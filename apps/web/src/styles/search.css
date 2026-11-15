@@ -1,9 +1,12 @@
 /* ── "찾는 길": scope chips, groups by work, totals and "더 보기" in the Ctrl+K box ─────────── */
 
-.palette.fast-find { display: flex; flex-direction: column; width: min(1180px, 96vw); height: min(820px, 88vh); }
-.fast-find .palette-body { flex: 1; grid-template-columns: minmax(300px, 1fr) minmax(320px, 1fr); }
-.search-tools { display: flex; gap: 12px; align-items: center; padding: 7px 16px; border-bottom: 1px solid var(--line); font-size: var(--fs-micro); }
-.search-tools select, .search-property-filter input { max-width: 210px; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 4px 7px; }
+.palette.fast-find { display: flex; flex-direction: column; }
+/* Match Fast Find's result-first 55:45 split; sizing is owned by hig-chat.css. */
+.fast-find .palette-body { flex: 1; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); }
+.fast-find .palette-list, .fast-find .palette-preview { min-width: 0; }
+.search-tools { display: flex; gap: var(--space-sm); align-items: center; padding: 7px var(--space-md); border-bottom: 1px solid var(--line); font-size: var(--fs-micro); }
+.search-tools .ui-select { max-width: 210px; font-size: inherit; }
+.search-property-filter input { max-width: 210px; --c-fill: var(--surface); --c-ink: var(--text); border-width: 1px; border-style: solid; --c-edge: var(--field-line); padding: var(--space-2xs) 7px; }
 .search-tools label { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
 .search-property-filter { position: relative; }
 .search-property-filter summary { cursor: pointer; }
@@ -11,19 +14,19 @@
 .search-property-filter input { width: 100%; }
 .search-property-filter button, .search-preview-toggle { color: var(--text); border: 1px solid var(--line); background: var(--surface); border-radius: var(--r-sm); padding: 3px 9px; }
 .search-preview-toggle { display: none; margin-left: auto; }
-.search-indexing { padding: 7px 16px; color: var(--muted); font-size: var(--fs-micro); }
+.search-indexing { padding: 7px var(--space-md); color: var(--muted); font-size: var(--fs-micro); }
 .search-heading { grid-column: 2 / -1; color: var(--accent); font-size: var(--fs-micro); }
-.search-source { font-size: var(--fs-meta); line-height: 1.65; margin-top: 12px; }
-.search-source-line { display: grid; grid-template-columns: 32px minmax(0, 1fr); white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 4px; }
-.search-source-number { font-size: 10px; color: var(--faint); user-select: none; text-align: right; padding-right: 9px; }
-.search-source-h1, .search-source-h2, .search-source-h3 { color: var(--accent); font-weight: 650; margin-top: 6px; }
+.search-source { font-size: var(--fs-meta); line-height: 1.65; margin-top: var(--space-sm); }
+.search-source-line { display: grid; grid-template-columns: 32px minmax(0, 1fr); white-space: pre-wrap; overflow-wrap: anywhere; padding: var(--space-3xs) var(--space-2xs); }
+.search-source-number { font-size: var(--fs-micro); color: var(--faint); user-select: none; text-align: right; padding-right: 9px; }
+.search-source-h1, .search-source-h2, .search-source-h3 { color: var(--accent); font-weight: 600; margin-top: 6px; }
 .search-source-h1 { font-size: 1.2em; }
 .search-source-code { font-family: var(--font-mono); background: var(--surface-muted); }
 .search-source-link, .search-source-tag { color: var(--accent); }
 .search-source-target, .search-open-target { background: color-mix(in srgb, var(--accent) 12%, transparent); border-radius: var(--r-sm); }
-.search-source-bound { padding: 8px 0; font-size: var(--fs-micro); color: var(--muted); }
-.search-related { margin: 16px 0 8px; border-top: 1px solid var(--line); padding-top: 10px; }
-.search-related button { display: flex; flex-direction: column; width: 100%; gap: 2px; text-align: left; color: var(--text); background: transparent; border: 0; padding: 7px 4px; border-radius: var(--r-sm); }
+.search-source-bound { padding: var(--space-xs) 0; font-size: var(--fs-micro); color: var(--muted); }
+.search-related { margin: var(--space-md) 0 var(--space-xs); border-top: 1px solid var(--line); padding-top: 10px; }
+.search-related button { display: flex; flex-direction: column; width: 100%; gap: var(--space-3xs); text-align: left; color: var(--text); background: transparent; border: 0; padding: 7px var(--space-2xs); border-radius: var(--r-sm); }
 .search-related button:hover, .search-related button:focus-visible { background: var(--surface-muted); }
 .search-related small { color: var(--muted); overflow-wrap: anywhere; }
 
@@ -34,8 +37,8 @@
   .fast-find.show-search-preview .palette-list { display: none; }
   .fast-find.show-search-preview .palette-preview { display: block; flex: 1; }
   .search-preview-toggle { display: block; }
-  .search-tools { gap: 8px; flex-wrap: wrap; }
-  .search-tools select { max-width: 150px; }
+  .search-tools { gap: var(--space-xs); flex-wrap: wrap; }
+  .search-tools .ui-select { max-width: 150px; }
 }
 
 /* The filters row holds the scope chips (Tab), then the engine chips and "보관 포함". */
@@ -51,8 +54,8 @@
 .search-scopes {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px;
+  gap: var(--space-3xs);
+  padding: var(--space-3xs);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--segmented-bg);
@@ -116,7 +119,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px 4px;
+  padding: var(--space-xs) 10px var(--space-2xs);
   font-size: var(--fs-micro);
   color: var(--muted);
 }
@@ -151,7 +154,7 @@
 }
 
 .search-notice {
-  margin: 2px 10px 6px;
+  margin: var(--space-3xs) 10px 6px;
   padding: 6px 10px;
   border-radius: var(--r-md);
   background: var(--amber-soft);
@@ -164,11 +167,11 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
-  padding: 12px 10px 4px;
+  gap: var(--space-xs);
+  padding: var(--space-sm) 10px var(--space-2xs);
   color: var(--text);
   font-size: var(--fs-meta);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .search-section-label span {
@@ -179,14 +182,14 @@
 
 /* One group per work/section: its folder trail and full result count. */
 .search-group + .search-group {
-  margin-top: 4px;
+  margin-top: var(--space-2xs);
   border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
 }
 
 .search-group .palette-group-label {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--space-xs);
   color: var(--muted);
 }
 

@@ -1,3 +1,4 @@
+import { ownTool } from "./own-tools.ts";
 import { spawn } from "node:child_process";
 import { stripVTControlCharacters } from "node:util";
 import { HttpError } from "./errors.ts";
@@ -36,7 +37,7 @@ const execute: Runner = (args, input, signal) => new Promise((resolve, reject) =
   if (signal.aborted) { reject(new Error("GitHub 읽기를 중단했습니다.")); return; }
   const env: NodeJS.ProcessEnv = { ...process.env, GH_HOST: "github.com", GH_PROMPT_DISABLED: "1", GH_PAGER: "cat", PAGER: "cat", GH_BROWSER: "false", GH_NO_UPDATE_NOTIFIER: "1", GH_NO_EXTENSION_UPDATE_NOTIFIER: "1", NO_COLOR: "1" };
   for (const name of ["GH_DEBUG", "GH_REPO", "GH_FORCE_TTY", "GH_PATH", "CLICOLOR_FORCE"]) delete env[name];
-  const child = spawn("gh", args, { env, cwd: process.cwd(), windowsHide: true, detached: process.platform !== "win32", stdio: ["pipe", "pipe", "pipe"] });
+  const child = spawn(ownTool("gh"), args, { env, cwd: process.cwd(), windowsHide: true, detached: process.platform !== "win32", stdio: ["pipe", "pipe", "pipe"] });
   let failure: Error | null = null, size = 0, stderr = "", closed = false, kill: ReturnType<typeof setTimeout> | undefined;
   const chunks: Buffer[] = [];
   const stop = () => { if (closed) return; failure ??= new Error("GitHub 읽기가 중단되었거나 제한 시간을 넘었습니다."); const send = (sig: NodeJS.Signals) => { if (!closed && child.pid) try { if (process.platform === "win32") child.kill(sig); else process.kill(-child.pid, sig); } catch { /* Only this owned gh process. */ } }; send("SIGTERM"); kill ??= setTimeout(() => send("SIGKILL"), 1500); kill.unref(); };

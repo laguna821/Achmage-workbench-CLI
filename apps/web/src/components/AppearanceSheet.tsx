@@ -1,26 +1,32 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { PROVIDER_LABEL, type Provider } from "@workbench/contracts";
 import {
   FONT_PRESETS,
   PALETTE_FIELDS,
   fontAvailable,
   fontStack,
-  onColor,
   useAppearance,
   type Bubble,
   type EngineMode,
   type Glow,
   type Look,
+  ENGINE_COLOR_HINT,
 } from "../appearance.ts";
-import type { Theme, ThemePref } from "../theme.ts";
+import type { PaletteId, Theme, ThemePref, UsagePlace } from "../theme.ts";
 import { EngineMark } from "./EngineMark.tsx";
-import { IconButton, Segmented } from "./ui/Hig.tsx";
+import { SettingsGroup, SettingsRow, SettingsSwitch } from "./SettingsSheet.tsx";
+import { Segmented } from "./ui/Hig.tsx";
 
-const THEME_LABEL: Record<Theme, string> = { light: "라이트", dark: "다크" };
+// 설정 › 화면 (release unit B): the app's look first (시스템 따라 / 밝게 / 어둡게), then how a
+// conversation reads — face, size, spacing — for the engine and mode chosen above the preview.
+// The per-engine colour is only "엔진 표시 색"; every other colour waits behind "색 직접 고르기".
+// The stored looks (v6, v7, v8 …) are read and written by appearance.ts as before: nothing here
+// resets a value the person chose.
+
 const BUBBLES: { id: Bubble; label: string }[] = [
   { id: "filled", label: "채움" },
   { id: "soft", label: "옅게" },
-  { id: "rail", label: "레일" },
+  { id: "rail", label: "줄" },
 ];
 const GLOWS: { id: Glow; label: string }[] = [
   { id: "off", label: "끄기" },
@@ -28,53 +34,78 @@ const GLOWS: { id: Glow; label: string }[] = [
   { id: "neon", label: "강하게" },
 ];
 const MODES: { id: EngineMode; label: string }[] = [
-  { id: "follow", label: "앱 화면 따르기" },
-  { id: "light", label: "항상 라이트" },
-  { id: "dark", label: "항상 다크" },
+  { id: "follow", label: "앱 따라" },
+  { id: "light", label: "늘 밝게" },
+  { id: "dark", label: "늘 어둡게" },
 ];
-const THEME_PREFS: { id: ThemePref; label: string }[] = [
-  { id: "system", label: "시스템" },
-  { id: "light", label: "라이트" },
-  { id: "dark", label: "다크" },
+export const THEME_PREFS: { id: ThemePref; label: string }[] = [
+  { id: "system", label: "시스템 따라" },
+  { id: "light", label: "밝게" },
+  { id: "dark", label: "어둡게" },
 ];
+/** 색 조합: Atlas (the default) and Workbench; the one quiet line says where Atlas's colours come from. */
+export const PALETTES: { id: PaletteId; label: string }[] = [
+  { id: "atlas", label: "Atlas (기본)" },
+  { id: "workbench", label: "Workbench" },
+];
+export const PALETTE_CREDIT = "Atlas는 Atlas File Manager의 색 조합을 따랐습니다.";
+const MODE_WORD: Record<Theme, string> = { light: "밝을 때", dark: "어두울 때" };
+/** "빛 궤적 보조색" was a developer's name for the working mark's second colour. */
+const FIELD_LABEL: Partial<Record<keyof Look["palette"], string>> = { motion: "작업 표시 보조색", surface: "입력창과 카드", headingAlt: "작은 제목과 기울임" };
 
 export type SheetTarget = { provider: Provider; theme: Theme };
 
-function LookCard({ provider, theme, look, active, onSelect }: { provider: Provider; theme: Theme; look: Look; active: boolean; onSelect: () => void }) {
+/** The look in the new shell's shapes: the navy rail, the white list column, the work with a turn. */
+function ShellPreview({ provider, look, theme }: { provider: Provider; look: Look; theme: Theme }) {
   const { palette } = look;
-  return (
-    <button
-      type="button"
-      className={`look-card${active ? " active" : ""}`}
-      onClick={onSelect}
-      style={{ background: palette.bg, color: palette.text, borderColor: active ? palette.accent : palette.line }}
-      aria-pressed={active}
-    >
-      <span className="look-card-head" style={{ color: palette.accent, fontFamily: fontStack(look.font) }}>
-        <EngineMark provider={provider} size={14} />
-        {PROVIDER_LABEL[provider]} · {THEME_LABEL[theme]}
-      </span>
-      <span className="look-card-bubble" style={{ background: palette.accent, color: onColor(palette.accent) }}>
-        요청
-      </span>
-      <span className="look-card-line" style={{ background: palette.heading }} />
-      <span className="look-card-line short" style={{ background: palette.muted }} />
-    </button>
-  );
+  return <div className="look-preview" data-theme={theme} aria-label={`${PROVIDER_LABEL[provider]} ${MODE_WORD[theme]} 미리 보기`} role="img">
+    <span className="look-preview-rail" aria-hidden><i /><i /><i /></span>
+    <span className="look-preview-list" aria-hidden><i className="current" /><i /><i /><i /></span>
+    <span className="look-preview-work" style={{ background: palette.bg, color: palette.text, fontFamily: fontStack(look.font) }}>
+      <span className="look-preview-head" style={{ color: palette.heading }}><EngineMark provider={provider} size={14} />3주차 강의안 다듬기</span>
+      <span className={`look-preview-ask bubble-${look.bubble}`} style={{ ...(look.bubble === "rail" ? { borderWidth: `0 0 0 ${look.borderWidth + 1}px`, borderColor: palette.muted } : { borderRadius: look.radius, borderWidth: look.borderWidth, borderColor: palette.line }), background: look.bubble === "filled" ? palette.surface : "transparent", color: palette.text, fontSize: Math.max(12, look.fontSize - 2) }}>도입부를 질문으로 시작해 줘</span>
+      <span className="look-preview-answer" style={{ fontSize: look.fontSize, lineHeight: look.lineHeight, fontWeight: look.fontWeight }}>도입부를 질문 하나로 바꿨습니다. <b style={{ color: palette.strong }}>평가 기준</b>은 그대로 두었습니다. <u style={{ color: palette.link }}>강의안.md</u></span>
+    </span>
+  </div>;
 }
 
-export function AppearanceSheet({
-  target,
-  onTarget,
-  themePref,
-  onThemePref,
-  onClose,
-}: {
+const USAGE_PLACES: { id: UsagePlace; label: string }[] = [
+  { id: "list", label: "목록 칸 아래" },
+  { id: "bottom", label: "창 아래 줄" },
+  { id: "hidden", label: "숨기기" },
+];
+
+/** 글꼴: the app's UI face — three choices only (no font list is read from the system). */
+const UI_FONTS: { id: "pretendard" | "system" | "custom"; label: string }[] = [
+  { id: "pretendard", label: "Pretendard (기본)" },
+  { id: "system", label: "시스템 글꼴" },
+  { id: "custom", label: "직접 입력" },
+];
+
+function UiFontRow({ value, onChange }: { value: string; onChange: (font: string) => void }) {
+  const choice = value === "system" ? "system" : value.startsWith("custom:") ? "custom" : "pretendard";
+  const [family, setFamily] = useState(value.startsWith("custom:") ? value.slice(7) : "");
+  const missing = choice === "custom" && family.trim() !== "" && !fontAvailable(family.trim());
+  return <SettingsRow label="글꼴" hint="메뉴, 목록, 버튼에 쓰는 글꼴입니다. 대화를 읽는 글꼴은 아래 대화 글자에서 고릅니다."
+    control={<Segmented label="글꼴" value={choice} onChange={(next) => onChange(next === "custom" ? `custom:${family.trim() || "Pretendard"}` : next)} options={UI_FONTS.map(({ id, label }) => ({ value: id, label }))} />}
+    detail={choice === "custom" ? <>
+      <input className="sheet-input" aria-label="글꼴 이름" value={family} placeholder="이 컴퓨터에 설치된 글꼴 이름 (예: 나눔고딕)"
+        onChange={(event) => { setFamily(event.target.value); if (event.target.value.trim()) onChange(`custom:${event.target.value.trim()}`); }} />
+      {missing ? <p className="settings-row-hint" role="status">이 컴퓨터에서 「{family.trim()}」 글꼴을 찾지 못해 Pretendard로 보입니다.</p> : null}
+    </> : null} />;
+}
+
+export function AppearancePanel({ target, onTarget, themePref, onThemePref, palette = "atlas", onPalette, uiFont = "pretendard", onUiFont, usagePlace = "list", onUsagePlace }: {
   target: SheetTarget;
   onTarget: (target: SheetTarget) => void;
   themePref: ThemePref;
   onThemePref: (pref: ThemePref) => void;
-  onClose: () => void;
+  palette?: PaletteId;
+  onPalette?: (palette: PaletteId) => void;
+  uiFont?: string;
+  onUiFont?: (font: string) => void;
+  usagePlace?: UsagePlace;
+  onUsagePlace?: (place: UsagePlace) => void;
 }) {
   const { appearance, updateLook, setMode, resetLook } = useAppearance();
   const { provider, theme } = target;
@@ -88,149 +119,74 @@ export function AppearanceSheet({
     [],
   );
   const update = (patch: Parameters<typeof updateLook>[2]) => updateLook(provider, theme, patch);
+  const name = PROVIDER_LABEL[provider];
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  return <div className="appearance-panel">
+    <SettingsGroup title="앱 화면">
+      {/* The owner's order (2026-11-15): 색 조합, 밝게 / 어둡게 / 시스템 따라, 글꼴, then the conversation's 글자 크기 and colours below. */}
+      {onPalette ? <SettingsRow label="색 조합" hint={PALETTE_CREDIT}
+        control={<Segmented label="색 조합" value={palette} onChange={onPalette} options={PALETTES.map(({ id, label }) => ({ value: id, label }))} />} /> : null}
+      <SettingsRow label="화면 모양" hint="시스템 따라는 컴퓨터의 밝게, 어둡게 설정을 따릅니다."
+        control={<Segmented label="화면" className="theme-choice" value={themePref} onChange={onThemePref} options={THEME_PREFS.map(({ id, label }) => ({ value: id, label }))} />} />
+      {onUiFont ? <UiFontRow value={uiFont} onChange={onUiFont} /> : null}
+      {onUsagePlace ? <SettingsRow label="사용 한도 표시" hint="Claude와 Codex의 5시간, 주간 한도를 어디에 보일지 고릅니다. 창 아래 줄을 누르면 자세히 보입니다."
+        control={<Segmented label="사용 한도 표시" value={usagePlace} onChange={onUsagePlace} options={USAGE_PLACES.map(({ id, label }) => ({ value: id, label }))} />} /> : null}
+    </SettingsGroup>
 
-  return (
-    <aside className="appearance-sheet" aria-label="외형 설정">
-      <div className="sheet-head">
-        <h2>외형</h2>
-        <IconButton icon="x" label="외형 설정 닫기" onClick={onClose} />
-      </div>
+    <SettingsGroup title="대화 글자">
+      <SettingsRow label="고칠 대화" hint="엔진마다, 밝을 때와 어두울 때가 따로 있습니다. 바꾸면 아래 미리 보기와 열린 대화에 바로 보입니다."
+        control={<>
+          <Segmented label="엔진" value={provider} onChange={(next) => onTarget({ provider: next, theme })} options={(["claude", "codex"] as const).map((engine) => ({ value: engine, label: PROVIDER_LABEL[engine] }))} />
+          <Segmented label="밝을 때, 어두울 때" value={theme} onChange={(next) => onTarget({ provider, theme: next })} options={(["light", "dark"] as const).map((mode) => ({ value: mode, label: MODE_WORD[mode] }))} />
+        </>}
+        detail={<ShellPreview provider={provider} look={look} theme={theme} />} />
+      <SettingsRow label="읽는 글꼴" hint="대화를 읽는 글꼴입니다. 화면의 메뉴와 버튼은 Pretendard를 씁니다."
+        control={<select className="sheet-select" aria-label="읽는 글꼴" value={custom ? "custom" : look.font}
+          onChange={(event) => update({ font: event.target.value === "custom" ? `custom:${customFamily || "Pretendard"}` : event.target.value })}>
+          {FONT_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label.replace(" · ", ", ")}{available[preset.id] ? "" : " (설치 안 됨)"}</option>)}
+          <option value="custom">직접 입력…</option>
+        </select>}
+        detail={custom ? <input className="sheet-input" aria-label="글꼴 이름" value={customFamily} placeholder="글꼴 이름 (예: Pretendard)"
+          onChange={(event) => { setCustomFamily(event.target.value); update({ font: `custom:${event.target.value}` }); }} /> : null} />
+      <SettingsRow label="글자 크기" control={<label className="slider-row"><input type="range" aria-label="글자 크기" min={12} max={24} step={1} value={look.fontSize} onChange={(event) => update({ fontSize: Number(event.target.value) })} /><span className="slider-value">{look.fontSize}px</span></label>} />
+      <SettingsRow label="줄 간격" hint="작게 하면 촘촘하게, 크게 하면 넉넉하게 읽힙니다." control={<label className="slider-row"><input type="range" aria-label="줄 간격" min={1.3} max={2.1} step={0.05} value={look.lineHeight} onChange={(event) => update({ lineHeight: Number(event.target.value) })} /><span className="slider-value">{look.lineHeight.toFixed(2)}</span></label>} />
+      <SettingsRow label="글자 굵기" control={<label className="slider-row"><input type="range" aria-label="글자 굵기" min={200} max={700} step={50} value={look.fontWeight} onChange={(event) => update({ fontWeight: Number(event.target.value) })} /><span className="slider-value">{look.fontWeight}</span></label>} />
+      <SettingsRow label={`${name} 대화 화면`} hint="이 엔진의 대화만 늘 밝게 또는 늘 어둡게 둘 수 있습니다."
+        control={<Segmented label={`${name} 화면 모드`} value={appearance[provider].mode} onChange={value => setMode(provider, value)} options={MODES.map(({ id, label }) => ({ value: id, label }))} />} />
+    </SettingsGroup>
 
-      <div className="sheet-body">
-        <section className="sheet-section">
-          <div className="sheet-label">화면</div>
-          <Segmented label="화면" value={themePref} onChange={onThemePref} options={THEME_PREFS.map(({ id, label }) => ({ value: id, label }))} />
-          <p className="sheet-hint">엔진마다 라이트·다크 외형이 따로 있습니다. 고른 외형이 지금 화면에 미리 보입니다.</p>
-          <div className="look-grid">
-            {(["claude", "codex"] as const).flatMap((engine) =>
-              (["light", "dark"] as const).map((mode) => (
-                <LookCard
-                  key={`${engine}-${mode}`}
-                  provider={engine}
-                  theme={mode}
-                  look={appearance[engine][mode]}
-                  active={engine === provider && mode === theme}
-                  onSelect={() => onTarget({ provider: engine, theme: mode })}
-                />
-              )),
-            )}
-          </div>
-        </section>
+    <SettingsGroup title="대화 모양">
+      <SettingsRow label="보낸 글 모양" control={<Segmented label="메시지 모양" value={look.bubble} onChange={value => update({ bubble: value })} options={BUBBLES.map(({ id, label }) => ({ value: id, label }))} />} />
+      <SettingsRow label="작업 중 표시" hint="AI가 일하는 동안 입력창 둘레에 보이는 표시의 세기입니다." control={<Segmented label="작업 표시" value={look.glow} onChange={value => update({ glow: value })} options={GLOWS.map(({ id, label }) => ({ value: id, label }))} />} />
+      <SettingsRow label="모서리" control={<label className="slider-row"><input type="range" aria-label="모서리" min={4} max={26} step={1} value={look.radius} onChange={(event) => update({ radius: Number(event.target.value) })} /><span className="slider-value">{look.radius}px</span></label>} />
+      <SettingsRow label="테두리 두께" control={<label className="slider-row"><input type="range" aria-label="테두리" min={1} max={3} step={0.5} value={look.borderWidth} onChange={(event) => update({ borderWidth: Number(event.target.value) })} /><span className="slider-value">{look.borderWidth}px</span></label>} />
+      <SettingsRow label="쉬는 동안에도 입력창 테두리를 진하게" control={<SettingsSwitch label="쉬는 동안에도 입력창 테두리를 진하게" checked={look.frame} onChange={(next) => update({ frame: next })} />} />
+    </SettingsGroup>
 
-        <section className="sheet-section">
-          <div className="sheet-label">
-            <EngineMark provider={provider} size={15} /> {PROVIDER_LABEL[provider]} 화면
-          </div>
-          <Segmented label={`${PROVIDER_LABEL[provider]} 화면 모드`} value={appearance[provider].mode} onChange={value => setMode(provider, value)} options={MODES.map(({ id, label }) => ({ value: id, label }))} />
-        </section>
-
-        <section className="sheet-section">
-          <div className="sheet-label">
-            색 · {PROVIDER_LABEL[provider]} {THEME_LABEL[theme]}
-          </div>
+    <SettingsGroup title="색">
+      <SettingsRow label="엔진 표시 색" hint={ENGINE_COLOR_HINT}
+        mark={<EngineMark provider={provider} size={16} />}
+        control={<label className="color-swatch"><input type="color" aria-label={`${name} 엔진 표시 색`} value={look.palette.accent} onChange={(event) => update({ palette: { accent: event.target.value } })} /></label>}
+        detail={<details className="settings-path color-more">
+          <summary>색 직접 고르기</summary>
           <div className="color-list">
             {PALETTE_FIELDS.map((field) => (
               <label key={field.key} className="color-row">
                 <input type="color" value={look.palette[field.key]} onChange={(event) => update({ palette: { [field.key]: event.target.value } })} />
-                <span>{field.label}</span>
-                <input
-                  className="hex"
-                  value={look.palette[field.key]}
-                  onChange={(event) => /^#[0-9a-f]{6}$/i.test(event.target.value) && update({ palette: { [field.key]: event.target.value.toLowerCase() } })}
-                  spellCheck={false}
-                />
+                <span>{FIELD_LABEL[field.key] ?? field.label}</span>
+                <input className="hex" aria-label={`${FIELD_LABEL[field.key] ?? field.label} 색 값`} value={look.palette[field.key]}
+                  onChange={(event) => /^#[0-9a-f]{6}$/i.test(event.target.value) && update({ palette: { [field.key]: event.target.value.toLowerCase() } })} spellCheck={false} />
               </label>
             ))}
           </div>
-        </section>
-
-        <section className="sheet-section">
-          <div className="sheet-label">글자</div>
-          <select
-            className="sheet-select"
-            value={custom ? "custom" : look.font}
-            onChange={(event) => update({ font: event.target.value === "custom" ? `custom:${customFamily || "Pretendard"}` : event.target.value })}
-          >
-            {FONT_PRESETS.map((preset) => (
-              <option key={preset.id} value={preset.id}>
-                {preset.label}
-                {available[preset.id] ? "" : " (설치 안 됨)"}
-              </option>
-            ))}
-            <option value="custom">직접 입력…</option>
-          </select>
-          {custom ? (
-            <input
-              className="sheet-input"
-              value={customFamily}
-              placeholder="글꼴 이름 (예: Pretendard)"
-              onChange={(event) => {
-                setCustomFamily(event.target.value);
-                update({ font: `custom:${event.target.value}` });
-              }}
-            />
-          ) : null}
-          <label className="slider-row">
-            <span>크기</span>
-            <input type="range" min={12} max={24} step={1} value={look.fontSize} onChange={(event) => update({ fontSize: Number(event.target.value) })} />
-            <span className="slider-value">{look.fontSize}px</span>
-          </label>
-          <label className="slider-row">
-            <span>줄 간격</span>
-            <input type="range" min={1.3} max={2.1} step={0.05} value={look.lineHeight} onChange={(event) => update({ lineHeight: Number(event.target.value) })} />
-            <span className="slider-value">{look.lineHeight.toFixed(2)}</span>
-          </label>
-          <label className="slider-row">
-            <span>굵기</span>
-            <input type="range" min={200} max={700} step={50} value={look.fontWeight} onChange={(event) => update({ fontWeight: Number(event.target.value) })} />
-            <span className="slider-value">{look.fontWeight}</span>
-          </label>
-        </section>
-
-        <section className="sheet-section">
-          <div className="sheet-label">대화 · 입력창</div>
-          <div className="option-row">
-            <span>말풍선</span>
-            <Segmented label="메시지 모양" value={look.bubble} onChange={value => update({ bubble: value })} options={BUBBLES.map(({ id, label }) => ({ value: id, label }))} />
-          </div>
-          <div className="option-row">
-            <span>빛 효과</span>
-            <Segmented label="작업 표시" value={look.glow} onChange={value => update({ glow: value })} options={GLOWS.map(({ id, label }) => ({ value: id, label }))} />
-          </div>
-          <label className="slider-row">
-            <span>모서리</span>
-            <input type="range" min={4} max={26} step={1} value={look.radius} onChange={(event) => update({ radius: Number(event.target.value) })} />
-            <span className="slider-value">{look.radius}px</span>
-          </label>
-          <label className="slider-row">
-            <span>테두리</span>
-            <input type="range" min={1} max={3} step={0.5} value={look.borderWidth} onChange={(event) => update({ borderWidth: Number(event.target.value) })} />
-            <span className="slider-value">{look.borderWidth}px</span>
-          </label>
-          <label className="check-row switch-row" data-gallery="uiverse:Toggle-switches/zjssun_friendly-sheep-29" data-component="toggle">
-            <input type="checkbox" checked={look.frame} onChange={(event) => update({ frame: event.target.checked })} />
-            쉬는 동안에도 입력창 테두리에 엔진 색
-          </label>
-        </section>
-
-        <section className="sheet-section sheet-actions">
-          <button type="button" className="button small" onClick={() => update({ ...appearance[provider][other] })}>
-            {THEME_LABEL[other]} 값 가져오기
-          </button>
-          <button type="button" className="button small" onClick={() => update({ ...appearance[otherEngine][theme] })}>
-            {PROVIDER_LABEL[otherEngine]} 값 가져오기
-          </button>
-          <button type="button" className="button small" onClick={() => resetLook(provider, theme)}>
-            기본값으로
-          </button>
-        </section>
-      </div>
-    </aside>
-  );
+        </details>} />
+      <SettingsRow label="다른 값 가져오기" hint={`${name} ${MODE_WORD[theme]}의 글자와 색을 다른 쪽의 값으로 바꾸거나 처음으로 되돌립니다.`}
+        control={<>
+          <button type="button" className="button small" onClick={() => update({ ...appearance[provider][other] })}>{MODE_WORD[other]} 값</button>
+          <button type="button" className="button small" onClick={() => update({ ...appearance[otherEngine][theme] })}>{PROVIDER_LABEL[otherEngine]} 값</button>
+          <button type="button" className="button small" onClick={() => resetLook(provider, theme)}>기본값으로</button>
+        </>} />
+    </SettingsGroup>
+  </div>;
 }
+

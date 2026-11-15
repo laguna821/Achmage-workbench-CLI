@@ -33,7 +33,9 @@ try {
   let wd = ctx.app.wd;
   const api = <T>(method: string, path: string, body?: unknown) => ctx!.app.api<T>(method, path, body);
   const clickText = async (text: string) => { const button = await wd.execute<any>('return [...document.querySelectorAll("button")].find(e=>e.textContent.trim()===arguments[0]);', text); if (!button) throw new Error(`Missing button: ${text}`); await wd.click(button); };
-  const openImport = async () => { await wd.frame(null); await wd.click(await wd.waitFor('button[aria-label="연결과 설정"]')); await clickText("이음오피스 설정 가져오기…"); await wd.waitFor(".office-import-dialog"); await installProbe(wd); };
+  // 설정 (one dialog; was the ⋯ "연결과 설정" popover): the rail's 설정 key, then the section in its left list.
+  const openAppSettings = async (section: string) => { await wd.frame(null); if (!await wd.find(".settings-dialog[open]")) await wd.click(await wd.waitFor('button[data-rail="settings"]')); await wd.click(await wd.waitFor(`.settings-dialog[open] .settings-nav [data-section="${section}"]`)); await wd.waitFor(`.settings-dialog[open] .settings-pane[data-section="${section}"]`); };
+  const openImport = async () => { await wd.frame(null); await openAppSettings("documents"); await clickText("이음오피스 설정 가져오기…"); await wd.waitFor(".office-import-dialog"); await installProbe(wd); };
   phase = "preview"; await openImport();
   const input = await wd.waitFor('.office-import-dialog input:not([type="checkbox"])'); await wd.click(input);
   await wd.keys([{ type: "keyDown", value: KEY.control }, { type: "keyDown", value: "a" }, { type: "keyUp", value: "a" }, { type: "keyUp", value: KEY.control }]);
@@ -46,7 +48,7 @@ try {
   report.check(S, "키를 실제 OS 저장소로 봉인하고 설정·스타일 가져오기", imported.includes("sealed:v1:workbench:") && !imported.includes(key) && readdirSync(join(ctx.app.dataDir, "office-styles/styles")).length === 1, undefined, await shot(ctx, "import-done.png"));
   report.check(S, "원본 설정·스타일 바이트 보존", originals.every(item => digest(item.file) === item.sha256));
   await clickText("완료");
-  await wd.click(await wd.waitFor('button[aria-label="연결과 설정"]')); await clickText("문서 AI 설정…"); await wd.frame(await wd.waitFor('iframe[title="문서 AI 설정 화면"]')); await installProbe(wd);
+  await openAppSettings("documents"); await clickText("문서 AI 설정…"); await wd.frame(await wd.waitFor('iframe[title="문서 AI 설정 화면"]')); await installProbe(wd);
   report.check(S, "원본 AI 설정 화면에서 가져온 모델 확인", await until(() => wd.execute<boolean>('return document.body.innerText.includes("가져온 로컬 모델");'), 15000), undefined, await shot(ctx, "import-ai-settings.png"));
   await wd.frame(null); await wd.click(await wd.waitFor('button[aria-label="문서 AI 설정 닫기"]'));
   phase = "saved style in original gallery";

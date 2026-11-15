@@ -1,0 +1,115 @@
+Achmage Workbench — rhwp v0.9.0 engine patch of Workbench's own (third_party/hop/patches-0.9.0).
+Origin: Workbench 0022 (new in H4b; no 0.8.7 form — 0.8.7 deflated every BinData entry anew)
+Status: new
+What it changes: 0.9.0's HWPX writer copies an HWP's stored raw-deflate BinData bytes into the ZIP entry unchanged (serializer/hwpx/mod.rs reusable_deflate). Hangul pads some stored streams with bytes after the end of the deflate stream; copied into a ZIP entry they are trailing junk to strict readers, and the app's ZIP gate refused the saved file (Save As HWPX of an HWP with such a picture failed: "한글 압축 파일을 읽지 못했습니다"; repository fixture memo-source.hwp). The stored bytes are now reused only when the deflate stream ends exactly at their end; otherwise the picture is deflated anew (the 0.8.7 behaviour).
+Regression test: serializer::hwpx::workbench_bindata_reuse_tests::stored_bindata_is_reused_only_without_bytes_after_the_deflate_stream; upstream's tests/cases/hwpx_bindata_save_passthrough.rs hwp_source_reuses_stored_deflate_stream now asserts verbatim reuse only for streams that end exactly (samples/exam_kor.hwp has padded ones; it failed on the first form of this patch) and a clean entry otherwise; app: apps/host/src/hwp-codec.test.ts "saves an HWP as HWPX with the live report"
+
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: h4b <h4b@localhost>
+Date: Sat, 14 Nov 2026 16:40:20 +0900
+Subject: [PATCH] Workbench: reuse a stored BinData deflate stream only when it ends with its bytes
+
+---
+ src/serializer/hwpx/mod.rs                   | 46 +++++++++++++++++++-
+ tests/cases/hwpx_bindata_save_passthrough.rs | 18 ++++++--
+ 2 files changed, 58 insertions(+), 6 deletions(-)
+
+diff --git a/src/serializer/hwpx/mod.rs b/src/serializer/hwpx/mod.rs
+index b8d128554..160f42fc8 100644
+--- a/src/serializer/hwpx/mod.rs
++++ b/src/serializer/hwpx/mod.rs
+@@ -66,14 +66,19 @@ fn reusable_deflate(
+     }
+     let stored = data.load_raw().filter(|stored| stored.compressed)?;
+     let mut inflated =
+-        flate2::CrcReader::new(flate2::read::DeflateDecoder::new(stored.bytes.as_slice()));
++        flate2::CrcReader::new(flate2::bufread::DeflateDecoder::new(stored.bytes.as_slice()));
+     let inflated_size = std::io::copy(
+         &mut std::io::Read::take(&mut inflated, payload.len() as u64 + 1),
+         &mut std::io::sink(),
+     )
+     .ok()?;
+     let crc = crc32();
+-    (inflated_size == payload.len() as u64 && inflated.crc().sum() == crc).then_some(
++    // [Workbench] An HWP's stored BinData stream can carry bytes after the end of its deflate
++    // stream (Hangul pads some). Copied into a ZIP entry they are "trailing junk" to strict
++    // readers (zlib inflate, the app's own ZIP gate refuses the file). Reuse the stored bytes
++    // only when the deflate stream ends exactly at their end; otherwise deflate anew.
++    let whole = inflated.get_ref().total_in() == stored.bytes.len() as u64;
++    (whole && inflated_size == payload.len() as u64 && inflated.crc().sum() == crc).then_some(
+         crate::model::bin_data::DeflatedZipEntry {
+             crc32: crc,
+             uncompressed_size: payload.len() as u64,
+@@ -648,6 +653,43 @@ where
+     Ok(())
+ }
+ 
++#[cfg(test)]
++mod workbench_bindata_reuse_tests {
++    use crate::model::bin_data::{BinDataBytes, BinDataResolver, StoredBinData};
++
++    #[derive(Debug)]
++    struct Stored(Vec<u8>);
++    impl BinDataResolver for Stored {
++        fn resolve(&self, _key: &str) -> Vec<u8> {
++            Vec::new()
++        }
++        fn resolve_raw(&self, _key: &str) -> Option<StoredBinData> {
++            Some(StoredBinData { bytes: self.0.clone(), compressed: true })
++        }
++    }
++    fn deflated(payload: &[u8]) -> Vec<u8> {
++        use std::io::Write;
++        let mut encoder = flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::default());
++        encoder.write_all(payload).unwrap();
++        encoder.finish().unwrap()
++    }
++    fn lazy(bytes: Vec<u8>) -> BinDataBytes {
++        BinDataBytes::Lazy { resolver: std::sync::Arc::new(Stored(bytes)), key: "BIN0001.bmp".into() }
++    }
++
++    /// The stored deflate bytes go into the ZIP as they are only when they end with the stream.
++    #[test]
++    fn stored_bindata_is_reused_only_without_bytes_after_the_deflate_stream() {
++        let payload = b"BM picture bytes, repeated repeated repeated repeated".to_vec();
++        let exact = deflated(&payload);
++        let reused = super::reusable_deflate(&lazy(exact.clone()), &payload).expect("exact stream reused");
++        assert_eq!(reused.compressed_bytes, exact);
++        let mut padded = exact.clone();
++        padded.extend_from_slice(&[0, 0, 0, 0]);
++        assert!(super::reusable_deflate(&lazy(padded), &payload).is_none(), "padding is not copied into the ZIP");
++    }
++}
++
+ #[cfg(test)]
+ mod tests {
+     use std::io::Read;
+diff --git a/tests/cases/hwpx_bindata_save_passthrough.rs b/tests/cases/hwpx_bindata_save_passthrough.rs
+index 40aca161e..268651074 100644
+--- a/tests/cases/hwpx_bindata_save_passthrough.rs
++++ b/tests/cases/hwpx_bindata_save_passthrough.rs
+@@ -86,10 +86,20 @@ fn hwp_source_reuses_stored_deflate_stream() {
+             .iter()
+             .find(|(_, _, saved_content)| *saved_content == loaded)
+             .unwrap_or_else(|| panic!("BIN{:04X} 내용의 엔트리가 저장본에 없다", content.id));
+-        assert!(
+-            *saved_raw == stored.bytes,
+-            "{name} 가 HWP 저장 스트림을 그대로 쓰지 않았다"
+-        );
++        // [Workbench 0022] reused only when the deflate stream ends with the stored bytes; a
++        // stream Hangul padded is deflated anew, so no ZIP reader meets bytes after its end.
++        let mut decoder = flate2::bufread::DeflateDecoder::new(stored.bytes.as_slice());
++        std::io::copy(&mut decoder, &mut std::io::sink()).expect("stored stream inflates");
++        if decoder.total_in() == stored.bytes.len() as u64 {
++            assert!(
++                *saved_raw == stored.bytes,
++                "{name} 가 HWP 저장 스트림을 그대로 쓰지 않았다"
++            );
++        } else {
++            let mut written = flate2::bufread::DeflateDecoder::new(saved_raw.as_slice());
++            std::io::copy(&mut written, &mut std::io::sink()).expect("saved entry inflates");
++            assert_eq!(written.total_in(), saved_raw.len() as u64, "{name}: bytes after the deflate stream");
++        }
+         assert_eq!(*saved_content, loaded);
+     }
+ }

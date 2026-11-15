@@ -1,0 +1,76 @@
+Achmage Workbench — rhwp v0.9.0 form of a 0.8.7 engine patch (third_party/hop/patches-0.9.0).
+Origin: HOP 0002 (third_party/hop/patches/0002-hop-auto-tab-left.patch, sha256 830f9d13d724e64870250b75abfa194dbfdcc925685f6f7142a544490a7f58ae; original author hop-workbench <hop@localhost>)
+Status: upstream-test
+Differs from the 0.8.7 form: 0.9.0 already moves the first tab of a hanging line to the hang position in line breaking and measurement and skips placeholder tabs; the 0.8.7 stop insertion is not re-applied (it would duplicate this). Not carried: the right/center-tab detectors do not see the automatic left stop.
+Regression test: renderer::composer::tests::hop_0002_auto_tab_left_stops_the_first_tab_at_the_hang (new; passes on 0.9.0 without the 0.8.7 code)
+
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: h4a <h4a@localhost>
+Date: Sat, 14 Nov 2026 11:49:27 +0900
+Subject: [PATCH] HOP 0002 hop-auto-tab-left (0.9.0 port: already upstream,
+ test added)
+
+
+diff --git a/src/renderer/composer/tests.rs b/src/renderer/composer/tests.rs
+index ebf03e4f..c36669bb 100644
+--- a/src/renderer/composer/tests.rs
++++ b/src/renderer/composer/tests.rs
+@@ -2527,6 +2527,58 @@ fn default_tabs_use_the_physical_row_origin() {
+     );
+ }
+ 
++/// [HOP patch 0002] 내어쓰기용 자동 탭 — 한/글은 `autoTabLeft` 가 켜진 내어쓰기 문단의
++/// 첫 줄에 둘째 줄이 시작하는 자리(|indent|)에 왼쪽 탭 정지를 하나 더 둔다. 줄 나눔도
++/// 첫 줄의 탭을 그 자리에서 재야 배치와 같은 줄을 짠다.
++/// (0.9.0: upstream implements this itself — `apply_auto_left_tab_targets` in line breaking,
++/// `TextStyle::auto_left_tab_position` in measurement — so the 0.8.7 hunks are not re-applied;
++/// this test pins the behaviour.)
++///
++/// 폭 100px, 내어쓰기 60px, 기본 탭 80px: 자동 탭이면 첫 탭이 60px 에서 끝나 전각 네 글자
++/// (40px)가 한 줄에 들어간다. 자동 탭이 꺼져 있으면 80px + 40px 라 두 줄이다.
++#[test]
++fn hop_0002_auto_tab_left_stops_the_first_tab_at_the_hang() {
++    let styles = |auto_tab_left| ResolvedStyleSet {
++        char_styles: vec![crate::renderer::style_resolver::ResolvedCharStyle {
++            font_size: 10.0,
++            ..Default::default()
++        }],
++        para_styles: vec![crate::renderer::style_resolver::ResolvedParaStyle {
++            default_tab_width: 80.0,
++            indent: -60.0,
++            auto_tab_left,
++            ..Default::default()
++        }],
++        ..Default::default()
++    };
++    let para = Paragraph {
++        text: "\t가나다라".into(),
++        char_count: 6,
++        char_offsets: (0..5).collect(),
++        char_shapes: vec![CharShapeRef {
++            start_pos: 0,
++            char_shape_id: 0,
++        }],
++        ..Default::default()
++    };
++    let rows = |auto_tab_left| {
++        let mut frame = crate::renderer::layout_frame::LayoutFrame::new(0..7500, 0, vec![]);
++        super::line_breaking::layout_paragraph_in_frame(
++            &para,
++            &mut frame,
++            &styles(auto_tab_left),
++            96.0,
++        )
++        .unwrap()
++    };
++    assert_eq!(rows(false).len(), 2, "기본 탭 격자(80px)면 두 줄");
++    assert_eq!(
++        rows(true).len(),
++        1,
++        "내어쓰기용 자동 탭은 첫 줄의 탭을 내어쓰기 자리(60px)에 세운다"
++    );
++}
++
+ /// 저장 줄 없는 문단은 vpos 재계산이 건너뛰지만, 그 높이 자리는 뒤 문단의 저장
+ /// 좌표에 남아 있다. 앞 문단을 편집해도 그 간격을 지워 뒤 문단을 끌어올리지 않는다.
+ #[test]

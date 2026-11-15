@@ -35,15 +35,39 @@ it("keeps independent records and rejects stale writes from another window witho
   expect(right.read("workspace-one")!.layout).toEqual(layout("space-tab"));
   expect(right.write("global", 2, layout("right-tab")).revision).toBe(3);
 });
-it("preserves old preferences exactly and refuses malformed trees and duplicate tabs", () => {
+it("preserves old preferences exactly; skips a repeated tab and drops a tree that no longer fits, not the layout (skin 2 · B)", () => {
   const { store, layouts } = fixture(), raw = '{"paneLayout":{"version":1},"legacy":"keep 🌊"}';
   store.setMeta("ui.prefs", raw); const saved = layouts();
   expect(store.getMeta("layouts.legacyPrefs")).toBe(raw);
   saved.write("global", 0, layout());
   expect(store.getMeta("ui.prefs")).toBe(raw);
-  expect(() => saved.write("global", 1, { ...layout(), tree: { kind: "pane", id: "missing" } })).toThrow(/형식/);
+  expect(saved.write("global", 1, { ...layout(), tree: { kind: "pane", id: "missing" } }).layout).toEqual(layout());
   const repeated = layout(); repeated.panes[0]!.tabs.push(repeated.panes[0]!.tabs[0]!);
-  expect(() => saved.write("global", 1, repeated)).toThrow(/형식/);
+  expect(saved.write("global", 2, repeated).layout).toEqual(layout());
+  expect(() => saved.write("global", 3, { version: 2, focus: "a", panes: [] })).toThrow(/형식/);
   expect(() => saved.write("unknown-space", 0, layout())).toThrow();
-  expect(saved.read("global")!.revision).toBe(1);
+  expect(saved.read("global")!.revision).toBe(3);
+});
+it("keeps every readable tab when one tab cannot be read; a pane left empty folds away (skin 2 · B)", () => {
+  const { layouts } = fixture(), saved = layouts();
+  const tab = (id: string, kind = "new", workId: string | null = null) => ({ id, view: { kind, folderId: null }, workId, sessionId: null });
+  const stored = { version: 2, focus: "b", tree: { kind: "split", id: "s", axis: "horizontal", ratio: 0.5, first: { kind: "pane", id: "a" }, second: { kind: "pane", id: "b" } }, panes: [
+    { ...tab("x"), id: "a", tabs: [tab("one"), tab("bad id!"), tab("future", "a-kind-from-later", "work-1"), tab("broken", "new", "not ok/")], activeTabId: "bad id!", recentTabIds: ["bad id!", "one"] },
+    { ...tab("x"), id: "b", tabs: [tab("one"), { id: "noview" }], activeTabId: "one", recentTabIds: ["one"] },
+  ] };
+  const record = saved.write("global", 0, stored);
+  const panes = record.layout.panes as { id: string; tabs: { id: string }[]; activeTabId: string }[];
+  // The future kind is the web app's to know: the gateway keeps it.
+  expect(panes.map((pane) => [pane.id, pane.tabs.map((entry) => entry.id), pane.activeTabId])).toEqual([["a", ["one", "future"], "one"]]);
+  expect(record.layout.focus).toBe("a");
+  expect(record.layout.tree).toBeUndefined();
+});
+it("accepts a remote device's own record beside the desktop's (skin 2 · B)", () => {
+  const { layouts } = fixture(), saved = layouts();
+  saved.write("global", 0, layout("desk"));
+  saved.write("device:phone-1", 0, layout("phone"));
+  expect(saved.read("global")!.layout).toEqual(layout("desk"));
+  expect(saved.read("device:phone-1")).toMatchObject({ key: "device:phone-1", revision: 1, layout: layout("phone") });
+  expect(saved.read("device:phone-2")).toBeNull();
+  expect(() => saved.write("device:../global", 0, layout())).toThrow();
 });

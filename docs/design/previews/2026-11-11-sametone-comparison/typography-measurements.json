@@ -1,0 +1,5980 @@
+{
+  "scope": "Official v0.3.0 release and installed current hotfix; isolated Linux X11 DPR1, fixture data, fresh defaults; no product changes",
+  "versions": {
+    "v0.3.0": {
+      "home": {
+        "dpr": 1,
+        "visibleButtons": [
+          {
+            "title": "사이드바 닫기",
+            "text": "",
+            "aria": "사이드바 닫기"
+          },
+          {
+            "title": "홈",
+            "text": "",
+            "aria": "Achmage 홈"
+          },
+          {
+            "title": "홈",
+            "text": "홈",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "새 문서",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "전체 배치",
+            "aria": "배치 선택"
+          },
+          {
+            "title": "오른쪽으로 분할",
+            "text": "",
+            "aria": "오른쪽으로 분할"
+          },
+          {
+            "title": "아래로 분할",
+            "text": "",
+            "aria": "아래로 분할"
+          },
+          {
+            "title": "다크 화면으로",
+            "text": "",
+            "aria": "다크 화면으로"
+          },
+          {
+            "title": "",
+            "text": "",
+            "aria": "연결과 설정"
+          },
+          {
+            "title": "새 세션 (Ctrl N)",
+            "text": "새 세션",
+            "aria": null
+          },
+          {
+            "title": "사이드바 배치: 두 칸",
+            "text": "",
+            "aria": "사이드바 배치"
+          },
+          {
+            "title": "사이드바 메뉴",
+            "text": "",
+            "aria": "사이드바 메뉴"
+          },
+          {
+            "title": "찾기 (Ctrl K)",
+            "text": "찾기Ctrl K",
+            "aria": null
+          },
+          {
+            "title": "모든 작업의 지금 상황과 새 세션",
+            "text": "홈",
+            "aria": null
+          },
+          {
+            "title": "지금 접기",
+            "text": "지금",
+            "aria": null
+          },
+          {
+            "title": "AI와 글쓰기 · 3주차 강의 — 슬라이드 구성과 읽기 흐름 · 대기 중",
+            "text": "AI와 글쓰기 · 3주차 강의 — 슬라이드 구성과 읽기 흐름",
+            "aria": null
+          },
+          {
+            "title": "바로가기 접기",
+            "text": "바로가기",
+            "aria": null
+          },
+          {
+            "title": "프로젝트 탐색 접기",
+            "text": "프로젝트 탐색",
+            "aria": null
+          },
+          {
+            "title": "새 폴더",
+            "text": "",
+            "aria": "새 폴더"
+          },
+          {
+            "title": "보기 접기",
+            "text": "보기",
+            "aria": null
+          },
+          {
+            "title": "새 보기",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "보기 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "kind:note @last7d",
+            "text": "이번 주 노트0",
+            "aria": null
+          },
+          {
+            "title": "kind:session status:running",
+            "text": "진행 중인 세션0",
+            "aria": null
+          },
+          {
+            "title": "볼트 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "옵시디언 볼트를 읽기 전용으로 붙입니다",
+            "text": "옵시디언 볼트 연결",
+            "aria": null
+          },
+          {
+            "title": "새 프로젝트",
+            "text": "",
+            "aria": "새 프로젝트"
+          },
+          {
+            "title": "하위 폴더의 프로젝트도 보는 중 (끄기)",
+            "text": "",
+            "aria": "하위 포함"
+          },
+          {
+            "title": "정렬: 최근 활동 · 줄 모양",
+            "text": "",
+            "aria": "정렬과 줄 모양"
+          },
+          {
+            "title": "거르기 (이름 · #태그 · 단계:값 · 폴더:이름 · 속성:값)",
+            "text": "",
+            "aria": "거르기"
+          },
+          {
+            "title": "새 페이지",
+            "text": "",
+            "aria": "새 페이지"
+          },
+          {
+            "title": "다시 읽기",
+            "text": "",
+            "aria": "사용 한도 다시 읽기"
+          },
+          {
+            "title": "보관한 세션·작업·폴더",
+            "text": "보관함",
+            "aria": null
+          },
+          {
+            "title": "홈 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "홈",
+            "aria": null
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "홈 탭 닫기"
+          },
+          {
+            "title": "새 탭",
+            "text": "",
+            "aria": "새 탭"
+          },
+          {
+            "title": "오른쪽 클릭: 이 엔진의 외형",
+            "text": "Claude",
+            "aria": null
+          },
+          {
+            "title": "오른쪽 클릭: 이 엔진의 외형",
+            "text": "Codex",
+            "aria": null
+          },
+          {
+            "title": "가짜 모델",
+            "text": "Fake (기본)",
+            "aria": null
+          },
+          {
+            "title": "추론 강도",
+            "text": "기본 강도",
+            "aria": null
+          },
+          {
+            "title": "앱이 이 작업 전용 폴더를 만듭니다",
+            "text": "폴더 없이",
+            "aria": null
+          },
+          {
+            "title": "앱이 새 프로젝트 폴더를 만듭니다",
+            "text": "새 프로젝트",
+            "aria": null
+          },
+          {
+            "title": "보내기 (Enter)",
+            "text": "",
+            "aria": "보내기"
+          },
+          {
+            "title": "목록 · 두 번 누르면 이름 바꾸기 · 오른쪽 클릭: 복제·지우기·기본값으로",
+            "text": "상태",
+            "aria": null
+          },
+          {
+            "title": "보기 더하기",
+            "text": "",
+            "aria": "보기 더하기"
+          },
+          {
+            "title": "",
+            "text": "묶기상태",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "하위 묶기",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "정렬",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "거르기",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "모양",
+            "aria": null
+          },
+          {
+            "title": "누르면 접기 · 오른쪽 클릭: 색",
+            "text": "새 답 1",
+            "aria": null
+          },
+          {
+            "title": "새 답을 모두 읽음으로 표시합니다",
+            "text": "모두 읽음",
+            "aria": null
+          },
+          {
+            "title": "슬라이드 구성과 읽기 흐름 · Codex",
+            "text": "AI와 글쓰기 · 3주차 강의슬라이드 구성과 읽기 흐름3주차 슬라이드 구성을 다시 짰습니다. 핵심은 질문을 ",
+            "aria": null
+          },
+          {
+            "title": "마지막 답 보기",
+            "text": "",
+            "aria": "마지막 답 보기"
+          },
+          {
+            "title": "/tmp/wb-app-e2e-Rjj4Dz/fixture-v0.3.0",
+            "text": "AI와 글쓰기 · 3주차 강의",
+            "aria": null
+          },
+          {
+            "title": "지금 — 무엇이 나를 기다리나 (1)",
+            "text": "지금",
+            "aria": null
+          },
+          {
+            "title": "프로젝트 — 프로젝트는 어디쯤인가 (2)",
+            "text": "프로젝트",
+            "aria": null
+          },
+          {
+            "title": "흐름 — 언제 무엇을 했나 (3)",
+            "text": "흐름",
+            "aria": null
+          },
+          {
+            "title": "문서 — 무엇이 만들어졌나 (4)",
+            "text": "문서",
+            "aria": null
+          }
+        ],
+        "elements": [
+          {
+            "width": 517,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 952,
+            "y": 48,
+            "text": " 새 세션찾기Ctrl K홈지금새 답 1AI와 글쓰기 · 3주차 강의 — 슬라이드 구성과 읽기 흐름바로가기프로젝트·폴더·태그를 여기로 끌어 놓으면 바로가기가 됩니다.프로젝트 탐색전체 프로젝트 보기정리 폴더보기이번 주 ",
+            "weight": "400",
+            "size": "14px",
+            "color": "rgb(21, 27, 39)",
+            "padding": "0px",
+            "x": 0,
+            "line": "20.299999px",
+            "background": "rgb(243, 245, 248)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(21, 27, 39)",
+            "selector": ".sidebar"
+          },
+          {
+            "selector": ".row-session .side-row-label",
+            "missing": true
+          },
+          {
+            "selector": ".side-section-label",
+            "missing": true
+          },
+          {
+            "width": 46,
+            "radius": "4px",
+            "tracking": "normal",
+            "height": 17,
+            "y": 202.5,
+            "text": "프로젝트",
+            "weight": "400",
+            "size": "10px",
+            "color": "rgb(0, 91, 172)",
+            "padding": "1px 5px",
+            "x": 402,
+            "line": "15px",
+            "background": "color(srgb 0 0.356863 0.67451 / 0.09)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 91, 172)",
+            "selector": ".nav-kind"
+          },
+          {
+            "width": 37.921875,
+            "radius": "8px",
+            "tracking": "-0.08px",
+            "height": 31,
+            "y": 8.5,
+            "text": "홈",
+            "weight": "600",
+            "size": "16px",
+            "color": "rgb(21, 27, 39)",
+            "padding": "4px 12px",
+            "x": 701.03125,
+            "line": "23.200001px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none rgb(21, 27, 39)",
+            "selector": ".topbar-title"
+          },
+          {
+            "width": 922,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 39,
+            "y": 49,
+            "text": "홈",
+            "weight": "400",
+            "size": "14px",
+            "color": "rgb(31, 30, 27)",
+            "padding": "4px 6px",
+            "x": 518,
+            "line": "20.299999px",
+            "background": "rgb(255, 255, 255)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "",
+            "selector": ".group-tabs"
+          },
+          {
+            "width": 11,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 18,
+            "y": 59,
+            "text": "홈",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(31, 30, 27)",
+            "padding": "0px",
+            "x": 553,
+            "line": "18.85px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(31, 30, 27)",
+            "selector": ".group-tab-title"
+          },
+          {
+            "width": 712,
+            "radius": "12px",
+            "tracking": "normal",
+            "height": 90,
+            "y": 278,
+            "text": "Fake (기본)기본 강도폴더 없이새 프로젝트",
+            "weight": "400",
+            "size": "14px",
+            "color": "rgb(31, 30, 27)",
+            "padding": "12px 10px 8px 14px",
+            "x": 623,
+            "line": "20.299999px",
+            "background": "rgb(255, 255, 255)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "1px solid color(srgb 0.763608 0.481412 0.367686)",
+            "selector": ".composer"
+          },
+          {
+            "width": 686,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 28,
+            "y": 291,
+            "text": "",
+            "weight": "400",
+            "size": "17px",
+            "color": "rgb(31, 30, 27)",
+            "padding": "0px 4px 0px 0px",
+            "x": 638,
+            "line": "27.200001px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none rgb(31, 30, 27)",
+            "selector": ".composer textarea"
+          },
+          {
+            "selector": ".turn-assistant > .markdown",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown p",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown h2",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown h3",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown h4",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown em",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown strong",
+            "missing": true
+          },
+          {
+            "selector": ".transcript",
+            "missing": true
+          },
+          {
+            "selector": ".user-bubble",
+            "missing": true
+          }
+        ],
+        "viewport": {
+          "height": 1000,
+          "width": 1440
+        },
+        "fonts": [
+          {
+            "status": "loaded",
+            "family": "Achmage SameTone",
+            "weight": "100 900"
+          },
+          {
+            "status": "loaded",
+            "family": "Achmage SameTone Hangul",
+            "weight": "100 900"
+          }
+        ]
+      },
+      "project": {
+        "dpr": 1,
+        "visibleButtons": [
+          {
+            "title": "사이드바 닫기",
+            "text": "",
+            "aria": "사이드바 닫기"
+          },
+          {
+            "title": "홈",
+            "text": "",
+            "aria": "Achmage 홈"
+          },
+          {
+            "title": "AI와 글쓰기 · 3주차 강의 · 프로젝트",
+            "text": "AI와 글쓰기 · 3주차 강의 · 프로젝트",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "새 문서",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "전체 배치",
+            "aria": "배치 선택"
+          },
+          {
+            "title": "오른쪽으로 분할",
+            "text": "",
+            "aria": "오른쪽으로 분할"
+          },
+          {
+            "title": "아래로 분할",
+            "text": "",
+            "aria": "아래로 분할"
+          },
+          {
+            "title": "다크 화면으로",
+            "text": "",
+            "aria": "다크 화면으로"
+          },
+          {
+            "title": "",
+            "text": "",
+            "aria": "연결과 설정"
+          },
+          {
+            "title": "새 세션 (Ctrl N)",
+            "text": "새 세션",
+            "aria": null
+          },
+          {
+            "title": "사이드바 배치: 두 칸",
+            "text": "",
+            "aria": "사이드바 배치"
+          },
+          {
+            "title": "사이드바 메뉴",
+            "text": "",
+            "aria": "사이드바 메뉴"
+          },
+          {
+            "title": "찾기 (Ctrl K)",
+            "text": "찾기Ctrl K",
+            "aria": null
+          },
+          {
+            "title": "모든 작업의 지금 상황과 새 세션",
+            "text": "홈",
+            "aria": null
+          },
+          {
+            "title": "지금 접기",
+            "text": "지금",
+            "aria": null
+          },
+          {
+            "title": "AI와 글쓰기 · 3주차 강의 — 슬라이드 구성과 읽기 흐름 · 대기 중",
+            "text": "AI와 글쓰기 · 3주차 강의 — 슬라이드 구성과 읽기 흐름",
+            "aria": null
+          },
+          {
+            "title": "바로가기 접기",
+            "text": "바로가기",
+            "aria": null
+          },
+          {
+            "title": "프로젝트 탐색 접기",
+            "text": "프로젝트 탐색",
+            "aria": null
+          },
+          {
+            "title": "새 폴더",
+            "text": "",
+            "aria": "새 폴더"
+          },
+          {
+            "title": "보기 접기",
+            "text": "보기",
+            "aria": null
+          },
+          {
+            "title": "새 보기",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "보기 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "kind:note @last7d",
+            "text": "이번 주 노트0",
+            "aria": null
+          },
+          {
+            "title": "kind:session status:running",
+            "text": "진행 중인 세션0",
+            "aria": null
+          },
+          {
+            "title": "볼트 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "옵시디언 볼트를 읽기 전용으로 붙입니다",
+            "text": "옵시디언 볼트 연결",
+            "aria": null
+          },
+          {
+            "title": "새 프로젝트",
+            "text": "",
+            "aria": "새 프로젝트"
+          },
+          {
+            "title": "하위 폴더의 프로젝트도 보는 중 (끄기)",
+            "text": "",
+            "aria": "하위 포함"
+          },
+          {
+            "title": "정렬: 최근 활동 · 줄 모양",
+            "text": "",
+            "aria": "정렬과 줄 모양"
+          },
+          {
+            "title": "거르기 (이름 · #태그 · 단계:값 · 폴더:이름 · 속성:값)",
+            "text": "",
+            "aria": "거르기"
+          },
+          {
+            "title": "새 페이지",
+            "text": "",
+            "aria": "새 페이지"
+          },
+          {
+            "title": "다시 읽기",
+            "text": "",
+            "aria": "사용 한도 다시 읽기"
+          },
+          {
+            "title": "보관한 세션·작업·폴더",
+            "text": "보관함",
+            "aria": null
+          },
+          {
+            "title": "홈 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "홈",
+            "aria": null
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "홈 탭 닫기"
+          },
+          {
+            "title": "AI와 글쓰기 · 3주차 강의 · 프로젝트 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "AI와 글쓰기 · 3주차 강의 · 프로젝트",
+            "aria": null
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "AI와 글쓰기 · 3주차 강의 · 프로젝트 탭 닫기"
+          },
+          {
+            "title": "새 탭",
+            "text": "",
+            "aria": "새 탭"
+          },
+          {
+            "title": "이 프로젝트에서 이어서 하기",
+            "text": "이어서: 슬라이드 구성과 읽기 흐름",
+            "aria": null
+          },
+          {
+            "title": "프로젝트 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "속성0/8",
+            "aria": null
+          },
+          {
+            "title": "모든 프로젝트에 미리 보일 속성(이름과 형식)을 정합니다",
+            "text": "템플릿…",
+            "aria": null
+          },
+          {
+            "title": "단계",
+            "text": "",
+            "aria": "단계 형식: 단계"
+          },
+          {
+            "title": "단계 바꾸기",
+            "text": "단계 없음",
+            "aria": null
+          },
+          {
+            "title": "태그 · 형식 바꾸기",
+            "text": "",
+            "aria": "태그 형식: 태그"
+          },
+          {
+            "title": "",
+            "text": "비어 있음",
+            "aria": null
+          },
+          {
+            "title": "목록 · 형식 바꾸기",
+            "text": "",
+            "aria": "종류 형식: 목록"
+          },
+          {
+            "title": "",
+            "text": "예: 강의, 연구, 개발, 행정, 글쓰기",
+            "aria": null
+          },
+          {
+            "title": "날짜 · 형식 바꾸기",
+            "text": "",
+            "aria": "시작일 형식: 날짜"
+          },
+          {
+            "title": "",
+            "text": "비어 있음",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "오늘",
+            "aria": null
+          },
+          {
+            "title": "날짜 · 형식 바꾸기",
+            "text": "",
+            "aria": "마감일 형식: 날짜"
+          },
+          {
+            "title": "",
+            "text": "비어 있음",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "오늘",
+            "aria": null
+          },
+          {
+            "title": "텍스트 · 형식 바꾸기",
+            "text": "",
+            "aria": "중요도 형식: 텍스트"
+          },
+          {
+            "title": "",
+            "text": "높음 · 보통 · 낮음",
+            "aria": null
+          },
+          {
+            "title": "텍스트 · 형식 바꾸기",
+            "text": "",
+            "aria": "목표 형식: 텍스트"
+          },
+          {
+            "title": "",
+            "text": "이 프로젝트로 얻으려는 것 한 줄",
+            "aria": null
+          },
+          {
+            "title": "링크 · 형식 바꾸기",
+            "text": "",
+            "aria": "관련 형식: 링크"
+          },
+          {
+            "title": "",
+            "text": "관련 프로젝트·노트",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "속성 추가",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "자세히",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "전체 보기",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "10:36Codex슬라이드-구성.md r1",
+            "aria": null
+          },
+          {
+            "title": "이 줄을 결정으로 남기기",
+            "text": "결정으로",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "10:36나견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어 줘.",
+            "aria": null
+          },
+          {
+            "title": "이 줄을 결정으로 남기기",
+            "text": "결정으로",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "10:36앱 밖강의안.md r1 · 작업 폴더에서 열기",
+            "aria": null
+          },
+          {
+            "title": "이 줄을 결정으로 남기기",
+            "text": "결정으로",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "+ 결정",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "+ 질문",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "슬라이드 구성과 읽기 흐름대기 중방금",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "강의 자료 교정과 문장 정리대기 중방금",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "국내외 교육 사례 조사대기 중방금",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "MD슬라이드-구성.mdr1 · 방금",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "MD강의안.mdr1 · 방금",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "편집",
+            "aria": null
+          },
+          {
+            "title": "오른쪽 클릭: 이 엔진의 외형",
+            "text": "Claude",
+            "aria": null
+          },
+          {
+            "title": "오른쪽 클릭: 이 엔진의 외형",
+            "text": "Codex",
+            "aria": null
+          },
+          {
+            "title": "보내기 (Enter)",
+            "text": "",
+            "aria": "보내기"
+          }
+        ],
+        "elements": [
+          {
+            "width": 517,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 952,
+            "y": 48,
+            "text": " 새 세션찾기Ctrl K홈지금새 답 1AI와 글쓰기 · 3주차 강의 — 슬라이드 구성과 읽기 흐름바로가기프로젝트·폴더·태그를 여기로 끌어 놓으면 바로가기가 됩니다.프로젝트 탐색전체 프로젝트 보기정리 폴더보기이번 주 ",
+            "weight": "400",
+            "size": "14px",
+            "color": "rgb(21, 27, 39)",
+            "padding": "0px",
+            "x": 0,
+            "line": "20.299999px",
+            "background": "rgb(243, 245, 248)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(21, 27, 39)",
+            "selector": ".sidebar"
+          },
+          {
+            "width": 167,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 18,
+            "y": 303,
+            "text": "슬라이드 구성과 읽기 흐름",
+            "weight": "400",
+            "size": "13px",
+            "color": "color(srgb 0.239059 0.259765 0.300471)",
+            "padding": "0px",
+            "x": 302,
+            "line": "18.85px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none color(srgb 0.239059 0.259765 0.300471)",
+            "selector": ".row-session .side-row-label"
+          },
+          {
+            "width": 288,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 30,
+            "y": 268,
+            "text": "채팅 · 3",
+            "weight": "500",
+            "size": "12px",
+            "color": "rgb(90, 100, 117)",
+            "padding": "10px 8px 3px 22px",
+            "x": 223,
+            "line": "17.4px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(90, 100, 117)",
+            "selector": ".side-section-label"
+          },
+          {
+            "width": 46,
+            "radius": "4px",
+            "tracking": "normal",
+            "height": 17,
+            "y": 202.5,
+            "text": "프로젝트",
+            "weight": "600",
+            "size": "10px",
+            "color": "rgb(0, 91, 172)",
+            "padding": "1px 5px",
+            "x": 402,
+            "line": "15px",
+            "background": "color(srgb 0 0.356863 0.67451 / 0.09)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 91, 172)",
+            "selector": ".nav-kind"
+          },
+          {
+            "width": 248.84375,
+            "radius": "8px",
+            "tracking": "-0.08px",
+            "height": 31,
+            "y": 8.5,
+            "text": "AI와 글쓰기 · 3주차 강의 · 프로젝트",
+            "weight": "600",
+            "size": "16px",
+            "color": "rgb(21, 27, 39)",
+            "padding": "4px 12px",
+            "x": 595.578125,
+            "line": "23.200001px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none rgb(21, 27, 39)",
+            "selector": ".topbar-title"
+          },
+          {
+            "width": 922,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 39,
+            "y": 49,
+            "text": "홈AI와 글쓰기 · 3주차 강의 · 프로젝트",
+            "weight": "400",
+            "size": "14px",
+            "color": "rgb(14, 23, 38)",
+            "padding": "4px 6px",
+            "x": 518,
+            "line": "20.299999px",
+            "background": "rgb(255, 255, 255)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "",
+            "selector": ".group-tabs"
+          },
+          {
+            "width": 11,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 18,
+            "y": 59,
+            "text": "홈",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(82, 97, 116)",
+            "padding": "0px",
+            "x": 553,
+            "line": "18.85px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(82, 97, 116)",
+            "selector": ".group-tab-title"
+          },
+          {
+            "width": 712,
+            "radius": "12px",
+            "tracking": "normal",
+            "height": 90,
+            "y": 872,
+            "text": "",
+            "weight": "400",
+            "size": "14px",
+            "color": "rgb(14, 23, 38)",
+            "padding": "12px 10px 8px 14px",
+            "x": 623,
+            "line": "20.299999px",
+            "background": "rgb(255, 255, 255)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "1px solid color(srgb 0.590196 0.724706 0.850196)",
+            "selector": ".composer"
+          },
+          {
+            "width": 686,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 28,
+            "y": 885,
+            "text": "",
+            "weight": "400",
+            "size": "16px",
+            "color": "rgb(14, 23, 38)",
+            "padding": "0px 4px 0px 0px",
+            "x": 638,
+            "line": "25.6px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none rgb(14, 23, 38)",
+            "selector": ".composer textarea"
+          },
+          {
+            "selector": ".turn-assistant > .markdown",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown p",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown h2",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown h3",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown h4",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown em",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown strong",
+            "missing": true
+          },
+          {
+            "selector": ".transcript",
+            "missing": true
+          },
+          {
+            "selector": ".user-bubble",
+            "missing": true
+          }
+        ],
+        "viewport": {
+          "height": 1000,
+          "width": 1440
+        },
+        "fonts": [
+          {
+            "status": "loaded",
+            "family": "Achmage SameTone",
+            "weight": "100 900"
+          },
+          {
+            "status": "loaded",
+            "family": "Achmage SameTone Hangul",
+            "weight": "100 900"
+          }
+        ]
+      },
+      "chat": {
+        "dpr": 1,
+        "visibleButtons": [
+          {
+            "title": "사이드바 닫기",
+            "text": "",
+            "aria": "사이드바 닫기"
+          },
+          {
+            "title": "홈",
+            "text": "",
+            "aria": "Achmage 홈"
+          },
+          {
+            "title": "눌러서 작업 이름 바꾸기",
+            "text": "AI와 글쓰기 · 3주차 강의",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "새 문서",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "전체 배치",
+            "aria": "배치 선택"
+          },
+          {
+            "title": "오른쪽으로 분할",
+            "text": "",
+            "aria": "오른쪽으로 분할"
+          },
+          {
+            "title": "아래로 분할",
+            "text": "",
+            "aria": "아래로 분할"
+          },
+          {
+            "title": "다크 화면으로",
+            "text": "",
+            "aria": "다크 화면으로"
+          },
+          {
+            "title": "",
+            "text": "",
+            "aria": "연결과 설정"
+          },
+          {
+            "title": "새 세션 (Ctrl N)",
+            "text": "새 세션",
+            "aria": null
+          },
+          {
+            "title": "사이드바 배치: 두 칸",
+            "text": "",
+            "aria": "사이드바 배치"
+          },
+          {
+            "title": "사이드바 메뉴",
+            "text": "",
+            "aria": "사이드바 메뉴"
+          },
+          {
+            "title": "찾기 (Ctrl K)",
+            "text": "찾기Ctrl K",
+            "aria": null
+          },
+          {
+            "title": "모든 작업의 지금 상황과 새 세션",
+            "text": "홈",
+            "aria": null
+          },
+          {
+            "title": "바로가기 접기",
+            "text": "바로가기",
+            "aria": null
+          },
+          {
+            "title": "프로젝트 탐색 접기",
+            "text": "프로젝트 탐색",
+            "aria": null
+          },
+          {
+            "title": "새 폴더",
+            "text": "",
+            "aria": "새 폴더"
+          },
+          {
+            "title": "보기 접기",
+            "text": "보기",
+            "aria": null
+          },
+          {
+            "title": "새 보기",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "보기 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "kind:note @last7d",
+            "text": "이번 주 노트0",
+            "aria": null
+          },
+          {
+            "title": "kind:session status:running",
+            "text": "진행 중인 세션0",
+            "aria": null
+          },
+          {
+            "title": "볼트 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "옵시디언 볼트를 읽기 전용으로 붙입니다",
+            "text": "옵시디언 볼트 연결",
+            "aria": null
+          },
+          {
+            "title": "새 프로젝트",
+            "text": "",
+            "aria": "새 프로젝트"
+          },
+          {
+            "title": "하위 폴더의 프로젝트도 보는 중 (끄기)",
+            "text": "",
+            "aria": "하위 포함"
+          },
+          {
+            "title": "정렬: 최근 활동 · 줄 모양",
+            "text": "",
+            "aria": "정렬과 줄 모양"
+          },
+          {
+            "title": "거르기 (이름 · #태그 · 단계:값 · 폴더:이름 · 속성:값)",
+            "text": "",
+            "aria": "거르기"
+          },
+          {
+            "title": "새 페이지",
+            "text": "",
+            "aria": "새 페이지"
+          },
+          {
+            "title": "다시 읽기",
+            "text": "",
+            "aria": "사용 한도 다시 읽기"
+          },
+          {
+            "title": "보관한 세션·작업·폴더",
+            "text": "보관함",
+            "aria": null
+          },
+          {
+            "title": "홈 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "홈",
+            "aria": null
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "홈 탭 닫기"
+          },
+          {
+            "title": "AI와 글쓰기 · 3주차 강의 · 프로젝트 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "AI와 글쓰기 · 3주차 강의 · 프로젝트",
+            "aria": null
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "AI와 글쓰기 · 3주차 강의 · 프로젝트 탭 닫기"
+          },
+          {
+            "title": "/tmp/wb-app-e2e-Rjj4Dz/fixture-v0.3.0 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "AI와 글쓰기 · 3주차 강의 · 슬라이드 구성과 읽기 흐름",
+            "aria": null
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "AI와 글쓰기 · 3주차 강의 · 슬라이드 구성과 읽기 흐름 탭 닫기"
+          },
+          {
+            "title": "새 탭",
+            "text": "",
+            "aria": "새 탭"
+          },
+          {
+            "title": "/tmp/wb-app-e2e-Rjj4Dz/fixture-v0.3.0",
+            "text": "기본 작업공간",
+            "aria": "작업공간 선택"
+          },
+          {
+            "title": "분류 옮기기",
+            "text": "분류 없음",
+            "aria": null
+          },
+          {
+            "title": "프로젝트 페이지: 속성·기록·결정·세션·파일",
+            "text": "AI와 글쓰기 · 3주차 강의",
+            "aria": null
+          },
+          {
+            "title": "이 작업의 문서",
+            "text": "문서 2",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "파일",
+            "aria": "문서 파일 메뉴"
+          },
+          {
+            "title": "",
+            "text": "대기 중·Codex·노트북",
+            "aria": null
+          },
+          {
+            "title": "이 요청으로 올라가기",
+            "text": "1견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어 줘.",
+            "aria": null
+          },
+          {
+            "title": "요청 전체 보기",
+            "text": "",
+            "aria": "요청 전체 보기"
+          },
+          {
+            "title": "이 요청 앞까지의 대화로 새 갈래를 만들고, 이 요청을 고쳐 다시 묻습니다(이 대화는 그대로)",
+            "text": "이 요청 전으로",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "생각 정리",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "명령 1개 · 파일 변경 1건",
+            "aria": null
+          },
+          {
+            "title": "/tmp/wb-app-e2e-Rjj4Dz/fixture-v0.3.0/슬라이드-구성.md",
+            "text": "MD슬라이드-구성.md새 파일 · r1 · Markdown열기",
+            "aria": null
+          },
+          {
+            "title": "이 답(고른 부분이 있으면 그 부분)을 작업 폴더의 새 페이지로",
+            "text": "페이지로 만들기",
+            "aria": null
+          },
+          {
+            "title": "이 답(고른 부분이 있으면 그 부분)을 프로젝트 노트의 결정으로",
+            "text": "결정으로",
+            "aria": null
+          },
+          {
+            "title": "이 답(고른 부분이 있으면 그 부분)을 프로젝트 노트의 열린 질문으로",
+            "text": "질문으로",
+            "aria": null
+          },
+          {
+            "title": "권한: 자동 — 작업 폴더 안에서는 묻지 않고, 폴더 밖이나 인터넷을 쓸 때만 묻습니다.",
+            "text": "자동",
+            "aria": null
+          },
+          {
+            "title": "컨텍스트 8% · 20k / 258k 토큰",
+            "text": "8%",
+            "aria": null
+          },
+          {
+            "title": "계획 먼저: 고치기 전에 계획을 보여 주고, 확인하면 진행합니다",
+            "text": "계획 먼저",
+            "aria": null
+          },
+          {
+            "title": "그림 그리기 · GPT Image (Codex 전용)",
+            "text": "그림",
+            "aria": null
+          },
+          {
+            "title": "브라우저: 꺼짐 — 자동: 읽기와 이미 연 사이트 안 이동은 바로 하고, 누르기·입력·새 사이트는 확인합니다.",
+            "text": "브라우저",
+            "aria": null
+          },
+          {
+            "title": "가짜 모델",
+            "text": "Fake",
+            "aria": null
+          },
+          {
+            "title": "추론 강도",
+            "text": "중간",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "Codex · 노트북",
+            "aria": null
+          },
+          {
+            "title": "결과를 새 문서로 만들기",
+            "text": "",
+            "aria": "새 문서로 만들기"
+          },
+          {
+            "title": "문서·파일 붙이기",
+            "text": "",
+            "aria": "문서·파일 붙이기"
+          },
+          {
+            "title": "보내기 (Enter)",
+            "text": "",
+            "aria": "보내기"
+          }
+        ],
+        "elements": [
+          {
+            "width": 517,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 952,
+            "y": 48,
+            "text": " 새 세션찾기Ctrl K홈바로가기프로젝트·폴더·태그를 여기로 끌어 놓으면 바로가기가 됩니다.프로젝트 탐색전체 프로젝트 보기정리 폴더보기이번 주 노트0진행 중인 세션0볼트옵시디언 볼트 연결프로젝트1오늘1AI와 글쓰기 ",
+            "weight": "400",
+            "size": "14px",
+            "color": "rgb(21, 27, 39)",
+            "padding": "0px",
+            "x": 0,
+            "line": "20.299999px",
+            "background": "rgb(243, 245, 248)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(21, 27, 39)",
+            "selector": ".sidebar"
+          },
+          {
+            "width": 181,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 18,
+            "y": 303,
+            "text": "슬라이드 구성과 읽기 흐름",
+            "weight": "600",
+            "size": "13px",
+            "color": "rgb(21, 27, 39)",
+            "padding": "0px",
+            "x": 302,
+            "line": "18.85px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(21, 27, 39)",
+            "selector": ".row-session .side-row-label"
+          },
+          {
+            "width": 288,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 30,
+            "y": 268,
+            "text": "채팅 · 3",
+            "weight": "500",
+            "size": "12px",
+            "color": "rgb(90, 100, 117)",
+            "padding": "10px 8px 3px 22px",
+            "x": 223,
+            "line": "17.4px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(90, 100, 117)",
+            "selector": ".side-section-label"
+          },
+          {
+            "width": 46,
+            "radius": "4px",
+            "tracking": "normal",
+            "height": 17,
+            "y": 202.5,
+            "text": "프로젝트",
+            "weight": "400",
+            "size": "10px",
+            "color": "rgb(0, 91, 172)",
+            "padding": "1px 5px",
+            "x": 402,
+            "line": "15px",
+            "background": "color(srgb 0 0.356863 0.67451 / 0.09)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 91, 172)",
+            "selector": ".nav-kind"
+          },
+          {
+            "width": 181.40625,
+            "radius": "8px",
+            "tracking": "-0.08px",
+            "height": 31,
+            "y": 8.5,
+            "text": "AI와 글쓰기 · 3주차 강의",
+            "weight": "600",
+            "size": "16px",
+            "color": "rgb(21, 27, 39)",
+            "padding": "4px 12px",
+            "x": 629.296875,
+            "line": "23.200001px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none rgb(21, 27, 39)",
+            "selector": ".topbar-title"
+          },
+          {
+            "width": 922,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 39,
+            "y": 49,
+            "text": "홈AI와 글쓰기 · 3주차 강의 · 프로젝트AI와 글쓰기 · 3주차 강의 · 슬라이드 구성과 읽기 흐름",
+            "weight": "400",
+            "size": "14px",
+            "color": "rgb(14, 23, 38)",
+            "padding": "4px 6px",
+            "x": 518,
+            "line": "20.299999px",
+            "background": "rgb(255, 255, 255)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "",
+            "selector": ".group-tabs"
+          },
+          {
+            "width": 11,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 18,
+            "y": 59,
+            "text": "홈",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(82, 97, 116)",
+            "padding": "0px",
+            "x": 553,
+            "line": "18.85px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(82, 97, 116)",
+            "selector": ".group-tab-title"
+          },
+          {
+            "width": 712,
+            "radius": "12px",
+            "tracking": "normal",
+            "height": 90,
+            "y": 876,
+            "text": "자동8%계획 먼저그림브라우저Fake중간Codex · 노트북",
+            "weight": "400",
+            "size": "14px",
+            "color": "rgb(14, 23, 38)",
+            "padding": "12px 10px 8px 14px",
+            "x": 623,
+            "line": "20.299999px",
+            "background": "rgb(255, 255, 255)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "1px solid color(srgb 0.590196 0.724706 0.850196)",
+            "selector": ".composer"
+          },
+          {
+            "width": 686,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 28,
+            "y": 889,
+            "text": "",
+            "weight": "400",
+            "size": "16px",
+            "color": "rgb(14, 23, 38)",
+            "padding": "0px 4px 0px 0px",
+            "x": 638,
+            "line": "25.6px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none rgb(14, 23, 38)",
+            "selector": ".composer textarea"
+          },
+          {
+            "width": 712,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 493.765625,
+            "y": 273,
+            "text": "3주차 슬라이드 구성을 다시 짰습니다. 핵심은 질문을 먼저 세우고, 사례로 내려가는 순서입니다.\n바꾼 점\n\n도입부를 질문 하나로 시작하게 바꿨습니다.\n겹치던 사례 슬라이드 두 장을 한 장으로 합쳤습니다.\n마지막 장에",
+            "weight": "400",
+            "size": "16px",
+            "color": "rgb(14, 23, 38)",
+            "padding": "0px",
+            "x": 623,
+            "line": "27.200001px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "1px solid rgba(0, 0, 0, 0)",
+            "selector": ".turn-assistant > .markdown"
+          },
+          {
+            "width": 710,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 27,
+            "y": 274,
+            "text": "3주차 슬라이드 구성을 다시 짰습니다. 핵심은 질문을 먼저 세우고, 사례로 내려가는 순서입니다.",
+            "weight": "400",
+            "size": "16px",
+            "color": "rgb(14, 23, 38)",
+            "padding": "0px",
+            "x": 624,
+            "line": "27.200001px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none rgb(14, 23, 38)",
+            "selector": ".turn-assistant > .markdown p"
+          },
+          {
+            "width": 710,
+            "radius": "0px",
+            "tracking": "-0.1px",
+            "height": 27,
+            "y": 329,
+            "text": "바꾼 점",
+            "weight": "600",
+            "size": "20px",
+            "color": "color(srgb 0 0.109412 0.310784)",
+            "padding": "0px",
+            "x": 624,
+            "line": "27px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none color(srgb 0 0.109412 0.310784)",
+            "selector": ".turn-assistant > .markdown h2"
+          },
+          {
+            "selector": ".turn-assistant > .markdown h3",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown h4",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown em",
+            "missing": true
+          },
+          {
+            "width": 262,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 22,
+            "y": 276,
+            "text": "질문을 먼저 세우고, 사례로 내려가는 순서",
+            "weight": "600",
+            "size": "16px",
+            "color": "rgb(0, 40, 112)",
+            "padding": "0px",
+            "x": 914,
+            "line": "27.200001px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 40, 112)",
+            "selector": ".turn-assistant > .markdown strong"
+          },
+          {
+            "width": 922,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 735,
+            "y": 133,
+            "text": "1견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어 줘.1요청·10:36 이 요청 전으로견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어",
+            "weight": "400",
+            "size": "14px",
+            "color": "rgb(14, 23, 38)",
+            "padding": "0px",
+            "x": 518,
+            "line": "20.299999px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(14, 23, 38)",
+            "selector": ".transcript"
+          },
+          {
+            "width": 566.6875,
+            "radius": "14px 14px 4px",
+            "tracking": "normal",
+            "height": 47,
+            "y": -117,
+            "text": "견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어 줘.",
+            "weight": "400",
+            "size": "16px",
+            "color": "rgb(14, 23, 38)",
+            "padding": "9px 14px",
+            "x": 768.3125,
+            "line": "27.200001px",
+            "background": "color(srgb 0.92 0.948549 0.973961)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "1px solid color(srgb 0.691373 0.787765 0.880314)",
+            "selector": ".user-bubble"
+          }
+        ],
+        "viewport": {
+          "height": 1000,
+          "width": 1440
+        },
+        "fonts": [
+          {
+            "status": "loaded",
+            "family": "Achmage SameTone",
+            "weight": "100 900"
+          },
+          {
+            "status": "loaded",
+            "family": "Achmage SameTone Hangul",
+            "weight": "100 900"
+          }
+        ]
+      },
+      "dark": {
+        "dpr": 1,
+        "visibleButtons": [
+          {
+            "title": "사이드바 닫기",
+            "text": "",
+            "aria": "사이드바 닫기"
+          },
+          {
+            "title": "홈",
+            "text": "",
+            "aria": "Achmage 홈"
+          },
+          {
+            "title": "눌러서 작업 이름 바꾸기",
+            "text": "AI와 글쓰기 · 3주차 강의",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "새 문서",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "전체 배치",
+            "aria": "배치 선택"
+          },
+          {
+            "title": "오른쪽으로 분할",
+            "text": "",
+            "aria": "오른쪽으로 분할"
+          },
+          {
+            "title": "아래로 분할",
+            "text": "",
+            "aria": "아래로 분할"
+          },
+          {
+            "title": "라이트 화면으로",
+            "text": "",
+            "aria": "라이트 화면으로"
+          },
+          {
+            "title": "",
+            "text": "",
+            "aria": "연결과 설정"
+          },
+          {
+            "title": "새 세션 (Ctrl N)",
+            "text": "새 세션",
+            "aria": null
+          },
+          {
+            "title": "사이드바 배치: 두 칸",
+            "text": "",
+            "aria": "사이드바 배치"
+          },
+          {
+            "title": "사이드바 메뉴",
+            "text": "",
+            "aria": "사이드바 메뉴"
+          },
+          {
+            "title": "찾기 (Ctrl K)",
+            "text": "찾기Ctrl K",
+            "aria": null
+          },
+          {
+            "title": "모든 작업의 지금 상황과 새 세션",
+            "text": "홈",
+            "aria": null
+          },
+          {
+            "title": "바로가기 접기",
+            "text": "바로가기",
+            "aria": null
+          },
+          {
+            "title": "프로젝트 탐색 접기",
+            "text": "프로젝트 탐색",
+            "aria": null
+          },
+          {
+            "title": "새 폴더",
+            "text": "",
+            "aria": "새 폴더"
+          },
+          {
+            "title": "보기 접기",
+            "text": "보기",
+            "aria": null
+          },
+          {
+            "title": "새 보기",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "보기 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "kind:note @last7d",
+            "text": "이번 주 노트0",
+            "aria": null
+          },
+          {
+            "title": "kind:session status:running",
+            "text": "진행 중인 세션0",
+            "aria": null
+          },
+          {
+            "title": "볼트 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "옵시디언 볼트를 읽기 전용으로 붙입니다",
+            "text": "옵시디언 볼트 연결",
+            "aria": null
+          },
+          {
+            "title": "새 프로젝트",
+            "text": "",
+            "aria": "새 프로젝트"
+          },
+          {
+            "title": "하위 폴더의 프로젝트도 보는 중 (끄기)",
+            "text": "",
+            "aria": "하위 포함"
+          },
+          {
+            "title": "정렬: 최근 활동 · 줄 모양",
+            "text": "",
+            "aria": "정렬과 줄 모양"
+          },
+          {
+            "title": "거르기 (이름 · #태그 · 단계:값 · 폴더:이름 · 속성:값)",
+            "text": "",
+            "aria": "거르기"
+          },
+          {
+            "title": "새 페이지",
+            "text": "",
+            "aria": "새 페이지"
+          },
+          {
+            "title": "다시 읽기",
+            "text": "",
+            "aria": "사용 한도 다시 읽기"
+          },
+          {
+            "title": "보관한 세션·작업·폴더",
+            "text": "보관함",
+            "aria": null
+          },
+          {
+            "title": "홈 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "홈",
+            "aria": null
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "홈 탭 닫기"
+          },
+          {
+            "title": "AI와 글쓰기 · 3주차 강의 · 프로젝트 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "AI와 글쓰기 · 3주차 강의 · 프로젝트",
+            "aria": null
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "AI와 글쓰기 · 3주차 강의 · 프로젝트 탭 닫기"
+          },
+          {
+            "title": "/tmp/wb-app-e2e-Rjj4Dz/fixture-v0.3.0 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "AI와 글쓰기 · 3주차 강의 · 슬라이드 구성과 읽기 흐름",
+            "aria": null
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "AI와 글쓰기 · 3주차 강의 · 슬라이드 구성과 읽기 흐름 탭 닫기"
+          },
+          {
+            "title": "새 탭",
+            "text": "",
+            "aria": "새 탭"
+          },
+          {
+            "title": "/tmp/wb-app-e2e-Rjj4Dz/fixture-v0.3.0",
+            "text": "기본 작업공간",
+            "aria": "작업공간 선택"
+          },
+          {
+            "title": "분류 옮기기",
+            "text": "분류 없음",
+            "aria": null
+          },
+          {
+            "title": "프로젝트 페이지: 속성·기록·결정·세션·파일",
+            "text": "AI와 글쓰기 · 3주차 강의",
+            "aria": null
+          },
+          {
+            "title": "이 작업의 문서",
+            "text": "문서 2",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "파일",
+            "aria": "문서 파일 메뉴"
+          },
+          {
+            "title": "",
+            "text": "대기 중·Codex·노트북",
+            "aria": null
+          },
+          {
+            "title": "이 요청으로 올라가기",
+            "text": "1견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어 줘.",
+            "aria": null
+          },
+          {
+            "title": "요청 전체 보기",
+            "text": "",
+            "aria": "요청 전체 보기"
+          },
+          {
+            "title": "이 요청 앞까지의 대화로 새 갈래를 만들고, 이 요청을 고쳐 다시 묻습니다(이 대화는 그대로)",
+            "text": "이 요청 전으로",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "생각 정리",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "명령 1개 · 파일 변경 1건",
+            "aria": null
+          },
+          {
+            "title": "/tmp/wb-app-e2e-Rjj4Dz/fixture-v0.3.0/슬라이드-구성.md",
+            "text": "MD슬라이드-구성.md새 파일 · r1 · Markdown열기",
+            "aria": null
+          },
+          {
+            "title": "이 답(고른 부분이 있으면 그 부분)을 작업 폴더의 새 페이지로",
+            "text": "페이지로 만들기",
+            "aria": null
+          },
+          {
+            "title": "이 답(고른 부분이 있으면 그 부분)을 프로젝트 노트의 결정으로",
+            "text": "결정으로",
+            "aria": null
+          },
+          {
+            "title": "이 답(고른 부분이 있으면 그 부분)을 프로젝트 노트의 열린 질문으로",
+            "text": "질문으로",
+            "aria": null
+          },
+          {
+            "title": "권한: 자동 — 작업 폴더 안에서는 묻지 않고, 폴더 밖이나 인터넷을 쓸 때만 묻습니다.",
+            "text": "자동",
+            "aria": null
+          },
+          {
+            "title": "컨텍스트 8% · 20k / 258k 토큰",
+            "text": "8%",
+            "aria": null
+          },
+          {
+            "title": "계획 먼저: 고치기 전에 계획을 보여 주고, 확인하면 진행합니다",
+            "text": "계획 먼저",
+            "aria": null
+          },
+          {
+            "title": "그림 그리기 · GPT Image (Codex 전용)",
+            "text": "그림",
+            "aria": null
+          },
+          {
+            "title": "브라우저: 꺼짐 — 자동: 읽기와 이미 연 사이트 안 이동은 바로 하고, 누르기·입력·새 사이트는 확인합니다.",
+            "text": "브라우저",
+            "aria": null
+          },
+          {
+            "title": "가짜 모델",
+            "text": "Fake",
+            "aria": null
+          },
+          {
+            "title": "추론 강도",
+            "text": "중간",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "Codex · 노트북",
+            "aria": null
+          },
+          {
+            "title": "결과를 새 문서로 만들기",
+            "text": "",
+            "aria": "새 문서로 만들기"
+          },
+          {
+            "title": "문서·파일 붙이기",
+            "text": "",
+            "aria": "문서·파일 붙이기"
+          },
+          {
+            "title": "보내기 (Enter)",
+            "text": "",
+            "aria": "보내기"
+          }
+        ],
+        "elements": [
+          {
+            "width": 517,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 952,
+            "y": 48,
+            "text": " 새 세션찾기Ctrl K홈바로가기프로젝트·폴더·태그를 여기로 끌어 놓으면 바로가기가 됩니다.프로젝트 탐색전체 프로젝트 보기정리 폴더보기이번 주 노트0진행 중인 세션0볼트옵시디언 볼트 연결프로젝트1오늘1AI와 글쓰기 ",
+            "weight": "400",
+            "size": "14px",
+            "color": "rgb(227, 231, 237)",
+            "padding": "0px",
+            "x": 0,
+            "line": "20.299999px",
+            "background": "rgb(16, 21, 28)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(227, 231, 237)",
+            "selector": ".sidebar"
+          },
+          {
+            "width": 181,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 18,
+            "y": 303,
+            "text": "슬라이드 구성과 읽기 흐름",
+            "weight": "600",
+            "size": "13px",
+            "color": "rgb(227, 231, 237)",
+            "padding": "0px",
+            "x": 302,
+            "line": "18.85px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(227, 231, 237)",
+            "selector": ".row-session .side-row-label"
+          },
+          {
+            "width": 288,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 30,
+            "y": 268,
+            "text": "채팅 · 3",
+            "weight": "500",
+            "size": "12px",
+            "color": "rgb(151, 161, 176)",
+            "padding": "10px 8px 3px 22px",
+            "x": 223,
+            "line": "17.4px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(151, 161, 176)",
+            "selector": ".side-section-label"
+          },
+          {
+            "width": 46,
+            "radius": "4px",
+            "tracking": "normal",
+            "height": 17,
+            "y": 202.5,
+            "text": "프로젝트",
+            "weight": "400",
+            "size": "10px",
+            "color": "rgb(125, 178, 240)",
+            "padding": "1px 5px",
+            "x": 402,
+            "line": "15px",
+            "background": "color(srgb 0.490196 0.698039 0.941176 / 0.09)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(125, 178, 240)",
+            "selector": ".nav-kind"
+          },
+          {
+            "width": 181.40625,
+            "radius": "8px",
+            "tracking": "-0.08px",
+            "height": 31,
+            "y": 8.5,
+            "text": "AI와 글쓰기 · 3주차 강의",
+            "weight": "600",
+            "size": "16px",
+            "color": "rgb(227, 231, 237)",
+            "padding": "4px 12px",
+            "x": 629.296875,
+            "line": "23.200001px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none rgb(227, 231, 237)",
+            "selector": ".topbar-title"
+          },
+          {
+            "width": 922,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 39,
+            "y": 49,
+            "text": "홈AI와 글쓰기 · 3주차 강의 · 프로젝트AI와 글쓰기 · 3주차 강의 · 슬라이드 구성과 읽기 흐름",
+            "weight": "400",
+            "size": "14px",
+            "color": "rgb(214, 222, 235)",
+            "padding": "4px 6px",
+            "x": 518,
+            "line": "20.299999px",
+            "background": "rgb(24, 30, 39)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "",
+            "selector": ".group-tabs"
+          },
+          {
+            "width": 11,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 18,
+            "y": 59,
+            "text": "홈",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(138, 150, 168)",
+            "padding": "0px",
+            "x": 553,
+            "line": "18.85px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(138, 150, 168)",
+            "selector": ".group-tab-title"
+          },
+          {
+            "width": 712,
+            "radius": "12px",
+            "tracking": "normal",
+            "height": 90,
+            "y": 876,
+            "text": "자동8%계획 먼저그림브라우저Fake중간Codex · 노트북",
+            "weight": "400",
+            "size": "14px",
+            "color": "rgb(214, 222, 235)",
+            "padding": "12px 10px 8px 14px",
+            "x": 623,
+            "line": "20.299999px",
+            "background": "rgb(14, 21, 34)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "1px solid color(srgb 0.19098 0.314118 0.447059)",
+            "selector": ".composer"
+          },
+          {
+            "width": 686,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 28,
+            "y": 889,
+            "text": "",
+            "weight": "400",
+            "size": "16px",
+            "color": "rgb(214, 222, 235)",
+            "padding": "0px 4px 0px 0px",
+            "x": 638,
+            "line": "25.6px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none rgb(214, 222, 235)",
+            "selector": ".composer textarea"
+          },
+          {
+            "width": 712,
+            "radius": "8px",
+            "tracking": "normal",
+            "height": 521.765625,
+            "y": 245,
+            "text": "3주차 슬라이드 구성을 다시 짰습니다. 핵심은 질문을 먼저 세우고, 사례로 내려가는 순서입니다.\n바꾼 점\n\n도입부를 질문 하나로 시작하게 바꿨습니다.\n겹치던 사례 슬라이드 두 장을 한 장으로 합쳤습니다.\n마지막 장에",
+            "weight": "400",
+            "size": "16px",
+            "color": "rgb(214, 222, 235)",
+            "padding": "14px 18px",
+            "x": 623,
+            "line": "27.200001px",
+            "background": "rgb(14, 21, 34)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "1px solid rgb(31, 42, 60)",
+            "selector": ".turn-assistant > .markdown"
+          },
+          {
+            "width": 674,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 27,
+            "y": 260,
+            "text": "3주차 슬라이드 구성을 다시 짰습니다. 핵심은 질문을 먼저 세우고, 사례로 내려가는 순서입니다.",
+            "weight": "400",
+            "size": "16px",
+            "color": "rgb(214, 222, 235)",
+            "padding": "0px",
+            "x": 642,
+            "line": "27.200001px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none rgb(214, 222, 235)",
+            "selector": ".turn-assistant > .markdown p"
+          },
+          {
+            "width": 674,
+            "radius": "0px",
+            "tracking": "-0.1px",
+            "height": 27,
+            "y": 315,
+            "text": "바꾼 점",
+            "weight": "600",
+            "size": "20px",
+            "color": "color(srgb 0.509216 0.789216 0.934118)",
+            "padding": "0px",
+            "x": 642,
+            "line": "27px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none color(srgb 0.509216 0.789216 0.934118)",
+            "selector": ".turn-assistant > .markdown h2"
+          },
+          {
+            "selector": ".turn-assistant > .markdown h3",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown h4",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown em",
+            "missing": true
+          },
+          {
+            "width": 262,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 22,
+            "y": 262,
+            "text": "질문을 먼저 세우고, 사례로 내려가는 순서",
+            "weight": "600",
+            "size": "16px",
+            "color": "rgb(169, 209, 255)",
+            "padding": "0px",
+            "x": 932,
+            "line": "27.200001px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none rgb(169, 209, 255)",
+            "selector": ".turn-assistant > .markdown strong"
+          },
+          {
+            "width": 922,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 735,
+            "y": 133,
+            "text": "1견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어 줘.1요청·10:36 이 요청 전으로견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어",
+            "weight": "400",
+            "size": "14px",
+            "color": "rgb(214, 222, 235)",
+            "padding": "0px",
+            "x": 518,
+            "line": "20.299999px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(214, 222, 235)",
+            "selector": ".transcript"
+          },
+          {
+            "width": 566.6875,
+            "radius": "8px",
+            "tracking": "normal",
+            "height": 47,
+            "y": -145,
+            "text": "견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어 줘.",
+            "weight": "400",
+            "size": "16px",
+            "color": "rgb(214, 222, 235)",
+            "padding": "9px 14px",
+            "x": 768.3125,
+            "line": "27.200001px",
+            "background": "color(srgb 0.084706 0.140392 0.214118)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "1px solid color(srgb 0.200235 0.334039 0.475294)",
+            "selector": ".user-bubble"
+          }
+        ],
+        "viewport": {
+          "height": 1000,
+          "width": 1440
+        },
+        "fonts": [
+          {
+            "status": "loaded",
+            "family": "Achmage SameTone",
+            "weight": "100 900"
+          },
+          {
+            "status": "loaded",
+            "family": "Achmage SameTone Hangul",
+            "weight": "100 900"
+          }
+        ]
+      },
+      "semanticSpecimen": {
+        "dpr": 1,
+        "visibleButtons": [
+          {
+            "title": "사이드바 닫기",
+            "text": "",
+            "aria": "사이드바 닫기"
+          },
+          {
+            "title": "홈",
+            "text": "",
+            "aria": "Achmage 홈"
+          },
+          {
+            "title": "눌러서 작업 이름 바꾸기",
+            "text": "AI와 글쓰기 · 3주차 강의",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "새 문서",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "전체 배치",
+            "aria": "배치 선택"
+          },
+          {
+            "title": "오른쪽으로 분할",
+            "text": "",
+            "aria": "오른쪽으로 분할"
+          },
+          {
+            "title": "아래로 분할",
+            "text": "",
+            "aria": "아래로 분할"
+          },
+          {
+            "title": "다크 화면으로",
+            "text": "",
+            "aria": "다크 화면으로"
+          },
+          {
+            "title": "",
+            "text": "",
+            "aria": "연결과 설정"
+          },
+          {
+            "title": "새 세션 (Ctrl N)",
+            "text": "새 세션",
+            "aria": null
+          },
+          {
+            "title": "사이드바 배치: 두 칸",
+            "text": "",
+            "aria": "사이드바 배치"
+          },
+          {
+            "title": "사이드바 메뉴",
+            "text": "",
+            "aria": "사이드바 메뉴"
+          },
+          {
+            "title": "찾기 (Ctrl K)",
+            "text": "찾기Ctrl K",
+            "aria": null
+          },
+          {
+            "title": "모든 작업의 지금 상황과 새 세션",
+            "text": "홈",
+            "aria": null
+          },
+          {
+            "title": "바로가기 접기",
+            "text": "바로가기",
+            "aria": null
+          },
+          {
+            "title": "프로젝트 탐색 접기",
+            "text": "프로젝트 탐색",
+            "aria": null
+          },
+          {
+            "title": "새 폴더",
+            "text": "",
+            "aria": "새 폴더"
+          },
+          {
+            "title": "보기 접기",
+            "text": "보기",
+            "aria": null
+          },
+          {
+            "title": "새 보기",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "보기 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "kind:note @last7d",
+            "text": "이번 주 노트0",
+            "aria": null
+          },
+          {
+            "title": "kind:session status:running",
+            "text": "진행 중인 세션0",
+            "aria": null
+          },
+          {
+            "title": "볼트 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "옵시디언 볼트를 읽기 전용으로 붙입니다",
+            "text": "옵시디언 볼트 연결",
+            "aria": null
+          },
+          {
+            "title": "새 프로젝트",
+            "text": "",
+            "aria": "새 프로젝트"
+          },
+          {
+            "title": "하위 폴더의 프로젝트도 보는 중 (끄기)",
+            "text": "",
+            "aria": "하위 포함"
+          },
+          {
+            "title": "정렬: 최근 활동 · 줄 모양",
+            "text": "",
+            "aria": "정렬과 줄 모양"
+          },
+          {
+            "title": "거르기 (이름 · #태그 · 단계:값 · 폴더:이름 · 속성:값)",
+            "text": "",
+            "aria": "거르기"
+          },
+          {
+            "title": "새 페이지",
+            "text": "",
+            "aria": "새 페이지"
+          },
+          {
+            "title": "다시 읽기",
+            "text": "",
+            "aria": "사용 한도 다시 읽기"
+          },
+          {
+            "title": "보관한 세션·작업·폴더",
+            "text": "보관함",
+            "aria": null
+          },
+          {
+            "title": "홈 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "홈",
+            "aria": null
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "홈 탭 닫기"
+          },
+          {
+            "title": "AI와 글쓰기 · 3주차 강의 · 프로젝트 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "AI와 글쓰기 · 3주차 강의 · 프로젝트",
+            "aria": null
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "AI와 글쓰기 · 3주차 강의 · 프로젝트 탭 닫기"
+          },
+          {
+            "title": "/tmp/wb-app-e2e-Rjj4Dz/fixture-v0.3.0 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "AI와 글쓰기 · 3주차 강의 · 슬라이드 구성과 읽기 흐름",
+            "aria": null
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "AI와 글쓰기 · 3주차 강의 · 슬라이드 구성과 읽기 흐름 탭 닫기"
+          },
+          {
+            "title": "새 탭",
+            "text": "",
+            "aria": "새 탭"
+          },
+          {
+            "title": "/tmp/wb-app-e2e-Rjj4Dz/fixture-v0.3.0",
+            "text": "기본 작업공간",
+            "aria": "작업공간 선택"
+          },
+          {
+            "title": "분류 옮기기",
+            "text": "분류 없음",
+            "aria": null
+          },
+          {
+            "title": "프로젝트 페이지: 속성·기록·결정·세션·파일",
+            "text": "AI와 글쓰기 · 3주차 강의",
+            "aria": null
+          },
+          {
+            "title": "이 작업의 문서",
+            "text": "문서 2",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "파일",
+            "aria": "문서 파일 메뉴"
+          },
+          {
+            "title": "",
+            "text": "대기 중·Codex·노트북",
+            "aria": null
+          },
+          {
+            "title": "이 요청으로 올라가기",
+            "text": "1견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어 줘.",
+            "aria": null
+          },
+          {
+            "title": "요청 전체 보기",
+            "text": "",
+            "aria": "요청 전체 보기"
+          },
+          {
+            "title": "이 요청 앞까지의 대화로 새 갈래를 만들고, 이 요청을 고쳐 다시 묻습니다(이 대화는 그대로)",
+            "text": "이 요청 전으로",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "생각 정리",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "명령 1개 · 파일 변경 1건",
+            "aria": null
+          },
+          {
+            "title": "/tmp/wb-app-e2e-Rjj4Dz/fixture-v0.3.0/슬라이드-구성.md",
+            "text": "MD슬라이드-구성.md새 파일 · r1 · Markdown열기",
+            "aria": null
+          },
+          {
+            "title": "이 답(고른 부분이 있으면 그 부분)을 작업 폴더의 새 페이지로",
+            "text": "페이지로 만들기",
+            "aria": null
+          },
+          {
+            "title": "이 답(고른 부분이 있으면 그 부분)을 프로젝트 노트의 결정으로",
+            "text": "결정으로",
+            "aria": null
+          },
+          {
+            "title": "이 답(고른 부분이 있으면 그 부분)을 프로젝트 노트의 열린 질문으로",
+            "text": "질문으로",
+            "aria": null
+          },
+          {
+            "title": "권한: 자동 — 작업 폴더 안에서는 묻지 않고, 폴더 밖이나 인터넷을 쓸 때만 묻습니다.",
+            "text": "자동",
+            "aria": null
+          },
+          {
+            "title": "컨텍스트 8% · 20k / 258k 토큰",
+            "text": "8%",
+            "aria": null
+          },
+          {
+            "title": "계획 먼저: 고치기 전에 계획을 보여 주고, 확인하면 진행합니다",
+            "text": "계획 먼저",
+            "aria": null
+          },
+          {
+            "title": "그림 그리기 · GPT Image (Codex 전용)",
+            "text": "그림",
+            "aria": null
+          },
+          {
+            "title": "브라우저: 꺼짐 — 자동: 읽기와 이미 연 사이트 안 이동은 바로 하고, 누르기·입력·새 사이트는 확인합니다.",
+            "text": "브라우저",
+            "aria": null
+          },
+          {
+            "title": "가짜 모델",
+            "text": "Fake",
+            "aria": null
+          },
+          {
+            "title": "추론 강도",
+            "text": "중간",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "Codex · 노트북",
+            "aria": null
+          },
+          {
+            "title": "결과를 새 문서로 만들기",
+            "text": "",
+            "aria": "새 문서로 만들기"
+          },
+          {
+            "title": "문서·파일 붙이기",
+            "text": "",
+            "aria": "문서·파일 붙이기"
+          },
+          {
+            "title": "보내기 (Enter)",
+            "text": "",
+            "aria": "보내기"
+          }
+        ],
+        "elements": [
+          {
+            "width": 517,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 952,
+            "y": 48,
+            "text": " 새 세션찾기Ctrl K홈바로가기프로젝트·폴더·태그를 여기로 끌어 놓으면 바로가기가 됩니다.프로젝트 탐색전체 프로젝트 보기정리 폴더보기이번 주 노트0진행 중인 세션0볼트옵시디언 볼트 연결프로젝트1오늘1AI와 글쓰기 ",
+            "weight": "400",
+            "size": "14px",
+            "color": "rgb(21, 27, 39)",
+            "padding": "0px",
+            "x": 0,
+            "line": "20.299999px",
+            "background": "rgb(243, 245, 248)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(21, 27, 39)",
+            "selector": ".sidebar"
+          },
+          {
+            "width": 181,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 18,
+            "y": 303,
+            "text": "슬라이드 구성과 읽기 흐름",
+            "weight": "600",
+            "size": "13px",
+            "color": "rgb(21, 27, 39)",
+            "padding": "0px",
+            "x": 302,
+            "line": "18.85px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(21, 27, 39)",
+            "selector": ".row-session .side-row-label"
+          },
+          {
+            "width": 288,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 30,
+            "y": 268,
+            "text": "채팅 · 3",
+            "weight": "500",
+            "size": "12px",
+            "color": "rgb(90, 100, 117)",
+            "padding": "10px 8px 3px 22px",
+            "x": 223,
+            "line": "17.4px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(90, 100, 117)",
+            "selector": ".side-section-label"
+          },
+          {
+            "width": 46,
+            "radius": "4px",
+            "tracking": "normal",
+            "height": 17,
+            "y": 202.5,
+            "text": "프로젝트",
+            "weight": "400",
+            "size": "10px",
+            "color": "rgb(0, 91, 172)",
+            "padding": "1px 5px",
+            "x": 402,
+            "line": "15px",
+            "background": "color(srgb 0 0.356863 0.67451 / 0.09)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 91, 172)",
+            "selector": ".nav-kind"
+          },
+          {
+            "width": 181.40625,
+            "radius": "8px",
+            "tracking": "-0.08px",
+            "height": 31,
+            "y": 8.5,
+            "text": "AI와 글쓰기 · 3주차 강의",
+            "weight": "600",
+            "size": "16px",
+            "color": "rgb(21, 27, 39)",
+            "padding": "4px 12px",
+            "x": 629.296875,
+            "line": "23.200001px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none rgb(21, 27, 39)",
+            "selector": ".topbar-title"
+          },
+          {
+            "width": 922,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 39,
+            "y": 49,
+            "text": "홈AI와 글쓰기 · 3주차 강의 · 프로젝트AI와 글쓰기 · 3주차 강의 · 슬라이드 구성과 읽기 흐름",
+            "weight": "400",
+            "size": "14px",
+            "color": "rgb(14, 23, 38)",
+            "padding": "4px 6px",
+            "x": 518,
+            "line": "20.299999px",
+            "background": "rgb(255, 255, 255)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "",
+            "selector": ".group-tabs"
+          },
+          {
+            "width": 11,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 18,
+            "y": 59,
+            "text": "홈",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(82, 97, 116)",
+            "padding": "0px",
+            "x": 553,
+            "line": "18.85px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(82, 97, 116)",
+            "selector": ".group-tab-title"
+          },
+          {
+            "width": 712,
+            "radius": "12px",
+            "tracking": "normal",
+            "height": 90,
+            "y": 876,
+            "text": "자동8%계획 먼저그림브라우저Fake중간Codex · 노트북",
+            "weight": "400",
+            "size": "14px",
+            "color": "rgb(14, 23, 38)",
+            "padding": "12px 10px 8px 14px",
+            "x": 623,
+            "line": "20.299999px",
+            "background": "rgb(255, 255, 255)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "1px solid color(srgb 0.590196 0.724706 0.850196)",
+            "selector": ".composer"
+          },
+          {
+            "width": 686,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 28,
+            "y": 889,
+            "text": "",
+            "weight": "400",
+            "size": "16px",
+            "color": "rgb(14, 23, 38)",
+            "padding": "0px 4px 0px 0px",
+            "x": 638,
+            "line": "25.6px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none rgb(14, 23, 38)",
+            "selector": ".composer textarea"
+          },
+          {
+            "width": 712,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 268.578125,
+            "y": 498,
+            "text": "읽기와 판단의 위계같은 내용을 읽어도 글자의 모양, 색, 여백에 따라 중요한 부분을 찾는 속도가 달라집니다.세 번째 단계 제목 · H3일반 문장 안에서 강조된 문구를 찾아봅니다. 굵게 강조한 문구와도 구분되어야 합니",
+            "weight": "400",
+            "size": "16px",
+            "color": "rgb(14, 23, 38)",
+            "padding": "0px",
+            "x": 623,
+            "line": "27.200001px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "1px solid rgba(0, 0, 0, 0)",
+            "selector": ".turn-assistant > .markdown"
+          },
+          {
+            "width": 710,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 27,
+            "y": 536,
+            "text": "같은 내용을 읽어도 글자의 모양, 색, 여백에 따라 중요한 부분을 찾는 속도가 달라집니다.",
+            "weight": "400",
+            "size": "16px",
+            "color": "rgb(14, 23, 38)",
+            "padding": "0px",
+            "x": 624,
+            "line": "27.200001px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none rgb(14, 23, 38)",
+            "selector": ".turn-assistant > .markdown p"
+          },
+          {
+            "width": 710,
+            "radius": "0px",
+            "tracking": "-0.1px",
+            "height": 27,
+            "y": 499,
+            "text": "읽기와 판단의 위계",
+            "weight": "600",
+            "size": "20px",
+            "color": "color(srgb 0 0.109412 0.310784)",
+            "padding": "0px",
+            "x": 624,
+            "line": "27px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none color(srgb 0 0.109412 0.310784)",
+            "selector": ".turn-assistant > .markdown h2"
+          },
+          {
+            "width": 710,
+            "radius": "0px",
+            "tracking": "-0.09px",
+            "height": 24,
+            "y": 588.1875,
+            "text": "세 번째 단계 제목 · H3",
+            "weight": "600",
+            "size": "18px",
+            "color": "rgb(0, 50, 141)",
+            "padding": "0px",
+            "x": 624,
+            "line": "24.299999px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 50, 141)",
+            "selector": ".turn-assistant > .markdown h3"
+          },
+          {
+            "width": 710,
+            "radius": "0px",
+            "tracking": "-0.08px",
+            "height": 21,
+            "y": 670.578125,
+            "text": "네 번째 단계 제목 · H4",
+            "weight": "600",
+            "size": "16px",
+            "color": "color(srgb 0 0.236275 0.583333)",
+            "padding": "0px",
+            "x": 624,
+            "line": "21.6px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none color(srgb 0 0.236275 0.583333)",
+            "selector": ".turn-assistant > .markdown h4"
+          },
+          {
+            "width": 74,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 22,
+            "y": 623.1875,
+            "text": "강조된 문구",
+            "weight": "400",
+            "size": "16px",
+            "color": "rgb(0, 50, 141)",
+            "padding": "0px",
+            "x": 734,
+            "line": "27.200001px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 50, 141)",
+            "selector": ".turn-assistant > .markdown em"
+          },
+          {
+            "width": 106,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 22,
+            "y": 623.1875,
+            "text": "굵게 강조한 문구",
+            "weight": "600",
+            "size": "16px",
+            "color": "rgb(0, 40, 112)",
+            "padding": "0px",
+            "x": 904,
+            "line": "27.200001px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 40, 112)",
+            "selector": ".turn-assistant > .markdown strong"
+          },
+          {
+            "width": 922,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 735,
+            "y": 133,
+            "text": "1견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어 줘.1요청·10:36 이 요청 전으로견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어",
+            "weight": "400",
+            "size": "14px",
+            "color": "rgb(14, 23, 38)",
+            "padding": "0px",
+            "x": 518,
+            "line": "20.299999px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, \"Achmage SameTone Hangul\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", system-ui, sans-serif",
+            "border": "0px none rgb(14, 23, 38)",
+            "selector": ".transcript"
+          },
+          {
+            "width": 566.6875,
+            "radius": "14px 14px 4px",
+            "tracking": "normal",
+            "height": 47,
+            "y": 108,
+            "text": "견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어 줘.",
+            "weight": "400",
+            "size": "16px",
+            "color": "rgb(14, 23, 38)",
+            "padding": "9px 14px",
+            "x": 768.3125,
+            "line": "27.200001px",
+            "background": "color(srgb 0.92 0.948549 0.973961)",
+            "font": "\"Achmage SameTone\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans KR\", \"Apple SD Gothic Neo\", system-ui, sans-serif",
+            "border": "1px solid color(srgb 0.691373 0.787765 0.880314)",
+            "selector": ".user-bubble"
+          }
+        ],
+        "viewport": {
+          "height": 1000,
+          "width": 1440
+        },
+        "fonts": [
+          {
+            "status": "loaded",
+            "family": "Achmage SameTone",
+            "weight": "100 900"
+          },
+          {
+            "status": "loaded",
+            "family": "Achmage SameTone Hangul",
+            "weight": "100 900"
+          }
+        ]
+      }
+    },
+    "current": {
+      "home": {
+        "dpr": 1,
+        "visibleButtons": [
+          {
+            "title": "사이드바 닫기",
+            "text": "",
+            "aria": "사이드바 닫기"
+          },
+          {
+            "title": "홈",
+            "text": "Workbench",
+            "aria": "Achmage 홈"
+          },
+          {
+            "title": "홈",
+            "text": "작업공간홈",
+            "aria": null
+          },
+          {
+            "title": "기기 연결",
+            "text": "기기 연결",
+            "aria": "기기 연결"
+          },
+          {
+            "title": "작업 현황",
+            "text": "",
+            "aria": "작업 현황"
+          },
+          {
+            "title": "",
+            "text": "1",
+            "aria": "알림 · 읽지 않음 1개"
+          },
+          {
+            "title": "",
+            "text": "화면 배치",
+            "aria": "화면 배치"
+          },
+          {
+            "title": "다크 화면으로",
+            "text": "",
+            "aria": "다크 화면으로"
+          },
+          {
+            "title": "",
+            "text": "",
+            "aria": "연결과 설정"
+          },
+          {
+            "title": "새로 만들기 (Ctrl N)",
+            "text": "새로 만들기",
+            "aria": null
+          },
+          {
+            "title": "사이드바 메뉴",
+            "text": "",
+            "aria": "사이드바 메뉴"
+          },
+          {
+            "title": "찾기 (Ctrl K)",
+            "text": "찾기Ctrl K",
+            "aria": null
+          },
+          {
+            "title": "모든 작업의 지금 상황과 새 세션",
+            "text": "홈",
+            "aria": null
+          },
+          {
+            "title": "새 정리 폴더",
+            "text": "",
+            "aria": "새 정리 폴더"
+          },
+          {
+            "title": "프로젝트 정렬",
+            "text": "",
+            "aria": "프로젝트 정렬"
+          },
+          {
+            "title": "새 문서·세션 만들기",
+            "text": "",
+            "aria": "새 문서·세션 만들기"
+          },
+          {
+            "title": "지금 접기",
+            "text": "지금",
+            "aria": null
+          },
+          {
+            "title": "AI와 글쓰기 · 3주차 강의 — 슬라이드 구성과 읽기 흐름 · 대기 중",
+            "text": "AI와 글쓰기 · 3주차 강의 — 슬라이드 구성과 읽기 흐름",
+            "aria": null
+          },
+          {
+            "title": "바로가기 접기",
+            "text": "바로가기",
+            "aria": null
+          },
+          {
+            "title": "보기 접기",
+            "text": "보기",
+            "aria": null
+          },
+          {
+            "title": "새 보기",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "보기 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "kind:note @last7d",
+            "text": "이번 주 노트0",
+            "aria": null
+          },
+          {
+            "title": "kind:session status:running",
+            "text": "진행 중인 세션0",
+            "aria": null
+          },
+          {
+            "title": "볼트 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "옵시디언 볼트를 읽기 전용으로 붙입니다",
+            "text": "옵시디언 볼트 연결",
+            "aria": null
+          },
+          {
+            "title": "다시 읽기",
+            "text": "",
+            "aria": "사용 한도 다시 읽기"
+          },
+          {
+            "title": "보관한 세션·작업·폴더",
+            "text": "보관함",
+            "aria": null
+          },
+          {
+            "title": "홈 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "홈",
+            "aria": "홈"
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "홈 탭 닫기"
+          },
+          {
+            "title": "이 프로젝트에 새 문서·디자인·세션 만들기",
+            "text": "새로 만들기",
+            "aria": "새로 만들기"
+          },
+          {
+            "title": "",
+            "text": "Search",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "Ask",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "Claude",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "Codex",
+            "aria": null
+          },
+          {
+            "title": "가짜 모델",
+            "text": "Fake (기본)",
+            "aria": "Fake (기본)"
+          },
+          {
+            "title": "추론 강도",
+            "text": "기본 강도",
+            "aria": null
+          },
+          {
+            "title": "앱이 이 작업 전용 폴더를 만듭니다",
+            "text": "폴더 없이",
+            "aria": null
+          },
+          {
+            "title": "앱이 새 프로젝트 폴더를 만듭니다",
+            "text": "새 프로젝트",
+            "aria": null
+          },
+          {
+            "title": "보내기 (Enter)",
+            "text": "",
+            "aria": "보내기"
+          },
+          {
+            "title": "",
+            "text": "작업 모아보기",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "AI와 글쓰기 · 3주차 강의",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "열기",
+            "aria": null
+          }
+        ],
+        "elements": [
+          {
+            "width": 288,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 952,
+            "y": 48,
+            "text": " 새로 만들기찾기Ctrl K홈프로젝트AI와 글쓰기 · 3주차 강의활동 및 바로가기지금새 답 1AI와 글쓰기 · 3주차 강의 — 슬라이드 구성과 읽기 흐름바로가기프로젝트·폴더·태그를 여기로 끌어 놓으면 바로가기가 됩니",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px",
+            "x": 0,
+            "line": "18.200001px",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "",
+            "selector": ".sidebar"
+          },
+          {
+            "selector": ".row-session .side-row-label",
+            "missing": true
+          },
+          {
+            "selector": ".side-section-label",
+            "missing": true
+          },
+          {
+            "selector": ".nav-kind",
+            "missing": true
+          },
+          {
+            "width": 82.6875,
+            "radius": "12px",
+            "tracking": "-0.065px",
+            "height": 28,
+            "y": 9.5,
+            "text": "작업공간홈",
+            "weight": "600",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "4px 12px",
+            "x": 678.65625,
+            "line": "18.85px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".topbar-title"
+          },
+          {
+            "width": 1152,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 41,
+            "y": 49,
+            "text": "홈새로 만들기",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "4px 8px",
+            "x": 288,
+            "line": "20px",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "",
+            "selector": ".group-tabs"
+          },
+          {
+            "width": 11,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 20,
+            "y": 59,
+            "text": "홈",
+            "weight": "600",
+            "size": "13px",
+            "color": "rgb(30, 110, 244)",
+            "padding": "0px",
+            "x": 325,
+            "line": "20px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(30, 110, 244)",
+            "selector": ".group-tab-title"
+          },
+          {
+            "width": 672,
+            "radius": "18px",
+            "tracking": "normal",
+            "height": 98,
+            "y": 284,
+            "text": "Fake (기본)기본 강도폴더 없이새 프로젝트",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "16px 12px 8px",
+            "x": 528,
+            "line": "18.85px",
+            "background": "rgb(255, 255, 255)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "1px solid rgb(30, 110, 244)",
+            "selector": ".composer"
+          },
+          {
+            "width": 646,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 32,
+            "y": 301,
+            "text": "",
+            "weight": "400",
+            "size": "17px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px 4px",
+            "x": 541,
+            "line": "29.75px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".composer textarea"
+          },
+          {
+            "selector": ".turn-assistant > .markdown",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown p",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown h2",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown h3",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown h4",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown em",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown strong",
+            "missing": true
+          },
+          {
+            "selector": ".transcript",
+            "missing": true
+          },
+          {
+            "selector": ".user-bubble",
+            "missing": true
+          }
+        ],
+        "viewport": {
+          "height": 1000,
+          "width": 1440
+        },
+        "fonts": [
+          {
+            "status": "unloaded",
+            "family": "Achmage SameTone",
+            "weight": "100 900"
+          },
+          {
+            "status": "unloaded",
+            "family": "Achmage SameTone Hangul",
+            "weight": "100 900"
+          },
+          {
+            "status": "loaded",
+            "family": "Pretendard Variable",
+            "weight": "45 920"
+          }
+        ]
+      },
+      "project": {
+        "dpr": 1,
+        "visibleButtons": [
+          {
+            "title": "사이드바 닫기",
+            "text": "",
+            "aria": "사이드바 닫기"
+          },
+          {
+            "title": "홈",
+            "text": "Workbench",
+            "aria": "Achmage 홈"
+          },
+          {
+            "title": "AI와 글쓰기 · 3주차 강의 · 프로젝트",
+            "text": "프로젝트AI와 글쓰기 · 3주차 강의 · 프로젝트",
+            "aria": null
+          },
+          {
+            "title": "기기 연결",
+            "text": "기기 연결",
+            "aria": "기기 연결"
+          },
+          {
+            "title": "작업 현황",
+            "text": "",
+            "aria": "작업 현황"
+          },
+          {
+            "title": "",
+            "text": "1",
+            "aria": "알림 · 읽지 않음 1개"
+          },
+          {
+            "title": "",
+            "text": "화면 배치",
+            "aria": "화면 배치"
+          },
+          {
+            "title": "다크 화면으로",
+            "text": "",
+            "aria": "다크 화면으로"
+          },
+          {
+            "title": "",
+            "text": "",
+            "aria": "연결과 설정"
+          },
+          {
+            "title": "새로 만들기 (Ctrl N)",
+            "text": "새로 만들기",
+            "aria": null
+          },
+          {
+            "title": "사이드바 메뉴",
+            "text": "",
+            "aria": "사이드바 메뉴"
+          },
+          {
+            "title": "찾기 (Ctrl K)",
+            "text": "찾기Ctrl K",
+            "aria": null
+          },
+          {
+            "title": "모든 작업의 지금 상황과 새 세션",
+            "text": "홈",
+            "aria": null
+          },
+          {
+            "title": "새 정리 폴더",
+            "text": "",
+            "aria": "새 정리 폴더"
+          },
+          {
+            "title": "프로젝트 정렬",
+            "text": "",
+            "aria": "프로젝트 정렬"
+          },
+          {
+            "title": "새 문서·세션 만들기",
+            "text": "",
+            "aria": "새 문서·세션 만들기"
+          },
+          {
+            "title": "지금 접기",
+            "text": "지금",
+            "aria": null
+          },
+          {
+            "title": "AI와 글쓰기 · 3주차 강의 — 슬라이드 구성과 읽기 흐름 · 대기 중",
+            "text": "AI와 글쓰기 · 3주차 강의 — 슬라이드 구성과 읽기 흐름",
+            "aria": null
+          },
+          {
+            "title": "바로가기 접기",
+            "text": "바로가기",
+            "aria": null
+          },
+          {
+            "title": "보기 접기",
+            "text": "보기",
+            "aria": null
+          },
+          {
+            "title": "새 보기",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "보기 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "kind:note @last7d",
+            "text": "이번 주 노트0",
+            "aria": null
+          },
+          {
+            "title": "kind:session status:running",
+            "text": "진행 중인 세션0",
+            "aria": null
+          },
+          {
+            "title": "볼트 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "옵시디언 볼트를 읽기 전용으로 붙입니다",
+            "text": "옵시디언 볼트 연결",
+            "aria": null
+          },
+          {
+            "title": "다시 읽기",
+            "text": "",
+            "aria": "사용 한도 다시 읽기"
+          },
+          {
+            "title": "보관한 세션·작업·폴더",
+            "text": "보관함",
+            "aria": null
+          },
+          {
+            "title": "홈 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "홈",
+            "aria": "홈"
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "홈 탭 닫기"
+          },
+          {
+            "title": "AI와 글쓰기 · 3주차 강의 · 프로젝트 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "프로젝트AI와 글쓰기 · 3주차 강의 · 프로젝트",
+            "aria": "프로젝트 · AI와 글쓰기 · 3주차 강의 · 프로젝트"
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "AI와 글쓰기 · 3주차 강의 · 프로젝트 탭 닫기"
+          },
+          {
+            "title": "이 프로젝트에 새 문서·디자인·세션 만들기",
+            "text": "새로 만들기",
+            "aria": "새로 만들기"
+          },
+          {
+            "title": "",
+            "text": "새로 만들기",
+            "aria": null
+          },
+          {
+            "title": "이 프로젝트에서 이어서 하기",
+            "text": "이어서: 슬라이드 구성과 읽기 흐름",
+            "aria": null
+          },
+          {
+            "title": "프로젝트 메뉴",
+            "text": "",
+            "aria": "프로젝트 메뉴"
+          },
+          {
+            "title": "",
+            "text": "프로젝트 속성0/8",
+            "aria": null
+          },
+          {
+            "title": "모든 프로젝트에 미리 보일 속성(이름과 형식)을 정합니다",
+            "text": "템플릿…",
+            "aria": null
+          },
+          {
+            "title": "단계",
+            "text": "",
+            "aria": "단계 형식: 단계"
+          },
+          {
+            "title": "단계 바꾸기",
+            "text": "단계 없음",
+            "aria": null
+          },
+          {
+            "title": "태그 · 형식 바꾸기",
+            "text": "",
+            "aria": "태그 형식: 태그"
+          },
+          {
+            "title": "",
+            "text": "비어 있음",
+            "aria": null
+          },
+          {
+            "title": "목록 · 형식 바꾸기",
+            "text": "",
+            "aria": "종류 형식: 목록"
+          },
+          {
+            "title": "",
+            "text": "예: 강의, 연구, 개발, 행정, 글쓰기",
+            "aria": null
+          },
+          {
+            "title": "날짜 · 형식 바꾸기",
+            "text": "",
+            "aria": "시작일 형식: 날짜"
+          },
+          {
+            "title": "",
+            "text": "비어 있음",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "오늘",
+            "aria": null
+          },
+          {
+            "title": "날짜 · 형식 바꾸기",
+            "text": "",
+            "aria": "마감일 형식: 날짜"
+          },
+          {
+            "title": "",
+            "text": "비어 있음",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "오늘",
+            "aria": null
+          },
+          {
+            "title": "텍스트 · 형식 바꾸기",
+            "text": "",
+            "aria": "중요도 형식: 텍스트"
+          },
+          {
+            "title": "",
+            "text": "높음 · 보통 · 낮음",
+            "aria": null
+          },
+          {
+            "title": "텍스트 · 형식 바꾸기",
+            "text": "",
+            "aria": "목표 형식: 텍스트"
+          },
+          {
+            "title": "",
+            "text": "이 프로젝트로 얻으려는 것 한 줄",
+            "aria": null
+          },
+          {
+            "title": "링크 · 형식 바꾸기",
+            "text": "",
+            "aria": "관련 형식: 링크"
+          },
+          {
+            "title": "",
+            "text": "관련 프로젝트·노트",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "속성 추가",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "자세히",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "슬라이드 구성과 읽기 흐름대기 중방금",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "강의 자료 교정과 문장 정리대기 중방금",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "국내외 교육 사례 조사대기 중방금",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "MD슬라이드-구성.mdr1 · 방금",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "MD강의안.mdr1 · 방금",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "전체 보기",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "10:36Codex슬라이드-구성.md r1",
+            "aria": null
+          },
+          {
+            "title": "이 줄을 결정으로 남기기",
+            "text": "결정으로",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "10:36나견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어 줘.",
+            "aria": null
+          },
+          {
+            "title": "이 줄을 결정으로 남기기",
+            "text": "결정으로",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "10:36앱 밖강의안.md r1 · 작업 폴더에서 열기",
+            "aria": null
+          },
+          {
+            "title": "이 줄을 결정으로 남기기",
+            "text": "결정으로",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "+ 결정",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "+ 질문",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "편집",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "Claude",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "Codex",
+            "aria": null
+          },
+          {
+            "title": "보내기 (Enter)",
+            "text": "",
+            "aria": "보내기"
+          },
+          {
+            "title": "",
+            "text": "열기",
+            "aria": null
+          }
+        ],
+        "elements": [
+          {
+            "width": 288,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 952,
+            "y": 48,
+            "text": " 새로 만들기찾기Ctrl K홈프로젝트AI와 글쓰기 · 3주차 강의채팅 · 3슬라이드 구성과 읽기 흐름채팅국내외 교육 사례 조사채팅강의 자료 교정과 문장 정리채팅문서 2활동 및 바로가기지금새 답 1AI와 글쓰기 · 3",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px",
+            "x": 0,
+            "line": "18.200001px",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "",
+            "selector": ".sidebar"
+          },
+          {
+            "width": 113,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 20,
+            "y": 288,
+            "text": "슬라이드 구성과 읽기 흐름",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px",
+            "x": 95,
+            "line": "20px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".row-session .side-row-label"
+          },
+          {
+            "width": 271,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 32,
+            "y": 252,
+            "text": "채팅 · 3",
+            "weight": "600",
+            "size": "13px",
+            "color": "rgb(108, 108, 112)",
+            "padding": "8px 8px 4px 22px",
+            "x": 8,
+            "line": "20px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(108, 108, 112)",
+            "selector": ".side-section-label"
+          },
+          {
+            "width": 22,
+            "radius": "4px",
+            "tracking": "normal",
+            "height": 20,
+            "y": 288,
+            "text": "채팅",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(108, 108, 112)",
+            "padding": "0px",
+            "x": 216,
+            "line": "20px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(108, 108, 112)",
+            "selector": ".nav-kind"
+          },
+          {
+            "width": 248.265625,
+            "radius": "12px",
+            "tracking": "-0.065px",
+            "height": 28,
+            "y": 9.5,
+            "text": "프로젝트AI와 글쓰기 · 3주차 강의 · 프로젝트",
+            "weight": "600",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "4px 12px",
+            "x": 595.859375,
+            "line": "18.85px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".topbar-title"
+          },
+          {
+            "width": 1152,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 41,
+            "y": 49,
+            "text": "홈프로젝트AI와 글쓰기 · 3주차 강의 · 프로젝트새로 만들기",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "4px 8px",
+            "x": 288,
+            "line": "20px",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "",
+            "selector": ".group-tabs"
+          },
+          {
+            "width": 11,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 20,
+            "y": 59,
+            "text": "홈",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(108, 108, 112)",
+            "padding": "0px",
+            "x": 325,
+            "line": "20px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(108, 108, 112)",
+            "selector": ".group-tab-title"
+          },
+          {
+            "width": 720,
+            "radius": "12px",
+            "tracking": "normal",
+            "height": 98,
+            "y": 862,
+            "text": "",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "16px 12px 8px",
+            "x": 504,
+            "line": "20px",
+            "background": "rgb(255, 255, 255)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "1px solid rgb(142, 142, 147)",
+            "selector": ".composer"
+          },
+          {
+            "width": 694,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 32,
+            "y": 879,
+            "text": "",
+            "weight": "400",
+            "size": "17px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px 4px",
+            "x": 517,
+            "line": "29.75px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".composer textarea"
+          },
+          {
+            "selector": ".turn-assistant > .markdown",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown p",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown h2",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown h3",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown h4",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown em",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown strong",
+            "missing": true
+          },
+          {
+            "selector": ".transcript",
+            "missing": true
+          },
+          {
+            "selector": ".user-bubble",
+            "missing": true
+          }
+        ],
+        "viewport": {
+          "height": 1000,
+          "width": 1440
+        },
+        "fonts": [
+          {
+            "status": "unloaded",
+            "family": "Achmage SameTone",
+            "weight": "100 900"
+          },
+          {
+            "status": "unloaded",
+            "family": "Achmage SameTone Hangul",
+            "weight": "100 900"
+          },
+          {
+            "status": "loaded",
+            "family": "Pretendard Variable",
+            "weight": "45 920"
+          }
+        ]
+      },
+      "chat": {
+        "dpr": 1,
+        "visibleButtons": [
+          {
+            "title": "사이드바 닫기",
+            "text": "",
+            "aria": "사이드바 닫기"
+          },
+          {
+            "title": "홈",
+            "text": "Workbench",
+            "aria": "Achmage 홈"
+          },
+          {
+            "title": "눌러서 작업 이름 바꾸기",
+            "text": "대화AI와 글쓰기 · 3주차 강의",
+            "aria": null
+          },
+          {
+            "title": "기기 연결",
+            "text": "기기 연결",
+            "aria": "기기 연결"
+          },
+          {
+            "title": "작업 현황",
+            "text": "",
+            "aria": "작업 현황"
+          },
+          {
+            "title": "",
+            "text": "1",
+            "aria": "알림 · 읽지 않음 1개"
+          },
+          {
+            "title": "",
+            "text": "화면 배치",
+            "aria": "화면 배치"
+          },
+          {
+            "title": "다크 화면으로",
+            "text": "",
+            "aria": "다크 화면으로"
+          },
+          {
+            "title": "",
+            "text": "",
+            "aria": "연결과 설정"
+          },
+          {
+            "title": "새로 만들기 (Ctrl N)",
+            "text": "새로 만들기",
+            "aria": null
+          },
+          {
+            "title": "사이드바 메뉴",
+            "text": "",
+            "aria": "사이드바 메뉴"
+          },
+          {
+            "title": "찾기 (Ctrl K)",
+            "text": "찾기Ctrl K",
+            "aria": null
+          },
+          {
+            "title": "모든 작업의 지금 상황과 새 세션",
+            "text": "홈",
+            "aria": null
+          },
+          {
+            "title": "새 정리 폴더",
+            "text": "",
+            "aria": "새 정리 폴더"
+          },
+          {
+            "title": "프로젝트 정렬",
+            "text": "",
+            "aria": "프로젝트 정렬"
+          },
+          {
+            "title": "새 문서·세션 만들기",
+            "text": "",
+            "aria": "새 문서·세션 만들기"
+          },
+          {
+            "title": "바로가기 접기",
+            "text": "바로가기",
+            "aria": null
+          },
+          {
+            "title": "보기 접기",
+            "text": "보기",
+            "aria": null
+          },
+          {
+            "title": "새 보기",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "보기 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "kind:note @last7d",
+            "text": "이번 주 노트0",
+            "aria": null
+          },
+          {
+            "title": "kind:session status:running",
+            "text": "진행 중인 세션0",
+            "aria": null
+          },
+          {
+            "title": "볼트 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "옵시디언 볼트를 읽기 전용으로 붙입니다",
+            "text": "옵시디언 볼트 연결",
+            "aria": null
+          },
+          {
+            "title": "다시 읽기",
+            "text": "",
+            "aria": "사용 한도 다시 읽기"
+          },
+          {
+            "title": "보관한 세션·작업·폴더",
+            "text": "보관함",
+            "aria": null
+          },
+          {
+            "title": "홈 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "홈",
+            "aria": "홈"
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "홈 탭 닫기"
+          },
+          {
+            "title": "AI와 글쓰기 · 3주차 강의 · 프로젝트 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "프로젝트AI와 글쓰기 · 3주차 강의 · 프로젝트",
+            "aria": "프로젝트 · AI와 글쓰기 · 3주차 강의 · 프로젝트"
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "AI와 글쓰기 · 3주차 강의 · 프로젝트 탭 닫기"
+          },
+          {
+            "title": "/tmp/wb-app-e2e-Rjj4Dz/fixture-current · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "채팅슬라이드 구성과 읽기 흐름",
+            "aria": "채팅 · 슬라이드 구성과 읽기 흐름"
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "슬라이드 구성과 읽기 흐름 탭 닫기"
+          },
+          {
+            "title": "이 프로젝트에 새 문서·디자인·세션 만들기",
+            "text": "새로 만들기",
+            "aria": "새로 만들기"
+          },
+          {
+            "title": "/tmp/wb-app-e2e-Rjj4Dz/fixture-current",
+            "text": "기본 작업공간",
+            "aria": "작업공간 선택"
+          },
+          {
+            "title": "분류 옮기기",
+            "text": "분류 없음",
+            "aria": null
+          },
+          {
+            "title": "프로젝트 페이지: 속성·기록·결정·세션·파일",
+            "text": "AI와 글쓰기 · 3주차 강의",
+            "aria": null
+          },
+          {
+            "title": "이 작업의 문서",
+            "text": "문서 2",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "파일",
+            "aria": "문서 파일 메뉴"
+          },
+          {
+            "title": "",
+            "text": "대기 중Codex노트북",
+            "aria": null
+          },
+          {
+            "title": "이 요청으로 올라가기",
+            "text": "1견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어 줘.",
+            "aria": null
+          },
+          {
+            "title": "요청 전체 보기",
+            "text": "",
+            "aria": "요청 전체 보기"
+          },
+          {
+            "title": "이 요청 앞까지의 대화로 새 갈래를 만들고, 이 요청을 고쳐 다시 묻습니다(이 대화는 그대로)",
+            "text": "이 요청 전으로",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "실행 상세 · 생각 정리",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "실행 상세 · 명령 1개 · 파일 변경 1건",
+            "aria": null
+          },
+          {
+            "title": "/tmp/wb-app-e2e-Rjj4Dz/fixture-current/슬라이드-구성.md",
+            "text": "MD슬라이드-구성.md새 파일 · r1 · Markdown열기",
+            "aria": null
+          },
+          {
+            "title": "이 답(고른 부분이 있으면 그 부분)을 작업 폴더의 새 페이지로",
+            "text": "페이지로 만들기",
+            "aria": null
+          },
+          {
+            "title": "이 답(고른 부분이 있으면 그 부분)을 프로젝트 노트의 결정으로",
+            "text": "결정으로",
+            "aria": null
+          },
+          {
+            "title": "이 답(고른 부분이 있으면 그 부분)을 프로젝트 노트의 열린 질문으로",
+            "text": "질문으로",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "첨부",
+            "aria": "사진 또는 파일 첨부"
+          },
+          {
+            "title": "권한: 자동 — 작업 폴더 안에서는 묻지 않고, 폴더 밖이나 인터넷을 쓸 때만 묻습니다.",
+            "text": "자동",
+            "aria": null
+          },
+          {
+            "title": "컨텍스트 8% · 20k / 258k 토큰",
+            "text": "8%",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "음성 입력",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "역할 · 없음",
+            "aria": "역할: 없음"
+          },
+          {
+            "title": "계획 먼저: 고치기 전에 계획을 보여 주고, 확인하면 진행합니다",
+            "text": "계획 먼저",
+            "aria": null
+          },
+          {
+            "title": "그림 그리기 · GPT Image (Codex 전용)",
+            "text": "그림",
+            "aria": null
+          },
+          {
+            "title": "브라우저: 꺼짐 — 자동: 읽기와 이미 연 사이트 안 이동은 바로 하고, 누르기·입력·새 사이트는 확인합니다.",
+            "text": "브라우저",
+            "aria": null
+          },
+          {
+            "title": "결과를 새 문서로 만들기",
+            "text": "",
+            "aria": "새 문서로 만들기"
+          },
+          {
+            "title": "가짜 모델",
+            "text": "Fake",
+            "aria": "Fake"
+          },
+          {
+            "title": "추론 강도",
+            "text": "중간",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "Codex · 노트북",
+            "aria": null
+          },
+          {
+            "title": "프로젝트 문서 붙이기",
+            "text": "",
+            "aria": "프로젝트 문서 붙이기"
+          },
+          {
+            "title": "보내기 (Enter)",
+            "text": "",
+            "aria": "보내기"
+          },
+          {
+            "title": "",
+            "text": "열기",
+            "aria": null
+          }
+        ],
+        "elements": [
+          {
+            "width": 288,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 952,
+            "y": 48,
+            "text": " 새로 만들기찾기Ctrl K홈프로젝트AI와 글쓰기 · 3주차 강의채팅 · 3슬라이드 구성과 읽기 흐름채팅국내외 교육 사례 조사채팅강의 자료 교정과 문장 정리채팅문서 2활동 및 바로가기바로가기프로젝트·폴더·태그를 여기",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px",
+            "x": 0,
+            "line": "18.200001px",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "",
+            "selector": ".sidebar"
+          },
+          {
+            "width": 125,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 20,
+            "y": 288,
+            "text": "슬라이드 구성과 읽기 흐름",
+            "weight": "600",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px",
+            "x": 95,
+            "line": "20px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".row-session .side-row-label"
+          },
+          {
+            "width": 271,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 32,
+            "y": 252,
+            "text": "채팅 · 3",
+            "weight": "600",
+            "size": "13px",
+            "color": "rgb(108, 108, 112)",
+            "padding": "8px 8px 4px 22px",
+            "x": 8,
+            "line": "20px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(108, 108, 112)",
+            "selector": ".side-section-label"
+          },
+          {
+            "width": 22,
+            "radius": "4px",
+            "tracking": "normal",
+            "height": 20,
+            "y": 288,
+            "text": "채팅",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(108, 108, 112)",
+            "padding": "0px",
+            "x": 228,
+            "line": "20px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(108, 108, 112)",
+            "selector": ".nav-kind"
+          },
+          {
+            "width": 174.84375,
+            "radius": "12px",
+            "tracking": "-0.065px",
+            "height": 28,
+            "y": 9.5,
+            "text": "대화AI와 글쓰기 · 3주차 강의",
+            "weight": "600",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "4px 12px",
+            "x": 632.578125,
+            "line": "18.85px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".topbar-title"
+          },
+          {
+            "width": 1152,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 41,
+            "y": 49,
+            "text": "홈프로젝트AI와 글쓰기 · 3주차 강의 · 프로젝트채팅슬라이드 구성과 읽기 흐름새로 만들기",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "4px 8px",
+            "x": 288,
+            "line": "20px",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "",
+            "selector": ".group-tabs"
+          },
+          {
+            "width": 11,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 20,
+            "y": 59,
+            "text": "홈",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(108, 108, 112)",
+            "padding": "0px",
+            "x": 325,
+            "line": "20px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(108, 108, 112)",
+            "selector": ".group-tab-title"
+          },
+          {
+            "width": 720,
+            "radius": "12px",
+            "tracking": "normal",
+            "height": 98,
+            "y": 890,
+            "text": " 첨부자동8%음성 입력도구다음 요청 설정역할 · 없음계획 먼저그림브라우저Fake중간Codex · 노트북",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "16px 12px 8px",
+            "x": 504,
+            "line": "18.85px",
+            "background": "rgb(255, 255, 255)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "1px solid rgb(142, 142, 147)",
+            "selector": ".composer"
+          },
+          {
+            "width": 694,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 32,
+            "y": 907,
+            "text": "",
+            "weight": "400",
+            "size": "17px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px 4px",
+            "x": 517,
+            "line": "29.75px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".composer textarea"
+          },
+          {
+            "width": 720,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 528.078125,
+            "y": 230,
+            "text": "3주차 슬라이드 구성을 다시 짰습니다. 핵심은 질문을 먼저 세우고, 사례로 내려가는 순서입니다.\n바꾼 점\n\n도입부를 질문 하나로 시작하게 바꿨습니다.\n겹치던 사례 슬라이드 두 장을 한 장으로 합쳤습니다.\n마지막 장에",
+            "weight": "400",
+            "size": "17px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px",
+            "x": 504,
+            "line": "29.75px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".turn-assistant > .markdown"
+          },
+          {
+            "width": 720,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 29,
+            "y": 230,
+            "text": "3주차 슬라이드 구성을 다시 짰습니다. 핵심은 질문을 먼저 세우고, 사례로 내려가는 순서입니다.",
+            "weight": "400",
+            "size": "17px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px",
+            "x": 504,
+            "line": "29.75px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".turn-assistant > .markdown p"
+          },
+          {
+            "width": 720,
+            "radius": "0px",
+            "tracking": "-0.11px",
+            "height": 29,
+            "y": 283,
+            "text": "바꾼 점",
+            "weight": "600",
+            "size": "22px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px",
+            "x": 504,
+            "line": "29.700001px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".turn-assistant > .markdown h2"
+          },
+          {
+            "selector": ".turn-assistant > .markdown h3",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown h4",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown em",
+            "missing": true
+          },
+          {
+            "width": 279.6304931640625,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 20,
+            "y": 234,
+            "text": "질문을 먼저 세우고, 사례로 내려가는 순서",
+            "weight": "600",
+            "size": "17px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px",
+            "x": 811.97509765625,
+            "line": "29.75px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".turn-assistant > .markdown strong"
+          },
+          {
+            "width": 1152,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 747,
+            "y": 135,
+            "text": "1견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어 줘.1요청·10:36 이 요청 전으로견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px",
+            "x": 288,
+            "line": "18.85px",
+            "background": "rgb(255, 255, 255)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".transcript"
+          },
+          {
+            "width": 597.953125,
+            "radius": "16px",
+            "tracking": "normal",
+            "height": 53,
+            "y": -199,
+            "text": "견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어 줘.",
+            "weight": "400",
+            "size": "17px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "12px 16px",
+            "x": 626.046875,
+            "line": "29.75px",
+            "background": "color(srgb 0.932612 0.942651 0.974526)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".user-bubble"
+          }
+        ],
+        "viewport": {
+          "height": 1000,
+          "width": 1440
+        },
+        "fonts": [
+          {
+            "status": "unloaded",
+            "family": "Achmage SameTone",
+            "weight": "100 900"
+          },
+          {
+            "status": "unloaded",
+            "family": "Achmage SameTone Hangul",
+            "weight": "100 900"
+          },
+          {
+            "status": "loaded",
+            "family": "Pretendard Variable",
+            "weight": "45 920"
+          }
+        ]
+      },
+      "dark": {
+        "dpr": 1,
+        "visibleButtons": [
+          {
+            "title": "사이드바 닫기",
+            "text": "",
+            "aria": "사이드바 닫기"
+          },
+          {
+            "title": "홈",
+            "text": "Workbench",
+            "aria": "Achmage 홈"
+          },
+          {
+            "title": "눌러서 작업 이름 바꾸기",
+            "text": "대화AI와 글쓰기 · 3주차 강의",
+            "aria": null
+          },
+          {
+            "title": "기기 연결",
+            "text": "기기 연결",
+            "aria": "기기 연결"
+          },
+          {
+            "title": "작업 현황",
+            "text": "",
+            "aria": "작업 현황"
+          },
+          {
+            "title": "",
+            "text": "1",
+            "aria": "알림 · 읽지 않음 1개"
+          },
+          {
+            "title": "",
+            "text": "화면 배치",
+            "aria": "화면 배치"
+          },
+          {
+            "title": "라이트 화면으로",
+            "text": "",
+            "aria": "라이트 화면으로"
+          },
+          {
+            "title": "",
+            "text": "",
+            "aria": "연결과 설정"
+          },
+          {
+            "title": "새로 만들기 (Ctrl N)",
+            "text": "새로 만들기",
+            "aria": null
+          },
+          {
+            "title": "사이드바 메뉴",
+            "text": "",
+            "aria": "사이드바 메뉴"
+          },
+          {
+            "title": "찾기 (Ctrl K)",
+            "text": "찾기Ctrl K",
+            "aria": null
+          },
+          {
+            "title": "모든 작업의 지금 상황과 새 세션",
+            "text": "홈",
+            "aria": null
+          },
+          {
+            "title": "새 정리 폴더",
+            "text": "",
+            "aria": "새 정리 폴더"
+          },
+          {
+            "title": "프로젝트 정렬",
+            "text": "",
+            "aria": "프로젝트 정렬"
+          },
+          {
+            "title": "새 문서·세션 만들기",
+            "text": "",
+            "aria": "새 문서·세션 만들기"
+          },
+          {
+            "title": "바로가기 접기",
+            "text": "바로가기",
+            "aria": null
+          },
+          {
+            "title": "보기 접기",
+            "text": "보기",
+            "aria": null
+          },
+          {
+            "title": "새 보기",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "보기 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "kind:note @last7d",
+            "text": "이번 주 노트0",
+            "aria": null
+          },
+          {
+            "title": "kind:session status:running",
+            "text": "진행 중인 세션0",
+            "aria": null
+          },
+          {
+            "title": "볼트 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "옵시디언 볼트를 읽기 전용으로 붙입니다",
+            "text": "옵시디언 볼트 연결",
+            "aria": null
+          },
+          {
+            "title": "다시 읽기",
+            "text": "",
+            "aria": "사용 한도 다시 읽기"
+          },
+          {
+            "title": "보관한 세션·작업·폴더",
+            "text": "보관함",
+            "aria": null
+          },
+          {
+            "title": "홈 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "홈",
+            "aria": "홈"
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "홈 탭 닫기"
+          },
+          {
+            "title": "AI와 글쓰기 · 3주차 강의 · 프로젝트 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "프로젝트AI와 글쓰기 · 3주차 강의 · 프로젝트",
+            "aria": "프로젝트 · AI와 글쓰기 · 3주차 강의 · 프로젝트"
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "AI와 글쓰기 · 3주차 강의 · 프로젝트 탭 닫기"
+          },
+          {
+            "title": "/tmp/wb-app-e2e-Rjj4Dz/fixture-current · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "채팅슬라이드 구성과 읽기 흐름",
+            "aria": "채팅 · 슬라이드 구성과 읽기 흐름"
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "슬라이드 구성과 읽기 흐름 탭 닫기"
+          },
+          {
+            "title": "이 프로젝트에 새 문서·디자인·세션 만들기",
+            "text": "새로 만들기",
+            "aria": "새로 만들기"
+          },
+          {
+            "title": "/tmp/wb-app-e2e-Rjj4Dz/fixture-current",
+            "text": "기본 작업공간",
+            "aria": "작업공간 선택"
+          },
+          {
+            "title": "분류 옮기기",
+            "text": "분류 없음",
+            "aria": null
+          },
+          {
+            "title": "프로젝트 페이지: 속성·기록·결정·세션·파일",
+            "text": "AI와 글쓰기 · 3주차 강의",
+            "aria": null
+          },
+          {
+            "title": "이 작업의 문서",
+            "text": "문서 2",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "파일",
+            "aria": "문서 파일 메뉴"
+          },
+          {
+            "title": "",
+            "text": "대기 중Codex노트북",
+            "aria": null
+          },
+          {
+            "title": "이 요청으로 올라가기",
+            "text": "1견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어 줘.",
+            "aria": null
+          },
+          {
+            "title": "요청 전체 보기",
+            "text": "",
+            "aria": "요청 전체 보기"
+          },
+          {
+            "title": "이 요청 앞까지의 대화로 새 갈래를 만들고, 이 요청을 고쳐 다시 묻습니다(이 대화는 그대로)",
+            "text": "이 요청 전으로",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "실행 상세 · 생각 정리",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "실행 상세 · 명령 1개 · 파일 변경 1건",
+            "aria": null
+          },
+          {
+            "title": "/tmp/wb-app-e2e-Rjj4Dz/fixture-current/슬라이드-구성.md",
+            "text": "MD슬라이드-구성.md새 파일 · r1 · Markdown열기",
+            "aria": null
+          },
+          {
+            "title": "이 답(고른 부분이 있으면 그 부분)을 작업 폴더의 새 페이지로",
+            "text": "페이지로 만들기",
+            "aria": null
+          },
+          {
+            "title": "이 답(고른 부분이 있으면 그 부분)을 프로젝트 노트의 결정으로",
+            "text": "결정으로",
+            "aria": null
+          },
+          {
+            "title": "이 답(고른 부분이 있으면 그 부분)을 프로젝트 노트의 열린 질문으로",
+            "text": "질문으로",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "첨부",
+            "aria": "사진 또는 파일 첨부"
+          },
+          {
+            "title": "권한: 자동 — 작업 폴더 안에서는 묻지 않고, 폴더 밖이나 인터넷을 쓸 때만 묻습니다.",
+            "text": "자동",
+            "aria": null
+          },
+          {
+            "title": "컨텍스트 8% · 20k / 258k 토큰",
+            "text": "8%",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "음성 입력",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "역할 · 없음",
+            "aria": "역할: 없음"
+          },
+          {
+            "title": "계획 먼저: 고치기 전에 계획을 보여 주고, 확인하면 진행합니다",
+            "text": "계획 먼저",
+            "aria": null
+          },
+          {
+            "title": "그림 그리기 · GPT Image (Codex 전용)",
+            "text": "그림",
+            "aria": null
+          },
+          {
+            "title": "브라우저: 꺼짐 — 자동: 읽기와 이미 연 사이트 안 이동은 바로 하고, 누르기·입력·새 사이트는 확인합니다.",
+            "text": "브라우저",
+            "aria": null
+          },
+          {
+            "title": "결과를 새 문서로 만들기",
+            "text": "",
+            "aria": "새 문서로 만들기"
+          },
+          {
+            "title": "가짜 모델",
+            "text": "Fake",
+            "aria": "Fake"
+          },
+          {
+            "title": "추론 강도",
+            "text": "중간",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "Codex · 노트북",
+            "aria": null
+          },
+          {
+            "title": "프로젝트 문서 붙이기",
+            "text": "",
+            "aria": "프로젝트 문서 붙이기"
+          },
+          {
+            "title": "보내기 (Enter)",
+            "text": "",
+            "aria": "보내기"
+          },
+          {
+            "title": "",
+            "text": "열기",
+            "aria": null
+          }
+        ],
+        "elements": [
+          {
+            "width": 288,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 952,
+            "y": 48,
+            "text": " 새로 만들기찾기Ctrl K홈프로젝트AI와 글쓰기 · 3주차 강의채팅 · 3슬라이드 구성과 읽기 흐름채팅국내외 교육 사례 조사채팅강의 자료 교정과 문장 정리채팅문서 2활동 및 바로가기바로가기프로젝트·폴더·태그를 여기",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(255, 255, 255)",
+            "padding": "0px",
+            "x": 0,
+            "line": "18.200001px",
+            "background": "color(srgb 0.205647 0.205647 0.213176)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "",
+            "selector": ".sidebar"
+          },
+          {
+            "width": 125,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 20,
+            "y": 288,
+            "text": "슬라이드 구성과 읽기 흐름",
+            "weight": "600",
+            "size": "13px",
+            "color": "rgb(255, 255, 255)",
+            "padding": "0px",
+            "x": 95,
+            "line": "20px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(255, 255, 255)",
+            "selector": ".row-session .side-row-label"
+          },
+          {
+            "width": 271,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 32,
+            "y": 252,
+            "text": "채팅 · 3",
+            "weight": "600",
+            "size": "13px",
+            "color": "rgb(174, 174, 178)",
+            "padding": "8px 8px 4px 22px",
+            "x": 8,
+            "line": "20px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(174, 174, 178)",
+            "selector": ".side-section-label"
+          },
+          {
+            "width": 22,
+            "radius": "4px",
+            "tracking": "normal",
+            "height": 20,
+            "y": 288,
+            "text": "채팅",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(174, 174, 178)",
+            "padding": "0px",
+            "x": 228,
+            "line": "20px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(174, 174, 178)",
+            "selector": ".nav-kind"
+          },
+          {
+            "width": 174.84375,
+            "radius": "12px",
+            "tracking": "-0.065px",
+            "height": 28,
+            "y": 9.5,
+            "text": "대화AI와 글쓰기 · 3주차 강의",
+            "weight": "600",
+            "size": "13px",
+            "color": "rgb(255, 255, 255)",
+            "padding": "4px 12px",
+            "x": 632.578125,
+            "line": "18.85px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(255, 255, 255)",
+            "selector": ".topbar-title"
+          },
+          {
+            "width": 1152,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 41,
+            "y": 49,
+            "text": "홈프로젝트AI와 글쓰기 · 3주차 강의 · 프로젝트채팅슬라이드 구성과 읽기 흐름새로 만들기",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(255, 255, 255)",
+            "padding": "4px 8px",
+            "x": 288,
+            "line": "20px",
+            "background": "color(srgb 0.205647 0.205647 0.213176)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "",
+            "selector": ".group-tabs"
+          },
+          {
+            "width": 11,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 20,
+            "y": 59,
+            "text": "홈",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(174, 174, 178)",
+            "padding": "0px",
+            "x": 325,
+            "line": "20px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(174, 174, 178)",
+            "selector": ".group-tab-title"
+          },
+          {
+            "width": 720,
+            "radius": "12px",
+            "tracking": "normal",
+            "height": 98,
+            "y": 890,
+            "text": " 첨부자동8%음성 입력도구다음 요청 설정역할 · 없음계획 먼저그림브라우저Fake중간Codex · 노트북",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(255, 255, 255)",
+            "padding": "16px 12px 8px",
+            "x": 504,
+            "line": "18.85px",
+            "background": "rgb(44, 44, 46)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "1px solid rgb(142, 142, 147)",
+            "selector": ".composer"
+          },
+          {
+            "width": 694,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 32,
+            "y": 907,
+            "text": "",
+            "weight": "400",
+            "size": "17px",
+            "color": "rgb(255, 255, 255)",
+            "padding": "0px 4px",
+            "x": 517,
+            "line": "29.75px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(255, 255, 255)",
+            "selector": ".composer textarea"
+          },
+          {
+            "width": 720,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 528.078125,
+            "y": 230,
+            "text": "3주차 슬라이드 구성을 다시 짰습니다. 핵심은 질문을 먼저 세우고, 사례로 내려가는 순서입니다.\n바꾼 점\n\n도입부를 질문 하나로 시작하게 바꿨습니다.\n겹치던 사례 슬라이드 두 장을 한 장으로 합쳤습니다.\n마지막 장에",
+            "weight": "400",
+            "size": "17px",
+            "color": "rgb(255, 255, 255)",
+            "padding": "0px",
+            "x": 504,
+            "line": "29.75px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(255, 255, 255)",
+            "selector": ".turn-assistant > .markdown"
+          },
+          {
+            "width": 720,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 29,
+            "y": 230,
+            "text": "3주차 슬라이드 구성을 다시 짰습니다. 핵심은 질문을 먼저 세우고, 사례로 내려가는 순서입니다.",
+            "weight": "400",
+            "size": "17px",
+            "color": "rgb(255, 255, 255)",
+            "padding": "0px",
+            "x": 504,
+            "line": "29.75px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(255, 255, 255)",
+            "selector": ".turn-assistant > .markdown p"
+          },
+          {
+            "width": 720,
+            "radius": "0px",
+            "tracking": "-0.11px",
+            "height": 29,
+            "y": 283,
+            "text": "바꾼 점",
+            "weight": "600",
+            "size": "22px",
+            "color": "rgb(255, 255, 255)",
+            "padding": "0px",
+            "x": 504,
+            "line": "29.700001px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(255, 255, 255)",
+            "selector": ".turn-assistant > .markdown h2"
+          },
+          {
+            "selector": ".turn-assistant > .markdown h3",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown h4",
+            "missing": true
+          },
+          {
+            "selector": ".turn-assistant > .markdown em",
+            "missing": true
+          },
+          {
+            "width": 279.6304931640625,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 20,
+            "y": 234,
+            "text": "질문을 먼저 세우고, 사례로 내려가는 순서",
+            "weight": "600",
+            "size": "17px",
+            "color": "rgb(255, 255, 255)",
+            "padding": "0px",
+            "x": 811.97509765625,
+            "line": "29.75px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(255, 255, 255)",
+            "selector": ".turn-assistant > .markdown strong"
+          },
+          {
+            "width": 1152,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 747,
+            "y": 135,
+            "text": "1견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어 줘.1요청·10:36 이 요청 전으로견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(255, 255, 255)",
+            "padding": "0px",
+            "x": 288,
+            "line": "18.85px",
+            "background": "rgb(28, 28, 30)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(255, 255, 255)",
+            "selector": ".transcript"
+          },
+          {
+            "width": 597.953125,
+            "radius": "16px",
+            "tracking": "normal",
+            "height": 53,
+            "y": -199,
+            "text": "견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어 줘.",
+            "weight": "400",
+            "size": "17px",
+            "color": "rgb(255, 255, 255)",
+            "padding": "12px 16px",
+            "x": 626.046875,
+            "line": "29.75px",
+            "background": "color(srgb 0.205647 0.205647 0.213176)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(255, 255, 255)",
+            "selector": ".user-bubble"
+          }
+        ],
+        "viewport": {
+          "height": 1000,
+          "width": 1440
+        },
+        "fonts": [
+          {
+            "status": "unloaded",
+            "family": "Achmage SameTone",
+            "weight": "100 900"
+          },
+          {
+            "status": "unloaded",
+            "family": "Achmage SameTone Hangul",
+            "weight": "100 900"
+          },
+          {
+            "status": "loaded",
+            "family": "Pretendard Variable",
+            "weight": "45 920"
+          }
+        ]
+      },
+      "semanticSpecimen": {
+        "dpr": 1,
+        "visibleButtons": [
+          {
+            "title": "사이드바 닫기",
+            "text": "",
+            "aria": "사이드바 닫기"
+          },
+          {
+            "title": "홈",
+            "text": "Workbench",
+            "aria": "Achmage 홈"
+          },
+          {
+            "title": "눌러서 작업 이름 바꾸기",
+            "text": "대화AI와 글쓰기 · 3주차 강의",
+            "aria": null
+          },
+          {
+            "title": "기기 연결",
+            "text": "기기 연결",
+            "aria": "기기 연결"
+          },
+          {
+            "title": "작업 현황",
+            "text": "",
+            "aria": "작업 현황"
+          },
+          {
+            "title": "",
+            "text": "1",
+            "aria": "알림 · 읽지 않음 1개"
+          },
+          {
+            "title": "",
+            "text": "화면 배치",
+            "aria": "화면 배치"
+          },
+          {
+            "title": "다크 화면으로",
+            "text": "",
+            "aria": "다크 화면으로"
+          },
+          {
+            "title": "",
+            "text": "",
+            "aria": "연결과 설정"
+          },
+          {
+            "title": "새로 만들기 (Ctrl N)",
+            "text": "새로 만들기",
+            "aria": null
+          },
+          {
+            "title": "사이드바 메뉴",
+            "text": "",
+            "aria": "사이드바 메뉴"
+          },
+          {
+            "title": "찾기 (Ctrl K)",
+            "text": "찾기Ctrl K",
+            "aria": null
+          },
+          {
+            "title": "모든 작업의 지금 상황과 새 세션",
+            "text": "홈",
+            "aria": null
+          },
+          {
+            "title": "새 정리 폴더",
+            "text": "",
+            "aria": "새 정리 폴더"
+          },
+          {
+            "title": "프로젝트 정렬",
+            "text": "",
+            "aria": "프로젝트 정렬"
+          },
+          {
+            "title": "새 문서·세션 만들기",
+            "text": "",
+            "aria": "새 문서·세션 만들기"
+          },
+          {
+            "title": "바로가기 접기",
+            "text": "바로가기",
+            "aria": null
+          },
+          {
+            "title": "보기 접기",
+            "text": "보기",
+            "aria": null
+          },
+          {
+            "title": "새 보기",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "보기 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "kind:note @last7d",
+            "text": "이번 주 노트0",
+            "aria": null
+          },
+          {
+            "title": "kind:session status:running",
+            "text": "진행 중인 세션0",
+            "aria": null
+          },
+          {
+            "title": "볼트 메뉴",
+            "text": "",
+            "aria": null
+          },
+          {
+            "title": "옵시디언 볼트를 읽기 전용으로 붙입니다",
+            "text": "옵시디언 볼트 연결",
+            "aria": null
+          },
+          {
+            "title": "다시 읽기",
+            "text": "",
+            "aria": "사용 한도 다시 읽기"
+          },
+          {
+            "title": "보관한 세션·작업·폴더",
+            "text": "보관함",
+            "aria": null
+          },
+          {
+            "title": "홈 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "홈",
+            "aria": "홈"
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "홈 탭 닫기"
+          },
+          {
+            "title": "AI와 글쓰기 · 3주차 강의 · 프로젝트 · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "프로젝트AI와 글쓰기 · 3주차 강의 · 프로젝트",
+            "aria": "프로젝트 · AI와 글쓰기 · 3주차 강의 · 프로젝트"
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "AI와 글쓰기 · 3주차 강의 · 프로젝트 탭 닫기"
+          },
+          {
+            "title": "/tmp/wb-app-e2e-Rjj4Dz/fixture-current · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경",
+            "text": "채팅슬라이드 구성과 읽기 흐름",
+            "aria": "채팅 · 슬라이드 구성과 읽기 흐름"
+          },
+          {
+            "title": "탭 닫기 · 파일과 세션 기록은 유지",
+            "text": "",
+            "aria": "슬라이드 구성과 읽기 흐름 탭 닫기"
+          },
+          {
+            "title": "이 프로젝트에 새 문서·디자인·세션 만들기",
+            "text": "새로 만들기",
+            "aria": "새로 만들기"
+          },
+          {
+            "title": "/tmp/wb-app-e2e-Rjj4Dz/fixture-current",
+            "text": "기본 작업공간",
+            "aria": "작업공간 선택"
+          },
+          {
+            "title": "분류 옮기기",
+            "text": "분류 없음",
+            "aria": null
+          },
+          {
+            "title": "프로젝트 페이지: 속성·기록·결정·세션·파일",
+            "text": "AI와 글쓰기 · 3주차 강의",
+            "aria": null
+          },
+          {
+            "title": "이 작업의 문서",
+            "text": "문서 2",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "파일",
+            "aria": "문서 파일 메뉴"
+          },
+          {
+            "title": "",
+            "text": "대기 중Codex노트북",
+            "aria": null
+          },
+          {
+            "title": "이 요청으로 올라가기",
+            "text": "1견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어 줘.",
+            "aria": null
+          },
+          {
+            "title": "요청 전체 보기",
+            "text": "",
+            "aria": "요청 전체 보기"
+          },
+          {
+            "title": "이 요청 앞까지의 대화로 새 갈래를 만들고, 이 요청을 고쳐 다시 묻습니다(이 대화는 그대로)",
+            "text": "이 요청 전으로",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "실행 상세 · 생각 정리",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "실행 상세 · 명령 1개 · 파일 변경 1건",
+            "aria": null
+          },
+          {
+            "title": "/tmp/wb-app-e2e-Rjj4Dz/fixture-current/슬라이드-구성.md",
+            "text": "MD슬라이드-구성.md새 파일 · r1 · Markdown열기",
+            "aria": null
+          },
+          {
+            "title": "이 답(고른 부분이 있으면 그 부분)을 작업 폴더의 새 페이지로",
+            "text": "페이지로 만들기",
+            "aria": null
+          },
+          {
+            "title": "이 답(고른 부분이 있으면 그 부분)을 프로젝트 노트의 결정으로",
+            "text": "결정으로",
+            "aria": null
+          },
+          {
+            "title": "이 답(고른 부분이 있으면 그 부분)을 프로젝트 노트의 열린 질문으로",
+            "text": "질문으로",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "첨부",
+            "aria": "사진 또는 파일 첨부"
+          },
+          {
+            "title": "권한: 자동 — 작업 폴더 안에서는 묻지 않고, 폴더 밖이나 인터넷을 쓸 때만 묻습니다.",
+            "text": "자동",
+            "aria": null
+          },
+          {
+            "title": "컨텍스트 8% · 20k / 258k 토큰",
+            "text": "8%",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "음성 입력",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "역할 · 없음",
+            "aria": "역할: 없음"
+          },
+          {
+            "title": "계획 먼저: 고치기 전에 계획을 보여 주고, 확인하면 진행합니다",
+            "text": "계획 먼저",
+            "aria": null
+          },
+          {
+            "title": "그림 그리기 · GPT Image (Codex 전용)",
+            "text": "그림",
+            "aria": null
+          },
+          {
+            "title": "브라우저: 꺼짐 — 자동: 읽기와 이미 연 사이트 안 이동은 바로 하고, 누르기·입력·새 사이트는 확인합니다.",
+            "text": "브라우저",
+            "aria": null
+          },
+          {
+            "title": "결과를 새 문서로 만들기",
+            "text": "",
+            "aria": "새 문서로 만들기"
+          },
+          {
+            "title": "가짜 모델",
+            "text": "Fake",
+            "aria": "Fake"
+          },
+          {
+            "title": "추론 강도",
+            "text": "중간",
+            "aria": null
+          },
+          {
+            "title": "",
+            "text": "Codex · 노트북",
+            "aria": null
+          },
+          {
+            "title": "프로젝트 문서 붙이기",
+            "text": "",
+            "aria": "프로젝트 문서 붙이기"
+          },
+          {
+            "title": "보내기 (Enter)",
+            "text": "",
+            "aria": "보내기"
+          },
+          {
+            "title": "",
+            "text": "열기",
+            "aria": null
+          }
+        ],
+        "elements": [
+          {
+            "width": 288,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 952,
+            "y": 48,
+            "text": " 새로 만들기찾기Ctrl K홈프로젝트AI와 글쓰기 · 3주차 강의채팅 · 3슬라이드 구성과 읽기 흐름채팅국내외 교육 사례 조사채팅강의 자료 교정과 문장 정리채팅문서 2활동 및 바로가기바로가기프로젝트·폴더·태그를 여기",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px",
+            "x": 0,
+            "line": "18.200001px",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "",
+            "selector": ".sidebar"
+          },
+          {
+            "width": 125,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 20,
+            "y": 288,
+            "text": "슬라이드 구성과 읽기 흐름",
+            "weight": "600",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px",
+            "x": 95,
+            "line": "20px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".row-session .side-row-label"
+          },
+          {
+            "width": 271,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 32,
+            "y": 252,
+            "text": "채팅 · 3",
+            "weight": "600",
+            "size": "13px",
+            "color": "rgb(108, 108, 112)",
+            "padding": "8px 8px 4px 22px",
+            "x": 8,
+            "line": "20px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(108, 108, 112)",
+            "selector": ".side-section-label"
+          },
+          {
+            "width": 22,
+            "radius": "4px",
+            "tracking": "normal",
+            "height": 20,
+            "y": 288,
+            "text": "채팅",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(108, 108, 112)",
+            "padding": "0px",
+            "x": 228,
+            "line": "20px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(108, 108, 112)",
+            "selector": ".nav-kind"
+          },
+          {
+            "width": 174.84375,
+            "radius": "12px",
+            "tracking": "-0.065px",
+            "height": 28,
+            "y": 9.5,
+            "text": "대화AI와 글쓰기 · 3주차 강의",
+            "weight": "600",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "4px 12px",
+            "x": 632.578125,
+            "line": "18.85px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".topbar-title"
+          },
+          {
+            "width": 1152,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 41,
+            "y": 49,
+            "text": "홈프로젝트AI와 글쓰기 · 3주차 강의 · 프로젝트채팅슬라이드 구성과 읽기 흐름새로 만들기",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "4px 8px",
+            "x": 288,
+            "line": "20px",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "",
+            "selector": ".group-tabs"
+          },
+          {
+            "width": 11,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 20,
+            "y": 59,
+            "text": "홈",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(108, 108, 112)",
+            "padding": "0px",
+            "x": 325,
+            "line": "20px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(108, 108, 112)",
+            "selector": ".group-tab-title"
+          },
+          {
+            "width": 720,
+            "radius": "12px",
+            "tracking": "normal",
+            "height": 98,
+            "y": 890,
+            "text": " 첨부자동8%음성 입력도구다음 요청 설정역할 · 없음계획 먼저그림브라우저Fake중간Codex · 노트북",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "16px 12px 8px",
+            "x": 504,
+            "line": "18.85px",
+            "background": "rgb(255, 255, 255)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "1px solid rgb(142, 142, 147)",
+            "selector": ".composer"
+          },
+          {
+            "width": 694,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 32,
+            "y": 907,
+            "text": "",
+            "weight": "400",
+            "size": "17px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px 4px",
+            "x": 517,
+            "line": "29.75px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".composer textarea"
+          },
+          {
+            "width": 720,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 289,
+            "y": 469,
+            "text": "읽기와 판단의 위계같은 내용을 읽어도 글자의 모양, 색, 여백에 따라 중요한 부분을 찾는 속도가 달라집니다.세 번째 단계 제목 · H3일반 문장 안에서 강조된 문구를 찾아봅니다. 굵게 강조한 문구와도 구분되어야 합니",
+            "weight": "400",
+            "size": "17px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px",
+            "x": 504,
+            "line": "29.75px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".turn-assistant > .markdown"
+          },
+          {
+            "width": 720,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 29,
+            "y": 510,
+            "text": "같은 내용을 읽어도 글자의 모양, 색, 여백에 따라 중요한 부분을 찾는 속도가 달라집니다.",
+            "weight": "400",
+            "size": "17px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px",
+            "x": 504,
+            "line": "29.75px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".turn-assistant > .markdown p"
+          },
+          {
+            "width": 720,
+            "radius": "0px",
+            "tracking": "-0.11px",
+            "height": 29,
+            "y": 469,
+            "text": "읽기와 판단의 위계",
+            "weight": "600",
+            "size": "22px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px",
+            "x": 504,
+            "line": "29.700001px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".turn-assistant > .markdown h2"
+          },
+          {
+            "width": 720,
+            "radius": "0px",
+            "tracking": "-0.085px",
+            "height": 22,
+            "y": 563,
+            "text": "세 번째 단계 제목 · H3",
+            "weight": "600",
+            "size": "17px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px",
+            "x": 504,
+            "line": "22.950001px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".turn-assistant > .markdown h3"
+          },
+          {
+            "width": 720,
+            "radius": "0px",
+            "tracking": "-0.085px",
+            "height": 22,
+            "y": 650,
+            "text": "네 번째 단계 제목 · H4",
+            "weight": "600",
+            "size": "17px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px",
+            "x": 504,
+            "line": "22.950001px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".turn-assistant > .markdown h4"
+          },
+          {
+            "width": 79,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 20,
+            "y": 601,
+            "text": "강조된 문구",
+            "weight": "400",
+            "size": "17px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px",
+            "x": 621,
+            "line": "29.75px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".turn-assistant > .markdown em"
+          },
+          {
+            "width": 113,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 20,
+            "y": 601,
+            "text": "굵게 강조한 문구",
+            "weight": "600",
+            "size": "17px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px",
+            "x": 801.97509765625,
+            "line": "29.75px",
+            "background": "rgba(0, 0, 0, 0)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".turn-assistant > .markdown strong"
+          },
+          {
+            "width": 1152,
+            "radius": "0px",
+            "tracking": "normal",
+            "height": 747,
+            "y": 135,
+            "text": "1견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어 줘.1요청·10:36 이 요청 전으로견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어",
+            "weight": "400",
+            "size": "13px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "0px",
+            "x": 288,
+            "line": "18.85px",
+            "background": "rgb(255, 255, 255)",
+            "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".transcript"
+          },
+          {
+            "width": 597.953125,
+            "radius": "16px",
+            "tracking": "normal",
+            "height": 53,
+            "y": 16,
+            "text": "견본: AI와 글쓰기 강의 구성을 정리해 줘. 핵심 내용을 먼저 쓰고, 표와 예시를 넣어 줘.",
+            "weight": "400",
+            "size": "17px",
+            "color": "rgb(0, 0, 0)",
+            "padding": "12px 16px",
+            "x": 626.046875,
+            "line": "29.75px",
+            "background": "color(srgb 0.932612 0.942651 0.974526)",
+            "font": "\"Pretendard Variable\", \"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+            "border": "0px none rgb(0, 0, 0)",
+            "selector": ".user-bubble"
+          }
+        ],
+        "viewport": {
+          "height": 1000,
+          "width": 1440
+        },
+        "fonts": [
+          {
+            "status": "unloaded",
+            "family": "Achmage SameTone",
+            "weight": "100 900"
+          },
+          {
+            "status": "unloaded",
+            "family": "Achmage SameTone Hangul",
+            "weight": "100 900"
+          },
+          {
+            "status": "loaded",
+            "family": "Pretendard Variable",
+            "weight": "45 920"
+          }
+        ]
+      }
+    }
+  },
+  "fontSpecimen": [
+    {
+      "size": "17px",
+      "color": "rgb(32, 39, 51)",
+      "font": "ReviewSameTone",
+      "hangulWidth": 154,
+      "latinWidth": 270.81689453125,
+      "line": "27.200001px"
+    },
+    {
+      "size": "17px",
+      "color": "rgb(32, 39, 51)",
+      "font": "\"Pretendard Variable\"",
+      "hangulWidth": 154,
+      "latinWidth": 261.89599609375,
+      "line": "27.200001px"
+    }
+  ]
+}

@@ -4,15 +4,19 @@ import type { Api } from "../api.ts";
 import type { State } from "../state.ts";
 import { Icon } from "./Icon.tsx";
 import { restoreSurfaceFocus } from "./controls/menu-navigation.ts";
+import { PathDetail } from "./SettingsSheet.tsx";
 import "./new-document.css";
 
 export const NEW_DOCUMENT_TYPES = [...BLANK_OFFICE_DOCUMENTS,
-  { format: "design", extension: "design.json", label: "디자인 (doory)", name: "새 디자인" },
+  { format: "design", extension: "design.json", label: "디자인", name: "새 디자인" },
 ] as const;
 export type NewDocumentFormat = BlankOfficeFormat | "design";
 export type NewDocumentTarget = { workId?: string | null; workspaceId?: string; format?: NewDocumentFormat };
 
 /** One creation dialog shared by tabs, project rows and empty project space. It never starts AI. */
+/** A folder's name as a teacher reads it: the gateway's "기본 작업공간" is the project's own folder. */
+const folderWord = (label: string | null | undefined) => !label || label === "기본 작업공간" ? "프로젝트 폴더" : label;
+
 export function NewDocumentDialog({ api, state, request, onOpen, onClose }: {
   api: Api; state: State; request: NewDocumentTarget;
   onOpen: (artifact: Artifact) => void; onClose: () => void;
@@ -59,13 +63,14 @@ export function NewDocumentDialog({ api, state, request, onOpen, onClose }: {
           {NEW_DOCUMENT_TYPES.map((entry) => <option key={entry.format} value={entry.format}>{entry.label} (.{entry.extension})</option>)}
         </select></label>
         {format === "design" ? <label>캔버스 크기<select value={preset} disabled={busy} onChange={event => setPreset(event.target.value)}>
-          <option value="square">정사각 (SNS) · 1080×1080</option><option value="portrait">카드뉴스 · 1080×1350</option>
-          <option value="story">세로 (스토리) · 1080×1920</option><option value="wide">가로 (썸네일·화면) · 1920×1080</option><option value="a4">A4 문서 · 794×1123</option>
+          <option value="square">정사각 (SNS), 1080×1080</option><option value="portrait">카드뉴스, 1080×1350</option>
+          <option value="story">세로 (스토리), 1080×1920</option><option value="wide">가로 (썸네일, 화면), 1920×1080</option><option value="a4">A4 문서, 794×1123</option>
         </select></label> : null}
-        <label>파일 이름<input autoFocus value={name} placeholder={kind.name} disabled={busy} onChange={(event) => setName(event.target.value)} /><small className="muted">.{kind.extension} · 같은 이름이 있으면 새 이름으로 만듭니다.</small></label>
-        {target ? <small className="muted new-document-path">{target === workId && workspaceId ? <>{state.workspaces[workspaceId]?.label ?? "현재 작업공간"} · {state.workspaces[workspaceId]?.cwd}</> : state.works[target]?.cwd}</small> : null}
+        <label>파일 이름<input autoFocus value={name} placeholder={kind.name} disabled={busy} onChange={(event) => setName(event.target.value)} /><small className="muted">.{kind.extension} 파일로 만듭니다. 같은 이름이 있으면 새 이름을 붙입니다.</small></label>
+        {target ? <div className="new-document-path"><small className="muted">저장할 폴더: {folderWord(target === workId && workspaceId ? state.workspaces[workspaceId]?.label : null)}</small>
+          <PathDetail value={target === workId && workspaceId ? state.workspaces[workspaceId]?.cwd : state.works[target]?.cwd} /></div> : null}
         {error ? <p role="alert">{error}</p> : null}
-        <footer><button type="submit" className="button primary" disabled={busy}>{busy ? "만드는 중…" : "만들고 열기"}</button></footer>
+        <footer><button type="button" className="button" disabled={busy} onClick={onClose}>취소</button><button aria-busy={busy ? true : undefined} type="submit" className="button primary" disabled={busy}>{busy ? "만드는 중…" : "만들고 열기"}</button></footer>
       </form>
     </dialog>;
 }

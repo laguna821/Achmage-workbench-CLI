@@ -22,7 +22,7 @@
 .flow-nav {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-3xs);
 }
 
 .flow-nav .icon-button.small.flow-step {
@@ -31,7 +31,7 @@
 }
 
 .flow-nav .button.small.flow-today {
-  margin: 0 2px;
+  margin: 0 var(--space-3xs);
 }
 
 .flow-title-wrap {
@@ -71,10 +71,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.flow-feeds-button.on {
-  color: var(--accent);
-}
-
 .flow-feed-error {
   display: flex;
   flex-wrap: wrap;
@@ -85,9 +81,9 @@
 }
 
 .flow-feed-error .text-button {
-  padding: 2px var(--space-2);
+  padding: var(--space-3xs) var(--space-2);
   font-size: var(--fs-meta);
-  color: var(--danger);
+  --c-ink: var(--danger);
 }
 
 /* ── the picker under the title ── */
@@ -116,11 +112,11 @@
 .flow-picker-days {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 2px;
+  gap: var(--space-3xs);
 }
 
 .flow-picker-wd {
-  padding-bottom: 2px;
+  padding-bottom: var(--space-3xs);
   font-size: var(--fs-micro);
   color: var(--muted);
   text-align: center;
@@ -295,7 +291,7 @@
   position: absolute;
   right: calc(100% + 6px);
   top: -9px;
-  padding: 0 2px;
+  padding: 0 var(--space-3xs);
   background: var(--surface);
   color: var(--accent);
   font-size: var(--fs-micro);
@@ -316,7 +312,7 @@
 .flow-allday-cell {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-3xs);
   min-width: 0;
   padding: 3px;
   border-left: 1px solid var(--line-soft);
@@ -354,7 +350,7 @@
   flex-flow: row wrap;
   align-content: flex-start;
   column-gap: 5px;
-  padding: 2px 5px;
+  padding: var(--space-3xs) 5px;
   overflow: hidden;
   box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--feed) 50%, var(--line));
@@ -394,7 +390,7 @@
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
-  gap: 2px;
+  gap: var(--space-3xs);
   min-width: 0;
   padding: var(--space-2);
   border: none;
@@ -436,7 +432,7 @@ button.flow-day-colhead:hover {
 .flow-day-colmeta {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-2xs);
   font-size: var(--fs-micro);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -511,9 +507,9 @@ button.flow-day-colhead:hover {
   z-index: 2;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-3xs);
   height: 18px;
-  padding: 0 4px;
+  padding: 0 var(--space-2xs);
   transform: translateY(-50%);
   border: 1px solid var(--line-strong);
   border-radius: var(--r-xs);
@@ -596,7 +592,7 @@ button.flow-day-colhead:hover {
   right: 2px;
   z-index: 1;
   display: block;
-  padding: 2px 5px;
+  padding: var(--space-3xs) 5px;
   overflow: hidden;
   box-sizing: border-box;
   border: 1px solid var(--line);
@@ -655,7 +651,7 @@ button.flow-day-colhead:hover {
 .flow-cell-line {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-2xs);
   min-width: 0;
 }
 
@@ -722,9 +718,9 @@ button.flow-day-colhead:hover {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 2px;
+  gap: var(--space-3xs);
   min-width: 0;
-  padding: 6px 6px 8px;
+  padding: 6px 6px var(--space-xs);
   border: none;
   border-right: 1px solid var(--line-soft);
   border-bottom: 1px solid var(--line-soft);
@@ -750,7 +746,7 @@ button.flow-day-colhead:hover {
 .flow-month-date {
   align-self: flex-start;
   min-width: 24px;
-  margin-bottom: 2px;
+  margin-bottom: var(--space-3xs);
   padding: 1px 5px;
   border-radius: var(--r-sm);
   font-size: var(--fs-meta);
@@ -780,9 +776,9 @@ button.flow-day-colhead:hover {
 .flow-line {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-2xs);
   min-width: 0;
-  padding: 1px 4px;
+  padding: 1px var(--space-2xs);
   border-radius: var(--r-xs);
   line-height: 1.35;
 }
@@ -929,7 +925,7 @@ button.flow-day-colhead:hover {
 .calendar-steps {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-3xs);
   margin: 0;
   padding-left: 1.4em;
   font-size: var(--fs-meta);
@@ -937,7 +933,7 @@ button.flow-day-colhead:hover {
 }
 
 .text-button.danger {
-  color: var(--danger);
+  --c-ink: var(--danger);
 }
 
 @media (max-width: 720px) {

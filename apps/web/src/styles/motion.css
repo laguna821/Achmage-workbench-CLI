@@ -1,0 +1,48 @@
+/* Motion grammar: each motion says what changed, never decorates.
+ * - Durations are only --dur-fast / --dur-base / --dur-slow; foundation.css's reduced-motion rule
+ *   collapses every one of them (pseudo-elements included), so nothing here repeats that.
+ * - Only transform and opacity move, and nothing that moves carries a blurred shadow: without
+ *   compositing WebKitGTK repaints a blur every frame.
+ * - Script-driven moves (pane zoom, tab open/close) live in flip.ts and read the same tokens.
+ * The progress line above the input is in styles.css ("composer-working"). */
+
+/* A segmented choice: the raised cell slides to the new choice (Hig.tsx sets --_i). */
+.hk-seg[data-ready] .hk-seg__indicator {
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+/* A step that is running: its words stay solid ink in the entry's "now" cell; the turning ring beside
+   them carries the motion (Hallmark U5 retired the gradient light passing along the text, 2b). */
+
+/* Something now needs the user: the capsule fades in where it stands. */
+.attention-button {
+  animation: state-in var(--dur-fast) var(--ease-out);
+}
+@keyframes state-in {
+  from { opacity: 0; }
+}
+
+/* The logo's one entrance per launch ("홈 로고 움직임"): letters rise, the arc sweeps in. Home opens
+   on today's ledger without a logo, so the top bar's mark (wordmark or compact symbol) makes it. */
+:is(.home-brand, .topbar .brand).greet .wordmark-ink {
+  transform-box: fill-box;
+  animation: brand-rise var(--dur-slow) var(--ease-out) both;
+}
+:is(.home-brand, .topbar .brand).greet .wordmark-flow {
+  animation-delay: calc(var(--dur-fast) / 2);
+}
+:is(.home-brand, .topbar .brand).greet .wordmark-arc {
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: brand-sweep var(--dur-slow) var(--ease-out) var(--dur-fast) both;
+}
+@keyframes brand-rise {
+  from { opacity: 0; transform: translateY(6px); }
+}
+@keyframes brand-sweep {
+  from { opacity: 0; transform: scaleX(0.15); }
+}
+
+/* "홈 로고 움직임" in the new shell: the rail's mark arrives once per launch (the top bar shows no mark now). */
+@keyframes rail-greet { from { opacity: 0; transform: scale(0.82); } to { opacity: 1; transform: none; } }
+.rail-brand.greet svg { animation: rail-greet var(--dur-slow) var(--ease-out) both; }

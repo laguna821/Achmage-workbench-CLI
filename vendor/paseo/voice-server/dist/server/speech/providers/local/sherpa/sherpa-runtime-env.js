@@ -1,5 +1,6 @@
 // Workbench adaptation: resolve explicitly installed optional native runtime before forking; original in upstream/.
 import { createRequire } from "node:module";
+import { existsSync } from "node:fs";
 import path from "node:path";
 export function sherpaPlatformArch(platform = process.platform, arch = process.arch) {
     const normalizedPlatform = platform === "win32" ? "win" : platform;
@@ -33,7 +34,13 @@ export function resolveSherpaLoaderEnv(platform = process.platform, arch = proce
         return null;
     }
     const packageName = sherpaPlatformPackageName(platform, arch);
-    const require = createRequire(runtimeNodeModules ? path.join(runtimeNodeModules, "__workbench_voice__.cjs") : import.meta.url);
+    // The downloaded runtime (<data>/voice/runtime-*/node_modules) by path join, not require.resolve:
+    // the gateway's resolve guard refuses resolving anything outside the install (sec-vault check F2).
+    if (runtimeNodeModules) {
+        const libDir = path.join(runtimeNodeModules, packageName);
+        return existsSync(path.join(libDir, "package.json")) ? { key, libDir, packageName } : null;
+    }
+    const require = createRequire(import.meta.url);
     try {
         const pkgJson = require.resolve(`${packageName}/package.json`);
         return {

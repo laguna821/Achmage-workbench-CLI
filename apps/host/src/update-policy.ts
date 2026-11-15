@@ -8,6 +8,11 @@ import { HttpError } from "./errors.ts";
 export class UpdatePolicy {
   private requestedAt: number | null = null;
   private stopping = false;
+  /**
+   * Runs once at the start of "stop all work", before any turn is interrupted (not on a drain): the
+   * gateway closes the messenger channel here, so turns ended by the stop are not sent while it exits.
+   */
+  beforeInterrupt: (() => Promise<void>) | null = null;
   private readonly manager: SessionManager;
   private readonly store: Store;
   private readonly resumed: () => void;
@@ -30,6 +35,9 @@ export class UpdatePolicy {
   requireAdmission() { if (this.requestedAt !== null || this.stopping) throw new HttpError(409, "host_draining", "업데이트를 준비하고 있습니다. 진행 중인 작업을 마치거나 업데이트 준비를 취소한 뒤 새 요청을 보내세요."); }
   assertRequest(method: string, path: string, access?: { viewId: string; writeToken: string }) {
     if (this.requestedAt === null || ["GET", "HEAD", "OPTIONS"].includes(method) || path.startsWith("/api/host/")) return;
+    // The messenger channel's gates at the PC (pause, lock, unlock, disconnect) only close or reopen
+    // a chat; an unlock admits nothing new while draining, because the channel checks admission itself.
+    if (method === "PATCH" && /^\/api\/channels\/bindings\/[^/]+$/.test(path)) return;
     // A live execution grant may finish its already-approved original tool/save lifecycle.
     // Authentication and the existing artifact/path authority still check every actual write.
     if (access?.writeToken && this.manager.documents.registry.executions.list().some(lease =>
@@ -45,6 +53,7 @@ export class UpdatePolicy {
     if (mode === "drain" && current.blockers.length) throw new HttpError(409, "host_active_work", `아직 ${current.blockers.length}개 작업 또는 실행기가 남아 있습니다. 기존 작업을 마친 뒤 다시 종료하세요.`);
     this.stopping = true;
     if (mode === "drain") return;
+    await this.beforeInterrupt?.().catch(() => undefined);
     // Finishing an interrupted parent must not start its already-queued next request during exit.
     for (const session of this.manager.view.sessions.values()) if (session.queued.length)
       this.manager.sink.updateSession(session.id, { queued: session.queued.map(request => ({ ...request, held: true })) });

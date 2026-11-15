@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { chmodSync, constants, copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, constants, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { CreateTarget, DocFormat } from "@workbench/contracts";
 import type { OfficeSkillHandoff } from "../../../packages/contracts/src/office-skills.ts";
@@ -17,6 +17,8 @@ export type CreationRecord<T extends CreationTarget = CreationTarget> = {
   state: "reserved" | "ready" | "sent" | "completed" | "interrupted" | "failed";
   initialSha256: string; skillPath: string | null; skillDir: string | null;
   artifactId: string | null; problem: string | null; createdAt: number; updatedAt: number;
+  /** Given up before the engine got the request: the same request may reserve again. */
+  released?: true;
   office?: { sourceArtifactId: string; sourceViewId: string; targetSessionId?: string; handoff: OfficeSkillHandoff; state: "queued" | "taken" | "interrupted"; claimedViewId?: string;
     preview?: { original: Snapshot; receipt: SkillCardReceipt; status: "open" | "saved" | "unsaved"; skillId?: string; title?: string } };
 };
@@ -43,7 +45,24 @@ export class CreationJournal {
       catch { return []; }
     });
   }
-  update<T extends CreationTarget = CreationTarget>(id: string, patch: Partial<Pick<CreationRecord, "state" | "artifactId" | "problem" | "office">>) {
+  /** The reserved file is still exactly what the reservation put there. */
+  untouched(record: CreationRecord) {
+    return existsSync(record.path) && hash(readFileSync(record.path)) === record.initialSha256;
+  }
+  /**
+   * Give up a reservation whose request was deleted, edited or refused before the engine got it. The file it made
+   * goes only when it is still exactly that file (a regular file with the bytes the reservation
+   * wrote, not a link); anything else at its name is someone's work and stays. Nothing is said.
+   */
+  release(id: string) {
+    const record = this.get(id);
+    if (!record || !["reserved", "ready", "sent"].includes(record.state)) return;
+    this.update(id, { state: "failed", released: true, problem: "엔진에 보내기 전에 요청이 지워지거나 바뀌거나 거절되어 예약한 이름을 풀었습니다." });
+    try {
+      if (lstatSync(record.path).isFile() && hash(readFileSync(record.path)) === record.initialSha256) unlinkSync(record.path);
+    } catch { /* Not there or not readable: nothing of the reservation's to remove. */ }
+  }
+  update<T extends CreationTarget = CreationTarget>(id: string, patch: Partial<Pick<CreationRecord, "state" | "artifactId" | "problem" | "office" | "released">>) {
     const current = this.get<T>(id);
     if (!current) return;
     const record = { ...current, ...patch, updatedAt: Date.now() };
@@ -60,10 +79,11 @@ export class CreationJournal {
   }
   reserve<T extends CreationTarget>(input: Pick<CreationRecord<T>, "requestId" | "sessionId" | "workId" | "workspaceId" | "fingerprint" | "cwd" | "target" | "sources"> & Pick<CreationRecord, "office">, template: Template | Snapshot | null): CreationRecord<T> {
     const previous = this.get<T>(input.requestId);
-    if (previous) {
+    // A reservation given up (`release`) is no longer this request's: it reserves anew, as it is now.
+    if (previous && !(previous.released && previous.sessionId === input.sessionId)) {
       if (previous.sessionId !== input.sessionId || previous.fingerprint !== input.fingerprint || previous.cwd !== resolve(input.cwd)) throw new HttpError(409, "request_id_conflict", "같은 requestId로 다른 문서를 만들 수 없습니다.");
       if (previous.state === "ready") {
-        if (!existsSync(previous.path) || hash(readFileSync(previous.path)) !== previous.initialSha256) throw new HttpError(409, "creation_copy_changed", "준비한 사본이 바뀌었거나 이동했습니다. 기존 파일을 확인해 주세요.");
+        if (!this.untouched(previous)) throw new HttpError(409, "creation_copy_changed", "준비한 사본이 바뀌었거나 이동했습니다. 기존 파일을 확인해 주세요.");
         return previous;
       }
       throw new HttpError(409, "creation_already_recorded", `이미 기록한 생성 요청입니다 (${previous.state}). 기존 사본을 확인해 주세요.`);

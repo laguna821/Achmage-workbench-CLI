@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ItemIcon, itemKindOf } from "./ItemIcon.tsx";
 import {
   FORMAT_LABEL,
   PROVIDER_LABEL,
@@ -27,6 +28,8 @@ import { ago } from "../format.ts";
 import { sessionHidden } from "../tree.ts";
 import { EngineMark } from "./EngineMark.tsx";
 import { Icon, type IconName } from "./Icon.tsx";
+import { Select } from "./ui/Select.tsx";
+import { layerOwns } from "./ui/layers.ts";
 import { lookStyle, NEUTRAL_LOOK, useAppearance } from "../appearance.ts";
 import "../styles/search.css";
 
@@ -36,7 +39,10 @@ import "../styles/search.css";
 // its conversation at that message), Shift+Enter opens a work's project page when the app offers
 // one, Esc closes. Ctrl+Shift+F opens the same box for contents only.
 
-export type PaletteCommand = { id: string; label: string; icon: IconName; hint?: string; run: () => void };
+/** `aliases`: other words that find the command (a former name, e.g. "홈" for 지금). */
+export type PaletteCommand = { id: string; label: string; aliases?: string[]; icon: IconName; hint?: string; run: () => void };
+
+const commandMatches = (command: PaletteCommand, needle: string) => includes(command.label, needle) || (command.aliases ?? []).some((alias) => includes(alias, needle));
 
 /** Ctrl+K (titles, contents and commands) or Ctrl+Shift+F (contents only). */
 export type PaletteMode = "palette" | "content";
@@ -110,6 +116,7 @@ export function SearchPalette({
   onOpenProject,
   onOpenRight,
   onClose,
+  initialQuery = "",
 }: {
   api: Api;
   state: State;
@@ -128,9 +135,11 @@ export function SearchPalette({
   /** Alt+Enter: the hit opens in the right pane (two panes; absent in a session window). */
   onOpenRight?: (item: PaneItem) => void;
   onClose: () => void;
+  /** What was typed in the top bar's search field before the palette opened (release unit A). */
+  initialQuery?: string;
 }) {
   const { appTheme } = useAppearance();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [scope, setScope] = useState<SearchScope>("all");
   const [provider, setProvider] = useState<Provider | null>(null);
   const [archived, setArchived] = useState(false);
@@ -163,7 +172,13 @@ export function SearchPalette({
   const searchRun = useRef(0), rankController = useRef<AbortController | null>(null);
   const canRank = (page: SearchPage) => page.groups.flatMap(value => value.hits).filter(hit => hit.kind === "document" || hit.kind === "note").length > 1;
 
-  useEffect(() => input.current?.focus(), []);
+  useEffect(() => {
+    const field = input.current;
+    field?.focus();
+    // Typing goes on after what the top bar's field passed on.
+    if (field && initialQuery) field.setSelectionRange(field.value.length, field.value.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Another query, scope or filter leaves an opened group and an old notice behind.
   useEffect(() => {
     setGroup(null);
@@ -218,7 +233,7 @@ export function SearchPalette({
 
   const sections = useMemo((): Section[] => {
     if (commandMode) {
-      return [{ key: "commands", label: "명령", entries: commands.filter((command) => includes(command.label, lowerNeedle) || !lowerNeedle).map((command) => ({ key: `c:${command.id}`, kind: "command" as const, command })) }];
+      return [{ key: "commands", label: "명령", entries: commands.filter((command) => commandMatches(command, lowerNeedle) || !lowerNeedle).map((command) => ({ key: `c:${command.id}`, kind: "command" as const, command })) }];
     }
     if (!needle) {
       if (content) return [];
@@ -275,7 +290,7 @@ export function SearchPalette({
       out.push({ key: "more", label: null, entries: [{ key: "more", kind: "more", label: `더 보기 · ${first.groupsTotal - shownGroups}${first.groups.some(group => group.section) ? "개 구역" : "곳"} 더` }] });
     }
     if (!content) {
-      const matching = commands.filter((command) => includes(command.label, lowerNeedle)).slice(0, 4);
+      const matching = commands.filter((command) => commandMatches(command, lowerNeedle)).slice(0, 4);
       if (matching.length) out.push({ key: "commands", label: "명령", entries: matching.map((command) => ({ key: `c:${command.id}`, kind: "command" as const, command })) });
     }
     return out;
@@ -408,9 +423,12 @@ export function SearchPalette({
   const hitIcon = (hit: FoundHit) =>
     hit.provider && (MESSAGE.has(hit.kind) || hit.kind === "session") ? (
       <EngineMark provider={hit.provider} size={15} className="palette-icon" />
-    ) : (
-      <Icon name={ICON[hit.kind] ?? (hit.kind === "session" ? "chat" : "file")} size={16} className="palette-icon" />
-    );
+    ) : (() => {
+      // Items (projects, documents, conversations, web pages) wear the item icons; other hits keep their line icon.
+      const name = ICON[hit.kind] ?? (hit.kind === "session" ? "chat" : "file");
+      const kind = itemKindOf(name);
+      return kind ? <ItemIcon kind={kind} size={16} className="palette-icon" /> : <Icon name={name} size={16} className="palette-icon" />;
+    })();
 
   const hitMeta = (hit: FoundHit) => {
     const when = hit.at ? ago(hit.at) : "";
@@ -562,7 +580,7 @@ export function SearchPalette({
       return (
         <>
           <div className="palette-preview-head">
-            <Icon name="project" size={15} /> {current.group.title}
+            <ItemIcon kind="project" size={15} /> {current.group.title}
           </div>
           <div className="palette-preview-hit">이 작업에서 찾은 {current.group.section ? `${SECTION_LABEL[current.group.section]} ` : ""}{current.group.total}건을 모두 봅니다.</div>
           <div className="palette-preview-foot">Enter 이 작업만 보기 · Esc 돌아가기</div>
@@ -594,11 +612,12 @@ export function SearchPalette({
     );
   };
 
+  const scopeWorks = Object.values(state.works).filter(work => archived || !work.archivedAt);
   const vaultShown = Boolean(first && (scope === "all" || scope === "vault") && first.counts.vault > 0);
   const places = first ? first.worksTotal ?? first.groupsTotal - (vaultShown ? 1 : 0) : 0;
 
   return (
-    <div className="palette-backdrop" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
+    <div className="palette-backdrop" onPointerDown={(event) => event.target === event.currentTarget && !layerOwns(event.nativeEvent) && onClose()}>
       <div
         className={`palette look-scope fast-find${showPreview ? " show-search-preview" : ""}${content ? " search-content" : ""}`}
         data-theme={appTheme}
@@ -606,7 +625,7 @@ export function SearchPalette({
         role="dialog"
         aria-label={content ? "내용 찾기" : "찾기"}
         onKeyDown={(event) => {
-          if (event.nativeEvent.isComposing || composing || event.nativeEvent.keyCode === 229) return;
+          if (event.nativeEvent.isComposing || composing || event.nativeEvent.keyCode === 229 || layerOwns(event.nativeEvent)) return;
           const target = event.target as HTMLElement;
           if (target !== input.current && target.matches("input, select, button") && event.key !== "Escape") return;
           if (event.key === "Escape") {
@@ -680,10 +699,8 @@ export function SearchPalette({
           </div>
         ) : null}
         {!commandMode && <div className="search-tools">
-          <select aria-label="프로젝트 범위" value={workId ?? ""} onChange={event => setWorkId(event.target.value || null)}>
-            <option value="">모든 프로젝트</option>
-            {Object.values(state.works).filter(work => archived || !work.archivedAt).map(work => <option key={work.id} value={work.id}>{work.title}</option>)}
-          </select>
+          <Select label="프로젝트 범위" value={workId ?? ""} onChange={value => setWorkId(value || null)} searchable={scopeWorks.length > 8} searchPlaceholder="프로젝트 찾기"
+            options={[{ value: "", label: "모든 프로젝트" }, ...scopeWorks.map(work => ({ value: work.id, label: work.title, hint: work.archivedAt ? "보관됨" : undefined }))]} />
           <label><input type="checkbox" checked={filesOnly} onChange={event => setFilesOnly(event.target.checked)} /> 제목·별칭만</label>
           <details className="search-property-filter"><summary>{propertyFilter ? `${propertyFilter.key}${propertyFilter.value === undefined ? " 있음" : ` = ${propertyFilter.value}`}` : "속성 조건"}</summary>
             <div><input aria-label="정확한 속성 키" placeholder="속성 키 (콜론 포함 그대로)" value={propertyKey} onChange={event => setPropertyKey(event.target.value)} />

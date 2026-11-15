@@ -26,7 +26,8 @@ type Load =
   | { kind: "recovery"; prepared: Prepared; drafts: DesignDraft[] }
   | { kind: "ready"; document: DoryDocument; name: string; revision: number; gateway: Gateway; adapter: ReturnType<typeof createWorkbenchAdapter>; state: DesignDocumentState; recovery: DesignRecovery };
 
-const CREDIT = "Doory by Siam, creator and maintainer of Doory, https://github.com/shaongitbd/doory";
+// vendor/doory/LICENSE clause 2: name, professional identification and URL, verbatim (as LaunchCredit in the app).
+const CREDIT = "Siam, Creator and maintainer of Doory, https://github.com/shaongitbd/doory";
 
 const stateOf = (state: SaveState): DesignSaveState => (state.status === "local" ? "saved" : state.status);
 

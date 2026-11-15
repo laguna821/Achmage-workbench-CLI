@@ -17,6 +17,9 @@ export type DeviceGrant = {
   revokedAt: number | null;
   credentialVersion: number;
   lastRotatedAt: number | null;
+  /** When the owner approved a device that said it keeps its credential after its tab or app closes.
+   * A record of what the device declared, not a limit the host enforces: expiry and revocation are. */
+  rememberedAt?: number | null;
 };
 
 export type DeviceApproval = {
@@ -24,6 +27,9 @@ export type DeviceApproval = {
   workIds: string[];
   /** Omission defaults to 30 days. null explicitly chooses no expiry. */
   expiresAt?: number | null;
+  /** Earlier approvals of this same device to take off the list with this approval. Removal only:
+   * nothing of theirs (projects, permissions) carries over. */
+  replaces?: string[];
 };
 
 /** token is returned only when the local user creates this single-use offer. */
@@ -46,6 +52,11 @@ export type PairingRequest = {
   expiresAt: number;
   status: "pending" | "approved" | "rejected";
   deviceId: string | null;
+  /** The device will keep its credential after its tab or app closes. */
+  remember?: boolean;
+  /** An approval this host issued earlier that the device names as its own. An unproven hint for
+   * the owner, used only to offer removing that earlier entry. */
+  previousDeviceId?: string | null;
 };
 
 export type PairingRequestInput = {
@@ -53,6 +64,8 @@ export type PairingRequestInput = {
   token: string;
   name: string;
   platform?: string;
+  remember?: boolean;
+  previousDeviceId?: string;
   /** Injected by the protected gateway, never trusted from a request body. */
   connectionId: string;
 };

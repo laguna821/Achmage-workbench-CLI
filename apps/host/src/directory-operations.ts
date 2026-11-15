@@ -2,8 +2,8 @@ import { realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { HttpError } from "./errors.ts";
 
-/** Resolve existing ancestors too: a new file can still be inside a symlinked directory. */
-export function physicalPath(path: string): string {
+/** The path with links followed, in its own letter case: the path to read or write. Resolves existing ancestors too: a new file can still be inside a symlinked directory. */
+export function resolvedPath(path: string): string {
   let current = resolve(path);
   const tail: string[] = [];
   for (;;) {
@@ -14,6 +14,12 @@ export function physicalPath(path: string): string {
       tail.unshift(basename(current)); current = parent;
     }
   }
+  return current;
+}
+
+/** A file's identity, for comparing paths (lower case where names ignore case): never a path to write to. */
+export function physicalPath(path: string): string {
+  const current = resolvedPath(path);
   return process.platform === "win32" ? current.toLowerCase() : current;
 }
 

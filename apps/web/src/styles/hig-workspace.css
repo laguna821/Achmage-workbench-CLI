@@ -1,80 +1,149 @@
-.topbar { min-height: 48px; gap: 12px; padding-inline: 12px; background: var(--chrome-bg); border-bottom: 1px solid var(--chrome-line); color: var(--chrome-text); }
-.hig-app-name { color: var(--chrome-text); font: 600 15px/20px var(--font-ui); letter-spacing: 0; }
-.hig-home-icon { display: none; }
-.topbar-title { min-width: 0; min-height: 28px; gap: 8px; font-size: 13px; }
-.topbar-right { gap: 4px; }
-.compact-toolbar-menu { display: flex; flex-direction: column; gap: 4px; padding: 8px; border-bottom: 1px solid var(--line); }
-.compact-toolbar-menu > button, .compact-toolbar-menu .workspace-layout-tools > button { justify-content: flex-start; width: 100%; min-height: 36px; }
-.workspace-layout-inline > summary { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 4px 8px; cursor: pointer; list-style: none; }
-.workspace-layout-inline > summary::-webkit-details-marker { display: none; }
-.topbar-right > button { min-width: 28px; }
-.topbar-right button { white-space: nowrap; }
-.topbar .shell-create { color: var(--chrome-text); }
+/* Furrow: one ink rule under the top bar, the record book's head line; everything below parts by warm hairlines.
+   Hallmark U4: the bar says where you are on the left (the place leads), and keeps at most three actions on
+   the right (확인 N while something waits, 알림, 화면 배치); 기기 연결, 작업 현황, 편집기에 집중 and 라이트/다크 are
+   one ⋯ away. Three columns at every width: nothing wraps into a second row, nothing grows to touch size. */
+.topbar {
+  display: grid;
+  /* left | the place's name | the search field (centre, release unit A) | room | the actions */
+  grid-template-columns: auto minmax(0, 1fr) minmax(14rem, 22rem) minmax(0, 1fr) auto;
+  align-items: center;
+  height: 48px;
+  min-height: 48px;
+  gap: var(--space-sm);
+  padding: 0 var(--space-xs) 0 var(--space-sm);
+  background: var(--chrome-bg);
+  color: var(--chrome-text);
+  box-shadow: inset 0 -1px 0 var(--rule-ink);
+}
+.topbar .brand { flex-shrink: 0; margin-right: 0; color: var(--brand-ink); }
+.topbar-left { flex-wrap: nowrap; gap: var(--space-2xs); min-width: 0; }
+/* The place: what kind of thing is open, then its name, set as the bar's title (16/600), from the left. */
+.topbar-title {
+  justify-self: start;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  min-width: 0;
+  max-width: 100%;
+  min-height: 32px;
+  padding: var(--space-2xs) var(--space-xs);
+  text-align: left;
+  font: 600 var(--text-md)/24px var(--font-ui);
+  letter-spacing: 0;
+}
+.topbar-title > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-title .shell-location-kind { flex: none; color: var(--chrome-muted); font: 400 var(--text-sm)/24px var(--font-ui); }
+.topbar-title-edit { justify-self: start; text-align: left; font: 600 var(--text-md)/24px var(--font-ui); }
+.topbar > .top-notice { justify-self: start; margin-inline: 0; }
+.topbar-right { grid-column: -2 / -1; flex-wrap: nowrap; justify-content: flex-end; gap: var(--space-2xs); padding-bottom: 0; }
+.topbar-right > button, .topbar-left > button { min-width: 32px; }
+.topbar :is(.topbar-left, .topbar-right) button { white-space: nowrap; flex: none; }
+.topbar :is(.topbar-left, .topbar-right) :is(.ghost-button, .icon-button) { height: 32px; min-height: 32px; gap: var(--space-2xs); }
+.topbar .shell-search, .topbar .shell-create { padding-inline: var(--space-xs); font-size: var(--text-sm); }
+.topbar .shell-create, .topbar .shell-bell { --c-ink: var(--chrome-text); }
 .topbar .shell-attention-count { color: var(--chrome-text); }
-.app:has(.body.with-sidebar) > .topbar .shell-create { display: none; }
+.topbar .attention-button { height: 28px; }
+/* The search field (release unit A, item 4; the owner's 01-dashboard): quiet — a hairline well with the
+   palette's shortcut; it only opens the palette with what was typed. At ≤ 760 px the rail's 찾기 stands for it. */
+.top-search { grid-column: 3; grid-row: 1; display: flex; align-items: center; gap: var(--space-xs); min-width: 0; height: 32px; padding: 0 var(--space-2xs) 0 var(--space-xs); border: 1px solid var(--chrome-line); border-radius: var(--radius-pill); background: var(--chrome-surface); color: var(--chrome-muted); cursor: text; }
+.top-search:hover { border-color: var(--line-strong); }
+.top-search:focus-within { border-color: var(--focus); box-shadow: inset 0 0 0 1px var(--focus); }
+.top-search > svg { flex: none; }
+.top-search input { flex: 1 1 auto; min-width: 0; height: 30px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--chrome-text); font: 400 var(--text-sm)/20px var(--font-ui); }
+.top-search input::placeholder { color: var(--chrome-muted); opacity: 1; }
+.top-search input::-webkit-search-cancel-button { display: none; }
+.top-search kbd { flex: none; padding: 0 var(--space-2xs); border: 1px solid var(--chrome-line); border-radius: var(--radius-well); color: var(--chrome-muted); font: 500 var(--text-xs)/18px var(--font-ui); }
+@media (max-width: 760px) {
+  .topbar { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .top-search { display: none; }
+}
+.compact-toolbar-menu { display: flex; flex-direction: column; gap: var(--space-3xs); padding: var(--space-2xs); border-bottom: 1px solid var(--line); }
+.compact-toolbar-menu > button, .compact-toolbar-menu .workspace-layout-tools > button { justify-content: flex-start; width: 100%; min-height: 32px; gap: var(--space-xs); font-size: var(--text-sm); }
+.workspace-layout-inline > summary { display: flex; align-items: center; gap: var(--space-xs); min-height: 32px; padding: var(--space-2xs) var(--space-xs); cursor: pointer; list-style: none; font-size: var(--text-sm); }
+.workspace-layout-inline > summary::-webkit-details-marker { display: none; }
 .sidebar-scrim { position: absolute; inset: 0; background: var(--scrim); z-index: 19; border: 0; border-radius: 0; }
 .workspace-layout-tools .popover { min-width: 240px; }
-.layout-mini { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; width: 24px; height: 24px; margin-right: 8px; flex: 0 0 auto; }
+.layout-mini { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3xs); width: 24px; height: 24px; margin-right: var(--space-xs); flex: 0 0 auto; }
 .layout-mini-1 { grid-template-columns: 1fr; }
 .layout-mini-9 { grid-template-columns: repeat(3, 1fr); }
-.layout-mini i { border: 1px solid currentColor; border-radius: 2px; }
-.panes.recursive { background: var(--chrome-bg); }
+.layout-mini i { border: 1px solid currentColor; border-radius: var(--radius-well); }
 .panes.recursive .pane { container-type: inline-size; container-name: work-pane; }
-.panes.recursive .pane-head { min-height: 40px; height: auto; padding: 4px 8px; gap: 8px; border-bottom: 1px solid var(--line); background: var(--chrome-bg); color: var(--chrome-text); }
-.pane-head-title { display: flex; flex-direction: column; min-width: 0; line-height: 1.4; font-size: 13px; }
-.pane-head-title small { font-size: 12px; color: var(--chrome-muted); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pane-status { color: var(--muted); font-size: 12px; flex: 0 1 auto; max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Side by side, a pane has ONE head row: its tabs, then (at the row's end) the pane's state and its
+   tools; the pane's name is its current tab, so the head no longer repeats it (kept for screen
+   readers). The focused pane is the one whose current tab wears the blue rule (controls.css). */
+.panes.recursive .pane:has(> .pane-head) { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto minmax(0, 1fr); }
+.panes.recursive .pane:has(> .pane-head) > .group-tabs { grid-row: 1; grid-column: 1; }
+.panes.recursive .pane:has(> .pane-head) > .pane-head { grid-row: 1; grid-column: 2; }
+.panes.recursive .pane:has(> .pane-head) > :not(.pane-head, .group-tabs) { grid-row: 2; grid-column: 1 / -1; min-height: 0; }
+.panes.recursive .pane:has(> .pane-head):not(:has(> .group-tabs)) > .pane-head { grid-column: 1 / -1; }
+.panes.recursive .pane-head { min-height: 36px; height: auto; padding: 0 var(--space-2xs) 0 var(--space-xs); gap: var(--space-2xs); border-bottom: 0; background: var(--chrome-bg); color: var(--chrome-text); box-shadow: inset 0 -1px 0 var(--chrome-line); }
+.panes.recursive .pane.focused > .pane-head { box-shadow: inset 0 -1px 0 var(--chrome-line); }
+.panes.recursive .pane-head-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.panes.recursive .pane-head-icon { display: none; }
+.panes.recursive .pane-head-tools .icon-button { width: 28px; height: 28px; }
+.panes.recursive .pane:not(.focused) .pane-head-tools .icon-button { --c-ink: var(--chrome-muted); }
+.pane-head-title { display: flex; flex-direction: column; min-width: 0; line-height: 1.4; font-size: var(--text-sm); }
+.pane-head-title small { font-size: var(--text-xs); color: var(--chrome-muted); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pane-status { color: var(--muted); font-size: var(--text-xs); flex: 0 1 auto; max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .panes[data-grid] .pane-head-tools > button:not([aria-label="이 칸 확대"]):not([aria-label="전체 칸 보기"]) { display: none; }
-.pane-start { display: flex; flex: 1; min-height: 0; flex-direction: column; align-items: stretch; gap: 12px; padding: 20px; overflow: auto; }
-.pane-start h2 { font: 600 15px/20px var(--font-ui); margin: 0; }
-.pane-start p { color: var(--muted); font-size: 13px; margin: 0; }
-.pane-start-projects { display: flex; flex-direction: column; gap: 4px; }
-.pane-start-projects button { display: flex; align-items: center; gap: 8px; text-align: left; border: 0; border-radius: 8px; padding: 8px; color: var(--text); background: transparent; }
+.pane-start { display: flex; flex: 1; min-height: 0; flex-direction: column; align-items: stretch; gap: var(--space-sm); padding: 20px; overflow: auto; }
+.pane-start h2 { font: 600 var(--text-md)/20px var(--font-ui); margin: 0; }
+.pane-start p { color: var(--muted); font-size: var(--text-sm); margin: 0; }
+.pane-start-projects { display: flex; flex-direction: column; gap: var(--space-2xs); }
+.pane-start-projects button { display: flex; align-items: center; gap: var(--space-xs); text-align: left; border: 0; border-radius: var(--radius-pill); padding: var(--space-xs); color: var(--text); background: transparent; }
 .pane-start-projects button:hover { background: var(--surface-muted); }
 .pane-start-projects button span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pane-start > .button { align-self: flex-start; }
-.work-link-dialog { width: min(720px, calc(100% - 32px)); max-height: calc(100dvh - 48px); overflow: auto; border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--elev-3); background: var(--surface); color: var(--text); padding: 24px; }
+.work-link-dialog { width: min(720px, calc(100% - 32px)); max-height: calc(100dvh - 48px); overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-entry); box-shadow: var(--elev-3); background: var(--surface); color: var(--text); padding: var(--space-lg); }
 .work-link-dialog::backdrop { background: var(--scrim); }
-.work-link-dialog > header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 24px; }
-.work-link-dialog h2 { font-size: 22px; margin: 0 0 8px; }
-.work-link-dialog p { font-size: 13px; color: var(--muted); margin: 0; }
-.work-link-dialog form { display: grid; gap: 16px; }
-.work-link-dialog label { display: grid; gap: 8px; font-size: 13px; }
-.work-link-pair { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; }
-.work-link-pair label { min-width: 0; }
-.work-link-dialog select, .work-link-dialog textarea { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); padding: 8px 12px; }
-.work-link-dialog textarea { font-size: 15px; line-height: 1.6; resize: vertical; }
-.work-link-dialog footer { display: flex; align-items: center; gap: 12px; justify-content: flex-end; }
-.work-link-dialog footer span { margin-right: auto; font-size: 13px; color: var(--muted); }
-.work-link-history { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 16px; }
-.work-link-history h3 { font-size: 15px; margin: 0 0 8px; }
-.work-link-history article { padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
-.work-link-history strong { display: inline-flex; gap: 8px; align-items: center; font-weight: 500; }
+.work-link-dialog > header { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-md); margin-bottom: var(--space-lg); }
+.work-link-dialog h2 { font-size: var(--text-xl); margin: 0 0 var(--space-xs); }
+.work-link-dialog p { font-size: var(--text-sm); color: var(--muted); margin: 0; }
+.work-link-dialog form { display: grid; gap: var(--space-md); }
+.work-link-dialog label { display: grid; gap: var(--space-xs); font-size: var(--text-sm); }
+.work-link-pair { display: grid; grid-template-columns: 1fr auto 1fr; gap: var(--space-sm); align-items: center; }
+.work-link-field { display: grid; gap: var(--space-xs); min-width: 0; font-size: var(--text-sm); }
+.work-link-field .ui-select { width: 100%; min-height: 40px; padding: var(--space-xs) var(--space-sm); --c-fill: var(--bg); font-size: var(--text-sm); }
+.work-link-dialog textarea { width: 100%; min-width: 0; border-width: 1px; border-style: solid; --c-edge: var(--field-line); --c-fill: var(--bg); --c-ink: var(--text); padding: var(--space-xs) var(--space-sm); }
+.work-link-dialog textarea { font-size: var(--text-md); line-height: 1.6; resize: vertical; }
+.work-link-dialog footer { display: flex; align-items: center; gap: var(--space-sm); justify-content: flex-end; }
+.work-link-dialog footer span { margin-right: auto; font-size: var(--text-sm); color: var(--muted); }
+.work-link-history { margin-top: var(--space-lg); border-top: 1px solid var(--line); padding-top: var(--space-md); }
+.work-link-history h3 { font-size: var(--text-md); margin: 0 0 var(--space-xs); }
+.work-link-history article { padding: var(--space-sm) 0; border-bottom: 1px solid var(--line); font-size: var(--text-sm); }
+.work-link-history strong { display: inline-flex; gap: var(--space-xs); align-items: center; font-weight: 500; }
 .work-link-history article > span { float: right; color: var(--muted); }
-.work-link-history article p { margin-top: 8px; white-space: pre-wrap; max-height: 120px; overflow: auto; }
+.work-link-history article p { margin-top: var(--space-xs); white-space: pre-wrap; max-height: 120px; overflow: auto; }
 @container work-pane (max-width: 500px) {
-  .pane-head { gap: 4px; }
+  .pane-head { gap: var(--space-2xs); }
   .pane-status { max-width: 72px; }
-  .start-view.with-board .start-inner { padding-block: 24px; }
-  .start-view .home-modes { display: none; }
-  .start-view .home-title { font-size: 17px; line-height: 22px; margin-bottom: 16px; }
+  .start-view.with-board .start-inner { padding-block: var(--space-lg); }
+  .start-view .home-title { font-size: var(--text-read); line-height: 22px; margin-bottom: var(--space-md); }
 }
-@media (max-width: 743px) {
-  .hig-app-name, .shell-location-kind, .topbar-right .shell-create { display: none; }
-  .topbar { padding-inline: 8px; gap: 4px; }
+@media (width < 40rem) {
+  .hig-app-name, .topbar-title .shell-location-kind { display: none; }
   .work-link-pair { grid-template-columns: 1fr; }
   .work-link-pair > svg { display: none; }
 }
-@media (max-width: 1100px) {
-  .shell-connections > span { display: none; }
+@media (width < 75rem) {
+  .topbar .shell-host .shell-label { display: none; }
 }
-@media (max-width: 900px) {
-  .topbar { display: flex; align-items: center; height: auto; min-height: 48px; }
-  .topbar-title, .topbar .hig-app-name, .shell-location-kind { display: none; }
-  .hig-home-icon { display: block; }
-  .topbar-right { margin-left: auto; flex-wrap: nowrap; padding-bottom: 0; }
-  .topbar > .topbar-right > :is(.shell-connections,.shell-tasks,.shell-theme) { display: none; }
-  .topbar-left { min-width: 0; gap: 4px; }
+/* Below 60rem the sidebar lies over the work (App.tsx compactShell) and the bar's actions keep their
+   icons only: the same controls, the same 32px, one row. */
+@media (width < 60rem) {
+  .topbar { gap: var(--space-xs); padding-inline: var(--space-xs) var(--space-2xs); }
+  .topbar :is(.shell-search, .shell-create, .shell-focus) .shell-label { display: none; }
   .body { position: relative; }
-  .body > .sidebar { position: absolute; inset: 0 auto 0 0; z-index: 20; max-width: calc(100% - 48px); box-shadow: var(--elev-3); }
+  .body > .sidebar { position: absolute; inset: 0 auto 0 0; z-index: 20; max-width: calc(100% - 48px); box-shadow: var(--shadow-lift); }
+}
+/* The pane that is not being worked in keeps its tools out of sight until it is pointed at or reached
+   by Tab; the focused pane shows them (Hallmark U4: two panes no longer double the controls). */
+@media (hover: hover) {
+  .panes.recursive .pane:not(.focused) > .pane-head:not(:hover, :focus-within) .pane-head-tools { opacity: 0; }
+}
+.panes.recursive .pane-head-tools { transition: opacity var(--dur-micro) var(--ease-out); }
+/* Coarse pointers: the bar's controls take the 44px a finger needs (fine pointers keep 32px). */
+@media (pointer: coarse) {
+  .topbar :is(.topbar-left, .topbar-right) :is(.ghost-button, .icon-button) { height: 44px; min-height: 44px; min-width: 44px; }
+  .topbar { height: auto; min-height: 52px; }
 }

@@ -54,8 +54,14 @@ try {
   const key = (value: string) => wd.keys([{ type: "keyDown", value: KEY.control }, { type: "keyDown", value }, { type: "keyUp", value }, { type: "keyUp", value: KEY.control }]);
   const frame = async () => { await wd.frame(null); await wd.frame(await wd.waitFor('.pane[data-tab-active="true"] iframe.office-frame', 30000)); await installProbe(wd); };
   const openDrive = async () => {
-    await wd.frame(null); await wd.click(await wd.waitFor('button[aria-label="연결과 설정"]'));
-    await wd.click(await wd.execute('return [...document.querySelectorAll("button")].find(b=>b.textContent.trim()==="Google Drive…");'));
+    // 설정 › 문서 도구 (was the ⋯ "연결과 설정" popover): the rail's 설정 key, then the section.
+    // NOTE: the "Google Drive…" key left the app on 2026-11-01 (d617e238, Dropbox replaced it) and
+    // 설정 has no row for it; this step fails with a clear message until a Drive entry returns.
+    await wd.frame(null); if (!await wd.find(".settings-dialog[open]")) await wd.click(await wd.waitFor('button[data-rail="settings"]'));
+    await wd.click(await wd.waitFor('.settings-dialog[open] .settings-nav [data-section="documents"]')); await wd.waitFor('.settings-dialog[open] .settings-pane[data-section="documents"]');
+    const driveKey = await wd.execute<Record<string, string> | null>('return [...document.querySelectorAll(".settings-dialog[open] button")].find(b=>b.textContent.trim()==="Google Drive…") ?? null;');
+    if (!driveKey) throw new Error("설정 › 문서 도구 has no \"Google Drive…\" key (removed in d617e238)");
+    await wd.click(driveKey);
     await wd.frame(await wd.waitFor('iframe[title="Google Drive 화면"]')); await wd.waitFor(".set-drive", 30000); await installProbe(wd);
   };
   phase = "OAuth and original connection UI";

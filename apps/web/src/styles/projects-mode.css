@@ -12,25 +12,13 @@
   gap: 10px;
 }
 
-.projects-filter {
-  flex: 0 1 280px;
-  height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  font-size: var(--fs-meta);
-}
-
 .projects-stage {
   --stage: var(--muted);
   display: inline-flex;
   align-items: center;
   gap: 5px;
   height: 22px;
-  padding: 0 8px 0 7px;
+  padding: 0 var(--space-xs) 0 7px;
   border: 1px solid color-mix(in srgb, var(--stage) 40%, transparent);
   border-radius: var(--r-xs);
   background: color-mix(in srgb, var(--stage) 11%, transparent);
@@ -86,7 +74,7 @@ button.projects-stage {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 6px 8px;
+  padding: 6px var(--space-xs);
   border: 0;
   background: none;
   color: inherit;
@@ -95,7 +83,7 @@ button.projects-stage {
 }
 
 .projects-table td {
-  padding: 6px 8px;
+  padding: 6px var(--space-xs);
   border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
   vertical-align: middle;
 }
@@ -141,7 +129,7 @@ button.projects-stage {
 }
 
 .projects-empty {
-  padding: 18px 4px;
+  padding: 18px var(--space-2xs);
   color: var(--muted);
   font-size: var(--fs-meta);
 }
@@ -178,7 +166,7 @@ button.projects-stage {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 12px 6px;
+  padding: 10px var(--space-sm) 6px;
   font-size: var(--fs-meta);
   font-weight: 600;
 }
@@ -195,13 +183,13 @@ button.projects-stage {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 0 8px 10px;
+  padding: 0 var(--space-xs) 10px;
 }
 
 .kanban-card {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-2xs);
   padding: 9px 10px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
@@ -237,7 +225,7 @@ button.projects-stage {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 6px;
+  gap: var(--space-2xs) 6px;
   font-size: var(--fs-micro);
 }
 
@@ -254,7 +242,7 @@ button.projects-stage {
 }
 
 .kanban-empty {
-  padding: 10px 4px;
+  padding: 10px var(--space-2xs);
   border: 1px dashed var(--line);
   border-radius: var(--r-md);
   color: var(--muted);
@@ -284,15 +272,34 @@ button.projects-stage {
   margin-left: auto;
 }
 
+/* A document's AI rides on its chip, as on its sidebar row: the engine mark, then its state dot. */
+.work-chip-ai {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .kanban-column {
     transition: none;
   }
 }
-.project-selection-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 9px 16px; border-bottom: 1px solid var(--line); font-size: 12px; }
-.project-selection-notice { margin: 8px 16px; font-size: 13px; overflow-wrap: anywhere; }
-.project-selection-choice { display: inline-flex; align-items: center; gap: 5px; margin-right: 10px; font-size: 12px; font-weight: normal; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.project-selection-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); padding: 9px var(--space-md); border-bottom: 1px solid var(--line); font-size: var(--text-xs); }
+.project-selection-notice { margin: var(--space-xs) var(--space-md); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.project-selection-choice { display: inline-flex; align-items: center; margin-right: var(--space-xs); cursor: pointer; }
+/* The box is named by its input ("가 선택"); no word beside it. */
+.project-selection-choice > span { display: none; }
 .project-selection-choice input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
-.work-card > .project-selection-choice, .board-card .project-selection-choice { margin-bottom: 6px; }
+/* On a card the box sits in its top corner, not on a row of its own. */
+.projects-mode :is(.work-card, .kanban-card) { position: relative; }
+.projects-mode .work-card > .project-selection-choice { position: absolute; top: 12px; right: 12px; margin: 0; }
+.projects-mode .kanban-card > .project-selection-choice { position: absolute; top: 8px; right: 8px; margin: 0; }
+.projects-mode :is(.work-card > .work-card-title, .kanban-card > .kanban-card-title) { max-width: calc(100% - 24px); }
+/* At rest (nothing chosen) the box shows under the pointer or the keyboard only; a touch screen keeps it. */
+@media (hover: hover) {
+  .projects-mode:not([data-selecting]) .project-selection-choice { opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
+  .projects-mode:not([data-selecting]) :is([data-work]:hover, [data-work]:focus-within) .project-selection-choice { opacity: 1; }
+}
 .projects-mode [data-work]:has(> .project-selection-choice input:checked), .projects-mode tr[data-work]:has(.project-selection-choice input:checked) { outline: 2px solid var(--accent); outline-offset: -2px; }
-.graph-key-hint { font-size: 11px; color: var(--muted); }
+.graph-key-hint { font-size: var(--text-xs); color: var(--muted); }

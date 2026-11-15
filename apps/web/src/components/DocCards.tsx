@@ -1,19 +1,18 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { REMARK_BASE } from "../markdown/plugins.ts";
 import { diagramComponents } from "./Diagram.tsx";
 
 const DRAWN = diagramComponents();
-import { FORMAT_LABEL, PROVIDER_LABEL, isOfficeFormat, type Artifact, type DocFormat, type Handoff, type Proposal, type RefSummary } from "@workbench/contracts";
-import { accentStyle, useAppearance } from "../appearance.ts";
+import { PROVIDER_LABEL, isOfficeFormat, type Artifact, type DocFormat, type Handoff, type Proposal, type RefSummary } from "@workbench/contracts";
 import { ago } from "../format.ts";
 import { changeKindLabel, designChanges, firstChangedPage, proposalTexts, useDesignThumb, type DesignChange } from "../design.ts";
-import { useOfficePage } from "../office.ts";
 import type { State } from "../state.ts";
 import { EngineMark } from "./EngineMark.tsx";
 import { Icon } from "./Icon.tsx";
 import { HandoffResend, PartialNote } from "./Recovery.tsx";
 import { appendDraft, quotedAnswer } from "../draft.ts";
+import { useOfficePage } from "../office.ts";
 
 // Cards for documents inside the conversation: files an engine wrote, proposals waiting for a
 // decision, and requests sent to other sessions with their answers.
@@ -56,18 +55,6 @@ export function FormatBadge({ format }: { format: DocFormat }) {
   return <span className={`format-badge format-${format}`}>{FORMAT_MARK[format]}</span>;
 }
 
-/** First page of a design revision, drawn small for the conversation. */
-function DesignCardThumb({ artifactId, revision }: { artifactId: string; revision: number }) {
-  const thumb = useDesignThumb({ artifactId, revision }, 0, 240);
-  return <span className="design-card-thumb">{thumb.url ? <img src={thumb.url} alt="" /> : <span className="design-thumb-wait">{thumb.error ? "미리보기 없음" : ""}</span>}</span>;
-}
-
-/** First page of a Word/PowerPoint/Excel revision, as IeumOffice renders it. */
-function OfficeCardThumb({ artifactId, revision }: { artifactId: string; revision: number }) {
-  const image = useOfficePage({ artifactId, revision }, 1);
-  return <span className="design-card-thumb">{image.url ? <img src={image.url} alt="" /> : <span className="design-thumb-wait">{image.error ? "미리보기 없음" : ""}</span>}</span>;
-}
-
 /** Base and proposed first pages of a Word/PowerPoint/Excel proposal. */
 function OfficeProposalPreview({ proposal }: { proposal: Proposal }) {
   const before = useOfficePage({ proposalId: proposal.id, side: "base" }, 1);
@@ -89,34 +76,39 @@ function OfficeProposalPreview({ proposal }: { proposal: Proposal }) {
   );
 }
 
+/** First page of a design revision, drawn small: a picture is shown, not named. */
+function DesignCardThumb({ artifactId, revision }: { artifactId: string; revision: number }) {
+  const thumb = useDesignThumb({ artifactId, revision }, 0, 240);
+  return <span className="design-card-thumb">{thumb.url ? <img src={thumb.url} alt="" /> : <span className="design-thumb-wait">{thumb.error ? "미리보기 없음" : ""}</span>}</span>;
+}
+
+/** First page of a Word/PowerPoint/Excel revision, as IeumOffice renders it. */
+function OfficeCardThumb({ artifactId, revision }: { artifactId: string; revision: number }) {
+  const image = useOfficePage({ artifactId, revision }, 1);
+  return <span className="design-card-thumb">{image.url ? <img src={image.url} alt="" /> : <span className="design-thumb-wait">{image.error ? "미리보기 없음" : ""}</span>}</span>;
+}
+
+/**
+ * A file the work made or changed: one line that opens it, as a link in a note. What had a
+ * preview keeps it in place of the format badge: a design's picture, an Office file's first page.
+ */
 export function FileCard({ artifact, revision, change }: { artifact: Artifact; revision: number; change: "created" | "modified" }) {
   const { actions } = useDocs();
   const newer = artifact.revision > revision;
+  const preview = artifact.format === "design" ? <DesignCardThumb artifactId={artifact.id} revision={revision} />
+    : isOfficeFormat(artifact.format) ? <OfficeCardThumb artifactId={artifact.id} revision={revision} /> : null;
+  // The entry folded to one row (작업 칸, .entry-file): the file and its facts as ruled cells.
   return (
-    <button
-      type="button"
-      className={`doc-card${artifact.format === "design" || isOfficeFormat(artifact.format) ? " design" : ""}`}
-      onClick={() => actions.openArtifact(artifact.id)}
-      title={artifact.path}
-    >
-      {artifact.format === "design" ? (
-        <DesignCardThumb artifactId={artifact.id} revision={revision} />
-      ) : isOfficeFormat(artifact.format) ? (
-        <OfficeCardThumb artifactId={artifact.id} revision={revision} />
-      ) : (
-        <FormatBadge format={artifact.format} />
-      )}
-      <span className="doc-card-main">
-        <span className="doc-card-name">{artifact.name}</span>
-        <span className="doc-card-meta">
-          {change === "created" ? "새 파일" : "수정"} · r{revision}
-          {newer ? ` · 지금 r${artifact.revision}` : ""}
-          {artifact.diskState !== "same" ? " · 디스크와 다름" : ""} · {FORMAT_LABEL[artifact.format]}
-        </span>
+    <button type="button" className={`doc-card entry-file${preview ? " with-thumb" : ""}`} data-kind="file" onClick={() => actions.openArtifact(artifact.id)} title={`${artifact.path} 열기`}>
+      {preview ?? <FormatBadge format={artifact.format} />}
+      <span className="doc-card-name">{artifact.name}</span>
+      <span className="entry-cells inline doc-card-meta">
+        <span className="entry-cell">{change === "created" ? "새 파일" : "고친 파일"}</span>
+        <span className="entry-cell">{revision}판</span>
+        {newer ? <span className="entry-cell now">지금 {artifact.revision}판</span> : null}
+        {artifact.diskState !== "same" ? <span className="entry-cell problem">디스크와 다름</span> : null}
       </span>
-      <span className="doc-card-open">
-        열기 <Icon name="arrowRight" size={14} />
-      </span>
+      <Icon name="arrowRight" size={14} className="doc-card-open" />
     </button>
   );
 }
@@ -166,77 +158,100 @@ function DesignProposalPreview({ proposal }: { proposal: Proposal }) {
   );
 }
 
-export function ProposalCard({ proposal }: { proposal: Proposal }) {
+/** A Hangul proposal that no longer holds something its base revision held: said before applying, not refused. */
+export const removedLine = (removed: string[]) => `이 수정안을 적용하면 없어집니다: ${removed.join(", ")}`;
+
+const lines = (n: number, verb: string) => `${n}줄 ${verb}`;
+const clock = (at: number) => new Date(at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
+
+/**
+ * A proposal as the entry (작업 칸): whose proposal, the document, the revision it was made on and
+ * what it changes as ruled cells; 미리보기 aside, 취소 and 적용 at the foot. `primary`: this is the
+ * entry that holds the view's one filled key (a waiting approval, or a newer proposal, takes it).
+ */
+export function ProposalCard({ proposal, primary = true }: { proposal: Proposal; primary?: boolean }) {
   const { state, actions } = useDocs();
-  const { lookOf } = useAppearance();
   const artifact = state.artifacts[proposal.artifactId];
   const session = state.sessions[proposal.sessionId];
   if (!artifact) return null;
   const stale = proposal.status === "pending" && artifact.revision !== proposal.baseRevision;
   const engine = session ? PROVIDER_LABEL[session.provider] : "AI";
+  const pictured = artifact.format === "design" || isOfficeFormat(artifact.format);
+  // Waiting: the one that holds the view's filled key leads (ink head); another waits its turn (queued).
+  const entryState = proposal.status === "pending" ? (primary ? "waiting" : "queued") : proposal.status === "running" ? "running" : "settled";
+  const when = proposal.status === "running" ? <span className="entry-when"><span className="spinner small" /> 만드는 중</span>
+    : proposal.status === "applied" ? <span className="entry-when done">적용함</span>
+      : proposal.status === "discarded" ? <span className="entry-when">버림</span>
+        : proposal.status === "empty" ? <span className="entry-when">바뀐 내용 없음</span>
+          : stale ? <span className="entry-when problem">이전 판 기준</span>
+            : proposal.createdAt ? <time className="entry-when" dateTime={new Date(proposal.createdAt).toISOString()}>{clock(proposal.createdAt)}</time> : null;
   return (
-    <div className={`proposal-card status-${proposal.status}${stale ? " stale" : ""}`} style={session ? accentStyle(lookOf(session.provider)) : undefined}>
-      <div className="proposal-head">
+    <div className={`proposal-card entry status-${proposal.status}${stale ? " stale" : ""}`} data-kind="proposal" data-state={entryState}>
+      <div className="entry-head proposal-head">
         {session ? <EngineMark provider={session.provider} size={15} /> : null}
-        <span className="proposal-title">
-          {engine}의 수정안 · {artifact.name}
-        </span>
-        <span className="proposal-meta">
-          r{proposal.baseRevision} 기준
-          {artifact.format === "design" || isOfficeFormat(artifact.format) ? null : (
-            <>
-              {" "}
-              · <span className="diff-add">+{proposal.added}</span> <span className="diff-del">−{proposal.removed}</span>
-            </>
-          )}
-        </span>
+        <span className="entry-who proposal-title">{engine}의 수정안</span>
+        {when}
       </div>
-      <PartialNote proposal={proposal} />
-      {artifact.format === "design" && proposal.status !== "running" && proposal.status !== "empty" ? <DesignProposalPreview proposal={proposal} /> : null}
-      {isOfficeFormat(artifact.format) && proposal.status !== "running" && proposal.status !== "empty" ? <OfficeProposalPreview proposal={proposal} /> : null}
-      {proposal.problem && proposal.status === "pending" ? <div className="proposal-warning">디자인 파일이 올바르지 않아 적용할 수 없습니다: {proposal.problem}</div> : null}
+      <dl className="entry-cells proposal-meta">
+        <div className="entry-cell"><dt>문서</dt><dd>{artifact.name}</dd></div>
+        <div className="entry-cell"><dt>{proposal.status === "applied" && proposal.appliedRevision ? "판" : "만든 판"}</dt><dd>{proposal.status === "applied" && proposal.appliedRevision ? `${proposal.baseRevision}판에서 ${proposal.appliedRevision}판으로` : `${proposal.baseRevision}판`}</dd></div>
+        {pictured ? null : (
+          <div className="entry-cell">
+            <dt>바뀐 줄</dt>
+            <dd>
+              {!proposal.added && !proposal.removed ? "없음" : null}
+              {proposal.added ? <span className="diff-add">{lines(proposal.added, "더함")}</span> : null}
+              {proposal.added && proposal.removed ? ", " : null}
+              {proposal.removed ? <span className="diff-del">{lines(proposal.removed, "뺌")}</span> : null}
+            </dd>
+          </div>
+        )}
+        {stale ? <div className="entry-cell"><dt>문서는 지금</dt><dd>{artifact.revision}판</dd></div> : null}
+      </dl>
+      {proposal.interruptedBy ? <div className="entry-body"><PartialNote proposal={proposal} /></div> : null}
+      {artifact.format === "design" && proposal.status !== "running" && proposal.status !== "empty" ? <div className="entry-body"><DesignProposalPreview proposal={proposal} /></div> : null}
+      {isOfficeFormat(artifact.format) && proposal.status !== "running" && proposal.status !== "empty" ? <div className="entry-body"><OfficeProposalPreview proposal={proposal} /></div> : null}
+      {proposal.problem && proposal.status === "pending" ? <p className="entry-note problem proposal-warning">디자인 파일이 올바르지 않아 적용할 수 없습니다: {proposal.problem}</p> : null}
+      {proposal.removedStructure?.length && proposal.status === "pending" ? <p className="entry-note proposal-warning">{removedLine(proposal.removedStructure)}</p> : null}
       {proposal.status === "pending" ? (
         stale ? (
           <>
-            <div className="proposal-warning">
-              문서가 지금 r{artifact.revision}입니다. 이전 판 기준 수정안이라 자동으로 적용하지 않습니다.
-            </div>
-            <div className="proposal-actions">
-              <button type="button" className="button small" onClick={() => actions.openArtifact(artifact.id, proposal.id)}>
-                차이 보기
-              </button>
-              <button type="button" className="button small primary" onClick={() => actions.retryProposal(proposal)}>
-                최신 판(r{artifact.revision})으로 다시 요청
-              </button>
+            <p className="entry-note proposal-warning">
+              문서가 지금 {artifact.revision}판입니다. 이전 판으로 만든 수정안이라 자동으로 적용하지 않습니다.
+            </p>
+            <div className="entry-keys proposal-actions">
+              <span className="entry-aside">
+                <button type="button" className="button small" onClick={() => actions.openArtifact(artifact.id, proposal.id)}>
+                  차이 보기
+                </button>
+              </span>
               <button type="button" className="button small" onClick={() => actions.discardProposal(proposal)}>
                 버리기
+              </button>
+              <button type="button" className={primary ? "button small primary" : "button small"} onClick={() => actions.retryProposal(proposal)}>
+                최신 판({artifact.revision}판)으로 다시 요청
               </button>
             </div>
           </>
         ) : (
-          <div className="proposal-actions">
-            <button type="button" className="button small" onClick={() => actions.openArtifact(artifact.id, proposal.id)}>
-              미리보기
-            </button>
-            {proposal.problem ? null : (
-              <button type="button" className="button small primary" onClick={() => actions.applyProposal(proposal)}>
-                적용
+          <div className="entry-keys proposal-actions">
+            <span className="entry-aside">
+              <button type="button" className="button small" onClick={() => actions.openArtifact(artifact.id, proposal.id)}>
+                미리보기
               </button>
-            )}
+            </span>
             <button type="button" className="button small" onClick={() => actions.discardProposal(proposal)}>
               취소
             </button>
+            {proposal.problem ? null : (
+              <button type="button" className={primary ? "button small primary" : "button small"} onClick={() => actions.applyProposal(proposal)}>
+                적용
+              </button>
+            )}
           </div>
         )
       ) : (
-        <div className="proposal-done">
-          {proposal.status === "applied"
-            ? `적용됨 → r${proposal.appliedRevision}`
-            : proposal.status === "discarded"
-              ? "버림"
-              : proposal.status === "running"
-                ? "만드는 중…"
-                : "바뀐 내용 없음"}
+        <div className="entry-keys proposal-done">
           <button type="button" className="link" onClick={() => actions.openArtifact(artifact.id)}>
             문서 열기
           </button>
@@ -246,9 +261,12 @@ export function ProposalCard({ proposal }: { proposal: Proposal }) {
   );
 }
 
+/**
+ * A request sent to another session, as the entry (작업 칸): where it went and its state in the
+ * head, what was sent as cells, the answer in the body (no box inside), the actions at the foot.
+ */
 export function HandoffCard({ handoff, viewer }: { handoff: Handoff; viewer: string }) {
   const { state, actions } = useDocs();
-  const { lookOf } = useAppearance();
   const [open, setOpen] = useState(false);
   const target = state.sessions[handoff.targetSessionId];
   const source = state.sessions[handoff.sourceSessionId];
@@ -256,52 +274,60 @@ export function HandoffCard({ handoff, viewer }: { handoff: Handoff; viewer: str
   if (!outgoing) return null;
   const targetWork = target ? state.works[target.workId] : undefined;
   const running = handoff.status === "sent";
+  const entryState = running ? "running" : handoff.status === "failed" ? "failed" : "settled";
   return (
-    <div className={`handoff-card status-${handoff.status}`} style={target ? accentStyle(lookOf(target.provider)) : undefined}>
-      <div className="handoff-head">
-        <Icon name="send" size={14} />
-        <span>
-          {target ? <EngineMark provider={target.provider} size={14} /> : null} {target?.purpose ?? "세션"}
-          {targetWork && targetWork.id !== state.sessions[handoff.sourceSessionId]?.workId ? ` · ${targetWork.title}` : ""}에 보냄
-        </span>
-        <span className={`handoff-status tone-${handoff.status}`}>
+    <div className={`handoff-card entry status-${handoff.status}`} data-kind="handoff" data-state={entryState}>
+      <div className="entry-head handoff-head">
+        {target ? <EngineMark provider={target.provider} size={15} /> : <Icon name="send" size={14} />}
+        <span className="entry-who">{target?.purpose ?? "세션"}에 보냄</span>
+        <span className={`entry-when handoff-status tone-${handoff.status}${handoff.status === "answered" ? " done" : handoff.status === "failed" ? " problem" : ""}`}>
           {running ? (
             <>
               <span className="spinner small" /> {target?.status === "awaitingApproval" ? "상대 세션이 승인을 기다림" : "확인 중"}
             </>
           ) : handoff.status === "answered" ? (
-            `답 도착 · ${ago(handoff.answeredAt)}`
+            `답 도착 ${ago(handoff.answeredAt)}`
           ) : (
-            `실패 · ${handoff.error ?? ""}`
+            `실패: ${handoff.error ?? ""}`
           )}
         </span>
       </div>
-      <div className="handoff-request">{handoff.text}</div>
-      {handoff.refs.length ? (
-        <div className="ref-chips">
-          {handoff.refs.map((ref) => (
-            <span key={`${ref.artifactId}:${ref.revision}`} className="ref-chip">
-              <Icon name="file" size={12} /> {state.artifacts[ref.artifactId]?.name ?? "문서"} · r{ref.revision}
-              {ref.selection ? ` · ${ref.selection.label}` : ""}
-            </span>
-          ))}
-        </div>
-      ) : null}
+      <dl className="entry-cells">
+        <div className="entry-cell wide"><dt>보낸 요청</dt><dd className="handoff-request">{handoff.text}</dd></div>
+        {targetWork && targetWork.id !== state.sessions[handoff.sourceSessionId]?.workId ? <div className="entry-cell wide"><dt>받은 프로젝트</dt><dd>{targetWork.title}</dd></div> : null}
+        {handoff.refs.length ? (
+          <div className="entry-cell wide">
+            <dt>함께 보낸 문서</dt>
+            <dd className="ref-chips">
+              {handoff.refs.map((ref) => (
+                <span key={`${ref.artifactId}:${ref.revision}`} className="ref-chip">
+                  <Icon name="file" size={12} /> {state.artifacts[ref.artifactId]?.name ?? "문서"}
+                  <span className="ref-chip-fact">{ref.revision}판</span>
+                  {ref.selection ? <span className="ref-chip-fact">{ref.selection.label}</span> : null}
+                </span>
+              ))}
+            </dd>
+          </div>
+        ) : null}
+      </dl>
       {handoff.reply ? (
-        <div className={`handoff-reply${open ? " open" : ""}`}>
+        <div className={`entry-body handoff-reply${open ? " open" : ""}`}>
+          <span className="entry-label">받은 답</span>
           <div className="markdown">
-            <Markdown remarkPlugins={[remarkGfm]} components={open ? DRAWN : undefined}>
+            <Markdown remarkPlugins={REMARK_BASE} components={open ? DRAWN : undefined}>
               {open ? handoff.reply : handoff.reply.slice(0, 400) + (handoff.reply.length > 400 ? "…" : "")}
             </Markdown>
           </div>
         </div>
       ) : null}
-      <div className="handoff-actions">
-        {handoff.reply && handoff.reply.length > 400 ? (
-          <button type="button" className="link" onClick={() => setOpen(!open)}>
-            {open ? "접기" : "답 전체 보기"}
-          </button>
-        ) : null}
+      <div className="entry-keys handoff-actions">
+        <span className="entry-aside">
+          {handoff.reply && handoff.reply.length > 400 ? (
+            <button type="button" className="link" onClick={() => setOpen(!open)}>
+              {open ? "접기" : "답 전체 보기"}
+            </button>
+          ) : null}
+        </span>
         {handoff.reply && source ? (
           <button
             type="button"
@@ -327,9 +353,11 @@ export function RefChips({ refs }: { refs: RefSummary[] }) {
     <div className="ref-chips">
       {refs.map((ref) => (
         <button key={`${ref.artifactId}:${ref.revision}`} type="button" className="ref-chip" title={ref.sha256 ? `참조한 판의 SHA-256: ${ref.sha256}` : undefined} onClick={() => actions.openArtifact(ref.artifactId)}>
-          <Icon name="file" size={12} /> {ref.name} · r{ref.revision} · {ref.mode === "edit" ? "수정 요청" : "읽기"}
-          {ref.savedSnapshot ? " · 미저장 편집 제외" : ""}
-          {ref.selection ? ` · ${ref.selection}` : ""}
+          <Icon name="file" size={12} /> {ref.name}
+          <span className="ref-chip-fact">{ref.revision}판</span>
+          <span className="ref-chip-fact">{ref.mode === "edit" ? "수정 요청" : "읽기"}</span>
+          {ref.savedSnapshot ? <span className="ref-chip-fact">미저장 편집 제외</span> : null}
+          {ref.selection ? <span className="ref-chip-fact">{ref.selection}</span> : null}
         </button>
       ))}
     </div>

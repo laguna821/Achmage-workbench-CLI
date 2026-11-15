@@ -49,7 +49,9 @@ export async function knowledgeHomeScenario(ctx: Ctx) {
     await wd.execute('arguments[0].scrollIntoView({block:"center"});', button); await wd.click(button);
   };
   const enter = async () => { await wd.frame(null); await wd.frame(await wd.waitFor('iframe[title="지식베이스 질문 화면"]', 30000)); await wd.waitFor(".kb-ask", 30000); await installProbe(wd); };
-  const open = async () => { await wd.frame(null); await wd.click(await wd.waitFor('button[aria-label="연결과 설정"]')); await clickText("지식베이스…"); await enter(); };
+  // 설정 (one dialog; was the ⋯ "연결과 설정" popover): the rail's 설정 key, then the section in its left list.
+  const openAppSettings = async (section: string) => { await wd.frame(null); if (!await wd.find(".settings-dialog[open]")) await wd.click(await wd.waitFor('button[data-rail="settings"]')); await wd.click(await wd.waitFor(`.settings-dialog[open] .settings-nav [data-section="${section}"]`)); await wd.waitFor(`.settings-dialog[open] .settings-pane[data-section="${section}"]`); };
+  const open = async () => { await openAppSettings("documents"); await clickText("지식베이스…"); await enter(); };
   const send = async (text: string) => { const input = await wd.waitFor('.kb-ask textarea:not(:disabled)', 30000); await wd.click(input); await wd.sendKeys(input, text); await wd.click(await wd.waitFor('.ai-send-btn:not(.ai-stop-btn):not(:disabled)', 30000)); };
   const finished = async (marker: string) => { if (!await until(() => wd.execute<boolean>('return document.querySelector(".kb-ask-thread")?.textContent.includes(arguments[0]) && !document.querySelector(".ai-stop-btn");', marker), 60000)) throw new Error("Home answer did not finish: " + marker); };
   const pick = async (name: string) => {

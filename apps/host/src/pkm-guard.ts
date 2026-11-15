@@ -16,7 +16,7 @@ export const CARD_LIMIT = 2048;
 const bytes = (text: string) => Buffer.byteLength(text, "utf8");
 
 /** The project part of a context card (project.ts `cardInfo`). */
-export type CardProject = { note: string; exists: boolean; stage: string | null; tags: string[]; decisions: string[]; questions: string[]; achmage?: string | null };
+export type CardProject = { note: string; exists: boolean; stage: string | null; tags: string[]; decisions: string[]; questions: string[] };
 
 /** A line cut to at most this many UTF-8 bytes (on a character boundary). */
 function clip(text: string, limit: number) {
@@ -43,14 +43,11 @@ export function contextCard(input: { title: string; folders: string[]; cwd: stri
     head.push(`프로젝트 노트: ${project.note}${project.exists ? "" : " (아직 없음)"} — 사람이 단계·태그·결정·열린 질문을 정리하는 곳입니다. 고쳐 달라는 요청이 있을 때만 고치세요.`);
     const facts = [project.stage ? `단계: ${project.stage}` : null, project.tags.length ? `태그: ${project.tags.map((tag) => `#${tag}`).join(" ")}` : null].filter(Boolean);
     if (facts.length) head.push(clip(facts.join(" · "), 240));
-    // So an engine publishing an insight names this work, not a guess.
-    if (project.achmage) head.push(clip(`Achmage 작업: ${project.achmage} — 인사이트를 낼 때 이 작업 id를 쓰세요.`, 240));
   }
   if (input.vault) {
     head.push(
       `옵시디언 볼트(사람 원본, 읽기 전용): ${input.vault}`,
       "- 관련 노트는 볼트에서 찾아 읽어도 됩니다. 볼트 안에는 파일을 만들거나 고치거나 지우지 마세요(Workbench가 막습니다).",
-      "- 볼트에 남길 인사이트는 Achmage MCP(draft_insight → publish_insight)로만 냅니다.",
     );
     // The user hid these in Notebook Navigator: hidden from engines too (decision 2026-10-29).
     if (input.hidden?.length) head.push(clip(`- 사용자가 숨긴 폴더·파일(읽지도 찾지도 마세요): ${input.hidden.join(", ")}`, 360));

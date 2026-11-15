@@ -1,6 +1,8 @@
-import { isUnseen, type Artifact, type Session, type Work } from "@workbench/contracts";
+import type { Artifact, Session, Work } from "@workbench/contracts";
 import type { State } from "./state.ts";
 import { folderHidden, sessionHidden, workDocs, workHidden, workSessions } from "./tree.ts";
+import { statusText } from "./format.ts";
+import { heldCount, needsPerson, rowState, type RowStateId } from "./row-state.ts";
 
 // Home overview modes (design 3.3): the same sessions, works and documents grouped along five
 // axes — what waits for me, where things stall, where things are, when they happened, what was
@@ -24,38 +26,47 @@ export const readHomeMode = (value: unknown): HomeMode =>
 /** Groups of "지금", in the order they ask for the user. */
 export type Bucket = "attention" | "trouble" | "unseen" | "running" | "queued";
 
+/** The groups in the one state order (row-state.ts), named with the one state words. */
 export const BUCKETS: { id: Bucket; label: string }[] = [
   { id: "attention", label: "확인 필요" },
-  { id: "trouble", label: "오류·멈춤" },
+  { id: "trouble", label: "실패" },
+  { id: "running", label: "진행 중" },
   { id: "unseen", label: "새 답" },
-  { id: "running", label: "진행" },
-  { id: "queued", label: "예약 있음" },
+  { id: "queued", label: "예약" },
 ];
 
-export const isWorking = (session: Session) => session.status === "starting" || session.status === "running" || session.status === "interrupting";
+// The one state word (skin 2, S3) lives in row-state.ts and is re-exported here: every surface
+// imports `rowState` from overview.ts.
+export { rowState, leadState, groupState, needsPerson, isWorking, heldCount, ROW_STATES, ROW_STATE_ORDER } from "./row-state.ts";
+export type { RowStateId, RowStateInfo, RowStateGlyph, RowStateTone, RowStateOptions } from "./row-state.ts";
 
-/** Requests kept after a stop, a failure or a restart: they go only when the user sends them. */
-export const heldCount = (session: Session) => session.queued.filter((entry) => entry.held).length;
+const BUCKET_OF: Record<RowStateId, Bucket | null> = { attention: "attention", failed: "trouble", running: "running", unseen: "unseen", queued: "queued", done: null };
 
-/**
- * Where a session stands in "지금", first match wins: waiting for an approval; failed, or holding
- * requests a stop left behind; a reply not looked at; working; requests waiting for the turn to
- * end. Null when nothing waits.
- */
+/** Where a session stands in "지금": its one state (`rowState`); null when nothing waits (완료, or never answered). */
 export function bucketOf(session: Session): Bucket | null {
-  if (session.status === "awaitingApproval") return "attention";
-  const working = isWorking(session);
-  if (session.status === "error" || (!working && (Boolean(session.lastError) || heldCount(session) > 0))) return "trouble";
-  if (!working && isUnseen(session)) return "unseen";
-  if (working) return "running";
-  if (session.queued.length) return "queued";
-  return null;
+  const state = rowState(session);
+  return state ? BUCKET_OF[state.id] : null;
+}
+
+/** Resume context must describe the current turn before showing an older answer. */
+export function sessionResume(session: Session) {
+  const bucket = bucketOf(session);
+  const label = rowState(session)?.word ?? "아직 답 없음";
+  const summary = bucket === "attention" ? (session.status === "awaitingApproval" ? session.activity ?? "요청을 확인해 주세요." : "보류된 요청이 있습니다.")
+    : bucket === "trouble" ? session.lastError || (heldCount(session) ? "보류된 요청이 있습니다." : "작업이 멈췄습니다.")
+    : bucket === "running" ? statusText(session)
+    : bucket === "queued" ? `보낼 요청 ${session.queued.length}개`
+    : session.preview;
+  return { bucket, label, summary: summary?.replace(/\s+/g, " ").trim() || null };
 }
 
 /** Latest sign of life of a session (a reply, else any change). */
 export const recency = (session: Session) => Math.max(session.previewAt ?? 0, session.updatedAt);
 
 const liveSessions = (state: State) => Object.values(state.sessions).filter((session) => !sessionHidden(state, session));
+
+/** How many conversations need the person now (확인 필요 + 실패): the number on the rail's 지금, home's count, the project pills' sum. */
+export const needsCount = (state: State) => liveSessions(state).filter((session) => needsPerson(rowState(session))).length;
 
 export type NowGroup = { bucket: Bucket; label: string; sessions: Session[] };
 
@@ -95,7 +106,7 @@ export type BoardColumn = { id: ColumnId; label: string; sessions: Session[] };
 const COLUMNS: { id: ColumnId; label: string }[] = [
   { id: "attention", label: "확인 필요" },
   { id: "running", label: "진행 중" },
-  { id: "trouble", label: "오류·멈춤" },
+  { id: "trouble", label: "실패" },
   { id: "unseen", label: "새 답" },
   { id: "rest", label: "쉬는 중" },
 ];

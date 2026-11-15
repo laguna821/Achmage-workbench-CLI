@@ -1,3 +1,4 @@
+import { ownTool } from "./own-tools.ts";
 import { execFile } from "node:child_process";
 import { mkdirSync, realpathSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -28,13 +29,13 @@ class GitCommandError extends Error {
 export async function git(cwd: string, args: string[], input?: string, signal?: AbortSignal) {
   if (input !== undefined) {
     return new Promise<string>((resolve, reject) => {
-      const child = execFile("git", [...PLAIN, "-C", cwd, ...args], { maxBuffer: 64 * 1024 * 1024 }, (error, stdout, stderr) =>
+      const child = execFile(ownTool("git"), [...PLAIN, "-C", cwd, ...args], { maxBuffer: 64 * 1024 * 1024 }, (error, stdout, stderr) =>
         error ? reject(new Error(String(stderr || error.message).trim())) : resolve(String(stdout)),
       );
       child.stdin?.end(input);
     });
   }
-  const { stdout } = await run("git", [...PLAIN, "-C", cwd, ...args], { maxBuffer: 64 * 1024 * 1024, windowsHide: true, signal }).catch((error: { stderr?: string; stdout?: string; message: string; code?: string | number }) => {
+  const { stdout } = await run(ownTool("git"), [...PLAIN, "-C", cwd, ...args], { maxBuffer: 64 * 1024 * 1024, windowsHide: true, signal }).catch((error: { stderr?: string; stdout?: string; message: string; code?: string | number }) => {
     throw new GitCommandError(String(error.stderr || error.message).trim(), error.code, String(error.stdout ?? ""));
   });
   return stdout;

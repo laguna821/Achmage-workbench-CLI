@@ -36,10 +36,12 @@ try {
   const click = async (text: string, selector = "button,[role=option]") => {
     if (!await until(async () => { for (const element of await wd.findAll(selector)) if (await wd.displayed(element) && await wd.execute<boolean>('return arguments[0].textContent.trim()===arguments[1]', element, text)) { await wd.click(element); return true; } return false; }, 10000)) throw new Error(`Missing control: ${text}`);
   };
+  // 설정 (one dialog; was the ⋯ "연결과 설정" popover): the rail's 설정 key, then the section in its left list.
+  const openAppSettings = async (section: string) => { await wd.frame(null); if (!await wd.find(".settings-dialog[open]")) await wd.click(await wd.waitFor('button[data-rail="settings"]')); await wd.click(await wd.waitFor(`.settings-dialog[open] .settings-nav [data-section="${section}"]`)); await wd.waitFor(`.settings-dialog[open] .settings-pane[data-section="${section}"]`); };
   const fill = async (selector: string, value: string) => { const input = await wd.waitFor(selector); await wd.click(input); await control("a"); await wd.sendKeys(input, value); };
   const settingsFile = join(ctx.app.dataDir, "office/file-search-settings.json"), saved = () => JSON.parse(readFileSync(settingsFile, "utf8"));
   const openSettings = async () => {
-    await wd.frame(null); await wd.click(await wd.waitFor('button[aria-label="연결과 설정"]')); await click("문서 AI 설정…");
+    await wd.frame(null); await openAppSettings("documents"); await click("문서 AI 설정…");
     await wd.frame(await wd.waitFor('iframe[title="문서 AI 설정 화면"]')); await installProbe(wd);
     await wd.click(await wd.waitFor(".set-adv-toggle")); await click("AI 미디어 및 검색", '.set-adv-tabs [role="tab"]');
     await wd.waitFor('[role="switch"][aria-label="Jev 검색 재정렬"]');
@@ -83,7 +85,7 @@ try {
   const source = join(outDir, "original-ieum"); mkdirSync(source);
   const original = JSON.stringify({ authorName: "원본 작성자", fileSearch: { rerank: true, jevEndpoint: "custom", jevKeys: { custom: key }, customBaseUrl: endpoint, customModel: "imported-decision" }, unknown: [null, "keep"] }, null, 3);
   writeFileSync(join(source, "app-settings.json"), original);
-  await wd.click(await wd.waitFor('button[aria-label="연결과 설정"]')); await click("이음오피스 설정 가져오기…");
+  await openAppSettings("documents"); await click("이음오피스 설정 가져오기…");
   await fill('.office-import-dialog input:not([type="checkbox"])', source); await click("가져올 항목 확인"); await wd.waitFor(".office-import-preview");
   report.check(S, "검색 설정·검색 키를 별도 선택하며 기본 미선택", await wd.execute<boolean>('return [...document.querySelectorAll(".office-import-choice")].filter(x=>x.textContent.includes("검색")).length===2 && [...document.querySelectorAll(".office-import-choice input")].every(x=>!x.checked)'));
   for (const label of ["파일 검색 재정렬 설정", "검색 API 키 포함"]) {

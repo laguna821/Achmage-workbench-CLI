@@ -1,0 +1,25 @@
+/* The one state mark (skin 2, S3; components/StateMark.tsx): a glyph of the one icon set in the
+   state's tone, and the word beside it where a surface has room. Colour never says it alone: the
+   word (or the accessible name) does. Words in the deep steps (≥ 4.5:1 on white); marks ≥ 3:1. */
+.state-mark { display: inline-grid; flex: 0 0 auto; place-items: center; width: var(--mark, 16px); height: var(--mark, 16px); color: var(--muted); }
+.state-mark.tone-attention { color: var(--color-attention-text); }
+.state-mark.tone-error { color: var(--color-error); }
+.state-mark.tone-active { color: var(--color-teal); }
+.state-mark.tone-new { color: var(--color-teal-ink); }
+.state-mark.tone-queued { color: var(--muted); }
+.state-mark.tone-done { color: var(--color-done); }
+.state-mark .row-turn { width: calc(var(--mark, 16px) - 4px); height: calc(var(--mark, 16px) - 4px); border: 2px solid var(--color-teal); border-inline-start-color: transparent; border-radius: var(--radius-round); animation: c-turn 900ms linear infinite; }
+.state-mark .row-new { width: calc(var(--mark, 16px) / 2); height: calc(var(--mark, 16px) / 2); border-radius: var(--radius-round); background: var(--color-teal-ink); }
+.state-mark .row-hollow { width: calc(var(--mark, 16px) - 6px); height: calc(var(--mark, 16px) - 6px); border: 1.5px solid var(--color-edge); border-radius: var(--radius-round); }
+@media (prefers-reduced-motion: reduce) { .state-mark .row-turn { animation: none; border-style: dotted; border-inline-start-color: var(--color-teal); } }
+.row-state { color: var(--muted); font: 400 var(--text-xs)/16px var(--font-ui); white-space: nowrap; }
+.row-state.tone-attention { color: var(--color-attention-text); font-weight: 600; }
+.row-state.tone-error { color: var(--color-error); font-weight: 600; }
+.row-state.tone-active,
+.row-state.tone-new { color: var(--color-teal-ink); }
+.row-state.tone-queued,
+.row-state.tone-done { color: var(--muted); }
+/* A tab's mark sits after its title. */
+.group-tab-state { display: inline-grid; flex: 0 0 auto; place-items: center; margin-left: var(--space-2xs); }
+/* A web page whose tab was closed (unit B's 웹 rows): the word 닫힘, quiet — not a state of work. */
+.row-state.tone-closed { color: var(--muted); }

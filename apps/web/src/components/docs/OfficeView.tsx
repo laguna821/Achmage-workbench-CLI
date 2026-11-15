@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { REMARK_BASE } from "../../markdown/plugins.ts";
 import { diagramComponents } from "../Diagram.tsx";
 
 const DRAWN = diagramComponents();
@@ -58,7 +58,7 @@ export function OfficeView({ api, artifact, revision, mode }: { api: Api; artifa
     <div className="doc-preview office-text">
       <div className="notice">이음오피스가 읽은 글입니다(읽기 전용). 고치려면 AI에게 수정 요청을 보내거나 오피스 앱에서 여세요.</div>
       <div className="markdown">
-        <Markdown remarkPlugins={[remarkGfm]} components={DRAWN}>
+        <Markdown remarkPlugins={REMARK_BASE} components={DRAWN}>
           {text.text}
         </Markdown>
       </div>

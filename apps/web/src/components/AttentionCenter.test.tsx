@@ -5,7 +5,7 @@ import { ATTENTION_LABEL, type AttentionEvent, type AttentionPayload, type Atten
 import { AttentionInbox, CompletionNotifications, watchAttentionPresence } from "../completion-notifications.ts";
 import { initialState } from "../state.ts";
 import { AttentionCenter } from "./AttentionCenter.tsx";
-import { ConversationSheet } from "./docs/ConversationDrawer.tsx";
+import { AgentColumn } from "./companion/AgentColumn.tsx";
 
 vi.mock("./Transcript.tsx", () => ({ Transcript: (props: { sessionId: string; focusItem?: { itemId: string; nonce: number } }) => <div data-testid="focused-transcript" data-session={props.sessionId} data-item={props.focusItem?.itemId} /> }));
 vi.mock("./ImageGen.tsx", () => ({ ImageCard: () => null }));
@@ -93,10 +93,38 @@ it("reports active-session presence on focus/visibility changes, every 15 second
   expect(f.attentionPresence).toHaveBeenLastCalledWith({ clientId: f.inbox.clientId, sessionId: "child", visible: false }, true);
 });
 
-it("passes an exact original item into the document conversation overlay without answering approval", () => {
+it("passes an exact original item into the document's conversation column without answering approval", () => {
   const onAnswer = vi.fn(), onClose = vi.fn();
-  render(<ConversationSheet state={state} session={session} focusItem={{ itemId: "approval-1", nonce: 7 }} onClose={onClose} onAnswer={onAnswer} />);
+  render(<AgentColumn state={state} session={session} kind="document" name="문서" focusItem={{ itemId: "approval-1", nonce: 7 }} onClose={onClose} onAnswer={onAnswer}>{null}</AgentColumn>);
   expect(screen.getByTestId("focused-transcript").getAttribute("data-session")).toBe("child"); expect(screen.getByTestId("focused-transcript").getAttribute("data-item")).toBe("approval-1");
-  expect(document.activeElement).toBe(screen.getByRole("button", { name: "대화 닫기" }));
-  fireEvent.keyDown(document.activeElement!, { key: "Escape" }); expect(onClose).toHaveBeenCalledOnce(); expect(onAnswer).not.toHaveBeenCalled();
+  // Looking is not answering: nothing is approved by opening it, nor by a key pressed on the column.
+  fireEvent.keyDown(screen.getByTestId("focused-transcript"), { key: "Escape" }); fireEvent.keyDown(screen.getByTestId("focused-transcript"), { key: "Enter" });
+  expect(onAnswer).not.toHaveBeenCalled(); expect(onClose).not.toHaveBeenCalled();
+});
+
+// Skin 2 fix 1, design review finding 3: closing 알림 left the focus on BODY. While a modal dialog is
+// open everything outside it is inert, and focus() on an inert element does nothing: the panel asked
+// the bell for the focus while it was still a modal dialog. Modelled here as the browser does it.
+it("gives the focus back to the bell when 알림 closes (by its 닫기 key and by Escape)", () => {
+  const realFocus = HTMLElement.prototype.focus;
+  const modal = () => document.querySelector<HTMLDialogElement>("dialog[data-test-modal]");
+  vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(function (this: HTMLElement, options?: FocusOptions) {
+    const open = modal();
+    if (open && !open.contains(this)) return; // inert behind a modal dialog
+    realFocus.call(this, options);
+  });
+  HTMLDialogElement.prototype.showModal = function () { this.open = true; this.setAttribute("data-test-modal", ""); this.querySelector<HTMLButtonElement>("button")?.focus(); };
+  HTMLDialogElement.prototype.close = function () { this.open = false; this.removeAttribute("data-test-modal"); };
+  for (const how of ["닫기", "Escape"] as const) {
+    const bell = document.createElement("button"); bell.setAttribute("aria-label", "알림"); document.body.append(bell); bell.focus();
+    const f = fixture();
+    let mounted: ReturnType<typeof render> | null = null;
+    const onClose = () => mounted?.unmount();
+    mounted = render(<AttentionCenter inbox={f.inbox} state={state} onOpen={async () => {}} onClose={onClose} />);
+    expect(document.activeElement).not.toBe(bell);
+    if (how === "닫기") fireEvent.click(screen.getByRole("button", { name: "알림 닫기" }));
+    else fireEvent(document.querySelector("dialog")!, new Event("cancel", { cancelable: true }));
+    expect([how, document.activeElement === bell ? "bell" : document.activeElement?.tagName]).toEqual([how, "bell"]);
+    bell.remove();
+  }
 });

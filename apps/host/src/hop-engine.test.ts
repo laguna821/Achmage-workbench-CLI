@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { unzipSync, zipSync, strFromU8, strToU8 } from "fflate";
 import { beforeAll, expect, it } from "vitest";
 import initOld, { HwpDocument as OldDocument } from "../../../vendor/ieumoffice/vendor/rhwp-core/rhwp.js";
-import init, { HwpDocument } from "../../../third_party/hop/rhwp-core/rhwp.js";
+import init, { HwpDocument } from "../../../third_party/hop/engine.ts";
 import { hwpWasmPath } from "./hwp-resource.ts";
 
 beforeAll(async () => {

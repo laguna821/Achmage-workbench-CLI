@@ -44,7 +44,7 @@
   width: 46%;
   height: 40px;
   margin-bottom: var(--space-4);
-  border-radius: 14px 14px 4px 14px;
+  border-radius: var(--radius-entry) var(--radius-entry) var(--radius-well) var(--radius-entry);
 }
 
 .loading-label {

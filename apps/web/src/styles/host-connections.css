@@ -1,66 +1,120 @@
+/* 기기 연결 (release unit B): the panel lives in 설정 › 휴대폰과 다른 기기 and in its own dialog (the
+   fallback page, a link someone arrived with). The dialog wears the one dialog recipe (radius 14,
+   title 19, body 16); inside, no box sits in a box: rows are parted by hairlines, pairing is three
+   numbered steps, the QR is large and alone in its step. */
+
 .host-connections-dialog {
-  width: min(760px, calc(100vw - 32px));
-  max-height: calc(100dvh - 48px);
+  width: min(720px, calc(100vw - 32px));
+  max-height: min(88dvh, 52rem);
   box-sizing: border-box;
   overflow: auto;
-  padding: var(--space-6);
+  padding: 0;
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--radius-entry);
   background: var(--surface);
   color: var(--text);
-  box-shadow: var(--popover-shadow);
-  font: var(--fs-ui) var(--font-ui);
+  box-shadow: var(--shadow-dialog);
+  font: var(--text-md)/1.6 var(--font-ui);
 }
 .host-connections-dialog::backdrop { background: var(--scrim); }
-.host-connections-dialog h2 { margin: 0; font-size: var(--fs-title); }
-.host-connections-dialog h3 { margin: 0; font-size: var(--fs-lead); }
-.host-connections-dialog h4 { margin: var(--space-2) 0 0; font-size: var(--fs-ui); }
-.host-connections-dialog p { margin: 0; line-height: 1.55; }
-.host-connections-head, .host-connection-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
-.host-connections-head p { margin-top: var(--space-2); color: var(--muted); }
-.host-connections-section { display: grid; gap: var(--space-3); margin-top: var(--space-5); padding-top: var(--space-5); border-top: 1px solid var(--line); }
-.host-connections-list { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-2); }
-.host-connection-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--space-3); }
-.host-connection-main { flex: 1 1 240px; min-width: 0; display: grid; gap: var(--space-1); }
-.host-connection-main span, .host-connection-main small { color: var(--muted); overflow-wrap: anywhere; font-size: var(--fs-meta); }
-.host-connection-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
-.host-connection-actions .button { gap: var(--space-2); }
-.host-connection-form, .host-connection-pending { display: grid; gap: var(--space-3); }
-.host-connections-dialog label { display: grid; gap: var(--space-2); }
-.host-connections-dialog input:not([type="checkbox"]), .host-connections-dialog textarea {
-  width: 100%; min-width: 0; box-sizing: border-box; padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--line); border-radius: var(--r-sm); color: var(--text); background: var(--bg); font: inherit;
+.host-connections-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); padding: var(--space-md) var(--space-md) var(--space-xs) var(--space-lg); background: var(--surface); }
+.host-connections-head h2 { margin: 0; font: 600 var(--text-lg)/1.4 var(--font-ui); }
+.host-connections-dialog > .host-connections-panel { padding: 0 var(--space-lg) var(--space-md); }
+.host-connections-foot { display: flex; justify-content: flex-end; padding: var(--space-sm) var(--space-lg) var(--space-md); border-top: 1px solid var(--line); }
+
+.host-connections-panel { font-size: var(--text-md); line-height: 1.6; word-break: keep-all; overflow-wrap: break-word; }
+.host-connections-panel h3 { margin: 0; font: 600 var(--text-md)/1.45 var(--font-ui); }
+.host-connections-panel h4 { margin: 0; font: 600 var(--text-sm)/1.45 var(--font-ui); }
+.host-connections-panel p { margin: 0; }
+.host-connections-panel .muted { color: var(--muted); font-size: var(--text-sm); }
+.host-connections-phase { color: var(--muted); font-size: var(--text-sm); }
+.host-connection-section-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
+.host-connections-section { display: grid; gap: var(--space-sm); margin-top: var(--space-lg); }
+.host-connections-error { margin-top: var(--space-xs); color: var(--danger); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.host-connections-notice { margin-top: var(--space-xs); color: var(--color-done); font-size: var(--text-sm); }
+.host-connection-local-status { color: var(--text-soft); font-size: var(--text-sm); }
+
+/* Rows: saved PCs, connected devices — name, state and last seen, the keys at the end. */
+.host-connections-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; }
+.host-connection-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-md); min-height: 56px; padding: var(--space-sm) 0; }
+.host-connection-row + .host-connection-row { border-top: 1px solid var(--line); }
+.host-connection-main { flex: 1 1 240px; min-width: 0; display: grid; gap: var(--space-3xs); }
+.host-connection-main strong { font-weight: 500; }
+.host-connection-main span, .host-connection-main small { color: var(--muted); overflow-wrap: anywhere; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.host-connection-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-xs); }
+.host-connection-actions .button { gap: var(--space-2xs); }
+.host-connection-confirm { flex-basis: 100%; display: grid; gap: var(--space-xs); padding: var(--space-sm) 0 0; }
+.host-connection-confirm .host-connection-actions { justify-content: flex-start; }
+
+/* Forms. */
+.host-connection-form, .host-connection-pending { display: grid; gap: var(--space-sm); }
+.host-connections-panel label { display: grid; gap: var(--space-2xs); font-size: var(--text-sm); }
+.host-connection-listen { display: grid; gap: var(--space-2xs); align-content: start; font-size: var(--text-sm); }
+.host-connections-panel input:not([type="checkbox"]), .host-connections-panel textarea {
+  width: 100%; min-width: 0; min-height: 32px; box-sizing: border-box; padding: var(--space-2xs) var(--space-sm);
+  border: 1px solid var(--field-line); border-radius: var(--radius-pill); color: var(--text); background: var(--surface); font: inherit; font-size: var(--text-sm);
 }
-.host-connections-dialog textarea { resize: vertical; overflow-wrap: anywhere; }
-.host-connections-dialog .host-connection-check { display: flex; flex-direction: row; align-items: flex-start; gap: var(--space-2); line-height: 1.5; }
-.host-connection-check input { flex: 0 0 auto; margin-top: var(--space-1); }
-.host-connections-dialog fieldset { min-width: 0; margin: 0; padding: 0; border: 0; display: grid; gap: var(--space-2); }
-.host-connections-dialog fieldset fieldset { margin-top: var(--space-3); }
-.host-connections-dialog legend { margin-bottom: var(--space-2); font-weight: 600; }
-.host-connection-fields { display: grid; grid-template-columns: minmax(0, 2fr) minmax(80px, 1fr); gap: var(--space-3); }
-.host-connection-network > label, .host-connection-network > div { margin-top: var(--space-3); }
-.host-connection-network summary { cursor: pointer; }
-.host-connection-identity { display: grid; gap: var(--space-2); color: var(--muted); font-size: var(--fs-micro); overflow-wrap: anywhere; }
-.host-connection-identity code { font-family: var(--mono); }
-.host-connection-offer, .host-connection-pending { border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--space-4); }
-.host-connection-offer { display: grid; justify-items: start; gap: var(--space-3); }
+.host-connections-panel :is(input, textarea):focus-visible { outline: 2px solid var(--focus); outline-offset: -1px; }
+.host-connections-panel textarea { resize: vertical; overflow-wrap: anywhere; }
+.host-connections-panel .host-connection-check { display: flex; flex-direction: row; align-items: flex-start; gap: var(--space-xs); line-height: 1.5; font-size: var(--text-md); }
+.host-connection-check input { flex: 0 0 auto; margin-top: var(--space-2xs); }
+.host-connections-panel fieldset { min-width: 0; margin: 0; padding: 0; border: 0; display: grid; gap: var(--space-xs); }
+.host-connections-panel fieldset fieldset { margin-top: var(--space-sm); }
+.host-connections-panel legend { margin-bottom: var(--space-2xs); color: var(--muted); font: 600 var(--text-label)/1.4 var(--font-ui); }
+.host-connection-fields { display: grid; grid-template-columns: minmax(0, 2fr) minmax(80px, 1fr); gap: var(--space-sm); }
+.host-connection-network > label, .host-connection-network > div, .host-connection-network > p { margin-top: var(--space-sm); }
+.host-connection-network summary { width: max-content; color: var(--color-teal-ink); font-size: var(--text-sm); cursor: pointer; }
+
+/* Pairing: three numbered steps (what you do on the phone, what you see here). */
+.device-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.device-step { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: var(--space-sm); padding: var(--space-md) 0; }
+.device-step + .device-step { border-top: 1px solid var(--line); }
+.device-step-no {
+  display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: var(--radius-round);
+  box-shadow: inset 0 0 0 1px var(--field-line); color: var(--text-soft); font: 600 var(--text-xs)/1 var(--font-ui); font-variant-numeric: tabular-nums;
+}
+.device-step.done .device-step-no { background: var(--active-bg); box-shadow: inset 0 0 0 1px var(--color-teal-ink); color: var(--color-teal-ink); }
+.device-step-body { display: grid; gap: var(--space-xs); min-width: 0; }
+.host-connection-offer { display: grid; justify-items: start; gap: var(--space-sm); padding-top: var(--space-xs); }
 .host-connection-offer label { width: 100%; }
-.host-connection-qr { display: block; width: min(240px, 100%); height: auto; }
-.host-connection-verification { display: grid; gap: var(--space-2); }
-.host-connection-verification > strong { font: 600 var(--fs-heading) var(--mono); letter-spacing: 0.15em; }
-.host-connection-verification small { color: var(--muted); font-size: var(--fs-meta); }
-.host-connection-confirm { flex-basis: 100%; display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); }
-.host-connection-confirm p { flex-basis: 100%; }
-.host-connections-error { margin-top: var(--space-3) !important; color: var(--control-error); overflow-wrap: anywhere; }
-.host-connections-notice { margin-top: var(--space-3) !important; color: var(--muted); }
-.host-connections-foot { display: flex; justify-content: flex-end; padding-top: var(--space-5); }
-.host-qr-scanner { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg); }
-.host-qr-scanner video { width: 100%; max-height: min(360px, 45dvh); object-fit: contain; border-radius: var(--r-md); background: black; }
+/* The QR alone in its step, large enough to scan from a phone held at arm's length. */
+.host-connection-qr { display: block; width: min(280px, 100%); height: auto; padding: var(--space-sm); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--color-paper, var(--surface)); }
+.host-connection-link { display: grid; gap: var(--space-xs); width: 100%; }
+.host-connection-link .button { justify-self: start; }
+.host-connection-pending + .host-connection-pending { border-top: 1px solid var(--line); padding-top: var(--space-md); }
+.host-connection-verification { display: grid; gap: var(--space-2xs); }
+.host-connection-verification > span { color: var(--muted); font-size: var(--text-sm); }
+.host-connection-verification > strong { font: 600 var(--text-xl) var(--font-outlier); letter-spacing: 0.15em; font-variant-numeric: tabular-nums; }
+.host-connection-verification small { color: var(--muted); font-size: var(--text-sm); }
+
+/* The two ways to use this PC from a phone: rows, the easiest first. */
+.host-connections-phone { margin-top: var(--space-sm); }
+.host-connection-ways { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.host-connection-way { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-md); min-height: 56px; padding: var(--space-sm) 0; }
+.host-connection-way + .host-connection-way { border-top: 1px solid var(--line); }
+.host-connection-way strong { display: flex; align-items: center; gap: var(--space-xs); font-weight: 500; }
+.host-connection-way p { margin: var(--space-3xs) 0 0; color: var(--muted); font-size: var(--text-sm); line-height: 1.55; }
+.host-connection-easy { color: var(--color-teal-ink); font-size: var(--text-sm); font-weight: 500; }
+.host-connections-other { margin-top: var(--space-lg); padding-top: var(--space-md); border-top: 1px solid var(--line); }
+.host-connections-other > summary { display: grid; gap: var(--space-3xs); cursor: pointer; list-style-position: outside; margin-left: var(--space-md); }
+.host-connections-other > summary strong { font-weight: 600; }
+.host-connections-other > summary span { color: var(--muted); font-size: var(--text-sm); }
+
+.host-qr-scanner { display: grid; gap: var(--space-sm); padding: var(--space-md) 0; }
+.host-qr-scanner video { width: 100%; max-height: min(360px, 45dvh); object-fit: contain; border-radius: var(--radius-card); background: var(--color-video-ground); }
 .host-qr-scanner video[hidden], .host-qr-scanner input[hidden] { display: none; }
 .host-qr-scanner small { color: var(--muted); line-height: 1.55; }
-@media (max-width: 560px) {
-  .host-connections-dialog { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); padding: var(--space-4); }
-  .host-connection-actions { gap: var(--space-2); }
+
+@media (max-width: 40rem) {
+  .host-connections-dialog { width: 100vw; max-height: 100dvh; height: 100dvh; border-radius: 0; border: 0; }
+  .host-connections-dialog > .host-connections-panel { padding: 0 var(--space-md) var(--space-md); }
+  .host-connection-way { grid-template-columns: minmax(0, 1fr); }
+  .host-connection-actions { justify-content: flex-start; }
   .host-connection-actions > button { min-height: 44px; }
-  .host-connection-identity { font-size: var(--fs-micro); }
+  .host-connection-fields { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* The page a phone's browser shows before it is joined to a PC (ConnectedWorkbench). */
+.connect-first { display: grid; gap: var(--space-sm); justify-items: start; max-width: 560px; margin: 12vh auto 0; padding: var(--space-lg); color: var(--text); font: var(--text-md)/1.6 var(--font-ui); word-break: keep-all; }
+.connect-first h1 { margin: 0; font: 600 var(--text-xl)/1.3 var(--font-ui); }
+.connect-first p { margin: 0; color: var(--text-soft); }

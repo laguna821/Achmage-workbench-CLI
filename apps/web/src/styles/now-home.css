@@ -1,0 +1,184 @@
+/* Skin 2 · unit D (S7): home "지금" in the owner's draft's shape (01-dashboard.png). The head "지금" +
+   the date; a filter row (전체 / 확인 필요 N / 진행 중 N / 완료, 묶어서 보기 at its end) on a hairline;
+   ONE band over the table when decisions wait; ONE table of conversations (the decisions first) — aligned columns,
+   34 px rows, a hairline under the header only, no boxes; 최근 문서 as one row of three. Tokens and
+   the control recipes only. Also the state word (glyph + word) shared by home, the project page and
+   the conversation head. */
+
+/* ── The column: wider than a reading column, so five columns sit side by side ───────────────── */
+.start-view.with-board:has(.now-home) { --home-measure: 960px; }
+.home-head-tools { display: flex; align-items: center; gap: var(--space-2xs); margin-left: auto; }
+.home-back-now { display: inline-flex; align-items: center; gap: var(--space-2xs); height: 32px; padding: 0 var(--space-xs); font-size: var(--text-sm); white-space: nowrap; }
+
+.now-home, .now-home > [role=tabpanel] { display: flex; flex-direction: column; gap: var(--space-lg); }
+
+/* ── The filter row: words with tabular counts; the current one carries a 2 px deep-teal rule ── */
+.now-filters { display: flex; align-items: flex-end; gap: var(--space-sm); border-bottom: 1px solid var(--color-rule); }
+.now-tabs { display: flex; gap: var(--space-2xs); min-width: 0; }
+.now-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  height: 36px;
+  padding: 0 var(--space-sm);
+  border: 0;
+  border-radius: var(--radius-pill) var(--radius-pill) 0 0;
+  background: transparent;
+  color: var(--muted);
+  font: var(--weight-medium) var(--text-sm)/1 var(--font-body);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out);
+}
+.now-tab:hover { background: var(--hover); color: var(--text); }
+.now-tab.current { color: var(--text); font-weight: var(--weight-strong); }
+.now-tab.current::after { content: ""; position: absolute; inset: auto var(--space-xs) -1px; height: 2px; border-radius: 1px; background: var(--color-teal-ink); }
+.now-tab:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; }
+.now-count { min-width: 1.25rem; padding: 0 var(--space-2xs); border-radius: var(--radius-well); background: var(--color-paper-3); color: var(--text); font-size: var(--text-xs); font-weight: var(--weight-strong); font-variant-numeric: tabular-nums; line-height: 1.5; text-align: center; }
+.now-tab[data-filter="attention"] .now-count { background: var(--color-attention-soft); color: var(--color-attention-text); }
+.now-mark { margin: 0 0 var(--space-2xs) auto; height: 28px; padding: 0 var(--space-xs); font-size: var(--text-sm); white-space: nowrap; }
+/* 묶어서 보기: the row's last key (after 새 답 N개 읽음으로 when that shows). */
+.now-group-key { display: inline-flex; align-items: center; gap: var(--space-2xs); height: 28px; margin: 0 0 var(--space-2xs) auto; padding: 0 var(--space-xs); font-size: var(--text-sm); white-space: nowrap; }
+.now-mark + .now-group-key { margin-left: 0; }
+.now-group-key.pressed { color: var(--color-teal-ink); font-weight: var(--weight-strong); }
+.now-filters.grouped { border-bottom: 0; }
+
+/* ── The band (the owner's draft): ONE line over the table when decisions wait — the words with the
+   count, and 검토하기 (the filled key) that unfolds the first decision in place. ── */
+.now-band { display: flex; align-items: center; gap: var(--space-xs); min-height: 44px; padding: var(--space-2xs) var(--space-2xs) var(--space-2xs) var(--space-sm); border-radius: var(--radius-pill); background: var(--active-bg); color: var(--text); font-size: var(--text-sm); }
+/* Fix 1 (ruling 2, the owner's 01-dashboard): a teal wash with ink words; the glyph keeps the attention colour
+   (it is the state's mark), the key is a deep-teal text key "검토하기 ›", not a filled one. */
+.now-band-glyph { flex: none; color: var(--color-attention-text); }
+.now-band .now-band-review { display: inline-flex; align-items: center; gap: var(--space-3xs); height: 32px; padding: 0 var(--space-xs); color: var(--color-teal-ink); font-weight: var(--weight-strong); }
+.now-band-words { font-weight: var(--weight-strong); word-break: keep-all; }
+.now-band-count { font-variant-numeric: tabular-nums; }
+.now-band-review { margin-left: auto; }
+
+/* ── Section heads: 13/600 muted, the count after the name ──────────────────────────────────── */
+.now-section-head { display: flex; align-items: center; gap: var(--space-xs); margin: 0 0 var(--space-xs); font: var(--weight-strong) var(--text-sm)/var(--leading-head) var(--font-body); color: var(--muted); word-break: keep-all; }
+.now-section-head .now-count { background: var(--color-attention-soft); color: var(--color-attention-text); }
+.now-section-note { font-weight: var(--weight-regular); }
+.now-docs .now-section-head .now-docs-all { display: inline-flex; align-items: center; gap: var(--space-3xs); height: 28px; margin-left: auto; padding: 0 var(--space-xs); font-size: var(--text-sm); }
+
+/* ── The table: aligned columns, a hairline under the header only, space between rows ─────── */
+.now-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; font-size: var(--text-sm); }
+.now-col-project { width: 24%; }
+.now-col-state { width: 7.5rem; }
+.now-col-ai { width: 6.5rem; }
+.now-col-time { width: 5.5rem; }
+.now-col-more { width: 2.25rem; }
+.now-table th { height: 32px; padding: 0 var(--space-xs); border-bottom: 1px solid var(--color-rule); color: var(--muted); font-size: var(--text-label); font-weight: var(--weight-strong); text-align: left; white-space: nowrap; }
+.now-table th.now-th-time { text-align: right; }
+.now-table td { height: 34px; padding: 0 var(--space-xs); vertical-align: middle; color: var(--text); }
+.now-row > td:first-child { border-radius: var(--radius-pill) 0 0 var(--radius-pill); }
+.now-row > td:last-child { border-radius: 0 var(--radius-pill) var(--radius-pill) 0; }
+.now-row { cursor: pointer; }
+.now-row:hover > td, .now-row.expanded > td { background: var(--color-paper-3); }
+.now-row:focus-within > td { background: var(--color-paper-3); }
+.now-table tbody tr:first-child > td { padding-top: var(--space-2xs); }
+
+.now-work, .now-project {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  max-width: 100%;
+  min-height: 28px;
+  padding: 0 var(--space-2xs);
+  margin-left: calc(var(--space-2xs) * -1);
+  border: 0;
+  border-radius: var(--radius-well);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.now-work > svg, .now-project > svg { flex: none; color: var(--muted); }
+.now-project { color: var(--text-soft); }
+.now-work:hover .now-text, .now-project:hover .now-text { text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.now-work:focus-visible, .now-project:focus-visible, .now-doc:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 0; }
+.now-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.now-ai { display: inline-flex; align-items: center; gap: var(--space-xs); color: var(--text-soft); white-space: nowrap; }
+.now-cell-time { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.now-cell-more { text-align: right; }
+.now-toggle { width: 28px; height: 28px; opacity: 0; transition: opacity var(--dur-micro) var(--ease-out); }
+.now-row:hover .now-toggle, .now-row:focus-within .now-toggle, .now-toggle[aria-expanded="true"] { opacity: 1; }
+@media (pointer: coarse) { .now-toggle { opacity: 1; width: 44px; height: 44px; } .now-table td { height: 44px; } }
+.now-reply-row > td { padding: 0 var(--space-xs) var(--space-sm) calc(var(--space-xs) + 24px); background: var(--color-paper-3); border-radius: 0 0 var(--radius-pill) var(--radius-pill); }
+.now-reply-row .home-reply { padding: 0; font-size: var(--text-sm); }
+/* A decision row's key, always shown (not on hover only); its full entry unfolds under it in place. */
+.now-cell-more { white-space: nowrap; }
+.now-decide { margin-right: var(--space-2xs); }
+.now-reply-row.decision > td { padding: var(--space-2xs) 0 var(--space-sm); background: none; }
+
+/* ── 최근 문서: one row of three, parted by hairlines, no cards ────────────────────────────── */
+.now-docs-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; padding: var(--space-xs) 0 0; border-top: 1px solid var(--color-rule); list-style: none; }
+.now-docs-row > li { min-width: 0; }
+.now-docs-row > li + li { border-left: 1px solid var(--color-rule); }
+.now-doc { display: flex; align-items: flex-start; gap: var(--space-xs); width: 100%; padding: var(--space-xs) var(--space-sm); border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.now-doc:hover { background: var(--hover); }
+.now-doc .format-badge { flex: none; margin-top: var(--space-3xs); }
+.now-doc-text { display: grid; gap: var(--space-3xs); min-width: 0; }
+.now-doc-name { overflow: hidden; font-size: var(--text-sm); font-weight: var(--weight-medium); text-overflow: ellipsis; white-space: nowrap; }
+.now-doc-meta { display: flex; gap: var(--space-xs); min-width: 0; color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.now-doc-meta > :first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.now-doc-meta > time { flex: none; }
+.now-doc-pending { flex: none; margin-left: auto; color: var(--color-attention-text); font-size: var(--text-xs); white-space: nowrap; }
+
+.now-home .home-more { align-self: flex-start; margin-top: var(--space-2xs); font-size: var(--text-sm); }
+.now-home .home-quiet { border-top: 0; }
+.now-empty { border-top: 0; padding-top: var(--space-xs); }
+
+/* ── Narrow (a pane under 760 px: the 1000 and 760 windows, split panes, a phone): each conversation
+   takes two lines, no horizontal scroll — the name and its state on the first, project, AI and time on
+   the second. Five columns need the fixed 348 px + the name's 12rem over the project's 76 %: ≈ 711 px;
+   at 620 (as merged) the 1000 window's ≈ 680 px pane kept five columns and the NAME shrank to its icon
+   (fix 1, finding 4; styles/now-home.test.ts checks this sum against the breakpoint). ── */
+@container work-pane (max-width: 760px) {
+  .now-table, .now-table tbody { display: block; }
+  .now-table thead, .now-table colgroup { display: none; }
+  /* Fixed tracks (fix 1): every row's AI, state and time line up under each other (auto tracks moved per row). */
+  .now-row { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem 6.5rem 2rem; grid-template-areas: "work work state more" "project ai time more"; align-items: center; column-gap: var(--space-xs); padding: var(--space-2xs) 0; }
+  .now-row > td { display: block; height: auto; padding: 0 var(--space-2xs); background: none; border-radius: 0; }
+  .now-row:hover, .now-row:focus-within, .now-row.expanded { border-radius: var(--radius-pill); background: var(--color-paper-3); }
+  .now-row:hover > td, .now-row:focus-within > td, .now-row.expanded > td { background: none; }
+  .now-cell-work { grid-area: work; min-width: 0; }
+  .now-cell-state { grid-area: state; }
+  .now-cell-more { grid-area: more; }
+  .now-cell-project, .now-cell-ai, .now-cell-time { font-size: var(--text-xs); color: var(--muted); }
+  .now-cell-project { grid-area: project; min-width: 0; padding-left: calc(var(--space-2xs) + 24px); }
+  .now-cell-ai { grid-area: ai; }
+  .now-cell-time { grid-area: time; text-align: right; }
+  .now-cell-state { justify-self: end; }
+  .now-cell-project .now-project > svg { display: none; }
+  .now-project { min-height: 24px; color: var(--muted); }
+  .now-ai { color: var(--muted); }
+  .now-reply-row { display: block; }
+  .now-reply-row > td { display: block; padding-left: var(--space-sm); }
+  .now-docs-row { grid-template-columns: minmax(0, 1fr); }
+  .now-docs-row > li + li { border-left: 0; border-top: 1px solid var(--color-rule); }
+  .now-mark { display: none; }
+  /* The filters keep their line (scrolling sideways if they must); 묶어서 보기 goes under them. */
+  .now-filters { flex-wrap: wrap; row-gap: 0; }
+  .now-tabs { flex: 1 1 100%; overflow-x: auto; scrollbar-width: none; }
+  .now-group-key { margin: var(--space-2xs) 0; }
+  .now-band { flex-wrap: wrap; }
+}
+
+/* ── The state word: a glyph from the one icon set AND the word; colour follows the meaning ─── */
+.state-word { display: inline-flex; align-items: center; gap: var(--space-2xs); color: var(--text-soft); font-size: var(--text-sm); white-space: nowrap; }
+.state-word .state-glyph { flex: none; }
+.state-word.tone-attention { color: var(--color-attention-text); }
+.state-word.tone-error { color: var(--color-error); }
+.state-word.tone-active { color: var(--color-teal-ink); }
+.state-word.tone-new { color: var(--text); font-weight: var(--weight-strong); }
+.state-word.tone-done { color: var(--muted); }
+.state-word.tone-queued { color: var(--muted); }
+
+/* ── The conversation's head: "이 프로젝트의 대화 N" and the state word as properties ─────────── */
+.note-props .conversations-key { display: inline-flex; align-items: center; gap: var(--space-2xs); }
+.conversations-key .count { font-variant-numeric: tabular-nums; }
+.conversations-waiting { min-width: 1.25rem; padding: 0 var(--space-2xs); border-radius: var(--radius-well); background: var(--color-attention-soft); color: var(--color-attention-text); font-size: var(--text-xs); font-weight: var(--weight-strong); font-variant-numeric: tabular-nums; text-align: center; }
+.note-prop-status .state-word { font-size: inherit; }
+.conversations-menu .state-word { font-size: var(--text-xs); }

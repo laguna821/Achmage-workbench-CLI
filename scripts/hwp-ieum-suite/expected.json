@@ -1,0 +1,151 @@
+{
+  "engine": "third_party/hop/engine.ts (rhwp 0.9.0-workbench.3)",
+  "note": "Ieum's vendored HWP suite on our engine: the tests listed here fail and why (H4b MUST 3). environment = fails the same on 0.8.7 (Ieum's own app shell); upstream = 0.9.0 behaves differently on purpose and the new value is right; engine-version = pins bytes of the 0.8.7 build. A test not listed must pass.",
+  "failures": [
+    {
+      "test": "tests/ai-doc-attach.test.ts > hwp AI panel: attach from a document attaches the picked paths through the same path a Drive pick takes",
+      "class": "environment",
+      "reason": "Ieum's Electron AI panel wiring, not run in Workbench (fails identically on 0.8.7)"
+    },
+    {
+      "test": "tests/engine-layout.test.ts > vendored rhwp engine is the build its manifest records",
+      "class": "environment",
+      "reason": "expects Ieum's own version string 0.8.7-ieum.N; ours is the Workbench build (fails on 0.8.7 too)"
+    },
+    {
+      "test": "tests/memo-side.test.ts > the memo column on screen follows a drag of its edge and remembers the width",
+      "class": "environment",
+      "reason": "Ieum's renderer UI (DOM/jsdom set-up of its own app shell), not run in Workbench (fails identically on 0.8.7)"
+    },
+    {
+      "test": "tests/memo-side.test.ts > the memo column on screen has a top-bar button that says whether the column is out",
+      "class": "environment",
+      "reason": "Ieum's renderer UI (DOM/jsdom set-up of its own app shell), not run in Workbench (fails identically on 0.8.7)"
+    },
+    {
+      "test": "tests/memo-side.test.ts > the memo column on screen hides the column while closed but keeps the panel mounted and quiet",
+      "class": "environment",
+      "reason": "Ieum's renderer UI (DOM/jsdom set-up of its own app shell), not run in Workbench (fails identically on 0.8.7)"
+    },
+    {
+      "test": "tests/memo-side.test.ts > the memo column on screen shows the panel with a resize edge while open",
+      "class": "environment",
+      "reason": "Ieum's renderer UI (DOM/jsdom set-up of its own app shell), not run in Workbench (fails identically on 0.8.7)"
+    },
+    {
+      "test": "tests/memo-side.test.ts > what the memo column remembers keeps a memo panel left out in the old shared dock out, once",
+      "class": "environment",
+      "reason": "Ieum's renderer UI (DOM/jsdom set-up of its own app shell), not run in Workbench (fails identically on 0.8.7)"
+    },
+    {
+      "test": "tests/memo-side.test.ts > what the memo column remembers keeps the width within its bounds and a share of the window",
+      "class": "environment",
+      "reason": "Ieum's renderer UI (DOM/jsdom set-up of its own app shell), not run in Workbench (fails identically on 0.8.7)"
+    },
+    {
+      "test": "tests/memo-side.test.ts > what the memo column remembers reads a saved width, and the default for nothing or nonsense",
+      "class": "environment",
+      "reason": "Ieum's renderer UI (DOM/jsdom set-up of its own app shell), not run in Workbench (fails identically on 0.8.7)"
+    },
+    {
+      "test": "tests/memo-side.test.ts > what the memo column remembers starts closed with nothing saved, and follows the saved flag after that",
+      "class": "environment",
+      "reason": "Ieum's renderer UI (DOM/jsdom set-up of its own app shell), not run in Workbench (fails identically on 0.8.7)"
+    },
+    {
+      "test": "tests/memo-side.test.ts > what the memo column remembers writes the new flag and drops the old dock mode",
+      "class": "environment",
+      "reason": "Ieum's renderer UI (DOM/jsdom set-up of its own app shell), not run in Workbench (fails identically on 0.8.7)"
+    },
+    {
+      "test": "tests/split-pane.test.ts > the split pane role asks the shell to focus this pane from the rail, and the panel shows once focus arrives",
+      "class": "environment",
+      "reason": "Ieum's split-pane shell, not part of Workbench (fails identically on 0.8.7)"
+    },
+    {
+      "test": "tests/split-pane.test.ts > the split pane role folds the panel to its rail in a secondary pane, and the panel stays mounted",
+      "class": "environment",
+      "reason": "Ieum's split-pane shell, not part of Workbench (fails identically on 0.8.7)"
+    },
+    {
+      "test": "tests/split-pane.test.ts > the split pane role reports this view gaining focus from the screen root",
+      "class": "environment",
+      "reason": "Ieum's split-pane shell, not part of Workbench (fails identically on 0.8.7)"
+    },
+    {
+      "test": "tests/agent-plugin-memos.test.ts > inserting, editing and removing a memo changes only the text and keeps the author and date",
+      "class": "upstream",
+      "reason": "expects date null; rhwp 0.9.0 reads and writes a memo's date (ISO, to the second). A person sees a date on each memo. Date round trip proven: apps/host/src/hwp-save-090.test.ts (b)"
+    },
+    {
+      "test": "tests/engine-layout.test.ts > vendored rhwp engine puts an inline table below the paper-anchored Square table of the same paragraph",
+      "class": "upstream",
+      "reason": "the table geometry passes; its last assertion wants the footnote separator line of a note line whose colour is \"none\" — 0.9.0 does not draw an invisible line (Hangul does not show it either); body stays above the notes"
+    },
+    {
+      "test": "tests/engine-memos.test.ts > editing memos inserts, edits and removes a body memo",
+      "class": "upstream",
+      "reason": "expects date null; 0.9.0 fills the date (see agent-plugin-memos)"
+    },
+    {
+      "test": "tests/engine-memos.test.ts > reading memos reads the Hancom HWP sample memo",
+      "class": "upstream",
+      "reason": "expects date null for a Hancom memo; 0.9.0 reads the date Hangul stored"
+    },
+    {
+      "test": "tests/engine-memos.test.ts > memo requests and text reads every JSON escape of the insert request",
+      "class": "upstream",
+      "reason": "sends author null; 0.9.0 refuses a memo without an author string (memo_insert_failed). The studio always sends a string (agent-plugin.mjs memoAuthorOf), so nothing a person does reaches it"
+    },
+    {
+      "test": "tests/engine-table-resize.test.ts > one cell resize (Shift+arrow) does nothing at the last column",
+      "class": "upstream",
+      "reason": "the starting width of a table pasted from HTML is 186.5 px per column on 0.9.0 (189 on 0.8.7, upstream's pasteHtml); the resize steps (+3.7/+3.8 px), the grid, colSpan and the widths after HWP and HWPX save are the same"
+    },
+    {
+      "test": "tests/engine-table-resize.test.ts > one cell resize (Shift+arrow) moves the same boundary again and keeps the grid after save",
+      "class": "upstream",
+      "reason": "same as above (starting width 186.5 instead of 189 px)"
+    },
+    {
+      "test": "tests/section-tails.test.ts > why the lists have to be put back the engine writes a changed section without a master page it read",
+      "class": "upstream",
+      "reason": "its own comment: 'when this fails, rhwp keeps the lists itself (edwardkim/rhwp#7899)' — 0.9.0 writes the master pages and memo lists of a changed section itself; the app's put-back adds no second copy: apps/host/src/hwp-save-090.test.ts (a)"
+    },
+    {
+      "test": "tests/recovery-main.test.ts > a recovery copy of a file holds what a save would write, in the app data folder, and leaves the file alone",
+      "class": "upstream",
+      "reason": "its precondition is the 0.8.7 engine dropping the lists (sectionTailsOf(export) null); 0.9.0 keeps them, the assertion after it is never reached. Covered by hwp-save-090.test.ts (a)"
+    },
+    {
+      "test": "tests/recovery-main.test.ts > opening a file with a copy left over corrects against the file, not the copy: lists the copy lacks come back on save",
+      "class": "upstream",
+      "reason": "same precondition as above"
+    },
+    {
+      "test": "tests/recovery-main.test.ts > opening a file with a copy left over keeps correcting against the file when the restored copy is edited and saved",
+      "class": "upstream",
+      "reason": "same precondition as above"
+    },
+    {
+      "test": "tests/tab-widths.test.ts > writeTabWidths writes the measures into those tabs, and the engine reads them back (hwp)",
+      "class": "upstream",
+      "reason": "the widths are written (its byte assertions pass); 0.9.0 lays a reopened tab out by its own tab-stop arithmetic (2055 HU) instead of the stand-in width 6000 the test writes. The app writes the width the editor measured, so a tab keeps its place: hwp-save-090.test.ts (d)"
+    },
+    {
+      "test": "tests/tab-widths.test.ts > writeTabWidths writes the measures into those tabs, and the engine reads them back (hwpx)",
+      "class": "upstream",
+      "reason": "same as (hwp)"
+    },
+    {
+      "test": "tests/engine-memos.test.ts > the engine writes Hancom memo identity saves format-copy-table.hwp, edited or not, as the engine without memos did",
+      "class": "engine-version",
+      "reason": "pins the sha256 of 0.8.7's HWPX output; 0.9.0 writes the same document with other bytes (the HWP hashes still match). Content is checked by the corpus round trip"
+    },
+    {
+      "test": "tests/engine-memos.test.ts > the engine writes Hancom memo identity saves hancom-page-number-no-dash.hwpx, edited or not, as the engine without memos did",
+      "class": "engine-version",
+      "reason": "same as above"
+    }
+  ]
+}

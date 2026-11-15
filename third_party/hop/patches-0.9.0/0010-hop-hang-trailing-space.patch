@@ -1,0 +1,41 @@
+Achmage Workbench — rhwp v0.9.0 form of a 0.8.7 engine patch (third_party/hop/patches-0.9.0).
+Origin: HOP 0010 (third_party/hop/patches/0010-hop-hang-trailing-space.patch, sha256 ddc04b270b399b8329cfee89784342c009d118cc92313b2cc1adecd5f1f59446; original author hop-workbench <hop@localhost>)
+Status: ported
+Differs from the 0.8.7 form: only the first hunk (synthetic lines pass false to compute_line_extra_spacing); the second hunk is upstream (line_trailing_space_by_run no longer depends on the flag); the unused local is kept as _renders_synthetic_wrap_trailing_space.
+Regression test: none (the 0.8.7 form brought none; a document whose synthetic lines end in a space was not built)
+
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: h4a <h4a@localhost>
+Date: Sat, 14 Nov 2026 11:32:32 +0900
+Subject: [PATCH] HOP 0010 hang trailing space (0.9.0 port: second hunk
+ upstream)
+
+
+diff --git a/src/renderer/layout/paragraph_layout.rs b/src/renderer/layout/paragraph_layout.rs
+index 01c9071d..cc98f57c 100755
+--- a/src/renderer/layout/paragraph_layout.rs
++++ b/src/renderer/layout/paragraph_layout.rs
+@@ -7410,7 +7410,8 @@ impl LayoutEngine {
+             let needs_distribute = alignment == Alignment::Distribute;
+ 
+             let has_tabs = comp_line.runs.iter().any(|r| r.text.contains('\t'));
+-            let renders_synthetic_wrap_trailing_space = !physical_frame_rows
++            // [HOP patch 0010] kept for reference; the trailing space now hangs on every line.
++            let _renders_synthetic_wrap_trailing_space = !physical_frame_rows
+                 && !computed_body_rows
+                 && !is_last_line_of_para
+                 && para
+@@ -7707,7 +7708,12 @@ impl LayoutEngine {
+                     false,
+                     needs_distribute,
+                     has_tabs,
+-                    renders_synthetic_wrap_trailing_space,
++                    // [HOP patch 0010] 한글 2024는 줄 끝 공백을 오른쪽 여백 밖에 매단다. 합성 줄도
++                    // 저장 줄(#5679)처럼 양쪽 정렬 여분을 줄 안 공백에만 나눠 마지막 글자가
++                    // 오른쪽 끝에 닿게 한다(한글 2024 인쇄 결과와 비교: 줄마다 7–14pt 모자라던 차이).
++                    // (0.9.0: the second hunk of the 0.8.7 form is upstream — line_trailing_space_by_run
++                    // no longer depends on renders_synthetic_wrap_trailing_space.)
++                    false,
+                     suppress_cell_overflow_spacing,
+                     converge_auto_shrink_cell,
+                     total_char_count,

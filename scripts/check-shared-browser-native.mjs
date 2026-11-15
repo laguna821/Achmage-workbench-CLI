@@ -44,6 +44,15 @@ const server = createServer((request, response) => {
     response.end(`<!doctype html><meta name="viewport" content="width=device-width"><title>${path}</title><style>body{margin:16px}iframe{width:240px;height:100px}</style><label>Search<input id="search" aria-label="native-search" autocomplete="off"></label><script>window.inputEvents=0;document.querySelector('#search').addEventListener('input',()=>window.inputEvents++)</script><iframe src="/iframe-child" title="independent frame URL"></iframe>`);
   } else if (path === '/iframe-child') {
     response.end('<!doctype html><title>Frame title must not become tab title</title><p>Frame content, separate URL</p>');
+  } else if (path === '/fixture-signin') {
+    response.writeHead(302, { 'set-cookie': 'workbench_fixture=reader; HttpOnly; SameSite=Lax; Path=/', location: '/private-article' });
+    response.end();
+  } else if (path === '/private-article') {
+    if (!request.headers.cookie?.split(';').some(cookie => cookie.trim() === 'workbench_fixture=reader')) {
+      response.statusCode = 401; response.end('<title>Sign in</title><p>Fixture sign-in required</p>');
+    } else {
+      response.end('<!doctype html><meta charset="utf-8"><title>Private fixture article</title><main>' + '허가된 테스트 본문. '.repeat(5000) + 'AUTHENTICATED_ARTICLE_END</main>');
+    }
   } else { response.statusCode = 404; response.end('Not found'); }
 });
 const sourceFiles = [

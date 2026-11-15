@@ -1,29 +1,20 @@
 {
-  "date": "2026-11-10",
-  "scope": "app",
-  "mode": "polish",
-  "contract": "docs/design/DESIGN.md:1",
-  "skills": {
-    "hallmark": "2.0.0",
-    "impeccable": "4.8.0",
-    "impeccableContext": "not run; OS-documented direct-context fallback"
+  "scanned": "2026-11-14",
+  "run": "hallmark redesign · full · scope app · stage 1 (record, audit, direction, plan; nothing built)",
+  "findings": {
+    "designContract": "docs/design/DESIGN.md:1-91 (HIG remake contract, 2026-11-11). Read as the BEFORE, not as a lock: the owner asked for the skin to be replaced (brief 2026-11-14). Note: the brief names apps/web/DESIGN.md; the file is docs/design/DESIGN.md.",
+    "fonts": "Pretendard Variable 45-920, bundled TTF (apps/web/public/fonts/pretendard/PretendardVariable.ttf; @font-face apps/web/src/styles/foundation.css:5-11) as UI, reading and display face (foundation.css:15). Achmage SameTone (the owner's own OFL face, bundled woff2, @font-face styles.css:8-29) is declared but overridden by foundation.css:15 (--font-read/--font-display -> Pretendard); it survives only as a per-look option. Mono: JetBrains Mono -> D2Coding -> ui-monospace (styles.css:44), not bundled.",
+    "palette": "hex/rgb custom properties, defined twice: styles.css:96-120 (older '괘선 노트' look) and foundation.css:13-97 (HIG remake, wins by import order main.tsx:9-10). Light: paper #fff, chrome #f3f5f8, ink #151b27, muted #566173, line #dce1e8, accent #005bac, brand teal #00a8a3, navy heading #00102e, engine Claude #c96442. Dark: paper #131820, chrome #10151c, accent #7db2f0. 335 hex literals (169 distinct) and 64 rgb() literals across 61 stylesheets.",
+    "spacing": "three scales side by side: --space-1..10 (styles.css:56-66, 4px base; 505 uses), HIG kit --s-1..12 (vendor/hig-kit/kit.css:49; 215 uses), and raw px (padding 293 distinct values, gap 51).",
+    "radii": "--r-* defined twice with different values: styles.css:69-75 (4/6/8/12/16) and foundation.css:19 (4/8/12/18/26, wins). 41 distinct border-radius values in use.",
+    "motion": "no motion library. Tokens defined three times: styles.css:79-85 (--dur-press 90 / fast 140 / base 200 / slow 280), foundation.css:20 (120/120/220/320, wins), kit.css:57 (--dur-1/2/3 120/220/320, --ease). styles/motion.css:1-60. 46 distinct transition declarations; 34 prefers-reduced-motion blocks; 43 @keyframes.",
+    "icons": "Lucide paths vendored into components/Icon.tsx:1-222 (64 glyphs, 24 viewBox, stroke 1.75, default 16px); engine marks in EngineMark.tsx; Hangul office ribbon icons inside the office iframe are a second set.",
+    "brand": "Achmage wordmark + Arc/Rune symbol (apps/web/src/brand/achmage-wordmark.json, components/BrandMark.tsx:2-5, from the owner's own site); named brand tokens --brand-ink #00102e and --brand-accent #00a8a3 (foundation.css:52, :64); Achmage blue #005bac (foundation.css:23); the owner's face Achmage SameTone (styles.css:7). DESIGN.md:13-15 names blue/teal/navy as the brand roles.",
+    "framework": "React 19.3 + Vite 8 (apps/web/package.json:30-52), Tauri 2 shell (apps/desktop; WebKitGTK on Linux, WebView2, WKWebView). No Tailwind, no CSS modules: 61 global stylesheets (17,840 lines; styles.css alone 5,916), imported in order main.tsx:8-16 then per component. A vendored HIG kit (vendor/hig-kit/kit.css, 925 lines, hk-* classes) sits beside the app's own control classes.",
+    "product": "runs: scripts/design-shots.ts boots the bundled host (apps/host/dist/host.mjs) with stand-in engines and a seeded fixture; --serve keeps it up. Captured in Playwright Chromium (fine pointer). The Rust search worker is not built in this worktree, so search shows its error state.",
+    "previousHallmark": "a Hallmark POLISH ran 2026-11-10 (old .hallmark/preflight.json, stamp foundation.css:1-4): polish depth cannot change composition, which is the owner's complaint."
   },
-  "preserve": [
-    "HIG/Pretendard",
-    "project and content hierarchy",
-    "all existing source changes and product wiring",
-    "installed application and real user data"
-  ],
-  "introduce": [
-    "semantic state/contrast/shadow polish",
-    "narrow-layout refinements",
-    "native blank initialization and resize fixes"
-  ],
-  "material": "actual seeded Workbench UI and isolated native app screenshots",
-  "audience": "existing Workbench user managing projects, documents and parallel agents",
-  "primaryAction": "open a project, work or ask without hidden setup steps",
-  "tone": "quiet desktop tool, neutral surfaces, content first",
-  "reviewBudget": "one independent finish review; one fix batch and recapture",
-  "research": "research:rr-d444ad1fc3329b8db7a04a08c16d9489:32ddac54fcb5a32a5d30ac3fd1330da4afd06377fef34fb1ea3c97a41428146e",
-  "completionResearch": "research:rr-d444ad1fc3329b8db7a04a08c16d9489:4eb15dcba62ba1bdcf3021d233f0cf3da4fa537d0431cb166765efb5e05adaad"
+  "preserve": ["every route, handler, data-* hook, test id and capture scene", "the brand: wordmark + Arc/Rune, Achmage blue / teal / navy roles, the engine marks", "Pretendard as the bundled Hangul UI face; Achmage SameTone as the owner's face", "user looks (per-engine appearance) and their stored values"],
+  "introduce": ["one token system replacing the three stacked ones", "a type scale with real steps (not 74% of text at 12-13px)", "one control family per kind with eight states", "motion tokens used by state", "four data states per region", "a width model for 1440/1280/1000/760", "a theme's palette balance, faces pairing, radius and surfaces"],
+  "audit": "stage 1 introduces nothing in product files"
 }

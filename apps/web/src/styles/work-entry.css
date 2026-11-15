@@ -1,0 +1,205 @@
+/* Hallmark · shape: app screen · genre: modern-minimal · theme: Furrow (deal 1/3) · redesign: full · signature: the entry (작업 칸), U5 · governed by styles/tokens.css (stamp, critique and the one token source there) · states: waiting, running, settled, failed */
+/*
+ * THE ENTRY (작업 칸) — the one object this tool is known by (Hallmark U5, the signature).
+ * Every AI job a person reads or decides on is one notebook entry: who asks what, the facts in
+ * ruled cells, the keys at its foot with ONE filled key. Approvals, plans, proposals, file results
+ * and hand-offs in a conversation wear it; the home (U6) lists the open ones in the same shape.
+ *
+ *   .entry          the card. One per job. Sheet ground, a 1px ring, 10px corners, no card inside.
+ *                   It takes the reading column's full width (the transcript, home's ledger and the
+ *                   request row share one edge: --column, 720).
+ *                   data-state: "waiting" (asks you now: ink head, ink ring, the one lift),
+ *                   "queued" (also waits on you, but another entry is the one to act on next: ink
+ *                   ring, quiet head over a hairline), "running" (the engine is at it), "settled"
+ *                   (done; the default), "failed".
+ *                   ONE RULE, home and conversation: one ink head per view, on the entry to act on
+ *                   next. In a conversation that is the entry holding the view's filled key; on home
+ *                   (no filled key: the decision is taken in the conversation) the first entry of the
+ *                   list. Every other waiting entry is "queued".
+ *                   data-kind (approval, plan, proposal, file, handoff) is a hook, not a look.
+ *   .entry-head     the head line: [engine mark] who + what ("Codex가 명령을 실행하려 합니다"),
+ *                   and at its end the time or the state (.entry-when). Filled with ink while
+ *                   waiting; ink words over a hairline once settled.
+ *   .entry-question (optional) the exact question, at the section step (19px): "이 명령을 실행할까요?"
+ *   .entry-body     (optional) free content that is not a fact: a plan's text, a reply, previews.
+ *   .entry-cells    the facts, as ruled cells two to a row (one in a narrow box): <dl> of
+ *                   .entry-cell, or spans. Hairlines part them; no boxes.
+ *                   .entry-cells.inline: the same cells on one line, parted by hairlines (progress,
+ *                   a file's facts, a turn's end) — the replacement for middle-dot strings.
+ *   .entry-cell     one fact: a label (dt / .entry-label, 12px muted) over its value (dd /
+ *                   .entry-value, 14px). .wide spans the row (a command, a list, a reply).
+ *   .entry-keys     the foot: quiet choices left (.entry-aside), the decision keys right, the
+ *                   last of them the one filled key with its shortcut (거절 Esc / 허용 Enter).
+ *   .entry-line     a decided entry: no box, one ruled line in the record (✓ 허용함 ls -la … 14:02).
+ *   .entry-file     a file result: the entry folded to one row that is itself the card link
+ *                   (button.doc-card): badge or first page, the name, its facts as inline cells.
+ */
+
+.entry {
+  --entry-ring: var(--line-strong);
+  --entry-head-fill: transparent;
+  --entry-head-ink: var(--text);
+  --entry-head-soft: var(--muted);
+  --entry-pad: var(--space-md);
+  container-type: inline-size;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  max-width: 100%;
+  gap: 0;
+  padding: 0;
+  overflow: clip;
+  opacity: 1;
+  border: 1px solid var(--entry-ring);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-2);
+  color: var(--text);
+  font: 400 var(--text-sm)/var(--leading-ui) var(--font-ui);
+}
+/* Skin 2 fix 1 (the coordinator's ruling 4): the entry that waits draws NO navy — a white head whose state
+   glyph and words are in the attention colour (the who-and-what stays ink), a 1 px frame in the strong
+   rule, a hairline under the head; the navy 허용 is the only fill in it. Navy stays on the rail and the
+   filled keys. Queued entries keep the same 1 px frame. */
+.entry[data-state="waiting"] {
+  --entry-ring: var(--line-strong);
+  --entry-head-fill: transparent;
+  --entry-head-ink: var(--text);
+  --entry-head-soft: var(--muted);
+  /* skin 2 (A11, one elevation per surface): no shadow. */
+  box-shadow: none;
+  animation: entry-arrive var(--dur-short) var(--ease-out);
+}
+.entry[data-state="waiting"] > .entry-head { border-bottom: 1px solid var(--color-rule); }
+.entry-head .entry-state { flex: none; color: var(--color-attention-text); font-weight: 600; }
+.entry[data-state="queued"] { --entry-ring: var(--line-strong); }
+.entry[data-state="failed"] { --entry-ring: var(--danger); --entry-head-ink: var(--danger); }
+@keyframes entry-arrive { from { opacity: 0; transform: translateY(4px); } }
+
+/* ── head ── */
+.entry-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  min-height: 36px;
+  padding: var(--space-xs) var(--entry-pad, var(--space-md));
+  background: var(--entry-head-fill);
+  color: var(--entry-head-ink);
+  font: 500 var(--text-sm)/var(--leading-ui) var(--font-ui);
+}
+.entry:not([data-state="waiting"]) > .entry-head:not(:last-child):not(:has(+ .entry-cells)) { border-bottom: 1px solid var(--color-rule); }
+.entry-head > :is(svg, .engine-mark, .spinner) { flex: none; }
+.entry-head .engine-mark { color: currentColor; }
+.entry-who { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.entry-when { flex: none; margin-left: auto; color: var(--entry-head-soft); font-size: var(--text-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.entry-when.done { color: var(--ok); }
+.entry-when.problem { color: var(--danger); }
+/* A head that is a disclosure (a running plan): the whole line is the key. */
+button.entry-head { width: 100%; border: 0; border-radius: 0; text-align: left; cursor: pointer; }
+@media (hover: hover) { button.entry-head:hover { background: var(--hover); } }
+button.entry-head:active { background: var(--pressed); }
+button.entry-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ── question and body ── */
+.entry-question {
+  margin: 0;
+  padding: var(--space-sm) var(--entry-pad, var(--space-md)) 0;
+  color: var(--text);
+  font: 600 var(--text-lg)/var(--leading-head) var(--font-ui);
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+.entry-body { min-width: 0; padding: var(--space-xs) var(--entry-pad, var(--space-md)) 0; color: var(--text-soft); font-size: var(--text-sm); line-height: var(--leading-body); word-break: keep-all; overflow-wrap: break-word; }
+.entry-body:last-child { padding-bottom: var(--space-sm); }
+.entry-note { margin: var(--space-xs) var(--entry-pad, var(--space-md)) 0; color: var(--color-attention-text); font-size: var(--text-sm); line-height: var(--leading-body); word-break: keep-all; }
+.entry-note.problem { color: var(--danger); }
+
+/* ── cells ── */
+.entry-cells {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  margin: var(--space-sm) 0 0 -1px;
+  padding: 0;
+  border-bottom: 1px solid var(--color-rule);
+  background: var(--color-paper-2);
+}
+.entry-head + .entry-cells { margin-top: 0; }
+.entry-cells:last-child { border-bottom: 0; }
+/* Each cell draws the hairline on its left and above; the row starts 1px left of the entry, whose
+   edge clips that first line, so the ring stays single and an empty slot stays paper. */
+.entry-cell { min-width: 0; margin: 0; padding: var(--space-xs) var(--entry-pad, var(--space-md)); background: var(--color-paper-2); box-shadow: inset 1px 0 0 var(--color-rule), inset 0 1px 0 var(--color-rule); }
+.entry-cell.wide, .entry-cell:last-child:nth-child(odd) { grid-column: 1 / -1; }
+/* A cell left alone before a wide one spans its row too: no empty slot, no half-drawn rule. */
+.entry-cell:nth-child(odd):has(+ .entry-cell.wide) { grid-column: 1 / -1; }
+:is(.entry-cell > dt, .entry-label) { display: block; color: var(--muted); font: 400 var(--text-xs)/var(--leading-ui) var(--font-ui); }
+:is(.entry-cell > dd, .entry-value) { display: block; min-width: 0; margin: 0; color: var(--text); font-weight: 500; overflow-wrap: anywhere; word-break: keep-all; font-variant-numeric: tabular-nums; }
+.entry-value.add { color: var(--color-diff-add); }
+.entry-value.del { color: var(--color-diff-del); }
+.entry-cell pre, .entry-value.code { margin: 0; color: var(--text); font: 400 var(--text-sm)/var(--leading-body) var(--font-outlier); white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal; }
+.entry-cell pre { max-height: 240px; overflow: auto; }
+@container (max-width: 440px) {
+  .entry-cells { grid-template-columns: minmax(0, 1fr); }
+  .entry-question { font-size: var(--text-md); }
+}
+
+/* The same cells on one line: facts parted by hairlines instead of middle dots. */
+.entry-cells.inline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3xs) 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: 400 var(--text-sm)/20px var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.entry-cells.inline > .entry-cell { padding: 0 var(--space-xs); background: none; box-shadow: none; border-left: 1px solid var(--color-rule); white-space: nowrap; }
+.entry-cells.inline > .entry-cell:first-child { padding-left: 0; border-left: 0; }
+.entry-cells.inline > .entry-cell.now { color: var(--text); }
+.entry-cells.inline > .entry-cell.problem { color: var(--danger); }
+.entry-cells.inline > .entry-cell.done { color: var(--ok); }
+
+/* ── keys ── */
+.entry-keys {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--entry-pad, var(--space-md));
+}
+.entry-cells + .entry-keys { border-top: 0; }
+.entry-aside { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs); margin-right: auto; color: var(--muted); }
+.entry-keys :is(.button, .text-button, .ghost-button, .link) { min-height: 32px; white-space: nowrap; }
+.entry-keys .button kbd { margin-left: var(--space-2xs); padding: 0 var(--space-2xs); border-radius: var(--radius-well); font: 500 var(--text-xs)/18px var(--font-ui); }
+@container (max-width: 440px) {
+  .entry-keys { justify-content: stretch; }
+  .entry-aside { flex-basis: 100%; }
+  .entry-keys > .button { flex: 1 1 0; }
+}
+
+/* ── a decided entry folds to one ruled line of the record: no box, no lift. Six of them in a long
+   conversation read as a ledger column, not as a stack of little cards. ── */
+.entry.entry-line { width: 100%; max-width: 100%; overflow: visible; border: 0; border-bottom: 1px solid var(--color-rule); border-radius: 0; background: none; box-shadow: none; }
+.entry.entry-line > .entry-head { min-height: 32px; padding: var(--space-2xs) 0; background: none; color: var(--text-soft); font-weight: 400; }
+.entry.entry-line > .entry-head > svg { color: var(--muted); }
+.entry-line .entry-who { flex: 0 1 auto; }
+.entry-line .entry-who code, .entry-line .entry-detail { color: var(--muted); font: 400 var(--text-sm)/20px var(--font-outlier); }
+
+/* ── a file result: the entry as one row, the row is the card link (button.doc-card) ── */
+.entry-file { border-radius: var(--radius-card); --c-edge: var(--line-strong); --c-fill: var(--color-paper-2); }
+.doc-card.entry-file { width: 100%; }
+.entry-file .entry-cells.inline { flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; overflow: hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+  .entry[data-state="waiting"] { animation: none; }
+}
+@media (pointer: coarse) {
+  .entry-keys :is(.button, .text-button, .ghost-button, .link), button.entry-head { min-height: 44px; }
+}

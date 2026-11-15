@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import type { Provider } from "@workbench/contracts";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { filterMentions, insertMention, mentionTriggerAt, relocateMentions, type MentionItem, type MentionSpan } from "../mention.ts";
 import { pastedFiles } from "./Attachments.tsx";
 import { showsNothing } from "./docs/image-paste.ts";
@@ -46,7 +47,20 @@ export function Composer({
   voiceScope,
   voiceReply,
   tools,
+  engine,
+  toolsOn,
+  provider,
 }: {
+  /**
+   * The quiet row (Hallmark U5): with an engine control given, the bar shows only 첨부, 도구, the
+   * engine and send. Everything else (left, target, voice, tools) lives one disclosure away in 도구,
+   * labelled, each control unchanged (same labels, keys and handlers).
+   */
+  engine?: ReactNode;
+  /** Settings that are on while 도구 is closed, named on its key so nothing on hides ("계획 먼저"). */
+  toolsOn?: string[];
+  /** The engine this input sends to: drawn as the line above it, so it must match the engine chip inside. */
+  provider?: Provider;
   draftKey: string;
   placeholder: string;
   busy: boolean;
@@ -109,6 +123,18 @@ export function Composer({
   const [active, setActive] = useState(0);
   const [dismissed, setDismissed] = useState<number | null>(null);
   const [dropping, setDropping] = useState(false);
+  const quiet = Boolean(engine);
+  const toolsRef = useRef<HTMLDetailsElement>(null);
+  // The quiet row's 도구 closes when the hand goes elsewhere (its menus open inside it).
+  useEffect(() => {
+    if (!quiet) return;
+    const away = (event: PointerEvent) => {
+      const details = toolsRef.current;
+      if (details?.open && event.target instanceof Node && !details.contains(event.target)) details.open = false;
+    };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [quiet]);
   const pendingCaret = useRef<number | null>(null);
   const trigger = mentions ? mentionTriggerAt(text, caret, { spans, composing }) : null;
   const rows = trigger && trigger.start !== dismissed && mentions ? filterMentions(mentions.items, trigger.query).slice(0, 8) : [];
@@ -245,10 +271,42 @@ export function Composer({
     }
   };
 
+  const voice = voiceScope ? <VoiceInput key={draftKey} draftId={draftKey} scope={voiceScope} resetVersion={voiceEpoch} reply={voiceReply} disabled={disabled || sending || composing} onApply={(captureDraft, transcript) => {
+        const next = appendVoiceTranscript(currentDraft.current, captureDraft, transcript);
+        if (next === null || disabled || sending || composing) return false;
+        setSpans(relocateMentions(currentDraft.current.text, next, spans)); setText(next); setCaret(next.length); pendingCaret.current = next.length;
+        ref.current?.focus({ preventScroll: true }); return true;
+      }} /> : null;
+  const closeOnEscape = (event: KeyboardEvent<HTMLDetailsElement>) => {
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    event.preventDefault(); event.stopPropagation(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus();
+  };
+  // 도구 in the quiet row: the controls as the entry's labelled cells, in a sheet above the input.
+  const quietTools = quiet ? (
+    <details ref={toolsRef} className="composer-tools quiet" onKeyDown={closeOnEscape}>
+      <summary title="권한, 모델, 음성 입력, 계획, 그림, 브라우저와 문서 도구">
+        <Icon name="tool" size={15} /><span>도구</span>
+        {toolsOn?.length ? toolsOn.map((name) => <span key={name} className="composer-tools-on">{name}</span>) : null}
+        <Icon name="chevronDown" size={13} />
+      </summary>
+      <div className="composer-tools-panel">
+        <span className="composer-tools-label">다음 요청 설정</span>
+        <dl className="entry-cells composer-tools-cells">
+          {left ? <div className="entry-cell"><dt>권한과 대화 길이</dt><dd className="composer-tools-controls">{left}</dd></div> : null}
+          {target ? <div className="entry-cell"><dt>모델</dt><dd className="composer-tools-controls">{target}</dd></div> : null}
+          {voice ? <div className="entry-cell wide"><dt>음성</dt><dd className="composer-tools-controls">{voice}</dd></div> : null}
+          {tools ? <div className="entry-cell wide"><dt>이번 요청에</dt><dd className="composer-tools-controls">{tools}</dd></div> : null}
+        </dl>
+      </div>
+    </details>
+  ) : null;
+
   return (
     <div
       className="composer hig-composer"
+      data-quiet={quiet ? "" : undefined}
       aria-label="메시지 작성"
+      data-provider={provider}
       data-phase={waiting ? "waiting" : undefined}
       data-drop={dropping ? "" : undefined}
       onDragOver={(event) => {
@@ -273,7 +331,7 @@ export function Composer({
       {slashOpen ? <SlashList rows={slashRows} loading={slash?.items === null} active={Math.min(active, Math.max(0, slashRows.length - 1))} onPick={(item) => pickCommand(item.name)} /> : null}
       {listOpen ? (
         <div className="mention-list" role="listbox" aria-label="문서 멘션">
-          <div className="menu-label">문서 붙이기 · 보내기 전에 저장 확인</div>
+          <div className="menu-label">문서 붙이기: 보내기 전에 저장합니다</div>
           {rows.map((item, index) => (
             <button
               key={item.id}
@@ -401,14 +459,9 @@ export function Composer({
       <div className="composer-bar">
         <div className="composer-left">
           {onFiles ? <AttachmentPicker draftKey={draftKey} disabled={disabled || sending} onFiles={onFiles} /> : null}
-          {!compactControls ? left : null}
-          {voiceScope ? <VoiceInput key={draftKey} draftId={draftKey} scope={voiceScope} resetVersion={voiceEpoch} reply={voiceReply} disabled={disabled || sending || composing} onApply={(captureDraft, transcript) => {
-        const next = appendVoiceTranscript(currentDraft.current, captureDraft, transcript);
-        if (next === null || disabled || sending || composing) return false;
-        setSpans(relocateMentions(currentDraft.current.text, next, spans)); setText(next); setCaret(next.length); pendingCaret.current = next.length;
-        ref.current?.focus({ preventScroll: true }); return true;
-      }} /> : null}
-          {tools || compactControls && (left || target) ? <details className="composer-tools" onKeyDown={event => {
+          {!quiet && !compactControls ? left : null}
+          {quiet ? null : voice}
+          {quiet ? quietTools : tools || compactControls && (left || target) ? <details className="composer-tools" onKeyDown={event => {
             if (event.key !== "Escape" || event.defaultPrevented) return;
             event.preventDefault(); event.stopPropagation(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus();
           }}>
@@ -417,7 +470,7 @@ export function Composer({
           </details> : null}
         </div>
         <div className="composer-right">
-          {!compactControls ? target : null}
+          {quiet ? engine : !compactControls ? target : null}
           {busy && (text.trim() || attachments > 0) ? (
             <>
               {steerable ? (
@@ -452,7 +505,7 @@ export function Composer({
           )}
         </div>
       </div>
-      {busy ? <div className="composer-status" role="status"><span className="spinner small" aria-hidden />{waiting ? "응답 중" : "작업 중"}<span>{steerable ? "Enter로 지금 전하기 · Alt+Enter로 끝나면 보내기" : "새 요청은 차례대로 보냅니다"}</span></div> : null}
+      {busy ? <div className="composer-status" role="status"><span className="spinner small" aria-hidden />진행 중<span>{steerable ? <><kbd>Enter</kbd> 지금 전하기 <kbd>Alt+Enter</kbd> 끝나면 보내기</> : "새 요청은 차례대로 보냅니다"}</span></div> : null}
     </div>
   );
 }
@@ -491,7 +544,7 @@ function AttachmentPicker({ draftKey, disabled, onFiles }: { draftKey: string; d
       <MenuItem onSelect={() => choose(photos.current)}>사진 보관함에서 선택</MenuItem>
       <MenuItem onSelect={() => choose(camera.current)}>사진 촬영</MenuItem>
       <MenuItem onSelect={() => choose(input.current)}>파일 선택</MenuItem>
-      <p className="menu-label">파일마다 최대 25MB · 선택한 대화에만 첨부</p>
+      <p className="menu-label">파일마다 최대 25MB, 선택한 대화에만 붙습니다</p>
     </Popover>
     <input ref={input} type="file" multiple hidden tabIndex={-1} onChange={event => selected(event.currentTarget)} />
     <input ref={photos} type="file" accept="image/*" multiple hidden tabIndex={-1} onChange={event => selected(event.currentTarget)} />

@@ -137,8 +137,8 @@ async function flow(provider: Provider) {
     await page.waitForSelector(".work-view .transcript");
   };
   const openDoc = async () => {
-    await page.locator(".docs-button").click();
-    await page.locator(".docs-menu .menu-item", { hasText: "강의안.md" }).click();
+    await page.locator(".note-head-more").click();
+    await page.locator(".note-menu [role=menuitem]", { hasText: "강의안.md" }).click();
     await page.waitForSelector(".document-view .doc-composer");
   };
   try {

@@ -1,6 +1,7 @@
-import { isUnseen, type Artifact, type Folder, type Session, type Work } from "@workbench/contracts";
+import type { Artifact, BrowserPage, Folder, Session, Work } from "@workbench/contracts";
 import type { State } from "./state.ts";
 import { nestDocs } from "./pages.ts";
+import { leadState, needsPerson, rowState, type RowStateId } from "./row-state.ts";
 
 // The sidebar tree as plain data: what is visible (archived things and everything under them are
 // not), in which order, and where a dragged row lands. Kept free of React so it can be tested.
@@ -41,9 +42,12 @@ export type Row =
   | { type: "folder"; id: string; depth: number; folder: Folder; open: boolean; empty: boolean }
   | { type: "work"; id: string; depth: number; work: Work; open: boolean; expandable: boolean; sessions: Session[]; docs: Artifact[] }
   | { type: "session"; id: string; depth: number; session: Session; work: Work }
-  | { type: "docs"; id: string; depth: number; work: Work; count: number; open: boolean }
-  | { type: "doc"; id: string; depth: number; artifact: Artifact; work: Work }
-  | { type: "section"; id: string; depth: number; label: string; workId?: string };
+  /** The "문서 n" group; `agents` are its documents' AIs (their state shows while it is folded). */
+  | { type: "docs"; id: string; depth: number; work: Work; count: number; open: boolean; agents: Session[] }
+  /** A document; its AI sessions have no row of their own and show here. */
+  | { type: "doc"; id: string; depth: number; artifact: Artifact; work: Work; agents: Session[] }
+  /** A label: "분류 없음", or a project's "대화 n" / "웹 n" group (`kind`, `count`). */
+  | { type: "section"; id: string; depth: number; label: string; workId?: string; kind?: "chat" | "web"; count?: number };
 
 /** Archived itself, or inside something archived. */
 export function folderHidden(state: State, folderId: string | null): boolean {
@@ -96,26 +100,93 @@ export const workOpen = (open: TreeOpenState, workId: string, currentWorkId: str
   open.openWorks.includes(workId) || (workId === currentWorkId && !open.closedWorks.includes(workId));
 
 /**
- * A work's row and, when it is unfolded, its sessions (when it has more than one) and a "문서" row
- * (when it has documents) that unfolds to the documents, subpages under their page. The tree and
- * the navigator's list both show a work this way.
+ * A work's row and, when it is unfolded, its groups: "대화" (its conversations), "문서" (unfolds to
+ * the documents, subpages under their page, each carrying its AI) and "웹" (its web tabs). The tree
+ * and the navigator's list both show a work this way.
  */
 export function workTreeRows(state: State, work: Work, open: TreeOpenState, currentWorkId: string | null, depth: number, sessions = workSessions(state, work.id), docs = workDocs(state, work.id)): Row[] {
   const expandable = sessions.length > 0 || docs.length > 0;
   const isOpen = expandable && workOpen(open, work.id, currentWorkId);
   const rows: Row[] = [{ type: "work", id: work.id, depth, work, open: isOpen, expandable, sessions, docs }];
   if (!isOpen) return rows;
-  const chats = sessions.filter((session) => !session.documentAgent && !session.pageAgent), agents = sessions.filter((session) => session.documentAgent), pages = sessions.filter(session => session.pageAgent);
-  for (const [key, label, members] of [["chats", "채팅", chats], ["agents", "문서 AI", agents], ["pages", "웹 탭 AI", pages]] as const) if (members.length) {
-    rows.push({ type: "section", id: `${key}:${work.id}`, depth: depth + 1, label: `${label} · ${members.length}`, workId: work.id });
+  // Three kinds, always in this order: 대화 · 문서 · 웹. A document's AI belongs to its document
+  // row; one whose document is not listed (gone) stays a conversation, so it is never unreachable.
+  // Only documents that get a row carry an AI (nestDocs leaves out a page caught in a cycle).
+  const nested = nestDocs(docs);
+  const listed = new Set(nested.map(({ artifact }) => artifact.id));
+  const onDoc = (session: Session) => Boolean(session.documentAgent && listed.has(session.documentAgent.artifactId));
+  const chats = sessions.filter((session) => !session.pageAgent && !onDoc(session));
+  const pages = sessions.filter((session) => session.pageAgent);
+  const agentsOf = new Map<string, Session[]>();
+  for (const session of sessions) if (onDoc(session)) agentsOf.set(session.documentAgent!.artifactId, [...(agentsOf.get(session.documentAgent!.artifactId) ?? []), session]);
+  const group = (kind: "chat" | "web", key: string, label: string, members: Session[]) => {
+    if (!members.length) return;
+    rows.push({ type: "section", id: `${key}:${work.id}`, depth: depth + 1, label, workId: work.id, kind, count: members.length });
     for (const session of members) rows.push({ type: "session", id: session.id, depth: depth + 2, session, work });
-  }
+  };
+  group("chat", "chats", "대화", chats);
   if (docs.length) {
     const docsOpen = open.openDocs.includes(work.id);
-    rows.push({ type: "docs", id: `docs:${work.id}`, depth: depth + 1, work, count: docs.length, open: docsOpen });
-    if (docsOpen) for (const { artifact, depth: nested } of nestDocs(docs)) rows.push({ type: "doc", id: artifact.id, depth: depth + 2 + nested, artifact, work });
+    rows.push({ type: "docs", id: `docs:${work.id}`, depth: depth + 1, work, count: docs.length, open: docsOpen, agents: [...agentsOf.values()].flat() });
+    if (docsOpen) for (const { artifact, depth: below } of nested) rows.push({ type: "doc", id: artifact.id, depth: depth + 2 + below, artifact, work, agents: agentsOf.get(artifact.id) ?? [] });
   }
+  group("web", "pages", "웹", pages);
   return rows;
+}
+
+/**
+ * Skin 2 · B: one item of a project's 웹 section. A page and its tab are one item: the row's `id` is the
+ * tab's identity `browser:<pageId>`. A page AI whose page this window does not know (the phone has no
+ * browser; an older record) keeps its own row, by its session id, so it is never unreachable.
+ */
+export type WebItem = { id: string; pageId: string | null; title: string; url: string | null; open: boolean; closedAt: number | null; agent: Session | null };
+
+/**
+ * The project's browser pages (skin 2 · B): the open ones in the order opened, then the ones whose tab
+ * was closed (kept by the host, newest first; 다시 열기 brings them back), each with its AI if it has
+ * one; then page AIs whose page is not known here.
+ */
+export function workPages(state: State, workId: string, browser: { pages: readonly BrowserPage[]; closedPages?: readonly BrowserPage[] }): WebItem[] {
+  const agents = Object.values(state.sessions).filter((session) => session.workId === workId && session.pageAgent);
+  const agentOf = (page: BrowserPage) => (page.sessionId ? state.sessions[page.sessionId] : undefined) ?? agents.filter((session) => session.pageAgent!.pageId === page.pageId).sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
+  // A blank page has no title of its own ("about:blank" says nothing to a person).
+  const named = (page: BrowserPage) => (page.title && page.title !== "about:blank" ? page.title : page.url === "about:blank" ? "빈 웹 페이지" : page.url);
+  const item = (page: BrowserPage, open: boolean): WebItem => ({ id: `browser:${page.pageId}`, pageId: page.pageId, title: named(page), url: page.url, open, closedAt: open ? null : (page.closedAt ?? null), agent: agentOf(page) });
+  const open = browser.pages.filter((page) => page.workId === workId && page.status !== "closed").sort((a, b) => a.createdAt - b.createdAt).map((page) => item(page, true));
+  const closed = (browser.closedPages ?? []).filter((page) => page.workId === workId && !browser.pages.some((entry) => entry.pageId === page.pageId && entry.status !== "closed"))
+    .sort((a, b) => (b.closedAt ?? 0) - (a.closedAt ?? 0)).map((page) => item(page, false));
+  const known = new Set([...open, ...closed].map((entry) => entry.pageId));
+  const orphans = workSessions(state, workId).filter((session) => session.pageAgent && !known.has(session.pageAgent.pageId))
+    .map((session): WebItem => ({ id: session.id, pageId: session.pageAgent!.pageId, title: session.purpose, url: null, open: true, closedAt: null, agent: session }));
+  return [...open, ...closed, ...orphans];
+}
+
+/** A conversation's name as a person reads it: the gateway stores a document's or page's AI as
+ * "강의안.md · 문서 AI"; the app says "강의안.md 문서 AI" (no middle dots in what is read). */
+export const purposeText = (session: Pick<Session, "purpose">) => session.purpose.replace(/\s*·\s*(문서 AI|웹 AI)$/, " $1");
+/** A document AI listed among conversations (its document is gone): "문서 이름 문서 AI". */
+export const docAgentLabel = (session: Session) => { const text = purposeText(session); return text.endsWith("문서 AI") ? text : `${text} 문서 AI`; };
+
+export type AgentTone = "attention" | "error" | "active" | "new" | null;
+
+/** The AI a document row shows: the most pressing by the one state order (row-state.ts), then the newest. */
+export function leadAgent(agents: Session[], visibleSessionId: string | null): { session: Session; tone: AgentTone } | null {
+  if (!agents.length) return null;
+  const TONE: Record<RowStateId, AgentTone> = { attention: "attention", failed: "error", running: "active", unseen: "new", queued: null, done: null };
+  const lead = leadState(agents, (session) => {
+    const state = rowState(session, { onScreen: session.id === visibleSessionId });
+    return state && TONE[state.id] ? state : null;
+  });
+  if (lead) return { session: lead.item, tone: TONE[lead.state.id] };
+  return { session: agents.reduce((a, b) => (b.createdAt > a.createdAt ? b : a)), tone: null };
+}
+
+/**
+ * What a click on a document row opens: the AI whose state the row shows, in every state. The
+ * document view then draws exactly that AI (its pane's session), also when it was already open.
+ */
+export function docOpenTarget(agents: Session[], visibleSessionId: string | null): Session | null {
+  return leadAgent(agents, visibleSessionId)?.session ?? null;
 }
 
 /**
@@ -149,17 +220,15 @@ export function treeRows(state: State, open: TreeOpenState, mode: SortMode, curr
   return rows;
 }
 
-/** Sessions that need the user now: waiting for an answer, working, then new replies. */
+/** Sessions that need the user now, by their one state (row-state.ts): 확인 필요 (and 실패), 진행 중, then new replies. */
 export function nowSessions(state: State, visibleSessionId: string | null) {
   const live = Object.values(state.sessions).filter((session) => !sessionHidden(state, session));
   const recent = (a: Session, b: Session) => (b.previewAt ?? b.updatedAt) - (a.previewAt ?? a.updatedAt);
+  const of = (session: Session) => rowState(session, { onScreen: session.id === visibleSessionId });
   return {
-    attention: live.filter((session) => session.status === "awaitingApproval").sort(recent),
-    running: live.filter((session) => session.status === "starting" || session.status === "running" || session.status === "interrupting").sort(recent),
-    unseen: live
-      .filter((session) => session.id !== visibleSessionId && (session.status === "idle" || session.status === "error") && isUnseen(session))
-      .sort(recent)
-      .slice(0, 6),
+    attention: live.filter((session) => needsPerson(of(session))).sort(recent),
+    running: live.filter((session) => of(session)?.id === "running").sort(recent),
+    unseen: live.filter((session) => of(session)?.id === "unseen").sort(recent).slice(0, 6),
   };
 }
 

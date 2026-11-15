@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Workbench 가독성 비교</title>
+<style>
+@font-face{font-family:Pretendard;src:url('../../../../apps/web/public/fonts/pretendard/PretendardVariable.ttf');font-weight:45 920}
+*{box-sizing:border-box}body{margin:0;background:#f3f5f8;color:#202733;font:15px/1.6 Pretendard,system-ui,sans-serif}header{padding:24px 28px;background:#fff;border-bottom:1px solid #d6dce4}h1{font-size:24px;margin:0 0 8px}p{margin:8px 0;color:#4e5968}.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:16px}button{font:600 14px Pretendard,system-ui;padding:8px 18px;border:1px solid #bac4d2;border-radius:7px;background:#fff;color:#202733;cursor:pointer}button[aria-pressed=true]{background:#202733;color:white;border-color:#202733}button:focus-visible,a:focus-visible{outline:3px solid #1e6ef4;outline-offset:3px}label{margin-left:12px}.frame{margin:20px;overflow:auto;border:1px solid #d6dce4;background:#fff;border-radius:8px}img{display:block;width:1440px;max-width:none;height:auto}.fit img{width:100%;max-width:1440px}a{color:#164db8}#state{font-weight:600;color:#202733}footer{padding:0 28px 24px}
+</style>
+<header><h1>글자를 또렷하게, 이름을 먼저</h1><p>같은 설치 바이너리·같은 테스트 데이터에서 탐색 영역의 크기, 굵기, 대비만 비교했습니다. 제안은 임시 창에만 적용했으며 설치본은 변경하지 않았습니다.</p>
+<div class="controls" role="group" aria-label="비교 화면"><button id="before" aria-pressed="false">현재 화면</button><button id="after" aria-pressed="true">가독성 제안</button><label><input id="fit" type="checkbox"> 화면에 맞추기</label></div>
+<p id="state" aria-live="polite">제안 · 작업명 14px / 500 · 중복 종류 배지 축소</p><p>기본은 이미지 1:1 보기입니다. 원본보다 축소하면 글자가 흐려 보일 수 있습니다. 실제 노트북 125% 배율 검증을 대신하지 않습니다.</p></header>
+<main class="frame" id="frame"><img id="screen" src="proposal.png" width="1440" height="900" alt="작업명과 비활성 탭 이름을 더 크고 진하게 한 가독성 제안"></main>
+<footer><a href="../../2026-11-11-navigation-readability-review.md">원인 분석·적용 계획</a> · <a href="current.png">현재 원본 PNG</a> · <a href="proposal.png">제안 원본 PNG</a><p>Linux WebKitGTK · 격리 X11 · devicePixelRatio 1 · 테스트용 프로젝트. 기능이나 전체 테마를 새로 만든 화면은 아닙니다.</p></footer>
+<script>
+const before=document.getElementById('before'),after=document.getElementById('after'),screen=document.getElementById('screen'),state=document.getElementById('state');
+function show(proposed){screen.src=proposed?'proposal.png':'current.png';screen.alt=proposed?'작업명을 더 크고 진하게 한 가독성 제안':'현재 설치본의 탐색 영역';before.setAttribute('aria-pressed',String(!proposed));after.setAttribute('aria-pressed',String(proposed));state.textContent=proposed?'제안 · 작업명 14px / 500 · 중복 종류 배지 축소':'현재 · 작업명 13px / 400 · 비활성 탭과 종류 표기가 같은 회색';}
+before.onclick=()=>show(false);after.onclick=()=>show(true);document.getElementById('fit').onchange=e=>document.getElementById('frame').classList.toggle('fit',e.target.checked);
+</script></html>

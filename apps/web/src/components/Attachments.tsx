@@ -227,7 +227,7 @@ function FileActions({ attachment, host }: { attachment: Attachment; host: strin
         if (!file) return;
         try { downloadAttachment(file); } catch (error) { setProblem(error instanceof Error ? error.message : "파일을 저장하지 못했습니다."); }
       }}><Icon name="download" size={15} /> 파일 받기</button>
-      <button type="button" disabled={!file || !canShareFile(file) || sharing} onClick={share}>{sharing ? "공유 창 여는 중…" : "공유…"}</button>
+      <button aria-busy={sharing ? true : undefined} type="button" disabled={!file || !canShareFile(file) || sharing} onClick={share}>{sharing ? "공유 창 여는 중…" : "공유…"}</button>
     </span>
     {file && !canShareFile(file) ? <small>이 브라우저에서는 파일 공유를 지원하지 않습니다. 파일 받기를 이용해 주세요.</small> : null}
     {problem ? <span className="attach-file-error" role="alert">{problem}{!file ? <button type="button" onClick={() => setAttempt(value => value + 1)}>다시 불러오기</button> : null}</span> : null}
@@ -264,13 +264,37 @@ function useImage(attachment: Attachment, active = true) {
   return { url, problem, retry: () => setAttempt(value => value + 1), failed: () => setProblem("그림을 표시하지 못했습니다") };
 }
 
+/** Near enough to load (400px around the scroller, or the window): from the layout itself. */
+const NEAR = 400;
+function nearView(element: Element, root: Element | null) {
+  if (!element.isConnected) return false;
+  const box = element.getBoundingClientRect();
+  if (!box.width && !box.height) return false;
+  const area = root ? root.getBoundingClientRect() : { top: 0, left: 0, bottom: window.innerHeight, right: window.innerWidth };
+  return box.bottom >= area.top - NEAR && box.top <= area.bottom + NEAR && box.right >= area.left - NEAR && box.left <= area.right + NEAR;
+}
+
 function Thumb({ attachment, onOpen }: { attachment: Attachment; onOpen: () => void }) {
   const container = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(typeof IntersectionObserver === "undefined");
+  // The observer alone sometimes never reported a thumbnail in view (it stayed "그림", U38). The
+  // layout is also read: once mounted, when the transcript scrolls or changes size, and once more
+  // shortly after; the observer watches the transcript's scroller, its real root.
   useEffect(() => {
-    if (typeof IntersectionObserver === "undefined" || !container.current) return;
-    const observer = new IntersectionObserver(([entry]) => setVisible(Boolean(entry?.isIntersecting)), { rootMargin: "400px" });
-    observer.observe(container.current); return () => observer.disconnect();
+    const element = container.current;
+    if (typeof IntersectionObserver === "undefined" || !element) return;
+    const root = element.closest(".transcript");
+    const check = () => setVisible(nearView(element, root));
+    const observer = new IntersectionObserver(([entry]) => setVisible(Boolean(entry?.isIntersecting) || nearView(element, root)), { root, rootMargin: `${NEAR}px` });
+    observer.observe(element);
+    let frame = 0;
+    const soon = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; check(); }); };
+    const resized = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(soon);
+    if (root) resized?.observe(root);
+    (root ?? window).addEventListener("scroll", soon, { passive: true });
+    check();
+    const later = window.setTimeout(check, 1000);
+    return () => { observer.disconnect(); resized?.disconnect(); (root ?? window).removeEventListener("scroll", soon); cancelAnimationFrame(frame); window.clearTimeout(later); };
   }, []);
   const image = useImage(attachment, visible);
   return (

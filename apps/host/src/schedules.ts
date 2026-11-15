@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { CommandReceipt, CreateScheduleRequest, Schedule, SchedulePolicy, ScheduleWhen } from "@workbench/contracts";
+import type { CommandReceipt, CreateScheduleRequest, RequestOrigin, Schedule, SchedulePolicy, ScheduleWhen } from "@workbench/contracts";
 import { HttpError } from "./errors.ts";
 import { ScheduleJournal, planScheduleTick } from "./schedule-journal.ts";
 
@@ -55,6 +55,10 @@ export type ScheduleHost = {
   transaction?: <T>(run: () => T) => T;
   changed: (schedules: Schedule[]) => void;
   now?: () => number;
+  /** Not now, and not consumed: it is looked at again at the next tick (a chat's schedule before the channel runs). */
+  defer?: (schedule: Schedule) => boolean;
+  /** Why it may not be turned on (a chat that is locked), or null. */
+  mayEnable?: (schedule: Schedule) => string | null;
 };
 
 export class Schedules {
@@ -80,7 +84,8 @@ export class Schedules {
     return this.list;
   }
 
-  create(request: CreateScheduleRequest): Schedule {
+  /** `origin`: made from a paired messenger chat (never read from an HTTP body). */
+  create(request: CreateScheduleRequest, origin?: RequestOrigin): Schedule {
     const text = String(request.text ?? "").trim();
     if (!text) throw new HttpError(400, "empty_schedule", "보낼 요청을 적어 주세요.");
     if (!this.host.sessionExists(request.sessionId)) throw new HttpError(404, "session_not_found", "세션을 찾지 못했습니다.");
@@ -89,18 +94,21 @@ export class Schedules {
     const policy = parsePolicy(request.policy, now);
     const nextAt = nextRun(when, now, policy.timezone);
     if (nextAt === null) throw new HttpError(400, "schedule_past", "이미 지난 시각입니다.");
-    const schedule: Schedule = { id: randomUUID(), sessionId: request.sessionId, text: text.slice(0, 8000), when, enabled: true, nextAt, lastAt: null, createdAt: now, policy, runCount: 0 };
+    const schedule: Schedule = { id: randomUUID(), sessionId: request.sessionId, text: text.slice(0, 8000), when, enabled: true, nextAt, lastAt: null, createdAt: now, policy, runCount: 0, ...(origin ? { origin } : {}), ...(request.draft || origin ? { draft: true } : {}) };
     this.save([...this.list, schedule]);
     return schedule;
   }
 
-  update(id: string, patch: { enabled?: boolean }): Schedule {
+  update(id: string, patch: { enabled?: boolean; offReason?: Schedule["offReason"] }): Schedule {
     const schedule = this.list.find((entry) => entry.id === id);
     if (!schedule) throw new HttpError(404, "schedule_not_found", "예약을 찾지 못했습니다.");
     const enabled = patch.enabled ?? schedule.enabled;
+    const refused = enabled && !schedule.enabled ? this.host.mayEnable?.(schedule) ?? null : null;
+    if (refused) throw new HttpError(409, "schedule_chat_closed", refused);
     // Turned back on: from now on (no catching up on what passed while it was off).
     if (enabled && ((schedule.policy?.expiresAt && schedule.policy.expiresAt <= this.now()) || (schedule.policy?.maxRuns && (schedule.runCount ?? 0) >= schedule.policy.maxRuns))) throw new HttpError(409, "schedule_ended", "기한 또는 실행 횟수가 끝난 예약입니다. 새 예약을 만들어 주세요.");
-    const next = { ...schedule, enabled, nextAt: enabled && !schedule.enabled ? nextRun(schedule.when, this.now(), schedule.policy?.timezone) : schedule.nextAt };
+    const { offReason: _was, ...rest } = schedule;
+    const next: Schedule = { ...rest, enabled, nextAt: enabled && !schedule.enabled ? nextRun(schedule.when, this.now(), schedule.policy?.timezone) : schedule.nextAt, ...(!enabled && patch.offReason ? { offReason: patch.offReason } : !enabled && schedule.offReason ? { offReason: schedule.offReason } : {}) };
     this.save(this.list.map((entry) => (entry.id === id ? next : entry)));
     return next;
   }
@@ -139,6 +147,8 @@ export class Schedules {
         this.forget(schedule.sessionId);
         continue;
       }
+      // Not yet: it stays due, as a time missed while the app was closed does, and goes at a later tick.
+      if (this.host.defer?.(schedule)) continue;
       const dueAt = schedule.nextAt!, policy = schedule.policy;
       const previous = this.journal.get(`${schedule.id}:${dueAt}`);
       const plan = planScheduleTick({ scheduleId: schedule.id, dueAt, now, enabled: schedule.enabled, expiresAt: policy?.expiresAt ?? null,

@@ -10,6 +10,8 @@ import { patchPdfLoader } from "./pdf-loader-patch.ts";
 import { patchOfficeSkillConversation } from "./skill-conversation-patch.ts";
 import { patchOfficeExecution } from "./execution-patch.ts";
 import { templateFonts } from "./template-fonts-build.ts";
+import { hwpMemoDatePatch } from "./src/hwp-memo-date.ts";
+import { koreanCopy } from "./korean-copy-plugin.ts";
 
 // IeumOffice's editor screens, built from vendor/ieumoffice (scripts/fetch-ieum.sh) and served on
 // the editors' own origin at /office/. The editors are used unchanged:
@@ -403,6 +405,11 @@ export default defineConfig({
     { name: "workbench-office-ui-font", generateBundle() {
       for (const file of ["PretendardVariable.ttf", "LICENSE.txt"]) this.emitFile({ type: "asset", fileName: `fonts/pretendard/${file}`, source: readFileSync(here(`../web/public/fonts/pretendard/${file}`)) });
     } },
+    { name: "workbench-hwp-memo-date", enforce: "pre", transform(code, id) {
+      // rhwp 0.9.0 gives a memo's date as Hangul writes it, local time with a literal Z (H4b)
+      if (id !== `${ieum}/apps/hwp/src/renderer/MemoPanel.tsx`) return;
+      return hwpMemoDatePatch(code, here("./src/hwp-memo-date.ts"));
+    } },
     { name: "workbench-sheets-generated-images", enforce: "pre", transform(code, id) {
       if (id !== `${ieum}/apps/sheets/src/preload/index.ts`) return;
       // The original renderer accepts generated file URLs. Its older preload still rejects
@@ -426,6 +433,8 @@ export default defineConfig({
       return id === `${ieum}/apps/pdf/src/renderer/App.tsx` ? patchPdfLoader(patchPdfImageExport(patchPdfCopy(patchPdfHistory(code, here("./src/pdf-history.ts"))), here("./src/pdf-history.ts")), here("./src/pdf-loader.tsx")) : null;
     } },
     textEditorPlatform(),
+    // The editors' words in plain Korean (design review copy list; the vendored source is not edited).
+    koreanCopy(),
     react(),
     tiptapMountGrace(),
     thirdPartyNotices([

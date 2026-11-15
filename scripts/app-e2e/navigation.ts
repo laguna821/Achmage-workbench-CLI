@@ -33,32 +33,26 @@ export async function navigationScenario(ctx: Ctx) {
   ctx.report.check(S, "충돌 해결 후 저장·프로젝트 전환 성공", saved && opened && after.artifacts.find((entry) => entry.id === doc.id)!.revision >= 3, undefined, await shot(ctx, "6-navigation-saved.png"));
   await api("PUT", `/api/projects/${two.id}/body`, { body: "Project original body\n", baseRevision: null });
   await wd.click(await wd.waitFor('.pane:not([hidden]) .work-view .project-link'));
-  await wd.waitFor('.pane:not([hidden]) .project-note-body');
-  await wd.click(await wd.waitFor('.pane:not([hidden]) .project-note .project-section-head button'));
-  const projectEditor = await wd.waitFor('.pane:not([hidden]) .project-note-editor .cm-content[contenteditable="true"]');
+  // The project note's words are edited in place; leaving writes them, unless the note changed meanwhile.
+  await wd.click(await wd.waitFor('.pane:not([hidden]) .pn-run'));
+  const projectEditor = await wd.waitFor('.pane:not([hidden]) .pn-body-edit .cm-content[contenteditable="true"]');
   await wd.click(projectEditor); await wd.sendKeys(projectEditor, "PROJECT UNSAVED BODY");
-  await wd.click(await wd.waitFor(`.nav-project[data-row-id="${one.id}"]`));
-  ctx.report.check(S, "프로젝트 노트의 수동 편집 중 이동 보류", !!(await wd.find('.pane:not([hidden]) .project-note-editor')) && await wd.execute<boolean>('return document.querySelector(".project-note-editor .cm-content")?.textContent.includes("PROJECT UNSAVED BODY");'));
   const page = await api<ProjectPage>("GET", `/api/projects/${two.id}`);
   const external = readFileSync(page.note.path, "utf8") + "\nEXTERNAL PROJECT CHANGE\n";
   writeFileSync(page.note.path, external);
-  await wd.click(await wd.waitFor('.pane:not([hidden]) .project-note-actions button.primary'));
-  const retained = await until(async () => !!(await wd.find('.pane:not([hidden]) .project-note-actions button.primary:not([disabled])')));
-  ctx.report.check(S, "프로젝트 노트 저장 실패 시 편집창·초안·외부 원문 유지", retained && readFileSync(page.note.path, "utf8") === external && await wd.execute<boolean>('return document.querySelector(".project-note-editor .cm-content")?.textContent.includes("PROJECT UNSAVED BODY");'), undefined, await shot(ctx, "6-project-note-save-conflict.png"));
-  // A live page refresh must not silently rebase the already-open body editor onto newer bytes.
+  // A live page refresh must not silently rebase the open editor onto the newer bytes.
   const refreshed = await api<ProjectPage>("GET", `/api/projects/${two.id}`);
   await api("PUT", "/api/projects/stages", { stages: refreshed.stages });
   await until(async () => await wd.execute<boolean>('return Number(document.querySelector(".pane:not([hidden]) .project-view")?.dataset.noteRevision) === arguments[0];', refreshed.note.revision));
-  const refreshedDisk = readFileSync(page.note.path, "utf8");
-  const saveAgain = await wd.waitFor('.pane:not([hidden]) .project-note-actions button.primary');
-  await wd.execute('arguments[0].scrollIntoView({ block: "center" });', saveAgain);
-  await wd.click(saveAgain);
-  const stillRetained = await until(async () => !!(await wd.find('.pane:not([hidden]) .project-note-actions button.primary:not([disabled])')));
-  ctx.report.check(S, "페이지 판이 갱신되어도 편집 시작 판을 유지해 덮어쓰기 거절", stillRetained && readFileSync(page.note.path, "utf8") === refreshedDisk && await wd.execute<boolean>('return document.querySelector(".project-note-editor .cm-content")?.textContent.includes("PROJECT UNSAVED BODY");'));
-  const cancel = await wd.waitFor('.pane:not([hidden]) .project-note-actions button:not(.primary)');
-  await wd.execute('arguments[0].scrollIntoView({ block: "center" });', cancel);
-  await wd.click(cancel);
   await wd.click(await wd.waitFor(`.nav-project[data-row-id="${one.id}"]`));
-  ctx.report.check(S, "수동 편집 취소 후 정상 이동", await until(async () => !!(await wd.find('.pane:not([hidden]) .work-view'))));
+  const held = await until(async () => !!(await wd.find('.pane:not([hidden]) .pn-conflict')));
+  ctx.report.check(S, "바깥에서 노트가 바뀐 뒤 떠나려 하면 덮어쓰지 않고 편집창·초안·바깥 원문 유지, 비교·내 것·저쪽 것 안내", held && !!(await wd.find('.pane:not([hidden]) .pn-body-edit')) && readFileSync(page.note.path, "utf8") === external && await wd.execute<boolean>('return document.querySelector(".pn-body-edit .cm-content")?.textContent.includes("PROJECT UNSAVED BODY");'), undefined, await shot(ctx, "6-project-note-save-conflict.png"));
+  for (const button of await wd.findAll('.pane:not([hidden]) .pn-conflict button')) {
+    if ((await wd.execute<string>('return arguments[0].textContent.trim();', button)) === "내 것으로 쓰기") { await wd.click(button); break; }
+  }
+  const mine = await until(async () => readFileSync(page.note.path, "utf8").includes("PROJECT UNSAVED BODY"));
+  ctx.report.check(S, "'내 것으로 쓰기'는 바뀐 판 위에 새 판으로 씀", mine);
+  await wd.click(await wd.waitFor(`.nav-project[data-row-id="${one.id}"]`));
+  ctx.report.check(S, "쓴 뒤에는 정상 이동", await until(async () => !!(await wd.find('.pane:not([hidden]) .work-view'))));
   ctx.report.check(S, "문서 전환 중 페이지 예외 없음", !(await pageErrors(wd)).length);
 }

@@ -41,7 +41,7 @@ export async function worktreesScenario(ctx: Ctx, launch: Omit<LaunchOptions, "n
   const linked = ((await snapshot()).workspaces ?? []).find((space) => space.cwd === external)!;
   await until(async () => (await snapshot()).sessions.some((session) => session.workspaceId === linked.id));
   ctx.report.check(S, "기존 워크트리 연결·새 세션·외부 파일 보존", connected && readFileSync(join(external, "보존.txt"), "utf8") === "외부 파일 보존\n" && (await recorded(wd)).trusted, undefined, await shot(ctx, "13-external-connected.png"));
-  await wd.click(await wd.waitFor('.worktree-chip button')); await wd.waitFor('.worktree-review');
+  await wd.click(await wd.waitFor('button.worktree-chip')); await wd.waitFor('.worktree-review');
   ctx.report.check(S, "외부에서 연결한 워크트리는 실제 삭제 버튼 비활성", await wd.execute<boolean>('return document.querySelector(".worktree-foot .danger").disabled;'), undefined, await shot(ctx, "13-external-protected.png"));
   await textButton('.worktree-foot button', "닫기");
   await wd.click(await wd.waitFor('.workspace-trigger')); await wd.click(await wd.waitFor(`[data-workspace-id="${work.defaultWorkspaceId}"]`));
@@ -77,7 +77,7 @@ export async function worktreesScenario(ctx: Ctx, launch: Omit<LaunchOptions, "n
   const restored = await snapshot();
   ctx.report.check(S, "새 포트로 앱 재시작 후 작업공간·세션·생성 기록 복원", restored.prefs.layoutScope === space.id && JSON.stringify((await savedLayout(ctx, space.id))?.layout).includes(secondInSpace.id) && (await jobs()).find((item) => item.id === job.id)?.workspaceId === space.id && restored.sessions.filter((session) => session.workspaceId === space.id).length === 2, undefined, await shot(ctx, "13-restarted.png"));
   const alias = await ctx.app.api<Work>("POST", "/api/works", { title: "같은 워크트리 연결", cwd: space.cwd });
-  await wd.click(await wd.waitFor('.worktree-chip button')); await wd.waitFor('.worktree-review');
+  await wd.click(await wd.waitFor('button.worktree-chip')); await wd.waitFor('.worktree-review');
   await wd.click(await wd.waitFor('.worktree-foot .danger')); await wd.waitFor('.worktree-confirm');
   ctx.report.check(S, "삭제 전 실제 대상 폴더를 확인하고 아직 파일 보존", existsSync(space.cwd) && await wd.execute<boolean>('return document.querySelector(".worktree-confirm").textContent.includes(arguments[0]);', space.cwd), undefined, await shot(ctx, "13-delete-confirm.png"));
   await textButton('.worktree-confirm button', "폴더 삭제");

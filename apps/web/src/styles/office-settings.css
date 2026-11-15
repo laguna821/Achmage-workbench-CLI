@@ -1,14 +1,14 @@
-.office-settings-overlay { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 24px; background: #0006; }
-.office-settings-dialog { width: min(100%, 1000px); height: min(94vh, 850px); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; box-shadow: 0 12px 48px #0004; }
-.office-settings-dialog > header { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 20px; }
-.office-settings-dialog h2 { margin: 0; font-size: 16px; }
+.office-settings-overlay { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: var(--space-lg); background: var(--scrim); }
+.office-settings-dialog { width: min(100%, 1000px); height: min(94vh, 850px); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; box-shadow: var(--shadow-lift); }
+.office-settings-dialog > header { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: var(--space-md); padding: var(--space-sm) 20px; }
+.office-settings-dialog h2 { margin: 0; font-size: var(--text-md); }
 .office-settings-dialog iframe { flex: 1; width: 100%; min-height: 0; border: 0; }
 .office-settings-dialog > p { padding: 20px; }
-.office-drive-question { width: min(100%, 560px); padding: 24px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; }
-.office-drive-question h2 { margin: 0; font-size: 18px; }
-.office-drive-choices { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.office-drive-question { width: min(100%, 560px); padding: var(--space-lg); background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-card); }
+.office-drive-question h2 { margin: 0; font-size: var(--text-lg); }
+.office-drive-choices { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-xs); }
 .office-import-dialog { max-height: 90vh; overflow-y: auto; }
-.office-import-actions { display: flex; gap: 8px; margin: 12px 0; }
-.office-import-dialog .office-import-choice { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+.office-import-actions { display: flex; gap: var(--space-xs); margin: var(--space-sm) 0; }
+.office-import-dialog .office-import-choice { display: flex; align-items: center; gap: var(--space-xs); margin-top: var(--space-md); }
 .office-import-dialog .office-import-choice input { width: auto; margin: 0; }
 .office-import-preview ul { max-height: 180px; overflow-y: auto; }

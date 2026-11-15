@@ -1,6 +1,5 @@
 import { LINK_REASON_LABEL, type Session } from "@workbench/contracts";
 import { durationText, goalLine, hopsText, linkOfSession, participantName, useLinks, useNow } from "../links.ts";
-import { accentStyle, useAppearance } from "../appearance.ts";
 import { EngineMark } from "./EngineMark.tsx";
 import "../styles/links.css";
 
@@ -11,7 +10,6 @@ import "../styles/links.css";
  */
 export function LinkBar({ session }: { session: Session }) {
   const links = useLinks();
-  const { lookOf } = useAppearance();
   const link = linkOfSession(links.state, session.id);
   const now = useNow(link?.state === "active" ? 10_000 : null);
   if (!link) return null;
@@ -31,7 +29,7 @@ export function LinkBar({ session }: { session: Session }) {
         </span>
         <span className="linked-bar-sep">·</span>
         {active ? (
-          <span className="linked-bar-who" style={speaker ? accentStyle(lookOf(speaker.provider)) : undefined}>
+          <span className="linked-bar-who">
             {speaker ? <EngineMark provider={speaker.provider} size={13} /> : null}
             {speaker?.id === session.id ? "이 세션" : participantName(speaker)} {speaking ? "답하는 중" : "차례"}
           </span>

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@getpaseo/relay": "file:../../vendor/paseo/relay",
+    "@resvg/resvg-wasm": "2.6.2",
     "@workbench/contracts": "0.4.1",
     "@workbench/provider-claude": "0.4.1",
     "@workbench/provider-codex": "0.4.1",

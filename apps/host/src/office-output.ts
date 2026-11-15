@@ -7,12 +7,14 @@ import type { Documents } from "./artifacts.ts";
 import { isWorkbenchPath } from "./artifacts.ts";
 import { officeGenerated } from "./office-generated.ts";
 import { HttpError } from "./errors.ts";
-import { decodeHwpSave, hwpFormat, prepareHwpSave } from "./hwp-codec.ts";
+import { decodeHwpSave, hwpFormat, hwpLossWarning, prepareHwpSave, type HwpLossPolicy } from "./hwp-codec.ts";
 import { checkOfficeCopy } from "./office-copy-codec.ts";
 import { prepareTextCopy } from "./office-text-copy.ts";
 
 export type OutputPlan = { id: string; path: string; format: OfficeOutputFormat; exists: boolean; size: number };
-type Result = { path: string; artifact: Artifact | null; backupPath?: string };
+/** `warning`: a Hangul copy saved to a new file lacks something the editor held (said, not refused). */
+/** `report`/`text` (Hangul only): as the save route's answer — the editor's live structure compared or absent; every text census computed ("checked") or not ("unchecked"). */
+type Result = { path: string; artifact: Artifact | null; backupPath?: string; warning?: string; report?: "compared" | "absent"; text?: "checked" | "unchecked"; structure?: "checked" | "unchecked" };
 type Ticket = OutputPlan & { artifactId: string; revision: number; sourcePath: string; viewId: string | null; sessionId: string | null; sha256: string | null; expires: number; longJob?: boolean; generatedId?: string; inputHash?: string; outputHash?: string; backupPath?: string; result?: Result };
 const hash = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 function disk(path: string) {
@@ -105,6 +107,7 @@ export class OfficeOutputs {
     this.busy.add(id);
     let assets: Awaited<ReturnType<typeof prepareTextCopy>> | null = null;
     let published = false;
+    let warning: string | undefined, hangul: Pick<Result, "report" | "text" | "structure"> = {};
     try {
       const source = this.documents.get(artifactId);
       if (ticket.longJob && !ticket.outputHash) {
@@ -117,7 +120,7 @@ export class OfficeOutputs {
       const finish = () => {
         // An export-only format is a real file, not a document the editor claims to open.
         const artifact = ticket.format === "odt" ? null : this.register(source, ticket.path, ticket.revision, ticket.sessionId);
-        ticket.result = { path: ticket.path, artifact, ...(ticket.backupPath ? { backupPath: ticket.backupPath } : {}) };
+        ticket.result = { path: ticket.path, artifact, ...(ticket.backupPath ? { backupPath: ticket.backupPath } : {}), ...(warning ? { warning } : {}), ...hangul };
         this.remember(ticket);
         if (ticket.generatedId) officeGenerated(this.documents).discard(ticket.generatedId);
         return ticket.result;
@@ -131,7 +134,12 @@ export class OfficeOutputs {
       let bytes = body;
       if (ticket.format === "hwp" || ticket.format === "hwpx") {
         const decoded = decodeHwpSave(body);
-        bytes = await prepareHwpSave(readFileSync(this.documents.revisionPath(artifactId, ticket.revision)), decoded.bytes, ticket.format, decoded.metadata, "save", hwpFormat(source.format));
+        // The way out of a refused save: a NEW file keeps the person's work, with the loss named.
+        // Replacing an existing file stays refused, as saving over the original does.
+        const check: NonNullable<HwpLossPolicy["check"]> = {};
+        const policy = ticket.exists ? { check } : { check, warn: (lost: string[]) => { warning = hwpLossWarning(lost); } };
+        bytes = await prepareHwpSave(readFileSync(this.documents.revisionPath(artifactId, ticket.revision)), decoded.bytes, ticket.format, decoded.metadata, "save", hwpFormat(source.format), policy);
+        hangul = { report: decoded.metadata.structure ? "compared" : "absent", text: check.text ?? "unchecked", structure: check.structure ?? "unchecked" };
       } else await checkOfficeCopy(bytes, ticket.format);
       // The original single-file HTML engine deliberately keeps skipped references;
       // Save As asset relocation must not rewrite its output or turn warnings into failure.

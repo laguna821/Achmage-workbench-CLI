@@ -1,0 +1,647 @@
+/* Hallmark · shape: app screen · genre: modern-minimal · theme: the owner's direction (N1: Slack layout + Linear restraint; replaces Furrow, deal 1/3, seed desktop-workbench-where-university-0c2f·6eb966f3·2026-11-14·r0) · redesign: full
+ * nav: navy rail + one list column (N1) · signature: the entry (작업 칸), built in U5 · states: loading, empty, error (U3) · modes: light+dark
+ * axes: light/grotesk-sans/cool · posture: committed · contrast: pass · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E4 S3 R5 V4 · weakest: S, Pretendard everywhere could be any Korean tool; the deep-navy rail beside white work, blue for the one primary and the brand teal marking where you are make it Achmage's own */
+/* Hallmark · dismissed 41 · a card on dark paper inherits --text from the same theme block that darkens its --surface; the swap is the token, not the rule */
+
+/*
+ * THE ONE SOURCE of colour, type, space, radius, elevation and motion for the Workbench (U1).
+ * Every other stylesheet reads these names; nothing else declares a colour or a face.
+ * Material (N1, the owner's direction 2026-11-14): white work surfaces and lists, neutral cool greys
+ * for rules and quiet grounds (Linear's restraint), deep navy ONLY on the global rail (Slack's
+ * layout), navy ink; Achmage blue = the one primary key, focus and links; the brand's teal =
+ * the current selection's mark and "the AI is working"; tangerine = "needs you", green = "done".
+ * Light and dark are both designed (dark: a neutral dark, the rail the darkest navy, elevation by
+ * lightness, no shadows). Moulded 6px keys (U2) are kept.
+ * The old names (styles.css, foundation.css, vendor/hig-kit/kit.css) are ALIASES at the end of
+ * this file; U12 removes them once no rule reads them.
+ * The default looks in appearance.ts and the office chrome bridge (apps/office/src/ui-adapters/
+ * chrome.css) carry hex mirrors of these values; tokens.test.ts keeps them equal.
+ */
+
+/* Faces: Pretendard Variable (bundled, Hangul-complete) for every role; SameTone is the owner's look option. */
+@font-face {
+  font-family: "Pretendard Variable";
+  src: url("/fonts/pretendard/PretendardVariable.ttf") format("truetype");
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+}
+/* Achmage SameTone (OFL, by the user): offered as a reading face in 외형. An installed copy wins. */
+@font-face {
+  font-family: "Achmage SameTone";
+  src:
+    local("Achmage SameTone"),
+    url("/fonts/sametone/fonts/AchmageSameTone%5Bwght%5D.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* ── Scale (scaffold --scope app), fitted to the app ── */
+  --space-3xs: 2px; --space-2xs: 4px; --space-xs: 8px; --space-sm: 12px; --space-md: 16px; --space-lg: 24px; --space-xl: 40px; --space-2xl: 64px; --space-3xl: 96px; --space-4xl: 144px;
+  /* Seven type steps, no more: 12 meta · 14 rows, labels, keys, tabs · 16 dialog body · 17 reading · 19 section · 23 screen title · 28 home and project head. */
+  --text-xs: 0.75rem; --text-label: 0.8125rem; --text-sm: 0.875rem; --text-md: 1rem; --text-read: 1.0625rem; --text-lg: 1.1875rem; --text-xl: 1.4375rem; --text-2xl: 1.75rem;
+  /* --text-label (13 px, skin 2 fix 1, the coordinator's ruling 8): quiet heads only — the list's group and
+     section heads and table heads, muted 600; 12 px (--text-xs) stays for meta (counts, times, kinds). */
+  --text-display-s: var(--text-xl); --text-display: var(--text-2xl); --text-section: var(--text-lg); --text-title: var(--text-md); --text-lead: var(--text-read);
+  --leading-head: 1.25; --leading-ui: 1.45; --leading-body: 1.6; --leading-read: 1.75;
+  --weight-regular: 400; --weight-medium: 500; --weight-strong: 600; --display-weight: 600;
+  --tracking-display: -0.015em;
+  /* Motion is state: brisk (micro 120 press and colour, short 220 hover and menus, long 360 dialogs and sheets); exits at 65%. */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); --ease-in: cubic-bezier(0.7, 0, 0.84, 0); --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro: 120ms; --dur-short: 220ms; --dur-long: 360ms;
+  --dur-micro-out: 80ms; --dur-short-out: 140ms; --dur-long-out: 240ms;
+  /* Layers: the app's own order is kept (raw overlays at 160, 1000 and 2200 sit between these). */
+  --z-sticky: 10; --z-float: 20; --z-popover: 40; --z-tabbar: 50; --z-sheet: 60; --z-modal: 80; --z-palette: 90; --z-toast: 90; --z-menu: 2300;
+
+  /* ── Faces ── */
+  /* 설정 › 화면 › 글꼴 (atlas-look): Pretendard (the default), the system's face, or a face the person names;
+     theme.ts sets --font-choice on <html> for the last two, so every role still reads the one --font-body. */
+  --font-pretendard: "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  --font-system: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+  --font-body: var(--font-choice, var(--font-pretendard));
+  --font-display: var(--font-body);
+  /* The one outlier: code. D2Coding first (Hangul in code comments), not bundled. Figures use tabular numerals, not mono. */
+  --font-outlier: "D2Coding", "JetBrains Mono", ui-monospace, "SFMono-Regular", "Noto Sans Mono", Menlo, monospace;
+  --font-sametone: "Achmage SameTone", var(--font-body);
+
+  /* ── Shape: radius by nesting, rules before boxes ── */
+  --radius-well: 4px;    /* inner wells, code, small marks */
+  --radius-pill: 6px;    /* keys, fields, chips: moulded */
+  --radius-card: 10px;   /* panes, menus, popovers, entries */
+  --radius-entry: 14px;  /* dialogs and sheets */
+  --radius-round: 999px; /* dots and switches only */
+  --rule-hair: 1px;
+
+  /* ── Sizes the shell already uses (kept; U4 owns widths) ── */
+  --column: 720px; --target: 28px; --target-min: 28px;
+  --nav-size: var(--text-sm); --nav-weight: 500; --nav-line: 20px; --nav-row: 32px;
+  --read-max: 720px; --app-max: 1200px; --tabbar-h: 68px; --toolbar-h: 52px;
+
+  /* ── Brand constants (identical in both modes) ── */
+  --color-brand-navy: oklch(18.06% 0.0661 257.7);   /* #00102e: the wordmark's ink on light */
+  --color-brand-teal: oklch(66.06% 0.1137 191);      /* #00a8a3: the Arc and the working line */
+  --color-engine-claude: oklch(61.71% 0.1375 39);    /* #c96442: Claude's mark */
+  /* File kinds keep their makers' colours as marks (Word, PowerPoint, Excel). */
+  --color-format-docx: oklch(46.1% 0.12 259);
+  --color-format-pptx: oklch(55.4% 0.176 35);
+  --color-format-xlsx: oklch(49.5% 0.106 155);
+  /* 색 조합 swatches (the first run's choice shows each combination in its own colours, whichever is on). */
+  --swatch-atlas-sidebar: #f2f2f7;
+  --swatch-atlas-accent: #007aff;
+
+  /* ── A document's own page stays a printed page in both modes ── */
+  --color-page: oklch(100% 0 0);
+  --color-page-ink: oklch(24% 0.01 262);
+  --color-page-check: oklch(87% 0 0);         /* the transparency checkerboard under an image */
+  --shadow-page: 0 1px 2px oklch(22% 0.035 262 / 0.12), 0 0 0 1px oklch(22% 0.035 262 / 0.06);
+  /* ── The picture viewer and the camera: a dark room of their own ── */
+  --color-on-viewer: oklch(97% 0.006 85);
+  --color-viewer-fill: oklch(12% 0.01 262 / 0.3);
+  --color-viewer-edge: oklch(97% 0.006 85 / 0.3);
+  --color-video-ground: oklch(12% 0.01 262);
+  --shadow-viewer: 0 10px 40px oklch(8% 0.01 262 / 0.4);
+  /* A switch's thumb and a key's knob sit on their track. */
+  --shadow-thumb: 0 1px 2px oklch(22% 0.035 262 / 0.25);
+  /* Masks read only alpha: an opaque stop. */
+  --mask-ink: oklch(0% 0 0);
+  /* The "own colour" swatch is a colour wheel (a real control, not decoration). */
+  --swatch-wheel: conic-gradient(oklch(70% 0.17 22), oklch(83% 0.16 85), oklch(78% 0.15 160), oklch(70% 0.14 250), oklch(68% 0.15 295), oklch(72% 0.17 350), oklch(70% 0.17 22));
+  /* ── The terminal: always a dark sheet, the navy ink as its ground (xterm's own theme matches it) ── */
+  --color-terminal-ground: oklch(20.9% 0.032 262);
+  --color-terminal-ink: oklch(94.3% 0.016 254);
+  --color-terminal-bar: color-mix(in oklab, var(--color-terminal-ground) 92%, var(--color-terminal-ink));
+  --color-terminal-key: color-mix(in oklab, var(--color-terminal-ground) 85%, var(--color-terminal-ink));
+  --color-terminal-rule: color-mix(in oklab, var(--color-terminal-ground) 78%, var(--color-terminal-ink));
+  --color-terminal-edge: color-mix(in oklab, var(--color-terminal-ground) 66%, var(--color-terminal-ink));
+  --color-terminal-signal: oklch(80% 0.1 252);
+  --color-terminal-selected: oklch(42% 0.08 252);
+  --color-terminal-error: oklch(87% 0.07 40);
+  --color-terminal-status: oklch(82% 0.06 252);
+}
+
+/* ── Light: white surfaces, cool neutral greys, navy ink; navy only on the rail ── */
+:root,
+.look-scope[data-theme="light"] {
+  color-scheme: light;
+  --color-paper: oklch(100% 0 0);             /* the frame: top bar, list column, tab strip are white (parted by hairlines) */
+  --color-paper-2: oklch(100% 0 0);           /* the work surface: panes, menus, dialogs */
+  --color-paper-3: oklch(96.8% 0.004 255);    /* the well: a quiet grey step (code, the request line, tracks) */
+  --color-field: oklch(100% 0 0);             /* the input ground */
+  --color-ink: oklch(22% 0.03 262);           /* navy ink, the brand's navy set for reading */
+  --color-ink-2: oklch(36% 0.025 262);
+  --color-muted: oklch(48% 0.018 260);        /* cool grey: meta at a row's end */
+  --color-faint: oklch(51% 0.016 260);
+  --color-rule: oklch(91.8% 0.006 258);       /* hairlines between rows and panes */
+  --color-edge: oklch(62% 0.016 258);         /* field and key edges, 3:1 */
+  --rule-ink: color-mix(in oklab, var(--color-ink) 14%, var(--color-paper)); /* N1: the top bar's rule is a firm hairline (Linear), not an ink line */
+  --color-accent: oklch(47.35% 0.1487 253.6); /* Achmage blue #005bac: a brand colour (skin 2: no longer the primary, focus or links; see --accent, --key-primary) */
+  --color-accent-ink: oklch(100% 0 0);
+  --color-accent-soft: oklch(94.6% 0.022 250);
+  --color-focus: var(--color-teal-ink);      /* skin 2: focus is teal (deep step: 3:1+ as a ring on white and on the washes) */
+  --color-teal: oklch(56% 0.098 192);         /* the brand teal set for marks on white (3:1+): current, working */
+  --color-teal-ink: oklch(50% 0.09 192);      /* the deep step for teal words on white (4.5:1+) */
+  --color-attention: oklch(63% 0.18 41);      /* tangerine: a fill with ink on it, "needs you" */
+  --color-attention-ink: oklch(22% 0.03 262);
+  --color-attention-text: oklch(49% 0.13 42); /* the tangerine's own dark, when it must be words */
+  --color-attention-soft: oklch(95.5% 0.03 60);
+  --color-done: oklch(49% 0.11 150);
+  --color-done-soft: oklch(95.5% 0.03 150);
+  --color-error: oklch(51% 0.19 27);
+  --color-error-soft: oklch(96% 0.02 27);
+  --color-on-dark: oklch(97% 0.008 255);      /* text on the ink, the toast and the picture viewer */
+  --color-scrim: oklch(22% 0.03 262 / 0.32);
+  --color-viewer-scrim: oklch(14% 0.01 262 / 0.86);
+  --color-toast: oklch(22% 0.03 262);
+  /* The rail: the one deep-navy place (the brand navy), its labels, the current item and its teal mark. */
+  --color-rail: var(--color-brand-navy);
+  --color-rail-ink: oklch(97% 0.008 255);
+  --color-rail-muted: oklch(77% 0.03 255);
+  --color-rail-hover: oklch(24% 0.07 258);
+  --color-rail-current: oklch(29% 0.075 256);
+  --color-rail-mark: oklch(76% 0.11 190);
+  --color-rail-rule: oklch(27% 0.06 258);
+  --color-rail-focus: oklch(74% 0.11 252);
+  /* Code and the terminal: a sheet of its own, tinted toward the ink. */
+  --color-code-ground: oklch(25% 0.035 262);
+  --color-code-ink: oklch(93% 0.006 255);
+  --color-diff-add: oklch(48% 0.11 150);
+  --color-diff-add-soft: oklch(94% 0.04 150);
+  --color-diff-del: oklch(50% 0.19 27);
+  --color-diff-del-soft: oklch(95% 0.025 27);
+  --color-highlight: oklch(91% 0.09 95);      /* a found word, a marked passage */
+  --color-callout-blue: oklch(47.35% 0.1487 253.6);
+  --color-callout-green: oklch(48% 0.11 150);
+  --color-callout-amber: oklch(50% 0.12 70);
+  --color-callout-red: oklch(50% 0.19 27);
+  --color-callout-violet: oklch(48% 0.13 300);
+  --color-callout-grey: oklch(48% 0.018 260);
+  /* Elevation: only what floats casts a shadow (menus, popovers, dialogs, toasts). */
+  --shadow-lift: 0 1px 1px oklch(22% 0.035 262 / 0.08), 0 2px 4px -1px oklch(22% 0.035 262 / 0.08), 0 24px 44px -20px oklch(22% 0.035 262 / 0.36);
+  --shadow-key: inset 0 1px 0 oklch(100% 0 0 / 0.6), 0 1px 0 oklch(22% 0.035 262 / 0.06);
+  --shadow-press: color-mix(in oklab, var(--color-ink) 7%, transparent);
+  /* The moulded key (controls.css): a lit top edge, a shaded foot, sunk when pressed or held. */
+  --key-lit: oklch(100% 0 0 / 0.8);
+  --key-shade: oklch(22% 0.035 262 / 0.13);
+  --key-sink: oklch(22% 0.035 262 / 0.16);
+  --key-primary-lit: oklch(100% 0 0 / 0.24);
+  --key-primary-shade: oklch(14% 0.05 262 / 0.36);
+  --key-deepen: var(--color-ink);   /* what a filled key darkens toward when hovered and pressed */
+}
+
+/* ── Dark: a neutral dark, a lighter sheet, near-white ink; the rail the darkest navy; elevation by lightness, no shadows ── */
+:root[data-theme="dark"],
+.look-scope[data-theme="dark"] {
+  color-scheme: dark;
+  --color-paper: oklch(17.8% 0.004 260);
+  --color-paper-2: oklch(21.3% 0.005 260);
+  --color-paper-3: oklch(25.2% 0.006 260);
+  --color-field: oklch(23.2% 0.005 260);
+  --color-ink: oklch(93.5% 0.004 260);
+  --color-ink-2: oklch(84% 0.006 260);
+  --color-muted: oklch(72% 0.012 260);
+  --color-faint: oklch(67% 0.012 260);
+  --color-rule: oklch(29.5% 0.007 260);
+  --color-edge: oklch(55% 0.012 260);
+  --rule-ink: color-mix(in oklab, var(--color-ink) 12%, var(--color-paper));
+  --color-accent: oklch(74% 0.11 252);
+  --color-accent-ink: oklch(17.8% 0.004 260);
+  --color-accent-soft: oklch(29% 0.05 252);
+  --color-focus: var(--color-teal-ink);      /* skin 2: focus is teal (deep step: 3:1+ as a ring on white and on the washes) */
+  --color-teal: oklch(72% 0.11 190);
+  --color-teal-ink: oklch(76% 0.1 190);
+  --color-attention: oklch(76% 0.15 45);
+  --color-attention-ink: oklch(17.8% 0.004 260);
+  --color-attention-text: oklch(80% 0.12 52);
+  --color-attention-soft: oklch(28% 0.045 50);
+  --color-done: oklch(74% 0.13 150);
+  --color-done-soft: oklch(27% 0.04 150);
+  --color-error: oklch(72% 0.15 27);
+  --color-error-soft: oklch(27% 0.05 27);
+  --color-on-dark: oklch(97% 0.008 255);
+  --color-scrim: oklch(8% 0.004 260 / 0.6);
+  --color-viewer-scrim: oklch(8% 0.004 260 / 0.9);
+  --color-toast: oklch(30% 0.006 260);
+  --color-rail: oklch(13.5% 0.045 262);
+  --color-rail-ink: oklch(97% 0.008 255);
+  --color-rail-muted: oklch(76% 0.025 255);
+  --color-rail-hover: oklch(20% 0.055 260);
+  --color-rail-current: oklch(25% 0.065 258);
+  --color-rail-mark: oklch(76% 0.11 190);
+  --color-rail-rule: oklch(22% 0.05 260);
+  --color-rail-focus: oklch(74% 0.11 252);
+  --color-code-ground: oklch(14% 0.005 260);
+  --color-code-ink: oklch(90% 0.006 260);
+  --color-diff-add: oklch(74% 0.13 150);
+  --color-diff-add-soft: oklch(27% 0.04 150);
+  --color-diff-del: oklch(72% 0.15 27);
+  --color-diff-del-soft: oklch(27% 0.05 27);
+  --color-highlight: oklch(40% 0.07 95);
+  --color-callout-blue: oklch(74% 0.11 252);
+  --color-callout-green: oklch(74% 0.13 150);
+  --color-callout-amber: oklch(80% 0.12 75);
+  --color-callout-red: oklch(72% 0.15 27);
+  --color-callout-violet: oklch(76% 0.1 300);
+  --color-callout-grey: oklch(72% 0.012 260);
+  --shadow-lift: 0 0 0 1px oklch(29.5% 0.007 260);
+  --shadow-key: inset 0 1px 0 oklch(100% 0 0 / 0.05);
+  --shadow-press: color-mix(in oklab, var(--color-ink) 9%, transparent);
+  /* Dark: no cast shadows; the key's lit edge and a darker foot are rules of light, not blur. */
+  --key-lit: oklch(100% 0 0 / 0.07);
+  --key-shade: oklch(8% 0.004 260 / 0.55);
+  --key-sink: oklch(8% 0.004 260 / 0.5);
+  --key-primary-lit: oklch(100% 0 0 / 0.3);
+  --key-primary-shade: oklch(10% 0.03 262 / 0.3);
+  --key-deepen: var(--color-paper);
+}
+
+/* OS preference before the app has set its theme (the first-paint script sets data-theme at once). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --color-paper: oklch(17.8% 0.004 260); --color-paper-2: oklch(21.3% 0.005 260); --color-paper-3: oklch(25.2% 0.006 260); --color-field: oklch(23.2% 0.005 260);
+    --color-ink: oklch(93.5% 0.004 260); --color-ink-2: oklch(84% 0.006 260); --color-muted: oklch(72% 0.012 260); --color-faint: oklch(67% 0.012 260);
+    --color-rule: oklch(29.5% 0.007 260); --color-edge: oklch(55% 0.012 260);
+    --color-accent: oklch(74% 0.11 252); --color-accent-ink: oklch(17.8% 0.004 260); --color-accent-soft: oklch(29% 0.05 252);
+    --color-rail: oklch(13.5% 0.045 262);
+  }
+}
+
+/* ── The look scope: what a pane's look (appearance.ts, set inline) does not set, derived here ── */
+:root {
+  /* A look's base tokens before the app applies one: the default look, from the tokens above. */
+  --bg: var(--color-paper-2);
+  --surface: var(--color-field);
+  --text: var(--color-ink);
+  --muted: var(--color-muted);
+  --line: var(--color-rule);
+  /* skin 2 (the coordinator's colour roles): the interaction accent — selection, current, on, the
+     small links and marks every sheet reads as --accent — is the DEEP teal (4.5:1 as words on white;
+     paper words on it). Achmage blue (--color-accent) stays a brand colour, no longer an interaction
+     colour; the filled primary key is navy (--key-primary). */
+  --accent: var(--color-teal-ink);
+  --on-accent: var(--color-accent-ink);
+  --motion: var(--color-teal);
+  --heading: var(--color-ink);
+  --heading-alt: var(--color-ink);
+  --strong: var(--color-ink);
+  --link: var(--color-teal-ink);             /* skin 2: small text links in deep teal (underline on hover) */
+  --link-default: var(--color-teal-ink);     /* what a look scope uses when the person chose no link colour */
+  --code-bg: var(--color-paper-3);
+  --code-text: var(--color-ink);
+  --glow: var(--theme-glow);
+  --e-font: var(--font-body);
+  --e-size: var(--text-read);
+  --e-line: var(--leading-read);
+  --e-weight: 400;
+  --e-border: 1px;
+  --e-radius: var(--radius-card);
+}
+
+/* ── Old names → new (aliases, removed in U12). Re-derived on every look scope. ── */
+:root,
+.look-scope {
+  /* faces */
+  --font-fallback: var(--font-body);
+  --font-ui: var(--font-body);
+  --font-read: var(--font-body);
+  --font: var(--font-body);
+  --mono: var(--font-outlier);
+  /* type: 47 sizes onto seven (13→14 for rows and labels, 15→16, 22→19, 26→23 or 28) */
+  --fs-micro: var(--text-xs);
+  --fs-meta: var(--text-sm);
+  --fs-ui: var(--text-sm);
+  --fs-body: var(--text-md);
+  --fs-lead: var(--text-read);
+  --fs-title: var(--text-lg);
+  --fs-heading: var(--text-xl);
+  --fs-display: var(--text-2xl);
+  --t-large-title: 600 var(--text-2xl)/1.25 var(--font-body);
+  --t-title-1: 600 var(--text-2xl)/1.25 var(--font-body);
+  --t-title-2: 600 var(--text-xl)/1.25 var(--font-body);
+  --t-title-3: 600 var(--text-lg)/1.3 var(--font-body);
+  --t-headline: 600 var(--text-md)/1.4 var(--font-body);
+  --t-body: 400 var(--text-sm)/1.45 var(--font-body);
+  --t-callout: 400 var(--text-sm)/1.45 var(--font-body);
+  --t-subhead: 400 var(--text-sm)/1.45 var(--font-body);
+  --t-footnote: 400 var(--text-xs)/1.4 var(--font-body);
+  --t-caption-1: 400 var(--text-xs)/1.4 var(--font-body);
+  --t-caption-2: 500 var(--text-xs)/1.4 var(--font-body);
+  /* space: 4px steps and the kit's --s-* onto the one scale (20→24, 32→40, 48→40) */
+  --space-1: var(--space-2xs); --space-2: var(--space-xs); --space-3: var(--space-sm); --space-4: var(--space-md);
+  --space-5: var(--space-lg); --space-6: var(--space-lg); --space-7: var(--space-xl); --space-8: var(--space-xl); --space-9: var(--space-xl);
+  --s-1: var(--space-2xs); --s-2: var(--space-xs); --s-3: var(--space-sm); --s-4: var(--space-md); --s-5: var(--space-lg); --s-6: var(--space-lg); --s-8: var(--space-xl); --s-12: var(--space-xl);
+  /* radius by nesting */
+  --r-xs: var(--radius-well); --r-sm: var(--radius-pill); --r-md: var(--radius-card); --r-lg: var(--radius-entry); --r-xl: var(--radius-entry); --r-full: var(--radius-round);
+  --radius: var(--radius-card);
+  /* motion */
+  --dur-press: var(--dur-micro); --dur-fast: var(--dur-micro); --dur-base: var(--dur-short); --dur-slow: var(--dur-long);
+  --dur-1: var(--dur-micro); --dur-2: var(--dur-short); --dur-3: var(--dur-long); --ease: var(--ease-out);
+
+  /* the desk (frame) */
+  --chrome-bg: var(--color-paper);
+  --chrome-surface: var(--color-paper-2);
+  --chrome-line: var(--color-rule);
+  --chrome-text: var(--color-ink);
+  --chrome-muted: var(--color-muted);
+  --chrome-accent: var(--accent);
+  --sidebar-bg: var(--chrome-bg);
+  --brand-ink: var(--color-ink);
+  --brand-accent: var(--color-brand-teal);
+  --accent-text: var(--accent);
+  --accent-fill: var(--accent);
+  --on-action: var(--color-accent-ink);
+  --field-line: var(--color-edge);
+  --engine-claude: var(--color-engine-claude);
+  /* states and signals */
+  --amber: var(--color-attention);
+  --amber-text: var(--color-attention-text);
+  --amber-soft: var(--color-attention-soft);
+  --danger: var(--color-error);
+  --danger-soft: var(--color-error-soft);
+  --ok: var(--color-done);
+  --scrim: var(--color-scrim);
+  --viewer-scrim: var(--color-viewer-scrim);
+  --viewer-text: var(--color-on-dark);
+  --toast-bg: var(--color-toast);
+  --toast-text: var(--color-on-dark);
+  --theme-glow: 0;
+  /* derived from the look (so a user's own look keeps working) */
+  --hover: color-mix(in oklab, var(--text) 6%, transparent);
+  --pressed: color-mix(in oklab, var(--text) 10%, transparent);
+  --press-shade: var(--shadow-press);
+  --surface-muted: var(--color-paper-3);
+  --surface-raised: var(--surface);
+  --line-strong: color-mix(in oklab, var(--line) 72%, var(--text));
+  --text-soft: color-mix(in oklab, var(--text) 84%, var(--bg));
+  --faint: var(--muted);
+  --accent-soft: color-mix(in oklab, var(--accent) 10%, var(--surface));
+  --accent-line: color-mix(in oklab, var(--accent) 30%, var(--line));
+  --accent-strong: color-mix(in oklab, var(--accent) 84%, var(--color-ink));
+  --selected: var(--accent-soft);
+  /* N1: the current selection's mark (a tab's rule, a list row's icon) is the brand teal; the wash stays quiet. */
+  --color-current: var(--color-teal);
+  /* N1: the current row's wash: the teal at 12% on the sheet (a column without focus sets it grey). */
+  --color-current-soft: color-mix(in oklab, var(--color-teal) 12%, var(--color-paper-2));
+  --focus: var(--color-focus);
+  /* skin 2: selection is teal (the coordinator's colour roles); blue is no longer an interaction colour. */
+  --active-bg: var(--color-current-soft);
+  --active-text: var(--color-teal-ink);
+  --current-line: color-mix(in oklab, var(--color-teal) 40%, var(--line));
+  /* skin 2: the ONE filled primary key = navy ink, flat (the owner's drafts: 새 작업, 적용). On dark the ink
+     is the light step, so the key is the light one with dark words. */
+  --key-primary: var(--color-ink);
+  --on-key-primary: var(--color-paper);
+  --active-hint: var(--muted);
+  --primary-disabled-bg: color-mix(in oklab, var(--key-primary) 16%, var(--surface));
+  --primary-disabled-text: var(--surface);
+  --segmented-bg: var(--color-paper-3);
+  --segmented-ring: inset 0 0 0 1px var(--line);
+  --line-highlight: var(--surface);
+  --control-surface: var(--chrome-surface);
+  --control-text: var(--chrome-text);
+  --control-muted: var(--chrome-muted);
+  --control-line: var(--chrome-line);
+  --control-hover: color-mix(in oklab, var(--chrome-text) 6%, var(--chrome-surface));
+  --control-selected: color-mix(in oklab, var(--chrome-accent) 12%, var(--chrome-surface));
+  --control-focus: var(--color-focus);
+  --control-error: var(--danger);
+  --h1: var(--heading); --h2: var(--heading); --h3: var(--heading-alt); --h4: var(--heading-alt);
+  --em: var(--heading-alt);
+  --link-external: var(--strong);
+  --composer-border: var(--field-line);
+  /* elevation: rules before boxes; only what floats lifts */
+  --shadow-float: var(--shadow-lift);
+  --shadow-dialog: var(--shadow-lift);
+  --shadow-modal: var(--shadow-lift);
+  --popover-shadow: var(--shadow-lift);
+  --elev-1: 0 1px 0 var(--color-rule);
+  --elev-2: var(--shadow-lift);
+  --elev-3: var(--shadow-lift);
+  --shadow-soft: none;
+  --shadow-selection: 0 0 0 1px var(--line);
+  --shadow-hairline: 0 1px 0 var(--color-rule);
+  --shadow-composer: none;
+  --shadow-worksurface: none;
+  --shadow-ink-float: color-mix(in oklab, var(--color-ink) 13%, transparent);
+  --shadow-ink-soft: color-mix(in oklab, var(--color-ink) 7%, transparent);
+  --shadow-ink-faint: color-mix(in oklab, var(--color-ink) 3%, transparent);
+  --shadow-ink-dialog: color-mix(in oklab, var(--color-ink) 15%, transparent);
+  --composer-shadow: none;
+  --composer-focus: 0 0 0 1px var(--color-teal-ink); /* skin 2: the focused edge is the focus teal, not blue */
+  --primary-glow: none;
+  --orbit-filter: none;
+  /* the HIG kit's roles (vendor/hig-kit/kit.css), onto the same paper and ink */
+  --label: var(--text);
+  --label-2: var(--muted);
+  --label-3: var(--color-faint);
+  --label-disabled: color-mix(in oklab, var(--text) 30%, transparent);
+  --separator: var(--line);
+  --bg-cell: var(--surface);
+  --bg-elevated: var(--surface);
+  --bg-grouped: var(--chrome-bg);
+  --fill: var(--surface-raised);
+  --fill-2: var(--surface-muted);
+  --raised: var(--surface);
+  --track: var(--color-paper-3);
+  --hk-raised: var(--surface);
+  --hk-track: var(--color-paper-3);
+  --switch-on: var(--color-teal);
+  --destructive: var(--color-error); --destructive-text: var(--color-error); --destructive-fill: var(--color-error);
+  --success: var(--color-done); --warning: var(--color-attention-text);
+  --red: var(--color-error); --red-ic: var(--color-error);
+  --orange: var(--color-attention); --orange-ic: var(--color-attention-text);
+  --green: var(--color-done); --green-ic: var(--color-done);
+  --blue: var(--color-accent); --blue-ic: var(--color-accent);
+  --gray: var(--color-faint); --gray-2: var(--color-edge); --gray-3: var(--color-edge); --gray-4: var(--color-rule); --gray-5: var(--color-paper-3); --gray-6: var(--color-paper);
+  --glass-bg: var(--color-paper-2); --glass-line: var(--line); --glass-hi: 0 0 0 0 transparent; --glass-filter: none;
+  /* names some feature sheets read but nothing declared (they fell back to nothing: transparent
+     dialogs, the browser's own border colour); now they reach the system */
+  --paper: var(--surface); --paper-muted: var(--surface-muted); --panel: var(--bg); --ink: var(--text);
+  --border: var(--line); --surface-hover: var(--hover); --radius-lg: var(--radius-entry);
+  --font-mono: var(--font-outlier); --fs-small: var(--text-xs);
+}
+
+/* Dark: what derives differently on dark paper. */
+:root[data-theme="dark"],
+.look-scope[data-theme="dark"] {
+  --surface-raised: color-mix(in oklab, var(--surface) 93%, var(--text));
+  --selected-text: var(--color-teal-ink);
+  --active-text: var(--color-teal-ink);
+  --active-bg: color-mix(in oklab, var(--color-teal) 16%, var(--surface));
+  --primary-disabled-bg: var(--surface-raised);
+  --primary-disabled-text: var(--faint);
+  --line-highlight: var(--text);
+  --line-strong: color-mix(in oklab, var(--line) 70%, var(--text));
+  /* A switch's knob when off: on the dark well the sheet colour vanished (≈1.05:1, review I4). */
+  --switch-knob: color-mix(in oklab, var(--text) 72%, var(--surface));
+}
+:root:not([data-theme="dark"]),
+.look-scope[data-theme="light"] {
+  --selected-text: var(--text);
+}
+
+/* User request styles (a look's "bubble"): a slip of paper with one tucked corner; no shadows, no stripes. */
+:root,
+.look-scope[data-bubble="filled"] {
+  --bubble-bg: var(--accent);
+  --bubble-text: var(--on-accent);
+  --bubble-border: var(--accent);
+  --bubble-radius: var(--radius-entry) var(--radius-entry) var(--radius-well) var(--radius-entry);
+  --bubble-shadow: none;
+  --assistant-bg: transparent;
+  --assistant-border: transparent;
+  --assistant-shadow: none;
+  --assistant-pad: 0;
+  --assistant-radius: 0;
+  --pending-radius: var(--radius-entry) var(--radius-entry) var(--radius-entry) var(--radius-well);
+  --pending-surface: var(--surface);
+}
+.look-scope[data-bubble="soft"] {
+  --bubble-bg: color-mix(in oklab, var(--accent) 7%, var(--surface));
+  --bubble-text: var(--text);
+  --bubble-border: color-mix(in oklab, var(--accent) 16%, var(--line));
+  --bubble-radius: var(--radius-entry) var(--radius-entry) var(--radius-well) var(--radius-entry);
+  --bubble-shadow: none;
+  --assistant-bg: transparent;
+  --assistant-border: transparent;
+  --assistant-shadow: none;
+  --assistant-pad: 0;
+  --assistant-radius: 0;
+  --pending-radius: var(--radius-entry) var(--radius-entry) var(--radius-entry) var(--radius-well);
+  --pending-surface: var(--surface);
+}
+.look-scope[data-bubble="rail"] {
+  --bubble-bg: color-mix(in oklab, var(--accent) 10%, var(--surface));
+  --bubble-text: var(--text);
+  --bubble-border: color-mix(in oklab, var(--accent) 34%, var(--line));
+  --bubble-radius: var(--radius-card);
+  --bubble-shadow: none;
+  --assistant-bg: var(--surface);
+  --assistant-border: var(--line);
+  --assistant-shadow: none;
+  --assistant-pad: var(--space-md) var(--space-lg);
+  --assistant-radius: var(--radius-card);
+  --pending-radius: var(--radius-card);
+  --pending-surface: var(--surface);
+}
+/* "입력창 테두리를 진하게" (the person's setting): the input's edge one step darker (skin 2: not the accent). */
+.look-scope[data-frame="on"] {
+  --composer-border: var(--line-strong);
+}
+
+/* ── Item icons (ItemIcon.tsx, atlas-look): the Icons8 Liquid Glass shapes drawn in one hue per kind. The same
+   in both 색 조합; dark lifts each hue so the glass still reads on a dark ground. Never a state colour. ── */
+:root,
+.look-scope[data-theme="light"] {
+  --item-project: #e89a0c; --item-folder: #3d97f0; --item-chat: #0fa39d; --item-web: #5b5bd6;
+  --item-markdown: #1597b8; --item-hwp: #2f80e4; --item-word: #2b56c6; --item-slides: #ef6430;
+  --item-sheet: #1e9a55; --item-pdf: #e2434b; --item-design: #9b55e0; --item-image: #dd4f93; --item-file: #8e8e93;
+}
+:root[data-theme="dark"],
+.look-scope[data-theme="dark"] {
+  --item-project: #ffd88a; --item-folder: #a6d2ff; --item-chat: #8eeee8; --item-web: #c0c0ff;
+  --item-markdown: #9fe6f7; --item-hwp: #a8d0ff; --item-word: #b4c2ff; --item-slides: #ffbea3;
+  --item-sheet: #9ff3c0; --item-pdf: #ffacb0; --item-design: #e2c4ff; --item-image: #ffb8da; --item-file: #e2e2e6;
+}
+
+/* ── 색 조합 "Atlas" (the owner's choice, 2026-11-15): Atlas File Manager's colour VALUES ("Atlas Light"
+   for light, "Atlas Graphite" for dark) on the same roles. Values only: every rule keeps reading the role
+   names above. Their accent #007aff (#0a84ff dark) is kept for fills and marks (selection rule, current
+   mark, switches, working line); as WORDS it is 4.0:1 on white, so words, links and focus take the deeper
+   step of the same blue (#0064d2, their pressed key, 5.6:1); the filled key is that step too, so its white
+   label reads 5.6:1. Their state colours are fills; where a state colour is words on white it is mixed
+   toward their ink until it reads 4.5:1. The rail is their sidebar grey (graphite on dark), ink icons.
+   Set by `data-palette="atlas"` on <html> (theme.ts); absent = Workbench. The office chrome mirrors
+   these (apps/office/src/ui-adapters/chrome.css, checked by chrome.test.ts). ── */
+:root[data-palette="atlas"],
+[data-palette="atlas"] .look-scope[data-theme="light"] {
+  --color-paper: #ffffff;                     /* list column, top bar, tab strip: their list */
+  --color-paper-2: #ffffff;                   /* panes, menus, dialogs: their background */
+  --color-paper-3: #f2f2f7;                   /* the well: their muted background */
+  --color-field: #ffffff;
+  --color-ink: #1d1d1f;
+  --color-ink-2: #3a3a3c;
+  --color-muted: #626268;                     /* 6.1:1 on white, 5.4:1 on the well */
+  --color-faint: #626268;
+  --color-rule: #e5e5ea;
+  --color-edge: #8e8e93;                      /* field and key edges, 3.3:1 (their #d1d1d6 is 1.5:1) */
+  --color-teal: #007aff;                      /* the accent as a mark or fill */
+  --color-teal-ink: #0064d2;                  /* the accent as words, links, focus: 5.6:1 */
+  --color-attention: #ff9f0a;                 /* their warning, a fill with ink on it (8.2:1) */
+  --color-attention-ink: #1d1d1f;
+  --color-attention-text: color-mix(in oklab, #ff9f0a 58%, #1d1d1f);
+  --color-attention-soft: color-mix(in oklab, #ff9f0a 10%, #ffffff);
+  --color-done: color-mix(in oklab, #34c759 60%, #1d1d1f);
+  --color-done-soft: color-mix(in oklab, #34c759 8%, #ffffff);
+  --color-error: color-mix(in oklab, #ff3b30 76%, #1d1d1f);
+  --color-error-soft: color-mix(in oklab, #ff3b30 8%, #ffffff);
+  --color-scrim: oklch(0% 0 0 / 0.15);        /* their overlay */
+  --color-rail: #f2f2f7;                      /* their sidebar */
+  --color-rail-ink: #1d1d1f;
+  --color-rail-muted: #626268;
+  --color-rail-hover: #e5e5ea;
+  --color-rail-current: color-mix(in oklab, #007aff 12%, #f2f2f7);
+  --color-rail-mark: #007aff;
+  --color-rail-rule: #e5e5ea;
+  --color-rail-focus: #0064d2;
+  --key-primary: #0064d2;
+  --on-key-primary: #ffffff;
+  --color-current-soft: color-mix(in oklab, #007aff 8%, #ffffff); /* their list.active wash */
+  --active-bg: var(--color-current-soft);
+}
+:root[data-palette="atlas"][data-theme="dark"],
+[data-palette="atlas"] .look-scope[data-theme="dark"] {
+  --color-paper: #1c1c1e;
+  --color-paper-2: #1c1c1e;
+  --color-paper-3: #2c2c2e;
+  --color-field: #242426;                     /* their list head: one step up for fields and cards */
+  --color-ink: #f5f5f7;
+  --color-ink-2: #d1d1d6;
+  --color-muted: #98989d;                     /* 5.9:1 on the ground, 4.9:1 on the rail */
+  --color-faint: #98989d;
+  --color-rule: #38383a;
+  --color-edge: #8e8e93;                      /* 4.8:1 on a field */
+  --color-teal: #0a84ff;
+  --color-teal-ink: #409cff;                  /* their sidebar accent words: 6.0:1 */
+  --color-attention: #ffd60a;
+  --color-attention-ink: #1c1c1e;
+  --color-attention-text: #ffd60a;
+  --color-attention-soft: color-mix(in oklab, #ffd60a 12%, #1c1c1e);
+  --color-done: #30d158;
+  --color-done-soft: color-mix(in oklab, #30d158 12%, #1c1c1e);
+  --color-error: #ff6961;                     /* their danger hover: 5.5:1 on a field (#ff453a is 4.6) */
+  --color-error-soft: color-mix(in oklab, #ff453a 12%, #1c1c1e);
+  --color-scrim: oklch(0% 0 0 / 0.35);
+  --color-rail: #2c2c2e;                      /* graphite: their muted ground, as light's rail */
+  --color-rail-ink: #f5f5f7;
+  --color-rail-muted: #98989d;
+  --color-rail-hover: #3a3a3c;
+  --color-rail-current: color-mix(in oklab, #0a84ff 15%, #2c2c2e);
+  --color-rail-mark: #0a84ff;
+  --color-rail-rule: #38383a;
+  --color-rail-focus: #409cff;
+  --key-primary: #0064d2;
+  --on-key-primary: #ffffff;
+  --color-current-soft: color-mix(in oklab, #0a84ff 12%, #1c1c1e);
+  --active-bg: var(--color-current-soft);
+}
+:root[data-palette="atlas"] {
+  /* A pane's look colour still at its default (appearance.ts lookStyle) follows the combination; one the
+     person chose stays. Without this block the look keeps its own value (the fallback). */
+  --palette-look-light-ink: #1d1d1f; --palette-look-light-muted: #626268; --palette-look-light-rule: #e5e5ea; --palette-look-light-well: #f2f2f7;
+  --palette-look-dark-paper: #1c1c1e; --palette-look-dark-sheet: #1c1c1e; --palette-look-dark-field: #242426; --palette-look-dark-ink: #f5f5f7;
+  --palette-look-dark-muted: #98989d; --palette-look-dark-rule: #38383a; --palette-look-dark-well: #2c2c2e;
+}
+/* The derived roles a look scope re-declares (the alias block above) are re-set under Atlas. */
+[data-palette="atlas"] .look-scope {
+  --key-primary: #0064d2;
+  --on-key-primary: #ffffff;
+}
+
+/* More contrast asked for: rules become edges. */
+@media (prefers-contrast: more) {
+  :root, .look-scope { --line: var(--muted); --line-strong: var(--text); --color-rule: var(--color-edge); }
+}

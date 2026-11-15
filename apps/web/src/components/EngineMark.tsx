@@ -1,7 +1,11 @@
+import { useContext } from "react";
 import type { Provider } from "@workbench/contracts";
+import { AppearanceContext, engineMarkStyle } from "../appearance.ts";
 
 // Own simple marks (not the vendors' logos): a filled spark for Claude, an outlined
-// hexagon with a prompt for Codex. Shape alone already tells them apart, color adds to it.
+// hexagon with a prompt for Codex. Shape alone already tells them apart; `data-provider` gives
+// each its engine color (styles.css "Engine identity"). Skin 2 (S9): this mark is the ONE place an
+// engine's colour is drawn; a colour the person gave the engine in 외형 reaches it as `--engine-own`.
 
 const SPARK = (() => {
   const points: string[] = [];
@@ -15,9 +19,11 @@ const SPARK = (() => {
 })();
 
 export function EngineMark({ provider, size = 16, className }: { provider: Provider; size?: number; className?: string }) {
+  const appearance = useContext(AppearanceContext);
+  const style = engineMarkStyle(appearance?.lookOf(provider));
   if (provider === "claude") {
     return (
-      <svg width={size} height={size} viewBox="0 0 24 24" className={`engine-mark ${className ?? ""}`} aria-hidden>
+      <svg width={size} height={size} viewBox="0 0 24 24" className={`engine-mark ${className ?? ""}`} data-provider={provider} style={style} aria-hidden>
         <path d={SPARK} fill="currentColor" strokeLinejoin="round" stroke="currentColor" strokeWidth={0.8} />
       </svg>
     );
@@ -33,6 +39,8 @@ export function EngineMark({ provider, size = 16, className }: { provider: Provi
       strokeLinecap="round"
       strokeLinejoin="round"
       className={`engine-mark ${className ?? ""}`}
+      data-provider={provider}
+      style={style}
       aria-hidden
     >
       <path d="M12 2.6l8.2 4.7v9.4L12 21.4l-8.2-4.7V7.3z" />

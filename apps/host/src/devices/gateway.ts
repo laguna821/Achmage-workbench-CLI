@@ -1,4 +1,4 @@
-import { handshakeFromHeader, PROTOCOL_HEADER, protocolHeader, requireProtocolWrite } from "@workbench/contracts";
+import { deviceLayoutKey, handshakeFromHeader, PROTOCOL_HEADER, protocolHeader, requireProtocolWrite } from "@workbench/contracts";
 import { randomUUID } from "node:crypto";
 import type { RemoteFrame, RemoteRequest, EventCursor } from "@workbench/contracts";
 import { REMOTE_BODY_LIMIT, REMOTE_CHUNK_BYTES } from "@workbench/contracts";
@@ -127,6 +127,11 @@ export class DeviceGateway {
           result = json(manager.notifications.observe({ clientId: "remote:" + grant.deviceId + ":" + connectionId,
             sessionId: typeof body.sessionId === "string" ? body.sessionId : null, visible: body.visible === true }));
         }
+        else if (pathname === "/api/layouts/device") {
+          // Skin 2 · B: the device's own layout record, never the desktop's `global` (no 409 tug of war).
+          const key = deviceLayoutKey(grant.deviceId);
+          result = json({ record: request.method === "GET" ? manager.layouts.read(key) : manager.layouts.write(key, body.expectedRevision, body.layout) });
+        }
         else if (pathname === "/api/prefs") {
           // Device layout preferences are held by its own client, not another desktop's UI.
           result = json(request.method === "GET" ? {} : body);
@@ -158,7 +163,10 @@ export class DeviceGateway {
       if (!id && message.op !== "unsubscribe") throw new HttpError(400, "remote_id", "요청 식별자가 없습니다.");
       if (message.op === "pair") {
         const offer = message.offer as { offerId?: string; token?: string };
-        return reply(id, registry.requestPairing({ offerId: String(offer?.offerId ?? ""), token: String(offer?.token ?? ""), name: String(message.name ?? ""), platform: String(message.platform ?? ""), connectionId }));
+        // What the device says about itself: it keeps its credential, and which earlier approval was its own.
+        // Both only inform the owner's approval; neither grants anything.
+        return reply(id, registry.requestPairing({ offerId: String(offer?.offerId ?? ""), token: String(offer?.token ?? ""), name: String(message.name ?? ""), platform: String(message.platform ?? ""), connectionId,
+          remember: message.remember === true, ...(typeof message.previousDeviceId === "string" && message.previousDeviceId.length <= 64 ? { previousDeviceId: message.previousDeviceId } : {}) }));
       }
       if (message.op === "claim") return reply(id, registry.claimCredential({ requestId: String(message.requestId ?? ""), claimToken: String(message.claimToken ?? ""), connectionId }));
       if (message.op === "authenticate") {

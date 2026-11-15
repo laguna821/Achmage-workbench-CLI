@@ -18,7 +18,10 @@ fn main() {
         std::process::exit(achmage_workbench_lib::office_fonts::run());
     }
     if std::env::args().nth(1).as_deref() == Some("--reveal-ai-secrets") {
-        std::process::exit(achmage_workbench_lib::reveal_ai_secrets());
+        // Removed: it opened stored keys for any caller. Still recognised so that IeumOffice's
+        // command line, which tries it, never starts a window; it gets no keys.
+        eprintln!("Achmage Workbench는 저장된 키를 다른 프로그램에 열어 주지 않습니다. 키가 필요한 이음오피스 기능은 앱 안에서 사용해 주세요.");
+        std::process::exit(2);
     }
     if std::env::args().nth(1).as_deref() == Some("--office-secret-key") {
         std::process::exit(achmage_workbench_lib::office_secrets::run());

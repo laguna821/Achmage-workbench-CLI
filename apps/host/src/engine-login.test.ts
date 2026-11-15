@@ -21,6 +21,34 @@ describe("engine environment", () => {
     expect(BILLING_ENV_VARS).toContain("CODEX_API_KEY");
   });
 
+  it("passes of the app's own variables only the allow-list: nothing that points at the vault helper or the gateway's door", () => {
+    const base = {
+      PATH: "/usr/bin", HOME: "/home/a", GITHUB_TOKEN: "the person's own",
+      WORKBENCH_SECRET_BIN: "/opt/wb/app", WORKBENCH_PTY_BIN: "/opt/wb/app", WORKBENCH_APP_BIN: "/opt/wb/app",
+      WORKBENCH_TOKEN: "gateway-door", WORKBENCH_PORT: "47820", WORKBENCH_HOST_RUNNER: "/x", WORKBENCH_CLI_INPUT: "/y",
+      WORKBENCH_TELEGRAM_API: "http://127.0.0.1:1", WORKBENCH_CLAUDE_BIN: "/c", WORKBENCH_WEB_DIR: "/w",
+      WORKBENCH_DATA_DIR: "/d", WORKBENCH_RESOURCES_DIR: "/r", GENOFFICE_AI_SETTINGS: "/d/office/ai-settings.json",
+    };
+    const env = engineEnv({ base, platform: "linux", extra: { WORKBENCH_FIND_SESSION: "s1" } });
+    for (const name of ["WORKBENCH_SECRET_BIN", "WORKBENCH_PTY_BIN", "WORKBENCH_TOKEN", "WORKBENCH_PORT", "WORKBENCH_HOST_RUNNER", "WORKBENCH_CLI_INPUT", "WORKBENCH_TELEGRAM_API", "WORKBENCH_CLAUDE_BIN", "WORKBENCH_WEB_DIR", "GENOFFICE_AI_SETTINGS"])
+      expect(env[name], name).toBeUndefined();
+    expect(Object.keys(env).filter((name) => /^(WORKBENCH|GENOFFICE)_/.test(name)).sort()).toEqual(["WORKBENCH_APP_BIN", "WORKBENCH_DATA_DIR", "WORKBENCH_FIND_SESSION", "WORKBENCH_RESOURCES_DIR"]);
+    // The person's own environment is theirs to give their engines (billing variables aside).
+    expect(env.GITHUB_TOKEN).toBe("the person's own");
+    const windows = engineEnv({ base: { Path: "C:\\x", workbench_secret_bin: "C:\\wb.exe", Workbench_Token: "t" }, platform: "win32" });
+    expect(windows.workbench_secret_bin).toBeUndefined();
+    expect(windows.Workbench_Token).toBeUndefined();
+  });
+
+  it("gives the Claude SDK the same environment, without the helper's path", () => {
+    process.env.WORKBENCH_SECRET_BIN = "/opt/wb/app"; process.env.WORKBENCH_PTY_BIN = "/opt/wb/app";
+    try {
+      const env = claudeSdkEnv("/usr/bin/claude");
+      expect(env.WORKBENCH_SECRET_BIN).toBeUndefined();
+      expect(env.WORKBENCH_PTY_BIN).toBeUndefined();
+    } finally { delete process.env.WORKBENCH_SECRET_BIN; delete process.env.WORKBENCH_PTY_BIN; }
+  });
+
   it("gives the SDK plain strings with a client tag", () => {
     const env = claudeSdkEnv("/usr/bin/claude");
     expect(env.CLAUDE_AGENT_SDK_CLIENT_APP).toMatch(/^achmage-workbench\//);

@@ -1,0 +1,25 @@
+/* Item icons (ItemIcon.tsx): the Icons8 Liquid Glass PNG as a mask, filled with the kind's hue (--item-*,
+   tokens.css). The PNG's own translucency gives the glass its two tones; served at 100 px, scaled down. */
+.item-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  vertical-align: middle;
+  background-color: var(--item-hue);
+  -webkit-mask: var(--item-art) center / contain no-repeat;
+  mask: var(--item-art) center / contain no-repeat;
+}
+.item-project { --item-hue: var(--item-project); }
+.item-folder, .item-folderOpen { --item-hue: var(--item-folder); }
+.item-chat { --item-hue: var(--item-chat); }
+.item-web { --item-hue: var(--item-web); }
+.item-markdown { --item-hue: var(--item-markdown); }
+.item-hwp { --item-hue: var(--item-hwp); }
+.item-word { --item-hue: var(--item-word); }
+.item-slides { --item-hue: var(--item-slides); }
+.item-sheet { --item-hue: var(--item-sheet); }
+.item-pdf { --item-hue: var(--item-pdf); }
+.item-design { --item-hue: var(--item-design); }
+.item-image { --item-hue: var(--item-image); }
+.item-file { --item-hue: var(--item-file); }
+/* A folder the person coloured keeps their colour (navigator.css: --folder-color). */
+.nav-folder.colored .item-icon { --item-hue: var(--folder-color); }

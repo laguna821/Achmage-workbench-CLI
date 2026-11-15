@@ -1,7 +1,7 @@
 import { PROTOCOL_HEADER, protocolHeader, WORKBENCH_PROTOCOL, negotiateProtocol, requireProtocolWrite } from "@workbench/contracts";
-import { closeSync, mkdirSync, openSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync } from "node:fs";
 import { spawn } from "node:child_process";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { HostInstance, HostStatus, StopReceipt } from "@workbench/contracts";
 import { readConnection, runtimeBuildId, sameInstance, type HostConnection } from "./instance.ts";
 
@@ -14,6 +14,21 @@ export async function attachHost(dataDir: string): Promise<HostConnection | null
     const status = await response.json() as HostStatus;
     return status.state === "running" && sameInstance(connection.instance, status.instance) ? connection : null;
   } catch { return null; }
+}
+
+/**
+ * The app's binary that launches the gateway: the AppImage runner, else the binary the app or the login
+ * unit names, else (a login unit that names none — older than wave 21's shape; check F3) the binary
+ * installed beside `entry` (host/host.mjs): <install>/achmage-workbench[.exe], the .app's
+ * Contents/MacOS, or /usr/bin for a /usr/lib/<product> package. None from a source checkout.
+ */
+export function launcherOf(env: NodeJS.ProcessEnv, platform: NodeJS.Platform = process.platform, entry?: string): string | undefined {
+  const image = platform === "linux" ? env.WORKBENCH_HOST_RUNNER : undefined;
+  const named = image || env.WORKBENCH_SECRET_BIN || env.WORKBENCH_APP_BIN;
+  if (named || !entry) return named || undefined;
+  const install = dirname(dirname(entry)), name = platform === "win32" ? "achmage-workbench.exe" : "achmage-workbench";
+  const beside = [join(install, name), ...(platform === "darwin" ? [join(install, "..", "MacOS", name)] : []), ...(platform === "linux" ? [join(install, "..", "..", "bin", name)] : [])];
+  return beside.find((file) => existsSync(file));
 }
 
 /** A tiny launcher exits; the detached host retains its own descriptors and process group. */
@@ -29,9 +44,11 @@ export async function startHost(options: { dataDir: string; entry: string; env?:
   let launchError: Error | null = null;
   try {
     const env: NodeJS.ProcessEnv = { ...process.env, ...options.env, WORKBENCH_DATA_DIR: options.dataDir, WORKBENCH_HOST_MODE: "service", WORKBENCH_EXIT_ON_STDIN_CLOSE: "0" };
-    // A durable AppImage starts a foreground native parent which owns its own mount.
-    // Spawning the UI mount's Node directly would strand workers when that UI exits.
-    const runner = process.platform === "linux" ? env.WORKBENCH_HOST_RUNNER : undefined;
+    // The gateway is always started by the app's own binary (`--host-runtime`, host_runtime.rs): it
+    // registers the gateway with the vault and hands it its per-run ticket (sec-vault round 2). A
+    // durable AppImage is that binary (it also keeps its own mount). Without the binary (a source
+    // checkout) the gateway runs directly and the vault refuses it — and says so.
+    const runner = launcherOf(env, process.platform, options.entry);
     const child = spawn(runner ?? process.execPath, runner ? ["--host-runtime"] : [options.entry], { env, detached: true, windowsHide: true, stdio: ["ignore", log, log] });
     child.on("error", error => { launchError = error; });
     child.unref();
@@ -68,4 +85,12 @@ export async function prepareHostUpdate(connection: HostConnection, action: "pre
   const result = await response.json() as import("@workbench/contracts").HostUpdateStatus & { message?: string; code?: string };
   if (!response.ok) throw Object.assign(Error(result.message ?? "기존 호스트에서 작업을 마친 뒤 앱의 ‘작업까지 모두 종료’를 사용해 주세요."), { code: result.code ?? "update_unavailable" });
   return result;
+}
+
+/** The way back (INSTALL-NOTE): the running gateway writes the vault's key where builds before sec-vault round 2 look. */
+export async function prepareRollback(connection: HostConnection) {
+  const response = await fetch(`${connection.url}/api/host/vault/legacy`, { method: "POST", redirect: "error", headers: { [PROTOCOL_HEADER]: protocolHeader(), authorization: `Bearer ${connection.token}`, "content-type": "application/json" },
+    body: JSON.stringify({ instance: connection.instance }), signal: AbortSignal.timeout(20_000) });
+  const result = await response.json() as { ok?: boolean; message?: string };
+  if (!response.ok || result.ok !== true) throw Error(result.message ?? "보관함의 열쇠를 이전 판이 읽는 자리에 쓰지 못했습니다.");
 }

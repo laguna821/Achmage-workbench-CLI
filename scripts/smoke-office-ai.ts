@@ -3,6 +3,7 @@
 // Usage: node scripts/smoke-office-ai.ts <evidence-directory> [native-vault-binary] [--managed-cli]
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { gatewayLaunch } from "./fixtures/launch-gateway.ts";
 import { createServer } from "node:http";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -37,9 +38,13 @@ let originalSettings = readFileSync(settingsPath);
 const file = join(profile, "project", "문서.md"); writeFileSync(file, "원본은 유지합니다.\n");
 const installedCli = join(profile, "engines/codex/0.0.0-fake/node_modules/@openai/codex/bin/codex.js");
 const npmLog = join(profile, "npm.log"), npmFailure = join(profile, "npm-failure");
-const child = spawn(process.execPath, [join(repo, "apps/host/dist/host.mjs")], {
+// With the real binary the gateway is started by its launcher (sec-vault round 2: only a gateway the
+// binary started holds the ticket the vault helper asks for); stopped then by SIGTERM to the launcher.
+const started = gatewayLaunch(join(repo, "apps/host/dist/host.mjs"), vaultBinary ?? undefined);
+process.on("exit", started.cleanup);
+const child = spawn(started.command, started.args, {
   cwd: repo,
-  env: { ...process.env, ...(vaultBinary ? { WORKBENCH_SECRET_BIN: vaultBinary } : {}), WORKBENCH_DATA_DIR: profile, WORKBENCH_PORT: "0", WORKBENCH_EDITORS_PORT: "0", WORKBENCH_EXIT_ON_STDIN_CLOSE: "1", WORKBENCH_CODEX_BIN: managedCli ? installedCli : join(repo, "scripts/fixtures/fake-codex.mjs"), WORKBENCH_CLAUDE_BIN: join(repo, "scripts/fixtures/fake-claude.mjs"),
+  env: { ...process.env, ...started.env, ...(vaultBinary ? { WORKBENCH_SECRET_BIN: vaultBinary } : {}), WORKBENCH_DATA_DIR: profile, WORKBENCH_PORT: "0", WORKBENCH_EDITORS_PORT: "0", WORKBENCH_EXIT_ON_STDIN_CLOSE: "1", WORKBENCH_CODEX_BIN: managedCli ? installedCli : join(repo, "scripts/fixtures/fake-codex.mjs"), WORKBENCH_CLAUDE_BIN: join(repo, "scripts/fixtures/fake-claude.mjs"),
     ...(managedCli ? { WORKBENCH_NPM_CLI: join(repo, "scripts/fixtures/fake-npm-cli.mjs"), FAKE_NPM_FAIL: "", FAKE_NPM_FAIL_FILE: npmFailure, FAKE_NPM_LOG: npmLog, FAKE_CODEX_VERSION: "0.0.0-fake", npm_config_registry: `http://127.0.0.1:${(provider.address() as AddressInfo).port}/registry/` } : {}),
   },
   stdio: ["pipe", "pipe", "pipe"],
@@ -140,7 +145,7 @@ try {
   assert.equal(repeated.duplicate, true); assert.equal(repeated.status, "completed"); assert.equal(requests.length, 1); checks.push("completed run reconnect does not start another model call");
 } catch (error) { failure = error; }
 finally {
-  child.stdin.end();
+  if (started.root) child.kill("SIGTERM"); else child.stdin.end();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const code = await Promise.race([exited, new Promise<never>((_done, reject) => { timer = setTimeout(() => reject(new Error("Bundled host did not stop normally")), 10_000); })]);

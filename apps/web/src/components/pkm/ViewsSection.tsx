@@ -1,4 +1,5 @@
 import { Icon } from "../Icon.tsx";
+import { failure } from "../../top-notice.ts";
 import type { MenuEntry, MenuRequest } from "../ContextMenu.tsx";
 import { usePkm } from "./PkmContext.tsx";
 import "../../styles/pkm.css";
@@ -30,7 +31,7 @@ export function ViewsSection({
     openMenu({
       x,
       y,
-      title: "보기",
+      title: "저장한 보기",
       items: [
         { kind: "item", label: "새 보기…", icon: "plus", onSelect: () => pkm.setDialog({ kind: "view", id: null }) },
         { kind: "item", label: "자동 정리 규칙…", icon: "bolt", onSelect: () => pkm.setDialog({ kind: "rules" }) },
@@ -38,25 +39,26 @@ export function ViewsSection({
     });
 
   return (
-    <section className="side-section views-section" aria-label="보기">
+    <section className="side-section views-section" aria-label="저장한 보기">
       <div className="side-section-title with-tools">
         {onFold ? (
-          <button type="button" className="nav-fold" aria-expanded={!folded} title={folded ? "보기 펼치기" : "보기 접기"} onClick={() => onFold(!folded)}>
+          <button type="button" className="nav-fold" aria-expanded={!folded} title={folded ? "저장한 보기 펼치기" : "저장한 보기 접기"} onClick={() => onFold(!folded)}>
             <Icon name={folded ? "chevronRight" : "chevronDown"} size={13} />
-            <span>보기</span>
+            <span>저장한 보기</span>
           </button>
         ) : (
-          <span>보기</span>
+          <span>저장한 보기</span>
         )}
         {folded && views.length ? <span className="nav-fold-count">{views.length}</span> : null}
         <span className="side-tools">
-          <button type="button" className="icon-button small" title="새 보기" onClick={() => pkm.setDialog({ kind: "view", id: null })}>
+          <button type="button" className="icon-button small" aria-label="새 보기 만들기" title="새 보기 만들기" onClick={() => pkm.setDialog({ kind: "view", id: null })}>
             <Icon name="plus" size={13} />
           </button>
           <button
             type="button"
             className="icon-button small"
-            title="보기 메뉴"
+            aria-label="저장한 보기 메뉴"
+            title="저장한 보기 메뉴 (새 보기, 자동 정리 규칙)"
             aria-haspopup="menu"
             onClick={(event) => {
               const box = event.currentTarget.getBoundingClientRect();
@@ -82,7 +84,7 @@ export function ViewsSection({
               { kind: "item", label: "고치기…", icon: "edit", onSelect: () => pkm.setDialog({ kind: "view", id: view.id }) },
               ...(menuExtras ? menuExtras(view) : []),
               { kind: "separator" },
-              { kind: "item", label: "지우기", icon: "x", danger: true, onSelect: () => void pkm.client.deleteView(view.id).catch((error: Error) => pkm.onToast(error.message)) },
+              { kind: "item", label: "지우기", icon: "x", danger: true, onSelect: () => void pkm.client.deleteView(view.id).catch((error: Error) => pkm.onToast(failure(error))) },
             ];
             openMenu({ x: event.clientX, y: event.clientY, title: view.name, items });
           }}

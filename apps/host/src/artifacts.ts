@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, constants as fsConstants, copyFileSync, existsSync, linkSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmdirSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { diffLines } from "diff";
 import {
@@ -27,9 +27,11 @@ import { designAssetPath, designGuide, designProblem, designStem, saveDesignAsse
 import type { IeumOffice, OfficePage } from "./ieumoffice.ts";
 import { BackgroundIndex } from "./doc-text.ts";
 import { DocumentRegistry } from "./document-registry.ts";
-import { physicalPath } from "./directory-operations.ts";
+import { writeAtomic } from "./atomic-write.ts";
 import { DesignDrafts } from "./design-drafts.ts";
 import { hwpToText } from "../../../third_party/ieumoffice/file-parse/hwp.ts";
+import { withHwpDocument } from "./hwp-document.ts";
+import { hwpStructureOf, lostStructure } from "./hwp-structure.ts";
 import { hwpFormat, openHwpBytes, prepareHwpSave } from "./hwp-codec.ts";
 
 // Documents with exact revisions (PRD 3.3). Every recorded revision is an immutable copy under the
@@ -50,14 +52,29 @@ function readFileOrNull(path: string): Buffer | null {
   }
 }
 
-/** Write next to the target, then rename, so a crash never leaves half a file. */
-function writeAtomic(path: string, data: Buffer | string) {
-  // A document opened through a symlink still writes the leased physical file,
-  // not a replacement regular file at the link's directory entry.
-  path = physicalPath(path);
-  const temporary = `${path}.workbench-${process.pid}-${Date.now()}.tmp`;
-  writeFileSync(temporary, data);
-  renameSync(temporary, path);
+/** File system steps a test can stand in for (a failing link, another device). */
+export const fileOps = {
+  link: linkSync,
+  device: (path: string) => statSync(path).dev,
+};
+
+const exists = (path: string) => {
+  try { lstatSync(path); return true; } catch { return false; }
+};
+
+/**
+ * Move a file on one file system without ever replacing one: an exclusive hard link (fails when
+ * the name is taken), then the old name's removal. If that removal fails the new name goes again,
+ * so there are never two; nothing else is ever deleted.
+ */
+function moveByLink(from: string, to: string) {
+  fileOps.link(from, to);
+  try {
+    unlinkSync(from);
+  } catch (error) {
+    unlinkSync(to);
+    throw error;
+  }
 }
 
 const isHangul = (format: string) => format === "hwpx" || format === "hwp";
@@ -116,6 +133,8 @@ export class Documents {
   readonly registry: DocumentRegistry;
   readonly designDrafts: DesignDrafts;
   private readonly artifacts = new Map<string, Artifact>();
+  /** Documents taken out of their projects (보관함), restorable until deleted for good. */
+  private readonly removedDocs = new Map<string, Artifact>();
   private readonly proposals = new Map<string, Proposal>();
   private readonly store: Store;
   private readonly bus: EventBus;
@@ -140,7 +159,8 @@ export class Documents {
     this.designDrafts = new DesignDrafts(join(dataDir, "design-drafts"), this);
     this.kordoc = kordoc;
     this.ieum = ieum;
-    for (const artifact of store.artifacts()) this.artifacts.set(artifact.id, { ...artifact, readBy: artifact.readBy ?? {} });
+    for (const artifact of store.artifacts()) (artifact.removed ? this.removedDocs : this.artifacts).set(artifact.id, { ...artifact, readBy: artifact.readBy ?? {} });
+    this.reconcileTrash();
     // Proposals a restart left running are finished by the session manager, with the turn it cut.
     for (const proposal of store.proposals()) this.proposals.set(proposal.id, proposal);
     if (store.getMeta("search.documents") !== DOCUMENT_SEARCH_VERSION) {
@@ -205,11 +225,240 @@ export class Documents {
     return [...this.artifacts.values()];
   }
 
-  forgetWork(workId: string) {
+  /** Forget a deleted project's documents; `keep`: its trashed ones (marked orphaned by the caller). */
+  forgetWork(workId: string, keep: ReadonlySet<string> = new Set()) {
+    for (const [id, artifact] of this.removedDocs) if (artifact.workId === workId && !keep.has(id)) this.removedDocs.delete(id);
     const ids = new Set(this.list().filter(artifact => artifact.workId === workId).map(artifact => artifact.id));
     for (const view of this.registry.list()) if (ids.has(view.artifactId)) this.registry.close(view.viewId, view.windowId);
     for (const id of ids) this.artifacts.delete(id);
     for (const [id, proposal] of this.proposals) if (ids.has(proposal.artifactId)) this.proposals.delete(id);
+  }
+
+  removedList() {
+    return [...this.removedDocs.values()];
+  }
+
+  /** A document, listed or removed (undefined when neither). */
+  find(artifactId: string): Artifact | undefined {
+    return this.artifacts.get(artifactId) ?? this.removedDocs.get(artifactId);
+  }
+
+  /** Trash files without a record, records without their file, moves left unfinished (reported, never deleted). */
+  readonly trashReport: string[] = [];
+
+  private saveRemoved(artifact: Artifact) {
+    this.artifacts.delete(artifact.id);
+    this.removedDocs.set(artifact.id, artifact);
+    this.store.saveArtifact(artifact);
+  }
+
+  /** A removed record's pending step done: kept removed (`removed`), or listed again. */
+  private settle(artifact: Artifact, removed: Artifact["removed"] | null) {
+    if (removed) {
+      this.saveRemoved({ ...artifact, removed });
+      return;
+    }
+    const { removed: _gone, ...live } = artifact;
+    this.removedDocs.delete(artifact.id);
+    this.save(live);
+  }
+
+  /** The app's trash folder (created on first use, private). */
+  trashRoot() {
+    const root = join(this.dataDir, "trash");
+    mkdirSync(root, { recursive: true, mode: 0o700 });
+    return root;
+  }
+
+  /**
+   * Take a document out of its project. "unlisted" touches no file. "trash" is called by the
+   * session manager only after it proved the narrow case in the same synchronous step: the move is
+   * recorded first, made with an exclusive link on one file system, then marked done. A failed move
+   * leaves the document as it was. Its revisions stay; its open proposals are closed.
+   */
+  remove(artifactId: string, kind: "trash" | "unlisted", sessionIds: string[] = []): Artifact {
+    const artifact = this.get(artifactId);
+    let removed: NonNullable<Artifact["removed"]> = { at: Date.now(), kind, ...(sessionIds.length ? { sessionIds } : {}) };
+    if (kind === "trash") {
+      const folder = join(this.trashRoot(), `${artifactId}-${randomUUID().slice(0, 8)}`);
+      mkdirSync(folder, { mode: 0o700 });
+      removed = { ...removed, trashPath: join(folder, artifact.name), source: artifact.path };
+      this.store.saveArtifact({ ...artifact, removed: { ...removed, pending: "moving" } });
+      try {
+        moveByLink(artifact.path, removed.trashPath!);
+      } catch (error) {
+        try { rmdirSync(folder); } catch { /* only ever empty here */ }
+        this.store.saveArtifact(artifact);
+        throw new HttpError(500, "move_failed", `파일을 앱 휴지통으로 옮기지 못했습니다(${(error as Error).message}). 문서는 그대로입니다.`);
+      }
+    }
+    for (const proposal of this.proposals.values()) if (proposal.artifactId === artifactId) this.discardProposal(proposal.id);
+    const done: Artifact = { ...artifact, removed };
+    this.store.saveArtifact(done);
+    this.artifacts.delete(artifactId);
+    this.removedDocs.set(artifactId, done);
+    this.store.removeDocumentEntry(artifactId);
+    this.bus.publish({ type: "artifact.removed", artifact: done });
+    return done;
+  }
+
+  /**
+   * Back to its project's list, never over anything (a file, a folder or a dangling link at its
+   * path): a trashed file comes back by an exclusive link. Its id and revisions are intact. A
+   * document whose project was deleted cannot come back (there is no list); save a copy instead.
+   */
+  restore(artifactId: string, projectExists: boolean): Artifact {
+    const artifact = this.removedDocs.get(artifactId);
+    if (!artifact?.removed) throw new HttpError(404, "artifact_not_removed", "보관함에 그 문서가 없습니다.");
+    if (artifact.removed.orphaned || !projectExists) throw new HttpError(409, "project_gone", "프로젝트를 지워 되돌릴 목록이 없습니다. \"다른 곳에 저장\"으로 파일을 꺼내 주세요.");
+    if (this.list().some((other) => other.workId === artifact.workId && other.path === artifact.path)) {
+      throw new HttpError(409, "restore_conflict", `「${artifact.name}」 문서가 이미 목록에 있습니다. 그 문서를 먼저 빼거나 이름을 바꾼 뒤 되돌리세요.`);
+    }
+    const { trashPath } = artifact.removed;
+    if (artifact.removed.kind === "trash" && trashPath) {
+      if (!exists(trashPath)) throw new HttpError(409, "trash_file_missing", "휴지통에 이 문서의 파일이 없습니다.");
+      if (exists(artifact.path)) throw new HttpError(409, "restore_conflict", `「${artifact.name}」 자리에 이미 파일이 있습니다. 그 파일을 옮기거나 이름을 바꾼 뒤 되돌리세요. (${artifact.path})`);
+      if (!exists(dirname(artifact.path))) throw new HttpError(409, "restore_folder_missing", `원래 폴더가 없습니다(${dirname(artifact.path)}).`);
+      this.store.saveArtifact({ ...artifact, removed: { ...artifact.removed, pending: "restoring" } });
+      try {
+        moveByLink(trashPath, artifact.path);
+      } catch (error) {
+        this.store.saveArtifact(artifact);
+        throw new HttpError(500, "move_failed", `파일을 되돌리지 못했습니다(${(error as Error).message}). 보관함에 그대로 있습니다.`);
+      }
+      try { rmdirSync(dirname(trashPath)); } catch { /* not empty: left as it is */ }
+    }
+    this.settle(artifact, null);
+    this.indexLatest(this.get(artifactId));
+    return this.check(artifactId);
+  }
+
+  /** "다른 곳에 저장": a copy of a deleted project's trashed file, created exclusively; the record stays as it is. */
+  saveCopy(artifactId: string, to: string) {
+    const artifact = this.removedDocs.get(artifactId);
+    if (!artifact?.removed?.orphaned || artifact.removed.kind !== "trash") throw new HttpError(409, "not_orphaned", "프로젝트가 지워진 문서만 다른 곳에 저장할 수 있습니다. 그 밖의 문서는 되돌리기로 돌려놓으세요.");
+    copyFileSync(this.trashFile(artifactId), to, fsConstants.COPYFILE_EXCL);
+    return { path: to };
+  }
+
+  /**
+   * The folder of a document's revisions, to delete with it: a real folder (not a link) directly
+   * inside the real `<data>/artifacts`, or null when there is none. A record's id is never trusted
+   * with a recursive delete: one that leads anywhere else is refused.
+   */
+  private revisionsFolder(artifactId: string): string | null {
+    const refusal = () => new HttpError(409, "artifact_path", "이 문서의 기록이 앱이 판을 보관하는 폴더 안의 이 문서 폴더를 가리키지 않아 아무것도 지우지 않았습니다.");
+    const folder = resolve(this.root, artifactId);
+    if (dirname(folder) !== resolve(this.root)) throw refusal();
+    if (!exists(folder)) return null;
+    const real = (path: string) => { try { return realpathSync.native(path); } catch { return null; } };
+    const root = real(this.root), place = real(folder);
+    if (!root || !place || !lstatSync(folder).isDirectory() || dirname(place) !== root) throw refusal();
+    return place;
+  }
+
+  /** Drop a removed document's record, revisions (in `revisions`, proved by `revisionsFolder`) and proposals. */
+  private forget(artifact: Artifact, revisions: string | null) {
+    if (revisions) rmSync(revisions, { recursive: true, force: true });
+    for (const [id, proposal] of this.proposals) if (proposal.artifactId === artifact.id) this.proposals.delete(id);
+    this.removedDocs.delete(artifact.id);
+    this.store.deleteArtifact(artifact.id);
+    this.bus.publish({ type: "artifact.purged", artifactId: artifact.id, workId: artifact.workId });
+  }
+
+  /**
+   * The folder to delete with a trashed file: this document's own (`<id>-…`), a real folder (not
+   * a link) directly inside the real `<data>/trash`, or null when it, or the whole trash, is
+   * already gone. A stored path is never trusted with a recursive delete: outside the trash, the
+   * trash itself, deeper inside it, through a link or another document's folder, it is refused.
+   */
+  private trashFolder(artifactId: string, trashPath: string): string | null {
+    const refusal = () => new HttpError(409, "trash_path", "이 문서의 휴지통 기록이 앱 휴지통 안에 있는 이 문서의 폴더를 가리키지 않아 아무것도 지우지 않았습니다.");
+    const trash = resolve(this.dataDir, "trash");
+    const folder = dirname(resolve(trashPath));
+    if (!basename(folder).startsWith(`${artifactId}-`)) throw refusal();
+    // The trash itself is gone (deleted by hand): nothing of the document is left to delete, when
+    // its folder was, as written, directly inside it.
+    if (!exists(trash)) {
+      if (dirname(folder) === trash) return null;
+      throw refusal();
+    }
+    const real = (path: string) => { try { return realpathSync.native(path); } catch { return null; } };
+    const root = real(trash);
+    if (!root) throw refusal();
+    if (!exists(folder)) {
+      if (real(dirname(folder)) === root) return null;
+      throw refusal();
+    }
+    const place = real(folder);
+    if (!place || !lstatSync(folder).isDirectory() || dirname(place) !== root) throw refusal();
+    return place;
+  }
+
+  /** Delete a trashed document for good: its file in the app's trash and its revisions. Never an unlisted one. */
+  purge(artifactId: string) {
+    const artifact = this.removedDocs.get(artifactId);
+    if (artifact?.removed?.kind !== "trash") throw new HttpError(409, "not_trashed", "앱 휴지통에 있는 문서만 영구 삭제할 수 있습니다. 목록에서 뺀 문서의 파일은 앱이 지우지 않습니다.");
+    // Both places are proved before anything is deleted: a refusal deletes nothing.
+    const folder = artifact.removed.trashPath ? this.trashFolder(artifact.id, artifact.removed.trashPath) : null;
+    const revisions = this.revisionsFolder(artifact.id);
+    if (folder) rmSync(folder, { recursive: true, force: true });
+    this.forget(artifact, revisions);
+  }
+
+  /** Revisions of a removed document (kept until it is deleted for good). */
+  removedRevisions(artifactId: string): ArtifactRevision[] {
+    if (!this.removedDocs.has(artifactId)) throw new HttpError(404, "artifact_not_removed", "보관함에 그 문서가 없습니다.");
+    return this.store.revisions(artifactId);
+  }
+
+  /** The trash copy of a removed document, for "다른 곳에 저장" by download. */
+  trashFile(artifactId: string) {
+    const path = this.removedDocs.get(artifactId)?.removed?.trashPath;
+    if (!path || !exists(path)) throw new HttpError(404, "trash_file_missing", "휴지통에 이 문서의 파일이 없습니다.");
+    return path;
+  }
+
+  /** Mark a deleted project's trashed document: it stays in 보관함 under the project's old name. */
+  orphan(artifactId: string, workTitle: string) {
+    const artifact = this.removedDocs.get(artifactId);
+    if (!artifact?.removed) return;
+    this.saveRemoved({ ...artifact, removed: { ...artifact.removed, orphaned: true, workTitle, sessionIds: [] } });
+  }
+
+  /**
+   * At start, a move whose record says it was in flight is completed only when its file is in
+   * exactly one of its two places (the record then says where it is); anything else is reported.
+   * Nothing is ever deleted here: no record, no revision, no file. Trash files that no record
+   * points at, and records whose trash file is gone, are reported too.
+   */
+  private reconcileTrash() {
+    for (const artifact of [...this.removedDocs.values()]) {
+      const removed = artifact.removed!;
+      const { trashPath, pending } = removed;
+      const source = removed.source ?? artifact.path;
+      const done = { ...removed };
+      delete done.pending;
+      if (pending && trashPath) {
+        const inTrash = exists(trashPath), atSource = exists(source);
+        if (inTrash && !atSource) this.settle(artifact, done);
+        else if (atSource && !inTrash) this.settle(artifact, null);
+        else this.trashReport.push(`${pending === "moving" ? "옮기다" : "되돌리다"} 멈춘 「${artifact.name}」: 휴지통(${trashPath})과 원래 자리(${source})를 확인해 주세요.`);
+      } else if (removed.kind === "trash" && trashPath && !exists(trashPath)) {
+        this.trashReport.push(`「${artifact.name}」의 휴지통 파일이 없습니다: ${trashPath}`);
+      }
+    }
+    const trash = join(this.dataDir, "trash");
+    const known = new Set([...this.removedDocs.values()].flatMap((artifact) => (artifact.removed?.trashPath ? [artifact.removed.trashPath] : [])));
+    let entries: string[] = [];
+    try { entries = readdirSync(trash); } catch { entries = []; }
+    for (const entry of entries) {
+      const path = join(trash, entry);
+      let names: string[];
+      try { names = statSync(path).isDirectory() ? readdirSync(path).map((name) => join(path, name)) : [path]; } catch { continue; }
+      for (const name of names) if (!known.has(name)) this.trashReport.push(`기록 없는 휴지통 파일: ${name}`);
+    }
+    for (const line of this.trashReport) console.warn(`[trash] ${line}`);
   }
 
   listProposals() {
@@ -750,14 +999,18 @@ export class Documents {
   private async checkHangul(proposalId: string) {
     const proposal = this.proposal(proposalId), artifact = this.get(proposal.artifactId);
     const original = readFileOrNull(this.revisionPath(artifact.id, proposal.baseRevision)), working = readFileOrNull(proposal.workingPath);
-    let problem: string | null = null, counts = { added: 0, removed: 0 };
+    let problem: string | null = null, counts = { added: 0, removed: 0 }, removedStructure: string[] | null = null;
     try {
       if (!original || !working) throw new Error("수정안 사본이 없습니다.");
-      await prepareHwpSave(original, working, hwpFormat(artifact.format), {});
+      const format = hwpFormat(artifact.format);
+      await prepareHwpSave(original, working, format, {});
       counts = countChanges(await hwpToText(original), await hwpToText(working));
+      // Information, not a refusal: the AI may delete on request, the person decides before applying.
+      const census = async (bytes: Uint8Array) => withHwpDocument((await openHwpBytes(bytes, format)).bytes, hwpStructureOf);
+      removedStructure = lostStructure(await census(original), await census(working));
     } catch (error) { problem = `한글 수정안을 적용할 수 없습니다: ${error instanceof Error ? error.message : String(error)}`; }
     const latest = this.proposal(proposalId), nowBytes = readFileOrNull(proposal.workingPath);
-    if (latest.status === "pending" && working && nowBytes && sha256(working) === sha256(nowBytes)) this.saveProposal({ ...latest, ...counts, problem, updatedAt: Date.now() });
+    if (latest.status === "pending" && working && nowBytes && sha256(working) === sha256(nowBytes)) this.saveProposal({ ...latest, ...counts, problem, removedStructure, updatedAt: Date.now() });
   }
 
   private async officeProblem(path: string): Promise<string | null> {

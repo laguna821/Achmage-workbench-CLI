@@ -44,6 +44,8 @@ try {
   const click = async (text: string, selector = "button,[role=menuitem]") => {
     if (!await until(async () => { for (const button of await wd.findAll(selector)) if (await wd.displayed(button) && await wd.execute<boolean>("return arguments[0].textContent.trim()===arguments[1]", button, text)) { await wd.click(button); return true; } return false; }, 10000)) throw new Error(`Missing button: ${text}`);
   };
+  // 설정 (one dialog; was the ⋯ "연결과 설정" popover): the rail's 설정 key, then the section in its left list.
+  const openAppSettings = async (section: string) => { await wd.frame(null); if (!await wd.find(".settings-dialog[open]")) await wd.click(await wd.waitFor('button[data-rail="settings"]')); await wd.click(await wd.waitFor(`.settings-dialog[open] .settings-nav [data-section="${section}"]`)); await wd.waitFor(`.settings-dialog[open] .settings-pane[data-section="${section}"]`); };
   const fill = async (element: any, value: string) => { await wd.click(element); await control("a"); await wd.sendKeys(element, value); };
   const settingsPath = join(ctx.app.dataDir, "office/markdown-settings.json");
   await showDoc();
@@ -81,7 +83,7 @@ try {
   await control("s"); if (!await until(async () => readFileSync(path, "utf8").includes("offline-fallback"), 10000)) throw new Error("Explicit Markdown save did not finish");
   const saved = readFileSync(path, "utf8"); report.check(S, "명시 저장 후 원격 주소와 로컬 사본 경로 유지", saved.includes(relay) && saved.includes("assets/") && !saved.includes(secret), undefined, await shot(ctx, "host-paste.png"));
   phase = "selective import"; await wd.frame(null);
-  await wd.click(await wd.waitFor('button[aria-label="연결과 설정"]')); await click("이음오피스 설정 가져오기…"); await wd.waitFor(".office-import-dialog");
+  await openAppSettings("documents"); await click("이음오피스 설정 가져오기…"); await wd.waitFor(".office-import-dialog");
   const source = join(outDir, "original-ieum"); mkdirSync(source); const sourceFile = join(source, "markdown-settings.json");
   const legacy = JSON.stringify({ markdownTheme: "blubook", imageHost: { kind: "smms", token: "synthetic-imported-image-token" }, future: { preserve: true } }, null, 3); writeFileSync(sourceFile, legacy);
   await fill(await wd.waitFor('.office-import-dialog input:not([type="checkbox"])'), source); await click("가져올 항목 확인"); await wd.waitFor(".office-import-preview");
@@ -91,7 +93,7 @@ try {
   await choose("Markdown 테마"); await click("선택한 항목 가져오기");
   if (!await until(() => wd.execute<boolean>('return document.querySelector(".office-import-dialog").textContent.includes("Markdown 테마 가져옴")'), 15000)) throw new Error("Theme import did not finish");
   let imported = JSON.parse(readFileSync(settingsPath, "utf8")); report.check(S, "테마만 가져오면 현재 호스트와 원본 설정 보존", imported.markdownTheme === "blubook" && imported.imageHost.kind === "github" && readFileSync(sourceFile, "utf8") === legacy);
-  await click("완료"); await wd.click(await wd.waitFor('button[aria-label="연결과 설정"]')); await click("이음오피스 설정 가져오기…");
+  await click("완료"); await openAppSettings("documents"); await click("이음오피스 설정 가져오기…");
   await fill(await wd.waitFor('.office-import-dialog input:not([type="checkbox"])'), source); await click("가져올 항목 확인"); await wd.waitFor(".office-import-preview"); await choose("Markdown 이미지 호스트"); await click("선택한 항목 가져오기");
   if (!await until(() => wd.execute<boolean>('return document.querySelector(".office-import-dialog").textContent.includes("이미지 호스트 가져옴")'), 15000)) throw new Error("Host import did not finish");
   imported = JSON.parse(readFileSync(settingsPath, "utf8"));

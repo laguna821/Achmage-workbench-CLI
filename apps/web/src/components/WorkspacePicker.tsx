@@ -7,6 +7,14 @@ import { Popover } from "./Popover.tsx";
 import { WorktreeWorkspaceDialog } from "./WorktreeWorkspaceDialog.tsx";
 import "../styles/workspaces.css";
 
+/** What a person reads for the folder an AI works in: the project's own folder is "프로젝트 폴더" (the
+ * gateway's stored "기본 작업공간" says nothing to a teacher); a linked folder or a branch keeps its name. */
+export function workspaceName(workspace: Workspace, work: Pick<Work, "cwd">): string {
+  if (workspace.kind === "worktree") return workspace.label;
+  if (workspace.cwd === work.cwd || workspace.label === "기본 작업공간") return workspace.cwd === work.cwd ? "프로젝트 폴더" : "연결한 폴더";
+  return workspace.label;
+}
+
 export function WorkspacePicker({ state, work, session, actions }: { state: State; work: Work; session: Session | null; actions: WorkActions }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -33,14 +41,14 @@ export function WorkspacePicker({ state, work, session, actions }: { state: Stat
   };
   if (!workspaces.length) return null;
   return <div className="anchor workspace-picker">
-    <button type="button" className="ghost-button small workspace-trigger" aria-label="작업공간 선택" aria-expanded={open} title={current?.cwd} onClick={() => setOpen(!open)}>
-      <Icon name="folder" size={14} /><span>{current?.label ?? "작업공간"}{current?.archivedAt ? " · 보관됨" : ""}</span><Icon name="chevronDown" size={12} />
+    <button type="button" className="ghost-button small workspace-trigger" aria-label="작업 폴더 고르기" aria-expanded={open} title={current?.cwd} onClick={() => setOpen(!open)}>
+      <Icon name="folder" size={14} /><span>{current ? workspaceName(current, work) : "작업 폴더"}{current?.archivedAt ? " (보관됨)" : ""}</span><Icon name="chevronDown" size={12} />
     </button>
     <Popover open={open} onClose={close} className="workspace-menu">
-      <div className="menu-label">{work.title} · 작업공간</div>
+      <div className="menu-label">{work.title}의 작업 폴더</div>
       {rows.map(({ workspace, depth }) => <div className={`workspace-choice${workspace.id === current?.id ? " active" : ""}`} key={workspace.id} style={{ marginLeft: depth * 12 }}>
         <button type="button" className="workspace-open" title={workspace.cwd} data-workspace-id={workspace.id} disabled={busy || workspace.archivedAt !== null || workspace.removedAt !== null} onClick={() => void select(workspace)}>
-          <strong>{workspace.label}</strong><small>{workspace.cwd}</small>
+          <strong>{workspaceName(workspace, work)}</strong><small>{workspace.cwd}</small>
           {workspace.removedAt ? <small>폴더 제거됨 · 기록 보존</small> : workspace.archivedAt ? <small>보관됨</small> : null}
         </button>
         {!workspace.removedAt ? <div className="workspace-tools">

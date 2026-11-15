@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { HostStatus } from "@workbench/contracts";
 import type { Api } from "../api.ts";
+import { SettingsRow } from "./SettingsSheet.tsx";
 
 export function BackgroundHost({ api }: { api: Api }) {
   const [host, setHost] = useState<HostStatus | null>(null), [error, setError] = useState("");
@@ -10,13 +11,16 @@ export function BackgroundHost({ api }: { api: Api }) {
     void Promise.all([api.hostStatus(), api.request<typeof startup>("GET", "/api/host/autostart")]).then(([host, startup]) => { if (live) { setHost(host); setStartup(startup); } }).catch(error => { if (live) setError(String(error.message ?? error)); });
     return () => { live = false; };
   }, [api]);
-  return <div className="connection">
-    <div className="connection-head"><span className="connection-name">백그라운드 작업</span><span className="connection-state">{host ? host.instance.mode === "service" ? "앱 종료 후에도 유지" : "앱과 함께 종료" : "연결 확인 중"}</span></div>
-    <div className="connection-meta muted">{host?.instance.mode === "service" ? "대화·터미널·예약은 창과 별도로 실행됩니다. 문서 편집기의 화면이 필요한 작업은 창을 유지해 주세요. 전체 종료는 트레이에서 선택할 수 있습니다." : "이 실행에서는 앱을 끝내면 호스트도 종료됩니다."}</div>
-    {startup?.supported ? <label className="connection-meta"><input type="checkbox" checked={startup.enabled} disabled={busy} onChange={event => {
-      const enabled = event.target.checked; setBusy(true); setError("");
-      void api.request<typeof startup>("PUT", "/api/host/autostart", { enabled }).then(setStartup).catch(error => setError(String(error.message ?? error))).finally(() => setBusy(false));
-    }} /> {startup.label}</label> : null}
-    {error ? <div className="notice notice-error compact" role="alert">{error}</div> : null}
-  </div>;
+  const service = host?.instance.mode === "service";
+  return <>
+    <SettingsRow label="창을 닫으면"
+      state={host ? { text: service ? "창을 닫아도 계속" : "앱과 함께 멈춤" } : { text: "확인 중" }}
+      hint={!host ? "확인하는 중입니다." : service ? "대화와 예약은 창을 닫아도 계속됩니다. 문서 편집기가 필요한 일은 창을 열어 두세요. 완전히 끝내려면 알림 영역의 아이콘에서 끝내기를 고르세요." : "지금은 앱을 닫으면 진행 중인 작업도 멈춥니다."}
+      detail={error ? <p className="settings-note warn" role="alert">{error}</p> : null} />
+    {startup?.supported ? <SettingsRow label="컴퓨터를 켜면 자동으로 시작" hint="켜 두면 로그인할 때 이 앱이 조용히 시작해 예약한 일을 이어 합니다."
+      control={<label className="check-row switch-row settings-switch" data-component="toggle"><input type="checkbox" role="switch" aria-label="컴퓨터를 켜면 자동으로 시작" checked={startup.enabled} disabled={busy} onChange={event => {
+        const enabled = event.target.checked; setBusy(true); setError("");
+        void api.request<typeof startup>("PUT", "/api/host/autostart", { enabled }).then(setStartup).catch(error => setError(`자동 시작을 바꾸지 못했습니다. ${String(error.message ?? error)}`)).finally(() => setBusy(false));
+      }} /></label>} /> : null}
+  </>;
 }

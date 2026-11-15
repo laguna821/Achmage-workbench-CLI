@@ -51,7 +51,7 @@ describe("vault rows", () => {
   });
 
   it("reads counts as '현재 · 하위' and builds obsidian links", () => {
-    expect(countLabel({ own: 3, below: 12 })).toBe("3 · 12");
+    expect(countLabel({ own: 3, below: 12 })).toBe("3/12"); // fix 1: no middle dot (was "3 · 12")
     expect(countLabel({ own: 2, below: 0 })).toBe("2");
     expect(countLabel({ own: 0, below: 0 })).toBe("");
     expect(obsidianUrl("/v/My Vault", "01. Inbox/a b.md")).toBe(`obsidian://open?path=${encodeURIComponent("/v/My Vault/01. Inbox/a b.md")}`);

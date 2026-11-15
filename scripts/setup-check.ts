@@ -6,7 +6,8 @@
 //  B. The first-run guide in Chromium with no engine on the computer: no command to type, a
 //     "설치" button per engine that installs it (a stand-in npm), "로그인" that logs in through the
 //     engine's own login (Codex: the browser comes back; Claude Code: the page's code pasted in),
-//     the document tools "앱에 포함", and the connection panel naming where each engine is.
+//     and after the guide 설정 › AI 엔진 naming where each engine is and 설정 › 문서 도구 with the
+//     document tools "앱에 들어 있음".
 // Usage: node scripts/setup-check.ts [outDir] [folder with the unpacked Linux apps]
 
 import { spawnSync } from "node:child_process";
@@ -132,7 +133,7 @@ try {
   const dialog = await page.locator(".onboarding").innerText();
   check("처음 안내에 입력할 명령이 없음 (npm·curl·irm·brew)", !/npm install|curl |irm |\| ?iex|brew install|\| ?bash/i.test(dialog), dialog.replace(/\s+/g, " ").slice(0, 120));
   check("두 엔진 모두 카드와 '설치' 버튼", (await card("codex").getByRole("button", { name: "Codex 설치" }).count()) === 1 && (await card("claude").getByRole("button", { name: "Claude 설치" }).count()) === 1);
-  check("'설치되지 않음' 대신 '아직 없음'", !dialog.includes("설치되지 않음") && dialog.includes("아직 없음"));
+  check("'설치되지 않음' 대신 '이 컴퓨터에 없음'", !dialog.includes("설치되지 않음") && dialog.includes("이 컴퓨터에 없음"));
 
   for (const provider of ["codex", "claude"] as const) {
     await card(provider).getByRole("button", { name: `${label[provider]} 설치` }).click();
@@ -147,7 +148,9 @@ try {
     }, 30_000);
     await page.waitForTimeout(400);
     const text = await card(provider).innerText();
-    check(`[${label[provider]}] 설치 뒤 'Workbench가 설치'와 경로, 로그인 버튼`, installed && text.includes("Workbench가 설치") && (await card(provider).getByRole("button", { name: `${label[provider]} 로그인` }).count()) === 1, text.replace(/\s+/g, " ").slice(0, 160));
+    // Where it was found and the path are behind the row's "찾은 위치 보기" (textContent reads it folded).
+    const found = (await card(provider).locator("details.settings-path", { hasText: "찾은 위치 보기" }).locator("code").textContent().catch(() => null)) ?? "";
+    check(`[${label[provider]}] 설치 뒤 '이 컴퓨터에서 찾았습니다', 찾은 위치 보기에 '이 앱이 설치했습니다'와 경로, 로그인 버튼`, installed && text.includes("이 컴퓨터에서 찾았습니다") && found.includes("이 앱이 설치했습니다") && /[\\/]/.test(found) && (await card(provider).getByRole("button", { name: `${label[provider]} 로그인` }).count()) === 1, `${text.replace(/\s+/g, " ").slice(0, 120)} | ${found.replace(/\s+/g, " ").slice(0, 120)}`);
   }
   await shot("03-engines-installed.png");
 
@@ -170,7 +173,7 @@ try {
   const codexIn = await until(async () => (await providerStatus("codex")).loggedIn === true, 15_000);
   await page.waitForTimeout(400);
   const codexText = await card("codex").innerText();
-  check("[Codex] 브라우저에서 돌아오면 저절로 '구독 연결됨'", codexIn && codexText.includes("구독 연결됨"), codexText.replace(/\s+/g, " ").slice(0, 120));
+  check("[Codex] 브라우저에서 돌아오면 저절로 '구독으로 연결됨'", codexIn && codexText.includes("구독으로 연결됨"), codexText.replace(/\s+/g, " ").slice(0, 120));
 
   // Claude Code: its page shows a code; pasted into the guide, the login finishes.
   await card("claude").getByRole("button", { name: "Claude 로그인" }).click();
@@ -187,26 +190,41 @@ try {
   const claudeIn = await until(async () => (await providerStatus("claude")).loggedIn === true, 15_000);
   await page.waitForTimeout(400);
   const claudeText = await card("claude").innerText();
-  check("[Claude Code] 코드를 넣으면 로그인되고 '구독 연결됨'", claudeIn && claudeText.includes("구독 연결됨"), claudeText.replace(/\s+/g, " ").slice(0, 120));
+  check("[Claude Code] 코드를 넣으면 로그인되고 '구독으로 연결됨'", claudeIn && claudeText.includes("구독으로 연결됨"), claudeText.replace(/\s+/g, " ").slice(0, 120));
   await shot("06-engines-ready.png");
 
-  // The document tools ship with the app.
-  await page.locator(".onboarding-actions .button.primary").click();
+  // The rest of the guide (첫 프로젝트 skipped, 휴대폰에서도 쓰기 → 시작하기): the first run has no
+  // document-tools step any more; the document tools are checked in 설정 › 문서 도구 below.
+  await page.locator(".onboarding-actions .button.primary", { hasText: "다음" }).click();
+  await page.locator(".onboarding-actions").getByRole("button", { name: "건너뛰기" }).click();
+  await page.locator(".onboarding-actions .button.primary", { hasText: "시작하기" }).click();
+  await page.waitForSelector(".onboarding", { state: "detached", timeout: 5000 });
+
+  // After the guide: 설정 › AI 엔진 says where each engine is (was the ⋯ "연결과 설정" panel).
+  await page.locator('.nav-rail button[data-rail="settings"]').click();
+  await page.locator('.settings-dialog[open] .settings-nav [data-section="engines"]').click();
+  const enginesPane = page.locator('.settings-dialog[open] .settings-pane[data-section="engines"]');
+  await enginesPane.locator(".setup-engine").first().waitFor();
+  await page.waitForTimeout(300);
+  await page.locator(".settings-dialog").screenshot({ path: join(outDir, "08-connections.png") });
+  const panel = await enginesPane.innerText();
+  const foundAll = (await enginesPane.locator(".setup-engine details.settings-path", { hasText: "찾은 위치 보기" }).locator("code").allTextContents()).join("\n");
+  check("설정 › AI 엔진: 두 엔진의 찾은 곳(이 앱이 설치했습니다)·로그인 상태(구독으로 연결됨)", (foundAll.match(/이 앱이 설치했습니다/g)?.length ?? 0) === 2 && (panel.match(/구독으로 연결됨/g)?.length ?? 0) === 2, `${panel.replace(/\s+/g, " ").slice(0, 160)} | ${foundAll.replace(/\s+/g, " ").slice(0, 120)}`);
+
+  // The document tools ship with the app: 설정 › 문서 도구 (was the first run's document-tools step).
+  await page.locator('.settings-dialog[open] .settings-nav [data-section="documents"]').click();
+  const toolsPane = page.locator('.settings-dialog[open] .settings-pane[data-section="documents"]');
+  await toolsPane.locator(".settings-state", { hasText: "앱에 들어 있음" }).first().waitFor({ timeout: 10_000 }).catch(() => undefined);
   await page.waitForTimeout(400);
   await shot("07-document-tools.png");
-  const tools = await page.locator(".onboarding").innerText();
-  check("문서 도구: kordoc·이음오피스·HOP·PDFCraft '앱에 포함', '설치되지 않음'·설치 버튼 없음", (tools.match(/앱에 포함/g)?.length ?? 0) === 4 && !tools.includes("설치되지 않음") && !tools.includes("이음오피스 받기"), tools.replace(/\s+/g, " ").slice(0, 240));
-
-  // After the guide: the connection panel says where each engine is.
-  await page.locator(".onboarding-actions .button.primary").click();
-  await page.locator(".onboarding-actions .button.primary").click();
-  await page.waitForSelector(".onboarding", { state: "detached", timeout: 5000 });
-  await page.getByRole("button", { name: "연결과 설정" }).click();
-  await page.waitForSelector(".connections .setup-engine");
-  await page.waitForTimeout(300);
-  await page.locator(".connections").screenshot({ path: join(outDir, "08-connections.png") });
-  const panel = await page.locator(".connections").innerText();
-  check("연결 패널: 두 엔진의 찾은 곳·로그인 상태·앱에 포함된 문서 도구", (panel.match(/Workbench가 설치/g)?.length ?? 0) === 2 && (panel.match(/구독 연결됨/g)?.length ?? 0) === 2 && (panel.match(/앱에 포함/g)?.length ?? 0) === 4, panel.replace(/\s+/g, " ").slice(0, 200));
+  const tools = await toolsPane.innerText();
+  const shipped = toolsPane.locator(".settings-row", { has: page.locator(".settings-state", { hasText: "앱에 들어 있음" }) });
+  const shippedCount = await shipped.count();
+  const shippedButtons = await shipped.locator(".settings-row-control button").count();
+  // WHICH four (tech review 7): the rows' own names, not only their count.
+  const shippedNames = (await shipped.locator(".settings-row-label").allInnerTexts()).map((label) => label.replace("앱에 들어 있음", "").trim()).sort();
+  const expectedNames = ["PDF 편집기", "워드, 파워포인트, 엑셀 편집기", "한글 문서 편집기", "한글 보고서 만들기"].sort();
+  check("설정 › 문서 도구: 한글 문서 편집기, 워드/파워포인트/엑셀 편집기, PDF 편집기, 한글 보고서 만들기가 '앱에 들어 있음', '설치되지 않음'·설치 버튼 없음", shippedCount === 4 && JSON.stringify(shippedNames) === JSON.stringify(expectedNames) && shippedButtons === 0 && !tools.includes("설치되지 않음") && !tools.includes("이음오피스 받기"), `${shippedNames.join(" | ")} :: ${tools.replace(/\s+/g, " ").slice(0, 200)}`);
 } finally {
   await browser.close();
   await gateway.stop();

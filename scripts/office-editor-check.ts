@@ -135,14 +135,14 @@ async function typeAtStart(p: Page, text: string) {
 try {
   await page.addInitScript((id) => localStorage.setItem("workbench.lastWork", id), work.id);
   await page.goto(`${ready.url}/?token=${ready.token}`);
-  await page.waitForSelector(".docs-button");
-  await page.locator(".docs-button").click();
-  await page.locator(".docs-menu").getByText("계획.docx", { exact: true }).click();
+  await page.waitForSelector(".note-head-more");
+  await page.locator(".note-head-more").click();
+  await page.locator(".note-menu").getByText("계획.docx", { exact: true }).click();
   await editor(page).waitFor({ timeout: 60_000 });
   await waitEditorText(page, "질문에서 시작하는 글쓰기");
   await page.waitForTimeout(1200);
   await page.screenshot({ path: join(outDir, "01-open.png") });
-  check("문서 화면 안에서 워드 편집기로 열림", (await status(page)).includes("r1 저장됨"), await status(page));
+  check("문서 화면 안에서 워드 편집기로 열림", (await status(page)).includes("1판 저장됨"), await status(page));
 
   // The editor runs on its own origin with a token for this document only.
   const frameUrl = new URL(page.frames().find((candidate) => candidate.url().includes("/office/docs.html"))!.url());
@@ -186,7 +186,7 @@ try {
   await typeAtStart(page, " — 워크벤치에서 고침");
   await waitStatus(page, "저장 안 됨");
   await page.keyboard.press("Control+s");
-  await waitStatus(page, "r2 저장됨");
+  await waitStatus(page, "2판 저장됨");
   check("Ctrl+S → r2, 파일에 반영", (await textOf(2)).includes("워크벤치에서 고침"), (await textOf(2)).split("\n")[0]);
   await page.screenshot({ path: join(outDir, "03-saved.png") });
 
@@ -201,7 +201,7 @@ try {
   // Back to the document: it opens at r3.
   await page.locator(".doc-tab-open", { hasText: "계획.docx" }).click();
   await waitEditorText(page, "(탭 이동 전)");
-  await waitStatus(page, "r3 저장됨");
+  await waitStatus(page, "3판 저장됨");
   check("다시 열면 r3 내용", true);
 
   // A revision made elsewhere while I have unsaved edits: refused, then "keep my edits".
@@ -212,14 +212,14 @@ try {
   await page.screenshot({ path: join(outDir, "04-conflict.png") });
   check("편집 중 다른 곳에서 r4 → 충돌 안내", r4 === 4, (await page.locator(".doc-conflict").innerText()).replace(/\s+/g, " ").slice(0, 120));
   await page.getByRole("button", { name: "내 편집을 새 판으로" }).click();
-  await waitStatus(page, "r5 저장됨");
+  await waitStatus(page, "5판 저장됨");
   const r5 = await textOf(5);
   check("내 편집을 새 판으로 → r5(내 편집), r4는 기록에 남음", r5.includes("또 고침") && !r5.includes("밖에서 고침") && (await textOf(4)).includes("밖에서 고침"), r5.split("\n")[0]);
 
   // A revision made elsewhere with nothing unsaved here (an applied AI proposal): the editor shows it.
   await editElsewhere("밖에서 두 번째");
   await waitEditorText(page, "밖에서 두 번째");
-  await waitStatus(page, "r6 저장됨");
+  await waitStatus(page, "6판 저장됨");
   check("저장 안 된 편집이 없으면 새 판(r6)을 바로 보여 줌", (await page.locator(".doc-conflict").count()) === 0);
 
   // Unsaved edits that cannot be saved (a conflict) are kept when leaving, and come back on the next visit.
@@ -240,7 +240,7 @@ try {
   await page.getByRole("button", { name: "최신 판 열기" }).click();
   await page.getByRole("button", { name: "버리고 열기" }).click();
   await waitEditorText(page, "밖에서 세 번째");
-  await waitStatus(page, "r7 저장됨");
+  await waitStatus(page, "7판 저장됨");
   const dropped = !(await editor(page).innerText()).includes("남겨 둘 편집");
   check("최신 판 열기 → 내 편집 버리고 r7", dropped && (await revisions()).length === 7);
 

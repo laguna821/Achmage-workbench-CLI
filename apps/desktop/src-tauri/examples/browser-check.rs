@@ -159,6 +159,26 @@ async fn run(app: &tauri::AppHandle, base: &str, isolation: &PathBuf, checks: &m
     check(checks, "restored-tab-keeps-document-control-and-dom", restored["observation"]["documentNonce"] == snapshot["observation"]["documentNonce"] && restored["page"]["control"] == ai && retained["value"] == "new york times" && retained["url"] == target, json!({"observation":restored["observation"],"actual":retained}))?;
     let untouched = eval(&b, "({value:document.querySelector('#search').value,url:location.href})").await?;
     check(checks, "separate-page-not-mutated", untouched["value"] == "" && untouched["url"] == b_url, untouched)?;
+
+    // A real server-issued HttpOnly fixture cookie is reused by the SAME native page.
+    // No real user account or cookie export is involved.
+    execute(app, &caller, "check-a", "fixture-signin", json!({"kind":"navigate","url":format!("{base}/fixture-signin")}), &ai, Value::Null).await?;
+    wait_document(&a, &format!("{base}/private-article")).await?;
+    let article = execute(app, &caller, "check-a", "article-overview", json!({"kind":"snapshot"}), &ai, Value::Null).await?;
+    let overview = article["observation"]["text"].as_str().unwrap_or("");
+    check(checks, "authenticated-page-overview-labels-truncation", overview.contains("Private fixture article") && overview.contains("Overview truncated") && !overview.contains("AUTHENTICATED_ARTICLE_END"), json!({"length":overview.len(),"url":article["page"]["url"]}))?;
+    let content = eval(&a, "document.body.innerText").await?;
+    let tail_offset = content.as_str().ok_or("No fixture body")?.encode_utf16().count().saturating_sub(1000);
+    let tail = execute(app, &caller, "check-a", "article-tail", json!({"kind":"read","offset":tail_offset,"limit":12000}), &ai, article["observation"].clone()).await?;
+    check(checks, "authenticated-long-body-tail-readable", tail["observation"]["text"].as_str().unwrap_or("").contains("AUTHENTICATED_ARTICLE_END"), json!({"offset":tail_offset,"pageId":tail["observation"]["target"]["pageId"]}))?;
+
+    eval(&a, "(()=>{history.pushState({},'', '/private-article?section=2');document.title='Article section 2';return true})()").await?;
+    let pages = command(app, &caller, json!({"kind":"list"})).await?;
+    let updated = pages.as_array().and_then(|pages| pages.iter().find(|page| page["pageId"] == "check-a")).ok_or("Missing SPA page")?;
+    check(checks, "spa-url-title-follow-live-document", updated["url"] == format!("{base}/private-article?section=2") && updated["title"] == "Article section 2", updated.clone())?;
+    let stale = command(app, &caller, json!({"kind":"execute","job":{"id":"stale-spa-read","pageId":"check-a","action":{"kind":"read","offset":tail_offset,"limit":1000},"control":ai,"expected":article["observation"],"deadline":now()+20000}})).await?;
+    let current = execute(app, &caller, "check-a", "spa-fresh-snapshot", json!({"kind":"snapshot"}), &ai, Value::Null).await?;
+    check(checks, "spa-navigation-invalidates-previous-observation", stale["error"].as_str().unwrap_or("").contains("STALE_DOCUMENT") && current["observation"]["documentNonce"] != article["observation"]["documentNonce"], json!({"error":stale["error"],"freshUrl":current["page"]["url"]}))?;
     Ok(())
 }
 

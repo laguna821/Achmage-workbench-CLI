@@ -317,9 +317,9 @@ def tick():
         text = frame.get("text") or ""
         if state["phase"] == "app" and value.get("docs"):
             evaluate(
-                """document.querySelector('.docs-button').click();
+                """document.querySelector('.note-head-more').click();
                    setTimeout(() => {
-                     const item = [...document.querySelectorAll('.docs-menu *')].find((el) => el.children.length === 0 && el.textContent.trim() === %s);
+                     const item = [...document.querySelectorAll('.note-menu *')].find((el) => el.children.length === 0 && el.textContent.trim() === %s);
                      item && item.click();
                    }, 300);
                    return { clicked: true };""" % json.dumps(DOC_NAME),
@@ -327,7 +327,7 @@ def tick():
             )
             state["phase"] = "open"
             state["deadline"] = time.time() + 90
-        elif state["phase"] == "open" and FIRST_TEXT in text and "r1 저장됨" in status:
+        elif state["phase"] == "open" and FIRST_TEXT in text and "1판 저장됨" in status:
             check(f"WebKitGTK에서 {dict(docs='워드', slides='PPT', sheets='엑셀')[kind]} 편집기 열림(다른 출처)", True, f"{time.time() - state['started']:.1f}s")
             state["support"] = frame.get("support")
             state["phase"] = "type"
@@ -338,7 +338,7 @@ def tick():
             state["phase"] = "save"
             state["deadline"] = time.time() + 30
             post_to_frame({"__test": "save"})
-        elif state["phase"] == "save" and "r2 저장됨" in status:
+        elif state["phase"] == "save" and "2판 저장됨" in status:
             saved = read_text(request("GET", f"/api/artifacts/{artifact['id']}/raw?revision=2", raw=True))
             # Excel: the typed cell, and the total over it still a formula with its new result (77 × 1200).
             expected = TYPED.strip() in saved if kind != "sheets" else saved == "77 (D2 B2*C2=92400)"
@@ -349,7 +349,7 @@ def tick():
             GLib.timeout_add(800, lambda: snapshot_then_quit() and False)
 
     evaluate(
-        """return { docs: Boolean(document.querySelector('.docs-button')),
+        """return { docs: Boolean(document.querySelector('.note-head-more')),
                     status: (document.querySelector('.save-state') || {}).textContent || null,
                     frame: window.__frame };""",
         on_state,

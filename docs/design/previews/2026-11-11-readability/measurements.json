@@ -1,0 +1,2381 @@
+{
+  "scope": "Actual isolated Linux WebKitGTK at 1x; fixture data; CSS proposal injected only in temporary test app",
+  "before": {
+    "dpr": 1,
+    "rows": [
+      {
+        "size": "13px",
+        "spacing": "normal",
+        "line": "18.85px",
+        "smoothing": "antialiased",
+        "color": "rgb(0, 0, 0)",
+        "parents": [
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": "body",
+        "weight": "400",
+        "text": "\n    Workbench대화Achmage CLI 연구 프로젝트기기 연결 새로 만들기화면 배치 새로 만들기찾기Ctrl K홈프로"
+      },
+      {
+        "size": "13px",
+        "spacing": "normal",
+        "line": "18.200001px",
+        "smoothing": "antialiased",
+        "color": "rgb(0, 0, 0)",
+        "parents": [
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "sidebar look-scope nav-tree",
+            "tag": "ASIDE"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "body with-sidebar",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "app look-scope",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": ".sidebar",
+        "weight": "400",
+        "text": " 새로 만들기찾기Ctrl K홈프로젝트Achmage CLI 연구 프로젝트채팅 · 3자료 조사와 문서 편집채팅한림대학교 미디어스쿨"
+      },
+      {
+        "size": "13px",
+        "spacing": "normal",
+        "line": "20px",
+        "smoothing": "antialiased",
+        "color": "rgb(0, 0, 0)",
+        "parents": [
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-row-label",
+            "tag": "SPAN"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-row row-work",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-tree-item",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-tree",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-section side-tree-section",
+            "tag": "SECTION"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-scroll",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "sidebar look-scope nav-tree",
+            "tag": "ASIDE"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "body with-sidebar",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "app look-scope",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": ".row-work .side-row-label",
+        "weight": "600",
+        "text": "Achmage CLI 연구 프로젝트"
+      },
+      {
+        "size": "13px",
+        "spacing": "normal",
+        "line": "20px",
+        "smoothing": "antialiased",
+        "color": "rgb(0, 0, 0)",
+        "parents": [
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-row-label",
+            "tag": "SPAN"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-row row-session",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-tree-item",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-tree",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-section side-tree-section",
+            "tag": "SECTION"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-scroll",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "sidebar look-scope nav-tree",
+            "tag": "ASIDE"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "body with-sidebar",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "app look-scope",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": ".row-session .side-row-label",
+        "weight": "400",
+        "text": "자료 조사와 문서 편집"
+      },
+      {
+        "size": "13px",
+        "spacing": "normal",
+        "line": "20px",
+        "smoothing": "antialiased",
+        "color": "rgb(108, 108, 112)",
+        "parents": [
+          {
+            "color": "rgb(108, 108, 112)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-section-label",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-tree-item",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-tree",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-section side-tree-section",
+            "tag": "SECTION"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-scroll",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "sidebar look-scope nav-tree",
+            "tag": "ASIDE"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "body with-sidebar",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "app look-scope",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": ".side-section-label",
+        "weight": "600",
+        "text": "채팅 · 3"
+      },
+      {
+        "size": "13px",
+        "spacing": "normal",
+        "line": "20px",
+        "smoothing": "antialiased",
+        "color": "rgb(108, 108, 112)",
+        "parents": [
+          {
+            "color": "rgb(108, 108, 112)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "nav-kind",
+            "tag": "SPAN"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-row row-session",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-tree-item",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-tree",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-section side-tree-section",
+            "tag": "SECTION"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-scroll",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "sidebar look-scope nav-tree",
+            "tag": "ASIDE"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "body with-sidebar",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "app look-scope",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": ".nav-kind",
+        "weight": "400",
+        "text": "채팅"
+      },
+      {
+        "size": "13px",
+        "spacing": "normal",
+        "line": "18.85px",
+        "smoothing": "antialiased",
+        "color": "rgb(0, 0, 0)",
+        "parents": [
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "topbar",
+            "tag": "HEADER"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "app look-scope",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": ".topbar",
+        "weight": "400",
+        "text": "Workbench대화Achmage CLI 연구 프로젝트기기 연결 새로 만들기화면 배치"
+      },
+      {
+        "size": "13px",
+        "spacing": "-0.065px",
+        "line": "18.85px",
+        "smoothing": "antialiased",
+        "color": "rgb(0, 0, 0)",
+        "parents": [
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "topbar-title",
+            "tag": "BUTTON"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "topbar",
+            "tag": "HEADER"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "app look-scope",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": ".topbar-title",
+        "weight": "600",
+        "text": "대화Achmage CLI 연구 프로젝트"
+      },
+      {
+        "size": "13px",
+        "spacing": "normal",
+        "line": "20px",
+        "smoothing": "antialiased",
+        "color": "rgb(108, 108, 112)",
+        "parents": [
+          {
+            "color": "rgb(108, 108, 112)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "group-tab-title",
+            "tag": "SPAN"
+          },
+          {
+            "color": "rgb(108, 108, 112)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BUTTON"
+          },
+          {
+            "color": "rgb(108, 108, 112)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "group-tab",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "group-tabs",
+            "tag": "NAV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "pane look-scope",
+            "tag": "SECTION"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "panes recursive",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "body with-sidebar",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "app look-scope",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": ".group-tab:not(.active) .group-tab-title",
+        "weight": "400",
+        "text": "홈"
+      },
+      {
+        "size": "13px",
+        "spacing": "normal",
+        "line": "20px",
+        "smoothing": "antialiased",
+        "color": "rgb(30, 110, 244)",
+        "parents": [
+          {
+            "color": "rgb(30, 110, 244)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "group-tab-title",
+            "tag": "SPAN"
+          },
+          {
+            "color": "rgb(30, 110, 244)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BUTTON"
+          },
+          {
+            "color": "rgb(30, 110, 244)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "group-tab active",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "group-tabs",
+            "tag": "NAV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "pane look-scope",
+            "tag": "SECTION"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "panes recursive",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "body with-sidebar",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "app look-scope",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": ".group-tab.active .group-tab-title",
+        "weight": "600",
+        "text": "발표 자료 정리"
+      },
+      {
+        "size": "13px",
+        "spacing": "normal",
+        "line": "20px",
+        "smoothing": "antialiased",
+        "color": "rgb(108, 108, 112)",
+        "parents": [
+          {
+            "color": "rgb(108, 108, 112)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "group-tab-kind",
+            "tag": "SPAN"
+          },
+          {
+            "color": "rgb(108, 108, 112)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BUTTON"
+          },
+          {
+            "color": "rgb(108, 108, 112)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "group-tab",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "group-tabs",
+            "tag": "NAV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "pane look-scope",
+            "tag": "SECTION"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "panes recursive",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "body with-sidebar",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "app look-scope",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": ".group-tab-kind",
+        "weight": "400",
+        "text": "프로젝트"
+      }
+    ],
+    "viewport": {
+      "height": 900,
+      "width": 1440
+    },
+    "fonts": [
+      {
+        "status": "unloaded",
+        "family": "Achmage SameTone",
+        "weight": "100 900"
+      },
+      {
+        "status": "unloaded",
+        "family": "Achmage SameTone Hangul",
+        "weight": "100 900"
+      },
+      {
+        "status": "loaded",
+        "family": "Pretendard Variable",
+        "weight": "45 920"
+      }
+    ]
+  },
+  "proposed": {
+    "dpr": 1,
+    "rows": [
+      {
+        "size": "13px",
+        "spacing": "normal",
+        "line": "18.85px",
+        "smoothing": "antialiased",
+        "color": "rgb(0, 0, 0)",
+        "parents": [
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": "body",
+        "weight": "400",
+        "text": "\n    Workbench대화Achmage CLI 연구 프로젝트기기 연결 새로 만들기화면 배치 새로 만들기찾기Ctrl K홈프로"
+      },
+      {
+        "size": "13px",
+        "spacing": "normal",
+        "line": "18.200001px",
+        "smoothing": "antialiased",
+        "color": "rgb(0, 0, 0)",
+        "parents": [
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(243, 245, 248)",
+            "opacity": "1",
+            "class": "sidebar look-scope nav-tree",
+            "tag": "ASIDE"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "body with-sidebar",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "app look-scope",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": ".sidebar",
+        "weight": "400",
+        "text": " 새로 만들기찾기Ctrl K홈프로젝트Achmage CLI 연구 프로젝트채팅 · 3자료 조사와 문서 편집채팅한림대학교 미디어스쿨"
+      },
+      {
+        "size": "14px",
+        "spacing": "normal",
+        "line": "22px",
+        "smoothing": "antialiased",
+        "color": "rgb(32, 39, 51)",
+        "parents": [
+          {
+            "color": "rgb(32, 39, 51)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-row-label",
+            "tag": "SPAN"
+          },
+          {
+            "color": "rgb(32, 39, 51)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-row row-work",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-tree-item",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-tree",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-section side-tree-section",
+            "tag": "SECTION"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-scroll",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(243, 245, 248)",
+            "opacity": "1",
+            "class": "sidebar look-scope nav-tree",
+            "tag": "ASIDE"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "body with-sidebar",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "app look-scope",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": ".row-work .side-row-label",
+        "weight": "600",
+        "text": "Achmage CLI 연구 프로젝트"
+      },
+      {
+        "size": "14px",
+        "spacing": "normal",
+        "line": "22px",
+        "smoothing": "antialiased",
+        "color": "rgb(32, 39, 51)",
+        "parents": [
+          {
+            "color": "rgb(32, 39, 51)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-row-label",
+            "tag": "SPAN"
+          },
+          {
+            "color": "rgb(32, 39, 51)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-row row-session",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-tree-item",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-tree",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-section side-tree-section",
+            "tag": "SECTION"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-scroll",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(243, 245, 248)",
+            "opacity": "1",
+            "class": "sidebar look-scope nav-tree",
+            "tag": "ASIDE"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "body with-sidebar",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "app look-scope",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": ".row-session .side-row-label",
+        "weight": "500",
+        "text": "자료 조사와 문서 편집"
+      },
+      {
+        "size": "13px",
+        "spacing": "normal",
+        "line": "20px",
+        "smoothing": "antialiased",
+        "color": "rgb(78, 89, 104)",
+        "parents": [
+          {
+            "color": "rgb(78, 89, 104)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-section-label",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-tree-item",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-tree",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-section side-tree-section",
+            "tag": "SECTION"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-scroll",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(243, 245, 248)",
+            "opacity": "1",
+            "class": "sidebar look-scope nav-tree",
+            "tag": "ASIDE"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "body with-sidebar",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "app look-scope",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": ".side-section-label",
+        "weight": "600",
+        "text": "채팅 · 3"
+      },
+      {
+        "size": "13px",
+        "spacing": "normal",
+        "line": "20px",
+        "smoothing": "antialiased",
+        "color": "rgb(78, 89, 104)",
+        "parents": [
+          {
+            "color": "rgb(78, 89, 104)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "nav-kind",
+            "tag": "SPAN"
+          },
+          {
+            "color": "rgb(32, 39, 51)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-row row-session",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-tree-item",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-tree",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-section side-tree-section",
+            "tag": "SECTION"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "side-scroll",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(243, 245, 248)",
+            "opacity": "1",
+            "class": "sidebar look-scope nav-tree",
+            "tag": "ASIDE"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "body with-sidebar",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "app look-scope",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": ".nav-kind",
+        "weight": "400",
+        "text": "채팅"
+      },
+      {
+        "size": "14px",
+        "spacing": "normal",
+        "line": "20.299999px",
+        "smoothing": "antialiased",
+        "color": "rgb(32, 39, 51)",
+        "parents": [
+          {
+            "color": "rgb(32, 39, 51)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "topbar",
+            "tag": "HEADER"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "app look-scope",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": ".topbar",
+        "weight": "400",
+        "text": "Workbench대화Achmage CLI 연구 프로젝트기기 연결 새로 만들기화면 배치"
+      },
+      {
+        "size": "14px",
+        "spacing": "-0.07px",
+        "line": "20.299999px",
+        "smoothing": "antialiased",
+        "color": "rgb(32, 39, 51)",
+        "parents": [
+          {
+            "color": "rgb(32, 39, 51)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "topbar-title",
+            "tag": "BUTTON"
+          },
+          {
+            "color": "rgb(32, 39, 51)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "topbar",
+            "tag": "HEADER"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "app look-scope",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": ".topbar-title",
+        "weight": "600",
+        "text": "대화Achmage CLI 연구 프로젝트"
+      },
+      {
+        "size": "14px",
+        "spacing": "normal",
+        "line": "20px",
+        "smoothing": "antialiased",
+        "color": "rgb(32, 39, 51)",
+        "parents": [
+          {
+            "color": "rgb(32, 39, 51)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "group-tab-title",
+            "tag": "SPAN"
+          },
+          {
+            "color": "rgb(32, 39, 51)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BUTTON"
+          },
+          {
+            "color": "rgb(32, 39, 51)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "group-tab",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(243, 245, 248)",
+            "opacity": "1",
+            "class": "group-tabs",
+            "tag": "NAV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "pane look-scope",
+            "tag": "SECTION"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "panes recursive",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "body with-sidebar",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "app look-scope",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": ".group-tab:not(.active) .group-tab-title",
+        "weight": "500",
+        "text": "홈"
+      },
+      {
+        "size": "14px",
+        "spacing": "normal",
+        "line": "20px",
+        "smoothing": "antialiased",
+        "color": "rgb(30, 110, 244)",
+        "parents": [
+          {
+            "color": "rgb(30, 110, 244)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "group-tab-title",
+            "tag": "SPAN"
+          },
+          {
+            "color": "rgb(30, 110, 244)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BUTTON"
+          },
+          {
+            "color": "rgb(30, 110, 244)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "group-tab active",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(243, 245, 248)",
+            "opacity": "1",
+            "class": "group-tabs",
+            "tag": "NAV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "pane look-scope",
+            "tag": "SECTION"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "panes recursive",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "body with-sidebar",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "app look-scope",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": ".group-tab.active .group-tab-title",
+        "weight": "600",
+        "text": "발표 자료 정리"
+      },
+      {
+        "size": "13px",
+        "spacing": "normal",
+        "line": "20px",
+        "smoothing": "antialiased",
+        "color": "rgb(78, 89, 104)",
+        "parents": [
+          {
+            "color": "rgb(78, 89, 104)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "group-tab-kind",
+            "tag": "SPAN"
+          },
+          {
+            "color": "rgb(32, 39, 51)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BUTTON"
+          },
+          {
+            "color": "rgb(32, 39, 51)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "group-tab",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(243, 245, 248)",
+            "opacity": "1",
+            "class": "group-tabs",
+            "tag": "NAV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "pane look-scope",
+            "tag": "SECTION"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "panes recursive",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "body with-sidebar",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "color(srgb 0.915765 0.928314 0.968157)",
+            "opacity": "1",
+            "class": "app look-scope",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1",
+            "class": "",
+            "tag": "DIV"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "BODY"
+          },
+          {
+            "color": "rgb(0, 0, 0)",
+            "zoom": "1",
+            "transform": "none",
+            "filter": "none",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1",
+            "class": "",
+            "tag": "HTML"
+          }
+        ],
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "selector": ".group-tab-kind",
+        "weight": "400",
+        "text": "프로젝트"
+      }
+    ],
+    "viewport": {
+      "height": 900,
+      "width": 1440
+    },
+    "fonts": [
+      {
+        "status": "unloaded",
+        "family": "Achmage SameTone",
+        "weight": "100 900"
+      },
+      {
+        "status": "unloaded",
+        "family": "Achmage SameTone Hangul",
+        "weight": "100 900"
+      },
+      {
+        "status": "loaded",
+        "family": "Pretendard Variable",
+        "weight": "45 920"
+      }
+    ]
+  }
+}

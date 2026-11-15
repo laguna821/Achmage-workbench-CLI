@@ -92,8 +92,8 @@ export async function officeOutputScenario(ctx: Ctx) {
       if(original)api.exportPdf=function(...args){window.__outputCapture={called:true,htmlLength:args[0]?.html?.length,args:args.map(v=>typeof v==='number'||typeof v==='string'?v:typeof v)};return original.apply(this,args).then(result=>{window.__outputCapture.result=result;return result},error=>{window.__outputCapture.error=String(error);throw error})};`);
     await wd.frame(null);
     await wd.execute(`window.__renderMeta=[];addEventListener('message',event=>{const data=event.data;if(data?.type==='office:output'&&data.job?.html)window.__renderMeta.push({action:data.action,htmlLength:data.job.html.length,width:data.job.widthIn,height:data.job.heightIn,scale:data.job.scale,margins:data.job.margins})});`);
-    await wd.click(await wd.waitFor('.doc-header-right .office-file-menu button[aria-label="문서 파일 메뉴"]'));
-    await click("PDF로 내보내기", '.office-file-menu [role="menuitem"]');
+    await wd.click(await wd.waitFor('.doc-header button[aria-label="문서 메뉴"]')); await click("내보내기", '.doc-menu [role="menuitem"]');
+    await click("PDF로 내보내기", '.doc-menu [role="menuitem"]');
     let exportError: string | null = null;
     if (!await until(async () => {
       await wd.frame(null); if (await wd.find(".office-output-dialog")) return true;
@@ -127,8 +127,8 @@ export async function officeOutputScenario(ctx: Ctx) {
     if (format === "docx") ctx.report.check(S, "docx: 추가 빈 쪽 없이 한 쪽 출력", /Pages:\s+1\b/.test(pdfInfo));
     ctx.report.note(S, `${format}: 출력 용지·쪽수`, pdfInfo.match(/Pages:.*|Page size:.*/g));
     if (format === "html") {
-      await wd.click(await wd.waitFor('.doc-header-right .office-file-menu button[aria-label="문서 파일 메뉴"]'));
-      await click("Word로 내보내기", '.office-file-menu [role="menuitem"]');
+      await wd.click(await wd.waitFor('.doc-header button[aria-label="문서 메뉴"]')); await click("내보내기", '.doc-menu [role="menuitem"]');
+      await click("Word로 내보내기", '.doc-menu [role="menuitem"]');
       const wordPath = join(work.cwd, "Exported-html.docx"), wordField = await wd.waitFor('.office-output-dialog input[aria-label="저장할 파일 경로"]');
       await wd.click(wordField); await key("a"); await wd.sendKeys(wordField, wordPath);
       await wd.click(await wd.waitFor('.office-output-dialog button[type="submit"]'));

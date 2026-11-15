@@ -154,12 +154,12 @@ async function loaded(p: Page) {
 try {
   await page.addInitScript((id) => localStorage.setItem("workbench.lastWork", id), work.id);
   await page.goto(`${ready.url}/?token=${ready.token}`);
-  await page.waitForSelector(".docs-button");
-  await page.locator(".docs-button").click();
-  await page.locator(".docs-menu").getByText("비품.xlsx", { exact: true }).click();
+  await page.waitForSelector(".note-head-more");
+  await page.locator(".note-head-more").click();
+  await page.locator(".note-menu").getByText("비품.xlsx", { exact: true }).click();
   await loaded(page);
   await page.screenshot({ path: join(outDir, "01-open.png") });
-  check("문서 화면 안에서 엑셀 편집기로 열림(엔진은 WebAssembly)", (await status(page)).includes("r1 저장됨"), await status(page));
+  check("문서 화면 안에서 엑셀 편집기로 열림(엔진은 WebAssembly)", (await status(page)).includes("1판 저장됨"), await status(page));
 
   const visibleAi = await editorFrame(page)!.locator("body").evaluate(() =>
     Array.from(document.querySelectorAll(".ai-entry, .copilot, .ai-ask-trigger")).filter((el) => el.getClientRects().length > 0).length,
@@ -171,7 +171,7 @@ try {
   await setCell(page, "E2", "=B2+C2");
   await waitStatus(page, "저장 안 됨");
   await page.keyboard.press("Control+s");
-  await waitStatus(page, "r2 저장됨");
+  await waitStatus(page, "2판 저장됨");
   const b2 = await cellOf(2, "B2");
   check("칸 고치고 Ctrl+S → r2, 파일에 반영", b2 === "7", `B2=${b2}`);
   // The engine keeps the total a formula and saves its new value (7 × 1200).
@@ -191,7 +191,7 @@ try {
   // Back; a revision made elsewhere while I have unsaved edits: my save is refused, then kept as the next one.
   await page.locator(".doc-tab-open", { hasText: "비품.xlsx" }).click();
   await loaded(page);
-  await waitStatus(page, "r3 저장됨");
+  await waitStatus(page, "3판 저장됨");
   await setCell(page, "B4", "9");
   await waitStatus(page, "저장 안 됨");
   await editElsewhere("지우개", "연필");
@@ -199,12 +199,12 @@ try {
   await page.screenshot({ path: join(outDir, "03-conflict.png") });
   check("편집 중 다른 곳에서 r4 → 충돌 안내", true, (await page.locator(".doc-conflict").innerText()).replace(/\s+/g, " ").slice(0, 100));
   await page.getByRole("button", { name: "내 편집을 새 판으로" }).click();
-  await waitStatus(page, "r5 저장됨", 60_000);
+  await waitStatus(page, "5판 저장됨", 60_000);
   check("내 편집을 새 판으로 → r5, r4는 기록에 남음", (await cellOf(5, "B4")) === "9" && (await cellOf(4, "A4")) === "연필", `r5 B4=${await cellOf(5, "B4")}`);
 
   // A revision made elsewhere with nothing unsaved here: the editor shows it.
   await editElsewhere("펜", "볼펜");
-  await waitFor("editor shows r6", async () => (await status(page)).includes("r6 저장됨"), 60_000);
+  await waitFor("editor shows r6", async () => (await status(page)).includes("6판 저장됨"), 60_000);
   await loaded(page);
   check("저장 안 된 편집이 없으면 새 판(r6)을 바로 보여 줌", (await page.locator(".doc-conflict").count()) === 0);
 } catch (error) {

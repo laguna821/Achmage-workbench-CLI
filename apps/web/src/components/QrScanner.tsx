@@ -120,7 +120,7 @@ export function QrScanner({ onOffer, onClose }: { onOffer(link: string): void; o
     <div className="host-connection-actions">
       <button type="button" className="button" disabled={camera !== "off" || imageBusy} onClick={() => void start()}>카메라 켜기</button>
       {camera !== "off" ? <button type="button" className="button" onClick={() => { stop(); setMessage("카메라를 껐습니다."); }}>카메라 중단</button> : null}
-      <button type="button" className="button" disabled={imageBusy} onClick={() => { stop(); input.current?.click(); }}>{imageBusy ? "그림 읽는 중…" : "QR 그림 선택"}</button>
+      <button aria-busy={imageBusy ? true : undefined} type="button" className="button" disabled={imageBusy} onClick={() => { stop(); input.current?.click(); }}>{imageBusy ? "그림 읽는 중…" : "QR 그림 선택"}</button>
       <button type="button" className="text-button" onClick={() => { stop(); callbacks.current.onClose(); }}>닫고 링크 붙여넣기</button>
     </div>
     <input ref={input} type="file" accept="image/*" hidden onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void fromImage(file); }} />

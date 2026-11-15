@@ -10,6 +10,8 @@ import { HttpError } from "./errors.ts";
 import { physicalPath, withinDirectory } from "./directory-operations.ts";
 import type { Store } from "./store.ts";
 import type { Workspaces } from "./workspaces.ts";
+import { gatewayOnly } from "./gateway-env.ts";
+import { withEngineTools } from "./engine-env.ts";
 
 const OUTPUT_LIMIT = 2 * 1024 * 1024;
 const active = (status: TerminalSession["status"]) => status === "starting" || status === "running" || status === "stopping";
@@ -26,7 +28,7 @@ export class Terminals {
   private readonly store: Store;
   private readonly spaces: Workspaces;
   private readonly binary: string;
-  constructor(store: Store, spaces: Workspaces, binary = process.env.WORKBENCH_PTY_BIN ?? "") {
+  constructor(store: Store, spaces: Workspaces, binary = gatewayOnly("WORKBENCH_PTY_BIN") ?? "") {
     this.store = store; this.spaces = spaces; this.binary = binary;
     for (const entry of store.terminals()) {
       this.records.set(entry.id, entry);
@@ -63,7 +65,8 @@ export class Terminals {
     if (this.live.size >= 16) throw new HttpError(429, "terminal_limit", "동시에 실행하는 터미널은 최대 16개입니다. 사용하지 않는 터미널을 종료해 주세요.");
     const now = Date.now();
     const entry = this.save({ id: request.requestId, workspaceId, workId: space.workId, hostId: space.hostId, cwd: internal.cwd ?? space.cwd, label: typeof request.label === "string" && request.label.trim() ? request.label.trim().slice(0, 80) : "터미널", shell, args, ...(internal.environment ? { environment: internal.environment } : {}), ...(internal.color ? { color: internal.color } : {}), status: "starting", pid: null, exitCode: null, error: null, cols: 80, rows: 24, outputStart: 0, outputEnd: 0, createdAt: now, updatedAt: now });
-    const child = spawn(this.binary, ["--pty-worker"], { stdio: "pipe", windowsHide: true, cwd: entry.cwd });
+    // The person's terminal keeps the app's tool wrappers on its PATH (they left the gateway's own PATH).
+    const child = spawn(this.binary, ["--pty-worker"], { stdio: "pipe", windowsHide: true, cwd: entry.cwd, env: withEngineTools() });
     let finish!: () => void;
     const running: Running = { child, done: new Promise<void>((resolve) => { finish = resolve; }) };
     this.live.set(entry.id, running);

@@ -1,28 +1,28 @@
 .workspace-trigger { max-width: 260px; }
 .workspace-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-menu { width: min(420px, 80vw); max-height: 65vh; overflow: auto; }
-.workspace-choice { display: flex; align-items: center; border-radius: 6px; }
+.workspace-choice { display: flex; align-items: center; border-radius: var(--radius-pill); }
 .workspace-choice.active { background: var(--hover); }
-.workspace-open { min-width: 0; flex: 1; text-align: left; padding: 8px 10px; border: 0; background: transparent; color: inherit; cursor: pointer; }
-.workspace-open:disabled { opacity: .55; cursor: default; }
+.workspace-open { min-width: 0; flex: 1; text-align: left; padding: var(--space-xs) 10px; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.workspace-open:disabled { color: color-mix(in oklab, var(--muted) 62%, var(--bg)); cursor: not-allowed; }
 .workspace-open strong, .workspace-open small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.workspace-open small { color: var(--muted); font-size: 11px; margin-top: 3px; }
-.workspace-tools { display: flex; gap: 8px; padding-right: 10px; font-size: 11px; }
+.workspace-open small { color: var(--muted); font-size: var(--text-xs); margin-top: 3px; }
+.workspace-tools { display: flex; gap: var(--space-xs); padding-right: 10px; font-size: var(--text-xs); }
 .workspace-form { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px; }
-.workspace-form label { width: 100%; font-size: 12px; }
-.workspace-form input { min-width: 0; flex: 1; width: 200px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; color: inherit; background: var(--paper); }
+.workspace-form label { width: 100%; font-size: var(--text-xs); }
+.workspace-form input { min-width: 0; flex: 1; width: 200px; padding: 6px var(--space-xs); border-width: 1px; border-style: solid; --c-edge: var(--field-line); --c-ink: currentColor; --c-fill: var(--paper); }
 .workspace-git-open { margin: 0 10px 10px; }
 .worktree-dialog { width: min(720px, 92vw); max-height: 85vh; overflow: auto; }
-.worktree-tabs { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-.worktree-list { display: flex; flex-direction: column; gap: 8px; }
-.worktree-row { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--line); padding: 12px 0; }
+.worktree-tabs { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-xs); margin: var(--space-sm) 0; }
+.worktree-list { display: flex; flex-direction: column; gap: var(--space-xs); }
+.worktree-row { display: flex; align-items: center; gap: var(--space-sm); border-top: 1px solid var(--line); padding: var(--space-sm) 0; }
 .worktree-row > div { flex: 1; min-width: 0; }
 .worktree-row strong, .worktree-row code, .worktree-row small { display: block; overflow-wrap: anywhere; }
-.worktree-row code, .worktree-row small { font-size: 11px; color: var(--muted); margin-top: 4px; }
-.worktree-row p, .worktree-error { font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.worktree-create { display: flex; flex-direction: column; gap: 12px; }
-.worktree-create > label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
-.worktree-create input:not([type="checkbox"]) { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: inherit; }
+.worktree-row code, .worktree-row small { font-size: var(--text-xs); color: var(--muted); margin-top: var(--space-2xs); }
+.worktree-row p, .worktree-error { font-size: var(--text-xs); white-space: pre-wrap; overflow-wrap: anywhere; }
+.worktree-create { display: flex; flex-direction: column; gap: var(--space-sm); }
+.worktree-create > label { display: flex; flex-direction: column; gap: var(--space-2xs); font-size: var(--text-xs); }
+.worktree-create input:not([type="checkbox"]) { width: 100%; padding: var(--space-xs); border: 1px solid var(--field-line); border-radius: var(--radius-pill); background: var(--paper); color: inherit; }
 .worktree-create > .worktree-parent { flex-direction: row; align-items: center; }
 .worktree-create > button { align-self: flex-end; }
-.worktree-confirm { padding: 12px 20px 20px; border-top: 1px solid var(--line); font-size: 13px; }
+.worktree-confirm { padding: var(--space-sm) 20px 20px; border-top: 1px solid var(--line); font-size: var(--text-sm); }

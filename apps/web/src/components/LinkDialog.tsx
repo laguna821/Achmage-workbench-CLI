@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LINK_LIMITS, LINK_PRESETS, PROVIDER_LABEL, type Session } from "@workbench/contracts";
-import { accentStyle, useAppearance } from "../appearance.ts";
 import { statusText } from "../format.ts";
 import { linkOfSession, type LinkStart } from "../links.ts";
 import { isBusy, type State } from "../state.ts";
@@ -53,7 +52,6 @@ export function LinkDialog({
   onStart: (start: LinkStart) => Promise<boolean>;
   onClose: () => void;
 }) {
-  const { lookOf } = useAppearance();
   // A session already in a live link cannot join another one.
   const [chosen, setChosen] = useState<string[]>(() => initial.filter((id) => state.sessions[id] && !linkOfSession(state, id)).slice(0, LINK_LIMITS.participants.max));
   const [goal, setGoal] = useState(initialGoal ?? "");
@@ -146,7 +144,7 @@ export function LinkDialog({
                 {chosen.map((id, index) => {
                   const session = state.sessions[id];
                   return session ? (
-                    <span key={id} className="linked-order-chip" style={accentStyle(lookOf(session.provider))}>
+                    <span key={id} className="linked-order-chip">
                       <span className="linked-order-no">{index + 1}</span>
                       <EngineMark provider={session.provider} size={13} />
                       {session.purpose}
@@ -177,7 +175,6 @@ export function LinkDialog({
                     role="option"
                     aria-selected={at !== -1}
                     className={`linked-candidate${at !== -1 ? " chosen" : ""}`}
-                    style={accentStyle(lookOf(session.provider))}
                     disabled={taken || (at === -1 && chosen.length >= LINK_LIMITS.participants.max)}
                     onClick={() => toggle(session)}
                   >
@@ -246,7 +243,7 @@ export function LinkDialog({
                 : "세션을 둘 이상 고르면 시작할 수 있습니다."}
               {usage >= 75 ? ` 5시간 사용량이 ${Math.round(usage)}%입니다. 90%를 넘으면 멈춥니다.` : ""}
             </p>
-            {busy.length ? <p className="linked-warning">응답 중인 세션이 끝나야 시작할 수 있습니다: {busy.map((session) => session.purpose).join(", ")}</p> : null}
+            {busy.length ? <p className="linked-warning">진행 중인 대화가 끝나야 시작할 수 있습니다: {busy.map((session) => session.purpose).join(", ")}</p> : null}
           </section>
         </div>
 

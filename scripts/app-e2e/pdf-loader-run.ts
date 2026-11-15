@@ -28,7 +28,7 @@ try {
   const tabs = [textArtifact, scanArtifact].map((artifact, index) => ({ id: `loader-${index}`, workId: work.id, sessionId: main.id, view: { kind: "document", artifactId: artifact.id, proposalId: null }, ui: { mode: "edit" } }));
   await seedLayout(ctx, { ...(await snapshot()).prefs, paneLayout: { version: 2, focus: "loader-pane", panes: [{ ...tabs[0]!, id: "loader-pane", tabs, activeTabId: tabs[0]!.id, recentTabIds: [tabs[0]!.id] }] } });
   await wd.refresh(); await installProbe(wd); await office(); await installProbe(wd);
-  phase = "setup and extraction"; await click("추출·OCR", ".ribbon-tab"); await wd.waitFor('[aria-label="PDF 추출·OCR"]');
+  phase = "setup and extraction"; await click("글자 추출", ".ribbon-tab"); await wd.waitFor('[aria-label="PDF 글자 추출"]');
   if (!await until(() => wd.execute<boolean>('return document.querySelector("[data-pdf-loader-dialog]")?.textContent.includes("한국어/영어 OCR 준비됨")'), 10000)) throw new Error("Installed runtime state missing");
   report.check(S, "원본 엔진·OCR 준비 상태 표시", true, undefined, await shot(ctx, "runtime-ready.png"));
   await fill('[aria-label="추출할 쪽 범위"]', "2"); await click("본문·표·그림 추출", "[data-pdf-loader-dialog] button");

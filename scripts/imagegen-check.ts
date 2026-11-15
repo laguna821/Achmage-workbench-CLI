@@ -208,7 +208,7 @@ async function flow(provider: Provider) {
     await page.keyboard.type("수업 도입 그림:");
     await until(async () => readFileSync(doc.path, "utf8").includes("수업 도입 그림:"), 6000);
     // Both ways in: the header's "그림" (Codex run) and Ctrl+Alt+G in the editor (Claude run).
-    if (provider === "codex") await page.locator(".draw-here").click();
+    if (provider === "codex") { await page.locator('.doc-header button[aria-label="문서 메뉴"]').click(); await page.locator(".doc-menu [role=menuitem]", { hasText: "여기에 그림 그리기" }).click(); }
     else await page.keyboard.press("Control+Alt+g");
     await page.waitForSelector(".inline-draw textarea");
     await page.locator(".inline-draw textarea").fill("천천히 그리는 초록 나무");
@@ -249,7 +249,7 @@ async function flow(provider: Provider) {
     pass("미리보기에 작업 폴더의 그림이 보임", previewed);
 
     // ── "현재 문서에 넣기" on the card in the conversation ────────────────────────────────────────
-    await page.locator(".doc-header .ghost-button", { hasText: "대화" }).click();
+    await page.locator(".doc-header .doc-back").click();
     await page.waitForSelector(".work-view .image-card.status-done");
     const cards = await page.locator(".work-view .image-card.status-done").count();
     const insertButton = page.locator(".work-view .image-card.status-done").first().locator("button", { hasText: "현재 문서에 넣기" });
@@ -269,7 +269,7 @@ async function flow(provider: Provider) {
 
     // The same in the dark look.
     await api("PUT", "/api/prefs", { prefs: { onboarding: "done", startScreen: "last", theme: "dark" } });
-    await page.locator(".doc-header .ghost-button", { hasText: "대화" }).click();
+    await page.locator(".doc-header .doc-back").click();
     await page.waitForSelector(".work-view .image-card.status-done");
     await page.waitForTimeout(400);
     await page.locator(".draw-pill").click();

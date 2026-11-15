@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import init, { HwpDocument } from "../../third_party/hop/rhwp-core/rhwp.js";
+import init, { HwpDocument, ENGINE_DIR } from "../../third_party/hop/engine.ts";
 import { hwpMemosOf, hwpToText } from "../../third_party/ieumoffice/file-parse/hwp.ts";
 import type { Artifact, Session, Snapshot, TranscriptItem, Work } from "@workbench/contracts";
 import { Kordoc } from "../../apps/host/src/kordoc.ts";
@@ -13,7 +13,7 @@ import { KEY } from "./webdriver.ts";
 const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 export async function hwpScenario(ctx: Ctx) {
   const S = "12 한글 내부 편집", { wd, api } = ctx.app;
-  await init({ module_or_path: readFileSync(resolve("third_party/hop/rhwp-core/rhwp_bg.wasm")) });
+  await init({ module_or_path: readFileSync(resolve(`${ENGINE_DIR}/rhwp_bg.wasm`)) });
   const work = await api<Work>("POST", "/api/works", { title: "한글 내부 편집 검사", cwd: null });
   const session = await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider: "codex" });
   const snapshot = () => api<Snapshot>("GET", "/api/snapshot");

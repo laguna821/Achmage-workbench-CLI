@@ -1,0 +1,39 @@
+/* What the Floor already decided (theme.mjs scaffold furrow --scope app), fitted to a tool someone
+   sits in all day. Kept from the scaffold: box sizing, clipped overflow, the paper and ink on body,
+   selection, the instant focus ring, links that inherit, heads that balance and never touch,
+   tabular figures, reduced motion. Left out on purpose (they would move the layout, U4+ owns it):
+   the page container and gutters, h1/h2/h3 sizes and measures, p max-width, block images and svg,
+   [hidden] !important, the photo slots. Reads only tokens.css. */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { overflow-x: clip; }
+html, body, #root { height: 100%; margin: 0; }
+html { font-size: 16px; scrollbar-color: var(--line-strong) transparent; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: var(--leading-ui);
+  /* Hangul breaks between words, never inside one; a long Latin token still wraps. */
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  caret-color: var(--accent);
+}
+::selection { background: color-mix(in oklab, var(--accent) 24%, transparent); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+a { text-decoration-thickness: 1px; text-underline-offset: 0.16em; }
+h1, h2, h3, h4 { font-family: var(--font-display); font-weight: var(--display-weight); font-synthesis: none; letter-spacing: var(--tracking-display); line-height: var(--leading-head); overflow-wrap: break-word; min-width: 0; text-wrap: balance; }
+p { text-wrap: pretty; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:disabled { cursor: default; }
+input, textarea, select { font: inherit; color: inherit; }
+::placeholder { color: var(--muted); opacity: 1; }
+/* Counts, times, usage and revisions line up as figures. */
+.num, .figure, td.num, time, kbd, .count-chip, .session-time, .usage-row, .count, .badge, .side-count, .tab-count { font-variant-numeric: tabular-nums; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* Reduced motion: every transition and animation ends at once; .keep-motion is for a loader that must still turn. */
+@media (prefers-reduced-motion: reduce) {
+  *:not(.keep-motion), *:not(.keep-motion)::before, *:not(.keep-motion)::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}

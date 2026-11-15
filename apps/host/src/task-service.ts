@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { CommandReceipt, ReceiptObservation, SendResult, Session, SubmitCommand, TaskCommand, TaskSnapshot, TaskSummary, TranscriptItem, TaskRef, NativeTaskSnapshot, NativeTaskIdentity, NativeTaskControl, NativeTaskDetail } from "@workbench/contracts";
+import type { CommandReceipt, ReceiptObservation, RequestOrigin, SendResult, Session, SubmitCommand, TaskCommand, TaskSnapshot, TaskSummary, TranscriptItem, TaskRef, NativeTaskSnapshot, NativeTaskIdentity, NativeTaskControl, NativeTaskDetail } from "@workbench/contracts";
 import { HttpError } from "./errors.ts";
 import type { Store } from "./store.ts";
 import type { EventBus } from "./bus.ts";
@@ -19,7 +19,7 @@ export function reconcileReceipt(current: CommandReceipt, observed: ReceiptObser
 }
 
 type Hooks = {
-  submit?(input: SubmitCommand, source?: "schedule"): Promise<SendResult>;
+  submit?(input: SubmitCommand, source?: "schedule", origin?: RequestOrigin): Promise<SendResult>;
   nativeTasks?(session: Session): NativeTaskSnapshot[];
   refreshNative?(session: Session): Promise<NativeTaskSnapshot[]>;
   controlNative?(session: Session, target: NativeTaskIdentity, command: NativeTaskControl): Promise<void>;
@@ -38,6 +38,8 @@ export class TaskService {
   private readonly bus: EventBus;
   private readonly hooks: Hooks;
   private readonly unsubscribe: () => void;
+  /** Hides stored credential values in what sub-agents show (previews, their items); see credentials/install.ts. */
+  scrub: (<T>(value: T) => T) | null = null;
   constructor(store: Store, bus: EventBus, hooks: Hooks) {
     this.store = store; this.bus = bus; this.hooks = hooks;
     // A previous process may have performed a command without receiving its result. Never replay it.
@@ -77,7 +79,8 @@ export class TaskService {
       .sort((a, b) => Number(active.has(b.state)) - Number(active.has(a.state)) || b.updatedAt - a.updatedAt) };
   }
 
-  observeNative(sessionId: string, observed: NativeTaskSnapshot[]) {
+  observeNative(sessionId: string, seen: NativeTaskSnapshot[]) {
+    const observed = this.scrub ? this.scrub(seen) : seen;
     const session = this.hooks.sessions().find(entry => entry.id === sessionId);
     if (!session) return;
     const before = this.store.getMeta(nativeKey(sessionId));
@@ -96,7 +99,8 @@ export class TaskService {
   private nativeFor(session: Session) {
     const raw = this.store.getMeta(nativeKey(session.id));
     const merged = new Map((raw ? JSON.parse(raw) as NativeTaskSnapshot[] : []).map(task => [nativeId(task), task]));
-    for (const live of this.hooks.nativeTasks?.(session) ?? []) {
+    const current = this.hooks.nativeTasks?.(session) ?? [];
+    for (const live of this.scrub ? this.scrub(current) : current) {
       const prior = merged.get(nativeId(live));
       merged.set(nativeId(live), { ...live, parentRequestId: live.parentRequestId ?? prior?.parentRequestId ?? null });
     }
@@ -116,7 +120,8 @@ export class TaskService {
     if (!session || session.hostId !== target.hostId || (session.workspaceId ?? null) !== target.workspaceId) throw new HttpError(409, "task_target_mismatch", "다른 작업공간의 작업입니다.");
     const task = this.forSession(session).find(entry => entry.runId === target.runId && entry.executorKind === "native_agent");
     if (!task?.nativeTask || !this.hooks.nativeHistory) throw new HttpError(409, "native_history_unavailable", "원본 상태를 먼저 확인하세요. 공급자가 식별한 하위 작업에만 기록을 연결합니다.");
-    const result = await this.hooks.nativeHistory(session, task.nativeTask);
+    const history = await this.hooks.nativeHistory(session, task.nativeTask);
+    const result = this.scrub ? this.scrub(history) : history;
     return { task, ...result };
   }
 
@@ -182,7 +187,8 @@ export class TaskService {
   private save(receipt: CommandReceipt) { this.store.setMeta(receiptKey(receipt.commandId), JSON.stringify(receipt)); return receipt; }
 
   /** CLI, MCP and UI automation share the existing session send gate and request journal. */
-  async submit(input: SubmitCommand, source?: "schedule"): Promise<CommandReceipt> {
+  /** `origin`: a schedule made from a paired messenger chat (the gateway's own caller only). */
+  async submit(input: SubmitCommand, source?: "schedule", origin?: RequestOrigin): Promise<CommandReceipt> {
     if (!input || typeof input.commandId !== "string" || !/^[\w.-]{1,160}$/.test(input.commandId) || typeof input.text !== "string" || !input.text.trim() || input.text.length > 100_000)
       throw new HttpError(400, "task_submit_invalid", "명령 ID와 요청 본문이 필요합니다.");
     if (input.mode !== undefined && !["auto", "queue", "steer"].includes(input.mode)) throw new HttpError(400, "task_mode", "지원하지 않는 전송 방식입니다.");
@@ -202,7 +208,7 @@ export class TaskService {
       status: "accepted", resultRef: null, detail: null, createdAt: now, updatedAt: now };
     this.save(receipt);
     try {
-      const result = await this.hooks.submit(input, source);
+      const result = await this.hooks.submit(input, source, origin);
       receipt = { ...reconcileReceipt(receipt, { kind: "observed", status: "completed", detail: result.delivery === "queued" ? "다음 요청으로 대기합니다." : result.delivery === "steered" ? "진행 중인 작업에 전달했습니다." : "요청을 전달했습니다." }), resultRef: runKey(session.id, input.commandId) };
     } catch (error) {
       receipt = { ...receipt, status: error instanceof HttpError && error.status < 500 ? "rejected" : "outcome_unknown", detail: error instanceof Error ? error.message : String(error), updatedAt: Date.now() };

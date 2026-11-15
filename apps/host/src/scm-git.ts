@@ -1,3 +1,4 @@
+import { ownTool } from "./own-tools.ts";
 import { spawn } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 
@@ -14,7 +15,7 @@ export function scmGit(cwd: string, args: string[], options: GitOptions = {}): P
   if (options.noLazyFetch) { (env as NodeJS.ProcessEnv).GIT_NO_LAZY_FETCH = "1"; (env as NodeJS.ProcessEnv).GIT_ALLOW_PROTOCOL = ""; }
   return new Promise((resolve, reject) => {
     if (options.signal?.aborted) { reject(new Error("Git 작업을 중단했습니다.")); return; }
-    const child = spawn("git", ["--no-pager", "--no-optional-locks", "--literal-pathspecs", "-c", "core.quotePath=false", "-c", "core.fsmonitor=false", "-C", cwd, ...args], { env, windowsHide: true, detached: process.platform !== "win32", stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn(ownTool("git"), ["--no-pager", "--no-optional-locks", "--literal-pathspecs", "-c", "core.quotePath=false", "-c", "core.fsmonitor=false", "-C", cwd, ...args], { env, windowsHide: true, detached: process.platform !== "win32", stdio: ["pipe", "pipe", "pipe"] });
     const chunks: Buffer[] = []; let size = 0, stderr = "", failure: Error | null = null;
     let closed = false, stopTimer: ReturnType<typeof setTimeout> | undefined;
     const signalOwned = (signal: NodeJS.Signals) => {

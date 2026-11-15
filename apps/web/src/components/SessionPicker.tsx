@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PROVIDER_LABEL, type Provider, type Session } from "@workbench/contracts";
-import { accentStyle, useAppearance } from "../appearance.ts";
 import { statusText } from "../format.ts";
-import { isBusy, type State } from "../state.ts";
+import { type State } from "../state.ts";
 import { EngineMark } from "./EngineMark.tsx";
 import { Icon } from "./Icon.tsx";
 
@@ -25,7 +24,6 @@ export function SessionPicker({
   onNew: (provider: Provider) => void;
   onClose: () => void;
 }) {
-  const { lookOf } = useAppearance();
   const [query, setQuery] = useState("");
   const [focus, setFocus] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -79,7 +77,6 @@ export function SessionPicker({
                 key={session.id}
                 type="button"
                 className={`picker-row${index === focus ? " focused" : ""}`}
-                style={accentStyle(lookOf(session.provider))}
                 onClick={() => onPick(session)}
                 onMouseEnter={() => setFocus(index)}
               >
@@ -87,7 +84,7 @@ export function SessionPicker({
                   <EngineMark provider={session.provider} size={15} /> {session.purpose}
                 </span>
                 <span className="picker-meta">
-                  {PROVIDER_LABEL[session.provider]} · {state.hostLabel} · {isBusy(session) ? statusText(session) : "대기 중"}
+                  {[PROVIDER_LABEL[session.provider], state.hostLabel, statusText(session)].filter(Boolean).join(", ")}
                   {session.workId !== workId && work ? ` · ${work.title}` : ""}
                 </span>
               </button>
@@ -99,7 +96,7 @@ export function SessionPicker({
           <span className="muted">다른 작업의 세션도 찾을 수 있습니다.</span>
           <span className="picker-new">
             {(["claude", "codex"] as const).map((provider) => (
-              <button key={provider} type="button" className="text-button" style={accentStyle(lookOf(provider))} onClick={() => onNew(provider)}>
+              <button key={provider} type="button" className="text-button" onClick={() => onNew(provider)}>
                 <EngineMark provider={provider} size={14} /> 새 {PROVIDER_LABEL[provider]} 세션에
               </button>
             ))}

@@ -114,3 +114,9 @@ export const asLink = (value: string) => {
   const text = value.trim();
   return !text || /^\[\[.*\]\]$/.test(text) || /^[a-z]+:\/\//i.test(text) ? text : `[[${text}]]`;
 };
+
+/** A decision or question line as the note keeps it ("2026-11-12 정한 것 — 출처"): its day and its words. */
+export function entryParts(text: string): { date: string | null; rest: string } {
+  const match = /^(\d{4}-\d{2}-\d{2})\s+(\S[\s\S]*)$/.exec(text.trim());
+  return match ? { date: match[1]!, rest: match[2]! } : { date: null, rest: text };
+}

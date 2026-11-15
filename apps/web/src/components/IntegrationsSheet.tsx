@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { failure, type Notify } from "../top-notice.ts";
 import type { IntegrationsView, McpDefinition } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import { Icon } from "./Icon.tsx";
@@ -10,7 +11,7 @@ const ENGINE_LABEL: Record<Engine, string> = { claude: "Claude", codex: "Codex" 
 function describe(definition: McpDefinition) {
   if (definition.type !== "stdio") return definition.url ?? definition.type;
   const env = Object.keys(definition.env);
-  return `${[definition.command, ...definition.args].join(" ")}${env.length ? ` · 환경변수 ${env.join(", ")}` : ""}`;
+  return `${[definition.command, ...definition.args].join(" ")}${env.length ? ` (환경 값 ${env.join(", ")})` : ""}`;
 }
 
 /** Servers that live inside the Codex app or one of its plugins: they only work there. */
@@ -29,7 +30,7 @@ function Cell({ present, enabled }: { present: boolean; enabled?: boolean }) {
  * own: this is the engines' configuration. Copying to the other engine happens only on a click,
  * after showing where it will be written, through the engine's own command.
  */
-export function IntegrationsSheet({ api, onClose, onToast }: { api: Api; onClose: () => void; onToast: (message: string) => void }) {
+export function IntegrationsSheet({ api, onClose, onToast }: { api: Api; onClose: () => void; onToast: Notify }) {
   const [view, setView] = useState<IntegrationsView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -59,7 +60,7 @@ export function IntegrationsSheet({ api, onClose, onToast }: { api: Api; onClose
       setView(await pending.action());
       onToast(pending.done);
     } catch (reason) {
-      onToast(reason instanceof Error ? reason.message : String(reason));
+      onToast(failure(reason));
     } finally {
       setBusy(null);
       setPending(null);
@@ -67,15 +68,15 @@ export function IntegrationsSheet({ api, onClose, onToast }: { api: Api; onClose
   };
 
   return (
-    <aside className="appearance-sheet integrations-sheet" aria-label="MCP와 스킬">
+    <aside className="appearance-sheet integrations-sheet" aria-label="도구 연결과 스킬">
       <div className="sheet-head">
-        <h2>MCP · 스킬</h2>
+        <h2>도구 연결과 스킬</h2>
         <button type="button" className="icon-button" onClick={onClose} aria-label="닫기">
           <Icon name="x" size={18} />
         </button>
       </div>
       <div className="sheet-body">
-        <button className="button small" onClick={() => setLibrary(true)}>양식·스킬 보관함</button>
+        <button className="button small" onClick={() => setLibrary(true)}>양식과 스킬 보관함</button>
         {library ? <SkillLibraryDialog api={api} onClose={() => setLibrary(false)} /> : null}
         <p className="sheet-hint">
           터미널의 Claude Code·Codex와 같은 설정입니다. Workbench는 따로 목록을 두지 않고, 누를 때만 각 엔진의 공식 명령으로 추가합니다.
@@ -85,7 +86,7 @@ export function IntegrationsSheet({ api, onClose, onToast }: { api: Api; onClose
           <div className="integration-confirm" role="alertdialog" aria-label="쓰기 확인">
             <pre>{pending.text}</pre>
             <div className="integration-confirm-actions">
-              <button type="button" className="button small primary" disabled={busy !== null} onClick={() => void confirm()}>
+              <button aria-busy={busy ? true : undefined} type="button" className="button small primary" disabled={busy !== null} onClick={() => void confirm()}>
                 {busy ? "쓰는 중…" : "그대로 쓰기"}
               </button>
               <button type="button" className="button small" disabled={busy !== null} onClick={() => setPending(null)}>

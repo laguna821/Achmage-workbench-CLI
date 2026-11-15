@@ -47,8 +47,8 @@ function Dialog({ close }: { close(): void }) {
   };
   const installing = state?.state === "installing";
   return <div className="pdf-modal-mask" onKeyDown={event => { event.stopPropagation(); if (event.key === "Escape" && !busy) close(); }}>
-    <div className="pdf-modal" role="dialog" aria-modal="true" aria-label="PDF 추출·OCR" style={{ width: "min(680px, 92vw)", maxHeight: "90vh", overflow: "auto" }}>
-      <h2>PDF 추출·OCR</h2>
+    <div className="pdf-modal" role="dialog" aria-modal="true" aria-label="PDF 글자 추출" style={{ width: "min(680px, 92vw)", maxHeight: "90vh", overflow: "auto" }}>
+      <h2>PDF 글자 추출</h2>
       <p>본문·표·그림을 추출하고 스캔 문서의 글자를 읽습니다. 문서는 이 컴퓨터에서 처리합니다.</p>
       <p>OpenDataLoader {state?.version ?? ""} · 본문 추출 {state?.coreReady ? "준비됨" : "미설치"} · 한국어/영어 OCR {state?.ocrReady ? "준비됨" : "미설치"}</p>
       {!state?.ocrReady && <p>추가 도구와 OCR 모델은 최초 설치 때 내려받습니다. OCR에는 수 GB의 여유 공간이 필요할 수 있습니다.</p>}
@@ -82,5 +82,5 @@ export function PdfLoaderButton() {
     const node = document.createElement("div"); node.dataset.pdfLoaderDialog = "true"; document.body.append(node);
     const root = createRoot(node); const close = () => { root.unmount(); node.remove(); };
     root.render(<Dialog close={close} />);
-  }}>추출·OCR</button>;
+  }}>글자 추출</button>;
 }

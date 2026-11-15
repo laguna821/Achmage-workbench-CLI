@@ -1,0 +1,71 @@
+Achmage Workbench — rhwp v0.9.0 form of a 0.8.7 engine patch (third_party/hop/patches-0.9.0).
+Origin: Ieum 0014 (vendor/ieumoffice/vendor/rhwp-core/patches/0014-page-number-pos-insert.patch, sha256 627ad658f948963693ed2ada898482f62d5a974716370613ea78ce45644e0c0d; original author not named in the patch)
+Status: ported
+Differs from the 0.8.7 form: upstream has the feature as setPageNumberPosition/getPageNumberPosition (#7635: arguments position, format; results {ok,controlIdx,removed} / {ok,exists,position,format,dash}; formats 0..16). The 0.9.0 form keeps only Ieum's JS names, argument order, 0..7 format limit (HWPX cannot hold more) and result shapes for the vendored studio plugin, implemented by upstream's native functions; the 0.8.7 insertion, HWPX parse/serialize hunks are upstream.
+Regression test: vendor/ieumoffice/apps/hwp/tests/page-number.test.ts (9 tests) against the built WASM; upstream page_number_position_api
+
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: h4a <h4a@localhost>
+Date: Sat, 14 Nov 2026 13:54:44 +0900
+Subject: [PATCH] Ieum 0014 page number pos (0.9.0 form: the 0.8.7 names on
+ upstream #7635)
+
+
+diff --git a/src/wasm_api.rs b/src/wasm_api.rs
+index 050d04e7..b96337a4 100644
+--- a/src/wasm_api.rs
++++ b/src/wasm_api.rs
+@@ -9201,6 +9201,53 @@ impl HwpDocument {
+             .map_err(|e| e.into())
+     }
+ 
++    /// [Ieum 0014, 0.9.0 form] 구역의 쪽 번호 위치 지정 (쪽 > 쪽 번호 매기기). 구역에 이미 있으면
++    /// 그 설정을 바꾼다. 0.8.7 의 이음 이름·인자 차례·결과 모양을 그대로 두고, 일은 upstream
++    /// `setPageNumberPosition`(#7635)이 한다. format: 번호 모양 0~7 (HWPX 에서도 쓸 수 있는 것),
++    /// position: 표시 위치 0~10. 결과 `{"ok":true,"replaced":bool}`.
++    #[wasm_bindgen(js_name = setPageNumberPos)]
++    pub fn set_page_number_pos(
++        &mut self,
++        section_idx: u32,
++        format: u32,
++        position: u32,
++        dash: bool,
++    ) -> Result<String, JsValue> {
++        if format > 7 {
++            return Err(JsValue::from_str("format must be 0~7"));
++        }
++        if position > 10 {
++            return Err(JsValue::from_str("position must be 0~10"));
++        }
++        let result = self
++            .set_page_number_position_native(section_idx as usize, position as u8, format as u8, dash)
++            .map_err(JsValue::from)?;
++        let value: serde_json::Value =
++            serde_json::from_str(&result).map_err(|e| JsValue::from_str(&e.to_string()))?;
++        let replaced = value["removed"]
++            .as_array()
++            .is_some_and(|removed| !removed.is_empty());
++        Ok(format!("{{\"ok\":true,\"replaced\":{replaced}}}"))
++    }
++
++    /// [Ieum 0014, 0.9.0 form] 구역의 쪽 번호 위치 (`{"ok":true,"pageNumber":{format,position,dash}|null}`),
++    /// upstream `getPageNumberPosition`(#7635)에서 읽는다.
++    #[wasm_bindgen(js_name = getPageNumberPos)]
++    pub fn get_page_number_pos(&self, section_idx: u32) -> Result<String, JsValue> {
++        let result = self
++            .get_page_number_position_native(section_idx as usize)
++            .map_err(JsValue::from)?;
++        let value: serde_json::Value =
++            serde_json::from_str(&result).map_err(|e| JsValue::from_str(&e.to_string()))?;
++        if value["exists"].as_bool() != Some(true) {
++            return Ok("{\"ok\":true,\"pageNumber\":null}".to_string());
++        }
++        Ok(format!(
++            "{{\"ok\":true,\"pageNumber\":{{\"format\":{},\"position\":{},\"dash\":{}}}}}",
++            value["format"], value["position"], value["dash"]
++        ))
++    }
++
+     /// 문단 서식을 적용한다 (본문 문단).
+     /// 문단 번호 시작 방식 설정
+     #[wasm_bindgen(js_name = setNumberingRestart)]

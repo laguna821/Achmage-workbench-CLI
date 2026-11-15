@@ -40,11 +40,14 @@ const capture = async (name: string) => {
   console.log(file);
 };
 const waitIdle = async (p: Page) => {
-  await p.waitForFunction(() => document.querySelector(".status-pill")?.textContent?.includes("대기 중"), null, { timeout: 240_000 });
+  await p.waitForFunction(() => document.querySelector(".note-props")?.textContent?.includes("대기 중"), null, { timeout: 240_000 });
 };
 
+// The top bar's ⋯ (더 보기) holds 밝은/어두운 화면으로 and the way into 설정.
+const more = () => page.locator('.topbar-right button[aria-label="더 보기"]').click();
 const toggleTheme = async () => {
-  await page.locator('.topbar-right button[aria-label$="화면으로"]').click();
+  await more();
+  await page.locator(".shell-theme").click();
   await page.waitForTimeout(300);
 };
 
@@ -65,9 +68,9 @@ try {
   await page.waitForSelector(".turn-user");
   await page.waitForTimeout(700);
   await capture("claude-waiting-light");
-  await page.waitForSelector(".turn-assistant .markdown", { timeout: 240_000 });
+  await page.waitForSelector(".turn-answer .markdown", { timeout: 240_000 });
   await capture("claude-streaming-light");
-  await page.waitForSelector(".turn-assistant .markdown:not(.streaming)", { timeout: 240_000 });
+  await page.waitForSelector(".turn-answer .markdown:not(.streaming)", { timeout: 240_000 });
   await waitIdle(page);
   await capture("claude-reply-light");
 
@@ -100,7 +103,11 @@ try {
   await page.keyboard.press("Enter");
   await page.waitForTimeout(500);
   await capture("finder-light");
-  await page.locator('.topbar-right button[aria-label="연결과 설정"]').click();
+  await more();
+  await page.waitForTimeout(300);
+  await capture("more-menu-light");
+  await page.locator(".shell-settings").click();
+  await page.waitForSelector(".settings-dialog[open] .settings-pane");
   await page.waitForTimeout(300);
   await capture("settings-menu-light");
 } finally {

@@ -184,7 +184,7 @@ export class PdfLoader {
     this.idle = setTimeout(() => { if (this.active === 0) this.server?.child.kill("SIGTERM"); else this.armIdle(); }, 180000); this.idle.unref();
   }
   async extract(bytes: Uint8Array, options: { pages?: number[]; password?: string; ocr?: boolean; images?: boolean; signal?: AbortSignal } = {}): Promise<PdfExtractResult> {
-    const core = this.core(); if (!core) throw new Error("PDF 추출·OCR 설정에서 OpenDataLoader를 먼저 설치해 주세요.");
+    const core = this.core(); if (!core) throw new Error("PDF 글자 추출 창에서 OpenDataLoader를 먼저 설치해 주세요.");
     if (bytes.length > 200_000_000 || !Buffer.from(bytes.subarray(0, 1024)).includes(Buffer.from("%PDF-"))) throw new Error("PDF 파일이 올바르지 않습니다.");
     if (options.pages && (options.pages.length > 20000 || options.pages.some(p => !Number.isSafeInteger(p) || p < 1))) throw new Error("PDF 페이지 범위가 올바르지 않습니다.");
     const key = hash(bytes) + JSON.stringify([options.pages, options.ocr, options.images]);
@@ -197,7 +197,7 @@ export class PdfLoader {
       if (options.pages?.length) args.push("--pages", options.pages.join(","));
       if (options.password !== undefined) args.push("--password", options.password);
       if (options.ocr) {
-        const python = this.python(); if (!python) throw new Error("PDF 추출·OCR 설정에서 한국어·영어 OCR을 설치해 주세요.");
+        const python = this.python(); if (!python) throw new Error("PDF 글자 추출 창에서 한국어·영어 OCR을 설치해 주세요.");
         const url = await this.startServer(python, options.signal); args.push("--hybrid", "docling-fast", "--hybrid-mode", "full", "--hybrid-url", url, "--hybrid-timeout", "180000");
       }
       await this.run(core.java, args, options.signal, options.ocr ? 300000 : 180000);

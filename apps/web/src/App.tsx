@@ -1,39 +1,64 @@
 import { DesktopTargetPicker } from "./components/DesktopTargetPicker.tsx";
+import { forgetUnread, keepUnread } from "./kept-unread.ts";
 import { MobilePushSettings } from "./components/MobilePushSettings.tsx";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { GLOBAL_LAYOUT, PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type Attachment, type CreateTarget, type DocRef, type ProjectPick, type Proposal, type Provider, type Session, type SessionStatus, type UiPrefs, type Work, type Workspace } from "@workbench/contracts";
+import { GLOBAL_LAYOUT, PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type Attachment, type CreateTarget, type DocRef, type DocumentRemovalPlan, type ProjectPick, type Proposal, type Provider, type Session, type SessionStatus, type UiPrefs, type Work, type Workspace } from "@workbench/contracts";
 import { Api, ApiRequestError, readToken } from "./api.ts";
+import { saveBlobAs } from "./mobile-platform.ts";
 import { VoiceEnvironment } from "./voice/context.ts";
 import { ExtensionLibrary } from "./components/ExtensionLibrary.tsx";
 import { EventHub } from "./components/EventHub.tsx";
-import { AttentionInbox, CompletionNotifications, watchAttentionPresence } from "./completion-notifications.ts";
+import { PhoneMessenger } from "./components/PhoneMessenger.tsx";
+import { VaultPanel } from "./components/VaultPanel.tsx";
+import { AttentionInbox, CompletionNotifications, ShownPanels, ShownPanelsContext, completionSurface, sessionsOnScreen, visibleSessionIds, watchAttentionPresence } from "./completion-notifications.ts";
 import { SharedBrowser, type BrowserNativeCommand } from "./browser-state.ts";
 import { BrowserView, NewBrowserDialog, openBrowserTab, type BrowserTarget } from "./components/BrowserView.tsx";
 import type { AttentionPayload, SequencedEvent } from "@workbench/contracts";
 import { useOfficeControl } from "./office-control.ts";
 import { configureDesign } from "./design.ts";
 import { initialState, isBusy, reducer, sessionsOf } from "./state.ts";
+import { becomesActive, lookingChangesState, opensBeside, restoreRefusal, restoredAgentPlan, sessionEntries, sessionRoute } from "./session-route.ts";
 import { applyPanePreset, type PanePreset } from "./layout-presets.ts";
 import { WorkspaceLayoutTools, PaneStart, WorkLinkDialog } from "./components/WorkspaceLayoutTools.tsx";
 import { newRequestId, titleFrom, statusText } from "./format.ts";
-import { folderChoices, readOpenState, workSessions, type Move, type Row, type SortMode, type TreeOpenState } from "./tree.ts";
-import { Connections } from "./components/Connections.tsx";
+import { folderChoices, readOpenState, sessionHidden, workSessions, type Move, type Row, type SortMode, type TreeOpenState } from "./tree.ts";
+import { AboutSection, AdvancedSection, DevicesSection, DocumentsSection, EditorAiRow, EnginesSection, GeneralSection } from "./components/Connections.tsx";
+import { SettingsSheet, SETTINGS_SECTIONS, readSettingsSection, type SettingsSection } from "./components/SettingsSheet.tsx";
+import { OnboardingModelCache } from "./components/onboarding/ModelCache.tsx";
 import type { BrowserActions } from "./components/BrowserPill.tsx";
 import { EditableText } from "./components/EditableText.tsx";
 import { Icon } from "./components/Icon.tsx";
+import { TopNotice } from "./components/TopNotice.tsx";
+import { EMPTY_NOTICES, asSlot, failure, noticeReducer, type Notify } from "./top-notice.ts";
+import { Wordmark, BrandSymbol, useBrandGreeting } from "./components/BrandMark.tsx";
 import { Popover } from "./components/Popover.tsx";
-import { Sidebar, type SidebarActions } from "./components/Sidebar.tsx";
+import { Sidebar, type PrefsPatch, type SidebarActions } from "./components/Sidebar.tsx";
+import type { WebRowActions } from "./components/nav/WebRows.tsx";
+import { Rail, type RailPlace } from "./components/nav/Rail.tsx";
+import { TopSearch } from "./components/nav/TopSearch.tsx";
+import { usePhoneWidth } from "./mobile-layout.ts";
+import { readNavigator, type RailDest } from "./components/nav/model.ts";
+import { STARTS_AT_NOW, litPlace, placePrefix, useListFollows, useNavPlace } from "./components/nav/place.ts";
+import { renameFirst } from "./components/nav/menu-order.ts";
+import { RightSidebar, sideNoteOf, useRightSidebar } from "./components/right/RightSidebar.tsx";
 import { requestNavigatorFocus } from "./components/nav/focus.ts";
+import { FromMenu } from "./components/nav/dialogs.tsx";
+import type { DocModes } from "./components/note/ConversationHead.tsx";
+import { addShortcuts, readShortcuts, sameShortcut } from "./components/nav/model.ts";
+import { RenameDialog } from "./components/RenameDialog.tsx";
+import { EDITOR_MIN_WIDTH, documentAttentionSession, type AgentReveal } from "./components/docs/document-modes.ts";
 import { ContextMenu, type MenuEntry, type MenuRequest } from "./components/ContextMenu.tsx";
 import { createActions, creationWorkspace, type CreateAction } from "./create-actions.ts";
 import { NewDirectoryDialog } from "./components/NewDirectoryDialog.tsx";
 import { SearchPalette, type PaletteCommand, type PaletteMode } from "./components/SearchPalette.tsx";
 import { ArchiveView } from "./components/ArchiveView.tsx";
 import { ProjectDeleteDialog } from "./components/ProjectDeleteDialog.tsx";
+import { ConfirmDialog } from "./components/ConfirmDialog.tsx";
+import { EditorRegistry, leaveEditors, removeAfterSaving, type EditorHandle } from "./doc-editors.ts";
 import { StartView, useEngineChoice } from "./components/StartView.tsx";
 import { WorkView, type WorkActions } from "./components/WorkView.tsx";
 import type { DrawState } from "./components/ImageGen.tsx";
-import { AppearanceSheet, type SheetTarget } from "./components/AppearanceSheet.tsx";
+import { AppearancePanel, type SheetTarget } from "./components/AppearanceSheet.tsx";
 import { EngineMenu } from "./components/EngineMenu.tsx";
 import { Switcher, UnseenContext } from "./components/SessionCards.tsx";
 import { DocContext, FormatBadge, type DocActions } from "./components/DocCards.tsx";
@@ -52,6 +77,10 @@ import { OfficeDrive } from "./components/OfficeDrive.tsx";
 import { DropboxDialog } from "./components/DropboxDialog.tsx";
 import { KnowledgeLibrary } from "./components/KnowledgeLibrary.tsx";
 import { Onboarding } from "./components/Onboarding.tsx";
+import { ItemIcon } from "./components/ItemIcon.tsx";
+import { UsageLine } from "./components/UsageCard.tsx";
+import { LaunchCredit } from "./components/LaunchCredit.tsx";
+import { LicenceList } from "./components/LicenceList.tsx";
 import type { EngineActions } from "./components/EngineSetup.tsx";
 import { SessionPicker } from "./components/SessionPicker.tsx";
 import { LinkLayer } from "./components/LinkCards.tsx";
@@ -65,8 +94,13 @@ import { ShortcutSettings } from "./components/ShortcutSettings.tsx";
 import { TemplateDialog } from "./components/project/TemplateDialog.tsx";
 import { FolderTemplateDialog } from "./components/project/FolderTemplateDialog.tsx";
 import { LinkContext, hopsText, linkOfSession, useLinkApi } from "./links.ts";
-import { SplitView, WorkModeBar, useWorkModeKeys } from "./components/WorkModes.tsx";
-import { keepPosition, keptPosition, modeOf, readingPosition, restorePosition, reviewProposal, viewFor, type ModeProps, type ReadingPosition, type WorkMode } from "./workmodes.ts";
+import { Beside, useBesideRoom } from "./components/companion/Beside.tsx";
+import { heldPageMayClose } from "./held-page.ts";
+import { projectChoiceMoves, useOverlayKeep } from "./overlay-keep.ts";
+import { besideOf, isCompanion, readMinimum, oneViewPerDocument, upgradeStoredLayout, viewDocument, viewsOfDocument, viewsOfPage, withoutCompanion, type Companion } from "./companion.ts";
+import { createDesk, settleLayout } from "./companion-desk.ts";
+import { MoveQuestion } from "./components/companion/MoveQuestion.tsx";
+import { keepPosition, keptPosition, modeDocument, modeOf, readingPosition, restorePosition, reviewProposal, useWorkModeKeys, type ModeProps, type ReadingPosition, type WorkMode } from "./workmodes.ts";
 import { detachSession, showInWindow, windowSession } from "./windows.ts";
 import { PkmProvider, type PkmApi } from "./components/pkm/PkmContext.tsx";
 import { VaultDialogHost, VaultSettingsRow } from "./components/pkm/VaultDialog.tsx";
@@ -74,16 +108,17 @@ import { PkmCenter, pkmTitle } from "./components/pkm/PkmCenter.tsx";
 import { ProjectView } from "./components/project/ProjectView.tsx";
 import type { PkmTarget } from "./pkm.ts";
 import { entryClient, homeTarget, sessionToOpen, unseenFailure } from "./entry.ts";
+import { isWorking, needsCount, readHomeMode, rowState } from "./overview.ts";
 import { WorksDirRow } from "./components/WorksDirRow.tsx";
 import { EngineMark } from "./components/EngineMark.tsx";
 import { LeaveGate } from "./leave-gate.ts";
-import { LayoutPersistence } from "./layout-persistence.ts";
-import { activeTab, activateTab, addBackgroundTab, closeTab, contentKey, findTab, moveTab, tabsOf, updateTabUi, updateTabView, withTabs } from "./tabs.ts";
+import { LayoutPersistence, keepChosen, layoutKey, skippedNotice } from "./layout-persistence.ts";
+import { activeTab, activateTab, addBackgroundTab, closeTab, contentKey, dropTabs, findTab, lastTabOf, moveTab, paneScopes, projectOfTab, setTabKeeper, storedTabs, tabsOf, updateTabUi, updateTabView, withTabs } from "./tabs.ts";
 import { PaneLayout, type PaneHead, type PaneScope } from "./components/Panes.tsx";
 import { NewDocumentDialog, type NewDocumentTarget } from "./components/NewDocumentButton.tsx";
 import { IeumAppDialog } from "./components/IeumAppDialog.tsx";
 import { OfficeImportDialog } from "./components/OfficeImportDialog.tsx";
-import { closePane, effectAt, focusPane, focusedPane, movePane, otherPane, paneById, placeAt, resizeSplit, restoreLayout, setPane, shownElsewhere, singleLayout, splitPane, MAX_PANES, type Layout, type Pane, type PaneContent, type PaneId, type PaneItem, type PaneTarget, type Side, type TabUiState } from "./panes.ts";
+import { closePane, effectAt, focusPane, focusedPane, movePane, otherPane, paneById, placeAt, readLayout, resizeSplit, restoreLayout, setPane, shownElsewhere, singleLayout, splitPane, treeOf, minimumSize, MAX_PANES, MIN_PANE, type Layout, type ParkedTab, type Pane, type PaneContent, type PaneId, type PaneItem, type PaneTab, type PaneTarget, type Side, type TabUiState } from "./panes.ts";
 import { PaneActionsContext, type PaneActions } from "./panedrag.ts";
 
 // Editors (CodeMirror, PDF.js) load only when a document opens.
@@ -91,9 +126,14 @@ const DocumentView = lazy(() => import("./components/docs/DocumentView.tsx"));
 const Reader = lazy(() => import("./components/Reader.tsx"));
 const TerminalView = lazy(() => import("./components/TerminalView.tsx"));
 import { AppearanceContext, DEFAULT_APPEARANCE, engineTheme, lookStyle, readAppearance, type AppearanceApi } from "./appearance.ts";
-import { isThemePref, resolveTheme, setRootTheme, useSystemTheme, type ThemePref } from "./theme.ts";
+import { isThemePref, readPalette, readUiFont, readUsagePlace, resolveTheme, setRootPalette, setRootTheme, setRootUiFont, useSystemTheme, type ThemePref } from "./theme.ts";
 
 const PREFS_CACHE_KEY = "workbench.prefsCache";
+/** The shell's two widths (Hallmark U4): the sidebar lies over the work below 60rem, and narrows below 75rem. */
+const COMPACT_SHELL = "(width < 60rem)";
+const MEDIUM_SHELL = "(width < 75rem)";
+/** N1: the rail goes icon-only below this. */
+const NARROW_RAIL = "(width < 50rem)";
 
 function readCachedPrefs(key = PREFS_CACHE_KEY): UiPrefs {
   try {
@@ -199,40 +239,38 @@ function resumeCommand(session: Session, work: Work) {
 }
 
 type View =
-  | { kind: "work" }
+  /** A conversation; `beside`: the document or web page open beside it, in its tab (곁 화면). */
+  | { kind: "work"; beside?: Companion }
   | { kind: "new"; folderId: string | null }
   | { kind: "archive" }
   | { kind: "terminal"; terminalId: string; workspaceId: string; label: string }
   | { kind: "browser"; pageId: string }
   | { kind: "document"; artifactId: string; proposalId: string | null }
   | { kind: "presentation"; id: string; artifactId: string; ownerTabId: string }
-  /** "나란히": chosen only, never where the app opens (views are not kept across launches). */
-  | { kind: "split"; artifactId: string; draftKey: string; focus: "chat" | "doc" }
   /** Cards of a vault folder, an app folder, a work or a saved view; or one vault note (pkm). */
   | { kind: "pkm"; target: PkmTarget }
   /** A work as a project note (project page). */
   | { kind: "project"; workId: string };
 
-type Toast = { text: string; action?: { label: string; run: () => void } };
 
 function isView(value: unknown): value is View {
   if (!value || typeof value !== "object") return false;
   const view = value as View;
-  if (view.kind === "work" || view.kind === "archive") return true;
+  if (view.kind === "work") return view.beside === undefined || isCompanion(view.beside);
+  if (view.kind === "archive") return true;
   if (view.kind === "new") return view.folderId === null || typeof view.folderId === "string";
   if (view.kind === "project") return typeof view.workId === "string";
   if (view.kind === "terminal") return typeof view.terminalId === "string" && typeof view.workspaceId === "string" && typeof view.label === "string";
   if (view.kind === "browser") return typeof view.pageId === "string";
   if (view.kind === "document") return typeof view.artifactId === "string" && (view.proposalId === null || typeof view.proposalId === "string");
   if (view.kind === "presentation") return typeof view.id === "string" && typeof view.artifactId === "string" && typeof view.ownerTabId === "string";
-  if (view.kind === "split") return typeof view.artifactId === "string" && typeof view.draftKey === "string" && (view.focus === "chat" || view.focus === "doc");
   if (view.kind !== "pkm" || !view.target || typeof view.target !== "object") return false;
   const target = view.target;
   return target.kind === "note" || target.kind === "vault" ? typeof target.path === "string" : ["folder", "work", "view"].includes(target.kind) && "id" in target && typeof target.id === "string";
 }
 
 /** The document body in the focused pane (with two panes, the other may show a document too). */
-const FOCUSED_DOC = '.pane[data-pane-active="true"] .document-view .doc-body';
+const FOCUSED_DOC = '.pane[data-pane-active="true"][data-tab-active="true"] .document-view .doc-body';
 const readJson = <T,>(key: string, fallback: T): T => {
   try {
     const raw = localStorage.getItem(key);
@@ -243,7 +281,7 @@ const readJson = <T,>(key: string, fallback: T): T => {
 };
 const SORT_MODES: SortMode[] = ["manual", "recent", "name"];
 
-export function App({ apiOverride, onConnections, connectionsOpen = false, connectionLabel, registerHostSwitchGuard, attentionRequest, onAttentionOpened }: { apiOverride?: Api | null; onConnections?: () => void; connectionsOpen?: boolean; connectionLabel?: string; registerHostSwitchGuard?: (guard: (() => Promise<void>) | null) => void; attentionRequest?: { id: string; nonce: string } | null; onAttentionOpened?: (id: string) => void } = {}) {
+export function App({ apiOverride, onConnections, devicePanel, connectionsOpen = false, messengerRequest = 0, connectionLabel, registerHostSwitchGuard, attentionRequest, onAttentionOpened }: { apiOverride?: Api | null; onConnections?: () => void; /** 기기 연결 in 설정 › 휴대폰과 다른 기기 (ConnectedWorkbench owns its state). */ devicePanel?: () => ReactNode; connectionsOpen?: boolean; messengerRequest?: number; connectionLabel?: string; registerHostSwitchGuard?: (guard: (() => Promise<void>) | null) => void; attentionRequest?: { id: string; nonce: string } | null; onAttentionOpened?: (id: string) => void } = {}) {
   const api = useMemo(() => {
     if (apiOverride !== undefined) return apiOverride;
     const token = readToken();
@@ -258,6 +296,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   const [state, dispatch] = useReducer(reducer, initialState);
   const [pushSettingsOpen, setPushSettingsOpen] = useState(false);
   const attentionInbox = useMemo(() => new AttentionInbox(api), [api]);
+  const shownPanels = useMemo(() => new ShownPanels(), []);
   const attentionState = useSyncExternalStore(attentionInbox.subscribe, attentionInbox.getState);
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -295,7 +334,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       windowSession() || (cachedPrefs().startScreen === "last" && localStorage.getItem(LAST_WORK_KEY)) ? { kind: "work" } : { kind: "new", folderId: null },
       localStorage.getItem(LAST_WORK_KEY),
     );
-    return withTabs(windowSession() ? fallback : restoreLayout(readJson(PANE_LAYOUT_KEY, null), isView, fallback));
+    return oneViewPerDocument(withTabs(windowSession() ? fallback : restoreLayout(upgradeStoredLayout(readJson(PANE_LAYOUT_KEY, null)), isView, fallback)));
   });
   // The layout as last asked for, so changes made in one handler build on each other.
   const layoutRef = useRef(layout);
@@ -304,11 +343,18 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   const updateLayout = useCallback((change: (current: Layout<View>) => Layout<View>) => {
     const changed = change(layoutRef.current);
     if (changed === layoutRef.current) return;
-    const next = withTabs(changed, layoutRef.current);
+    // A conversation gone to again keeps its companion; a document never has two views.
+    const next = settleLayout(changed, layoutRef.current);
     layoutRef.current = next;
     setLayout(next);
   }, []);
   const { view, workId } = focusedPane(layout);
+  // N1: the project the tab strips belong to: the focused tab's project (home and other places keep the last one).
+  const scopeOwner = projectOfTab(activeTab(focusedPane(layout)));
+  const [scopeWorkId, setScopeWorkId] = useState<string | null>(() => scopeOwner);
+  // Skin 2 · B: each pane's strip follows its own tab's project; panes of different projects name theirs.
+  const scopes = useMemo(() => paneScopes(layout, scopeWorkId), [layout, scopeWorkId]);
+  useEffect(() => { if (scopeOwner) setScopeWorkId(scopeOwner); }, [scopeOwner]);
   useEffect(() => {
     const tabs = layout.panes.flatMap(tabsOf), owners = new Set(tabs.map(tab => tab.id));
     const shown = new Set(tabs.flatMap(tab => tab.view.kind === "presentation" ? [tab.view.id] : []));
@@ -322,9 +368,11 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   }, [layout, updateLayout]);
   // A document view holding edits only it can save (the Word editor) saves them before it is replaced (one per pane).
   const leaveGate = useRef(new LeaveGate());
-  const leaveGuards = useRef<Partial<Record<PaneId, (reason?: "close") => Promise<void>>>>({});
+  /** The tabs showing a document (set each render; read from the event stream). */
+  const documentTabsRef = useRef<(artifactId: string) => { pane: Pane<View>; tab: PaneTab<View> }[]>(() => []);
+  const leaveGuards = useRef<Partial<Record<PaneId, (reason?: "close" | "discard") => Promise<void>>>>({});
   const guardOf = useMemo(() => {
-    const keep = (id: PaneId) => (guard: ((reason?: "close") => Promise<void>) | null) => {
+    const keep = (id: PaneId) => (guard: ((reason?: "close" | "discard") => Promise<void>) | null) => {
       if (guard) leaveGuards.current[id] = guard;
       else delete leaveGuards.current[id];
     };
@@ -332,27 +380,75 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   }, [layout.panes.flatMap((pane) => tabsOf(pane).map((tab) => tab.id)).sort().join(",")]);
   useEffect(() => {
     registerHostSwitchGuard?.(async () => {
-      for (const guard of Object.values(leaveGuards.current)) await guard?.("close");
+      for (const guard of Object.values(leaveGuards.current)) await guard?.();
     });
     return () => registerHostSwitchGuard?.(null);
   }, [registerHostSwitchGuard]);
+  useEffect(() => {
+    const closed = new Set(browserState.closedPageIds ?? []);
+    if (!closed.size) return;
+    updateLayout(current => {
+      let next = current;
+      for (const pane of current.panes) for (const tab of tabsOf(pane)) {
+        const pageId = tab.view.kind === "browser" ? tab.view.pageId : undefined;
+        if (pageId && closed.has(pageId)) next = closeTab(next, pane.id, tab.id, { view: { kind: "new", folderId: null }, workId: null, sessionId: null });
+        // A closed page beside a conversation: the conversation stays, alone.
+        const beside = besideOf(tab.view);
+        if (beside?.kind === "browser" && closed.has(beside.pageId)) next = withoutCompanion(next, tab.id);
+      }
+      return next;
+    });
+  }, [browserState.closedPageIds, state.sessions, updateLayout]);
+  // Skin 2 · B: a page whose tab was closed while its AI worked stays open until that AI is done.
+  useEffect(() => {
+    for (const pageId of browserState.heldPageIds ?? []) {
+      if (findTab(layout, `browser:${pageId}`)) { void sharedBrowser.releaseHeld(pageId, true); continue; }
+      // Not while its AI works, nor while its answer is unseen (it shows as 새 답 first; W1).
+      if (heldPageMayClose(pageId, state.sessions)) void sharedBrowser.releaseHeld(pageId).catch(fail);
+    }
+  }, [browserState.heldPageIds, state.sessions, layout, sharedBrowser]);
   const uiOf = useMemo(() => Object.fromEntries(layout.panes.flatMap((pane) => tabsOf(pane).map((tab) => [tab.id, (ui: TabUiState) => updateLayout((current) => updateTabUi(current, tab.id, ui))]))), [updateLayout, layout.panes.flatMap((pane) => tabsOf(pane).map((tab) => tab.id)).sort().join(",")]);
-  /** `then`, after the pane's document view saved what only it can save, when that view goes away. */
-  const afterLeaving = useCallback((id: PaneId, next: View | null, then: () => void) => {
-    const pane = paneById(layoutRef.current, id);
-    const guard = pane ? leaveGuards.current[activeTab(pane).id] : null;
-    // "문서" and "나란히" show the same document view; it is left only when another one replaces it.
-    const docOf = (entry: View | null) => (entry && (entry.kind === "document" || entry.kind === "split") ? entry.artifactId : null);
-    const leaving = pane !== undefined && (docOf(pane.view) !== null ? docOf(next) !== docOf(pane.view) : !next || contentKey({ ...pane, view: next }) !== contentKey(pane));
-    leaveGate.current.run(id, guard && leaving ? guard : null, then, (error) => setToast(error instanceof Error ? error.message : String(error)), pane ? activeTab(pane).id : id);
-  }, []);
+  // 곁 화면's wiring (companion-desk.ts): how a view is left, shown, put beside a conversation and
+  // closed. Nothing saves or closes a document's other view by itself; a move is the person's
+  // act, asked about first when the view that goes holds an editor.
+  /**
+   * The person (or the app for them) went somewhere since the window opened: the start-up restore
+   * keeps it. Never reset: the start-up restore runs once per window.
+   */
+  const navigated = useRef(false);
+  const selectTabRef = useRef<(paneId: PaneId, tabId: string, then?: () => void) => void>(() => undefined);
+  const [moveAsk, setMoveAsk] = useState<{ name: string; certain: boolean; same: boolean; go: () => Promise<void>; drop: () => Promise<void> } | null>(null);
+  /** Tabs whose conversation is covered by its companion, for callbacks made once. */
+  const coveredRef = useRef<Record<string, boolean>>({});
+  const desk = useMemo(() => createDesk<View>({
+    layout: () => layoutRef.current,
+    update: updateLayout,
+    guard: (tabId) => leaveGuards.current[tabId],
+    gate: leaveGate.current,
+    select: (paneId, tabId, then) => selectTabRef.current(paneId, tabId, then),
+    editors: (artifactId) => editors.current.states(artifactId),
+    looksSaved: (artifactId) => editors.current.looksSaved(artifactId),
+    ask: (artifactId, { certain, same }, go, drop) => setMoveAsk({ name: stateRef.current.artifacts[artifactId]?.name ?? "문서", certain, same, go, drop }),
+    covered: (tabId) => Boolean(coveredRef.current[tabId]),
+    onNavigate: () => { navigated.current = true; },
+    fail: (error) => showNotice({ type: "show", slot: asSlot(failure(error)) }),
+    home: { view: { kind: "new", folderId: null }, workId: null, sessionId: null },
+    conversation: (beside) => ({ kind: "work", beside }),
+    page: (pageId) => {
+      const page = sharedBrowser.getState().pages.find((entry) => entry.pageId === pageId);
+      return page && page.status !== "closed" ? { view: { kind: "browser", pageId }, workId: page.workId, sessionId: page.sessionId } : null;
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [updateLayout, sharedBrowser]);
+  /** `then`, after the pane's view saved what only it can save (see `desk.leave`). `move`: the person's explicit move of a document. */
+  const afterLeaving = useCallback((id: PaneId, next: View | null, then: () => void, destination: string | null = null, move = false) => desk.leave(id, next, then, { destination, move }), [desk]);
   const setViewOf = useCallback(
-    (id: PaneId, next: View | ((current: View) => View), openedScope?: Pick<Artifact, "workId" | "workspaceId"> & { preserveSource?: boolean }) => {
+    (id: PaneId, next: View | ((current: View) => View), openedScope?: Pick<Artifact, "workId" | "workspaceId"> & { preserveSource?: boolean }, move = false) => {
       const pane = paneById(layoutRef.current, id);
       if (!pane) return;
       const resolved = typeof next === "function" ? next(pane.view) : next;
       if (resolved === pane.view) return;
-      const artifact = resolved.kind === "document" || resolved.kind === "split" || resolved.kind === "presentation" ? stateRef.current.artifacts[resolved.artifactId] ?? openedScope : undefined;
+      const artifact = resolved.kind === "document" || resolved.kind === "presentation" ? stateRef.current.artifacts[resolved.artifactId] ?? openedScope : undefined;
       const currentSession = pane.sessionId ? stateRef.current.sessions[pane.sessionId] : undefined;
       const changedScope = artifact && (artifact.workId !== pane.workId || artifact.workspaceId && artifact.workspaceId !== currentSession?.workspaceId);
       const content = { view: resolved, workId: artifact?.workId ?? pane.workId, sessionId: changedScope ? null : pane.sessionId };
@@ -361,8 +457,8 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       const show = () => updateLayout((current) => ({ ...setPane(current, targetId, content), focus: targetId }));
       // A completed export may open a new tab after preserving the source's recovery
       // buffer. withTabs keeps that source mounted; opening a conversion is not Save.
-      if (openedScope?.preserveSource && targetId === id && (resolved.kind === "document" || resolved.kind === "presentation") && ["document", "split"].includes(pane.view.kind)) leaveGate.current.run(id, null, show, () => {});
-      else afterLeaving(targetId, resolved, show);
+      if (openedScope?.preserveSource && targetId === id && (resolved.kind === "document" || resolved.kind === "presentation") && viewDocument(pane.view) !== null) leaveGate.current.run(id, null, show, () => {});
+      else afterLeaving(targetId, resolved, show, existing?.tab.id ?? null, move);
     },
     [afterLeaving, updateLayout],
   );
@@ -374,6 +470,23 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   const [officeSettingsOpen, setOfficeSettingsOpen] = useState(false);
   const [desktopOpen, setDesktopOpen] = useState(false);
   const [extensionsOpen, setExtensionsOpen] = useState(false), [eventHubOpen, setEventHubOpen] = useState(false);
+  // 설정 (release unit B): one dialog with a left list of sections; it reopens on the section seen last.
+  const [settingsAt, setSettingsAt] = useState<SettingsSection | null>(null);
+  // Opened as "설정" (rail, ⋯, Ctrl+, the palette) rather than on a named section: on a phone the
+  // section list is its first screen (SettingsSheet listFirst).
+  const [settingsListFirst, setSettingsListFirst] = useState(false);
+  // The device panel's "휴대폰 메신저 열기" (it lives outside the app; each press raises the counter): 설정 › 메신저.
+  useEffect(() => { if (messengerRequest > 0) setSettingsAt("messenger"); }, [messengerRequest]);
+  // Ctrl+, (⌘, on a Mac) opens 설정 on the section seen last (j1).
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "," || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.defaultPrevented) return;
+      event.preventDefault();
+      setSettingsAt((current) => { if (!current) setSettingsListFirst(true); return current ?? readSettingsSection(prefsRef.current.settingsSection); });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const [taskPanelOpen, setTaskPanelOpen] = useState(false);
   const [workLinksOpen, setWorkLinksOpen] = useState(false);
   const [paneFocus, setPaneFocus] = useState(false);
@@ -386,12 +499,38 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   const [knowledgeMounted, setKnowledgeMounted] = useState(false);
   const openKnowledge = () => { setKnowledgeMounted(true); setKnowledgeOpen(true); };
   const [onboardingAgain, setOnboardingAgain] = useState(false);
+  /** The messenger the first run asked 설정 › 메신저 to open (ux/two-messengers adds the prop that takes it). */
+  const [messengerKind, setMessengerKind] = useState<"telegram" | "slack" | null>(null);
   // Documents opened in each work, shown as tabs and offered first by "@".
   const [openDocs, setOpenDocs] = useState<Record<string, string[]>>(() => readJson(OPEN_DOCS_KEY, {}));
-  const [toast, setToastState] = useState<Toast | null>(null);
-  const setToast = useCallback((next: string | Toast | null) => setToastState(typeof next === "string" ? { text: next } : next), []);
-  const [menuOpen, setMenuOpen] = useState(false);
+  // One status slot in the top bar, in the title's place: completions, action results and errors.
+  const [notices, showNotice] = useReducer(noticeReducer, EMPTY_NOTICES);
+  const closeNotice = useCallback(() => showNotice({ type: "close" }), []);
+  const setToast = useCallback<Notify>((next) => showNotice({ type: "show", slot: asSlot(next) }), []);
+  // The settings menu (⋯): opened from the top bar or from the rail's foot (N1), one at a time.
+  const [menuAt, setMenuAt] = useState<"top" | "rail" | null>(null);
+  const menuOpen = menuAt !== null;
+  const setMenuOpen = useCallback((open: boolean) => setMenuAt(open ? "top" : null), []);
   const [editingTitle, setEditingTitle] = useState(false);
+  // A rename in progress is never hidden: notices wait (their clocks too) until it commits or cancels.
+  const shownNotice = editingTitle ? null : notices.current;
+  const standingNotice = editingTitle ? null : layoutProblem;
+  // The vault refused this gateway (sec-vault round 2, I3): said on its own standing row until it opens.
+  const [vaultProblem, setVaultProblem] = useState<string | null>(null);
+  useEffect(() => {
+    if (!api) return;
+    let live = true;
+    void api.hostStatus().then((host) => { if (live) setVaultProblem(host.vault?.state === "refused" ? host.vault.message ?? "" : null); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [api]);
+  const retryVault = useCallback(async () => {
+    if (!api) return;
+    try {
+      const next = await api.request<import("@workbench/contracts").HostVaultStatus>("POST", "/api/host/vault/retry");
+      setVaultProblem(next.state === "refused" ? next.message ?? "" : null);
+    } catch (error) { setVaultProblem(error instanceof Error ? error.message : String(error)); }
+  }, [api]);
+  const standingVault = editingTitle || layoutProblem ? null : vaultProblem;
   const [engine, setEngine] = useEngineChoice();
   const [engineMenu, setEngineMenu] = useState<{ provider: Provider; x: number; y: number } | null>(null);
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
@@ -401,32 +540,56 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   const openCreate = useRef<(anchor?: HTMLElement) => void>(() => undefined);
   // Ctrl+K opens the search box ("palette"); Ctrl+Shift+F opens it for contents only ("content").
   const [paletteOpen, setPaletteOpen] = useState<PaletteMode | null>(null);
+  // What the top bar's search field passed on to the palette (release unit A, item 4).
+  const [paletteSeed, setPaletteSeed] = useState("");
   // A message to bring into view after opening its conversation (from search).
   const [focusItem, setFocusItem] = useState<{ sessionId: string; itemId: string; nonce: number } | null>(null);
   // Inline rename or folder creation asked from a menu, handled by the sidebar.
   const [sidebarPending, setSidebarPending] = useState<{ rename?: string; createIn?: string | null } | null>(null);
-  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const closeMenu = useCallback(() => setMenuAt(null), []);
   // The PKM layer's dialogs and calls, for the menus built here (pkm/PkmContext.tsx).
   const pkmHandle = useRef<PkmApi | null>(null);
   const closeEngineMenu = useCallback(() => setEngineMenu(null), []);
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
-  const navigateTo = useCallback((content: PaneContent<View>, opened?: () => void) => {
-    const existing = findTab(layoutRef.current, contentKey(content));
-    const id = existing?.pane.id ?? layoutRef.current.focus;
-    afterLeaving(id, content.view, () => {
-      updateLayout((current) => ({ ...setPane(current, id, content), focus: id }));
+  /** Go to `content` (the pane that has it in a tab, else the focused one). `move`: a document beside a conversation is given its own tab for it. */
+  const navigateTo = useCallback((content: PaneContent<View>, opened?: () => void, move = false) => {
+    desk.show(layoutRef.current.focus, content, { move, then: () => {
       if (content.workId) localStorage.setItem(LAST_WORK_KEY, content.workId);
       opened?.();
-    });
-  }, [afterLeaving, updateLayout]);
+    } });
+  }, [desk]);
 
   const fail = useCallback((error: unknown) => {
-    setToast(error instanceof ApiRequestError || error instanceof Error ? error.message : String(error));
-  }, [setToast]);
-  const notifyOfficeControl = useOfficeControl(api, !single, artifact => new Promise(resolve => {
-    if (panesRef.current.focusIfShown(`doc:${artifact.id}`)) { resolve(); return; }
-    navigateTo({ workId: artifact.workId, sessionId: null, view: { kind: "document", artifactId: artifact.id, proposalId: null } }, resolve);
+    showNotice({ type: "show", slot: asSlot(failure(error)) });
+  }, []);
+  /** Tabs whose conversation is covered by its companion (no room for both): it is not on screen. */
+  const [coveredTabs, setCoveredTabs] = useState<Record<string, boolean>>({});
+  coveredRef.current = coveredTabs;
+  /** Opening beside the focused conversation, for the actions made once (filled in below on every render). */
+  const besideRef = useRef<{ open: (artifactId: string, proposalId?: string | null) => boolean; openPage: (pageId: string) => boolean }>({ open: () => false, openPage: () => false });
+  /** Per document, the latest request to show one of its AIs, kept until a view acts on it. */
+  const [revealAgents, setRevealAgents] = useState<Record<string, AgentReveal | null>>({});
+  /**
+   * The one opener of a conversation (session-route.ts): every row, menu, notice and card goes
+   * through it, so a live document AI always ends beside its document with its conversation out.
+   */
+  const showConversation = useRef<(session: Session, work?: { id: string }, opened?: () => void) => void>(() => undefined);
+  const entries = useMemo(() => sessionEntries({
+    find: (sessionId) => stateRef.current.sessions[sessionId],
+    hasDocument: (artifactId) => Boolean(stateRef.current.artifacts[artifactId]),
+    // A document's or page's AI is shown in the document's or page's own tab: one that is beside a
+    // conversation (read there, nothing to save) is given its tab for it.
+    navigate: (content, opened) => navigateTo(content, opened, true),
+    // Asked for only once the pane has moved to that AI (a refused leave asks for nothing).
+    reveal: (artifactId, request) => setRevealAgents((current) => ({ ...current, [artifactId]: request })),
+    conversation: (session, work, opened) => showConversation.current(session, work, opened),
+  }), [navigateTo]);
+  const openSession = entries.open;
+  // Office control waits for an editable view: the document's own tab (desk.edit — beside a
+  // conversation it is only read, so its own tab is opened, and the request is always answered).
+  const notifyOfficeControl = useOfficeControl(api, !single, artifact => new Promise((resolve, reject) => {
+    desk.edit(layoutRef.current.focus, { workId: artifact.workId, sessionId: null, view: { kind: "document", artifactId: artifact.id, proposalId: null } }, resolve, reject);
   }), fail);
   // Only this window's explicit creation requests open result tabs. Replayed events open once.
   const creatingRequests = useRef(new Map<string, { workId: string; sessionId: string; tabId: string }>());
@@ -447,11 +610,6 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     [api, fail, setToast],
   );
 
-  useEffect(() => {
-    if (!toast) return;
-    const timer = window.setTimeout(() => setToastState(null), toast.action ? 9000 : 6000);
-    return () => window.clearTimeout(timer);
-  }, [toast]);
 
   // Snapshot, then live events; a resync reloads the snapshot.
   useEffect(() => {
@@ -476,6 +634,16 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
               for (const pane of current.panes) for (const tab of tabsOf(pane)) if (tab.workId === event.workId || (tab.view.kind === "project" && tab.view.workId === event.workId)) next = closeTab(next, pane.id, tab.id, { view: { kind: "new", folderId: null }, workId: null, sessionId: null });
               return next;
             });
+            // A document taken out of its project: its tabs close; a conversation beside it stays.
+            // No save check runs here: the gateway refuses a removal while any view reports unsaved
+            // edits (the app saves first, through each editor's leave path), and a removed document
+            // takes no more saves. Running the check made the closing editor wait for a frame that
+            // was already going: the tab stayed on 문서를 찾을 수 없습니다 and its pane stopped (U38).
+            if (event.type === "artifact.removed") for (const { pane, tab } of documentTabsRef.current(event.artifact.id)) {
+              leaveGate.current.run(pane.id, null, () => updateLayout(current => dropTabs(current, view =>
+                viewDocument(view) === event.artifact.id ? (view.kind === "document" ? "close" : { kind: "work" }) : null,
+                { view: { kind: "new", folderId: null }, workId: null, sessionId: null })), fail, tab.id);
+            }
             if (event.type === "office.control") notifyOfficeControl();
             if (event.type === "office.note.ready") window.dispatchEvent(new CustomEvent("workbench:note-ready", { detail: event.artifactId }));
             if (event.type === "item.upserted" && event.item.kind === "artifact" && event.item.id.startsWith("artifact:create:")) {
@@ -509,15 +677,19 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   const saveTimer = useRef<number | undefined>(undefined);
   const latestSave = useRef<UiPrefs | null>(null);
   const prefs = localPrefs ?? (state.ready ? state.prefs : cachedPrefs());
+  // "홈 로고 움직임": the logo's entrance of this launch, on the top bar's mark (home shows no logo now).
+  const [brandGreet, brandGreeted] = useBrandGreeting(prefs.brandMotion !== false);
   const prefsRef = useRef(prefs);
   prefsRef.current = prefs;
   useEffect(() => {
     if (state.ready) localStorage.setItem(PREFS_CACHE_KEY, JSON.stringify(state.prefs));
   }, [state.ready, state.prefs]);
   const savePrefs = useCallback(
-    (patch: UiPrefs) => {
+    (patch: PrefsPatch) => {
       setLocalPrefs((current) => {
-        const next = { ...(current ?? state.prefs), ...patch };
+        const base = current ?? state.prefs;
+        // A change of the latest (the list column's preferences) builds on every change before it.
+        const next = { ...base, ...(typeof patch === "function" ? patch(base) : patch) };
         latestSave.current = next;
         window.clearTimeout(saveTimer.current);
         saveTimer.current = window.setTimeout(() => {
@@ -538,24 +710,75 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   const systemTheme = useSystemTheme();
   const themePref: ThemePref = isThemePref(prefs.theme) ? prefs.theme : "system";
   const appTheme = resolveTheme(themePref, systemTheme);
+  // 색 조합 (설정 › 화면, the first run): stored with the theme in this PC's screen preferences; none = Workbench.
+  const palette = readPalette(prefs.palette);
+  useEffect(() => setRootPalette(palette), [palette]);
+  // 글꼴 (설정 › 화면): the app's UI face through the one font token; old records = Pretendard.
+  const uiFont = readUiFont(prefs.uiFont);
+  useEffect(() => setRootUiFont(uiFont), [uiFont]);
+  // 사용 한도 표시 (설정 › 화면): 목록 칸 아래 (old records), 창 아래 줄, 숨기기.
+  const usagePlace = readUsagePlace(prefs.usagePlace);
   const appearance = useMemo(() => readAppearance(prefs.appearance), [prefs.appearance]);
   // The sidebar is where many sessions live: open unless the user closed it (decision 2026-10-28).
   const [expandedEditorTab, setExpandedEditorTab] = useState<string | null>(null);
   const focusedTabId = activeTab(focusedPane(layout)).id;
+  // Tabs whose home wordmark is on screen: one wordmark per screen, so the top bar then shows the symbol.
+  const [, setHeroTabs] = useState<ReadonlySet<string>>(() => new Set());
+  const heroIn = useCallback((tabId: string, shown: boolean) => setHeroTabs(current => {
+    if (current.has(tabId) === shown) return current;
+    const next = new Set(current);
+    if (shown) next.add(tabId); else next.delete(tabId);
+    return next;
+  }), []);
   const editorFocus = view.kind === "presentation" || view.kind === "document" && !layout.grid && expandedEditorTab !== focusedTabId;
-  const [compactShell, setCompactShell] = useState(() => window.matchMedia("(max-width: 900px)").matches);
+  // Below 60rem (about 960px) the sidebar lies over the work instead of taking a third of the window.
+  const [compactShell, setCompactShell] = useState(() => window.matchMedia(COMPACT_SHELL).matches);
+  // Release unit A: under 40rem the bar keeps the list key, the place's name, 확인 N and ⋯ (the rest is in ⋯).
+  const phoneBar = usePhoneWidth();
   const [compactSidebar, setCompactSidebar] = useState(false);
   useEffect(() => {
-    const media = window.matchMedia("(max-width: 900px)");
+    const media = window.matchMedia(COMPACT_SHELL);
     const update = () => { setCompactShell(media.matches); setCompactSidebar(false); };
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
-  useEffect(() => setCompactSidebar(false), [focusedTabId, view.kind, workId, focusedPane(layout).sessionId]);
+  // A project chosen in the laid-over column keeps the column open (its inside is what the person asked for)
+  // until the next choice in it — an event, not a 400 ms window (tech review N2; overlay-keep.ts).
+  const overlay = useOverlayKeep(`${focusedTabId}|${view.kind}|${workId}|${focusedPane(layout).sessionId}`, () => setCompactSidebar(false));
   const sidebarOpen = !single && !editorFocus && (compactShell ? compactSidebar : prefs.sidebar !== false);
   const showSidebar = () => { setCompactSidebar(true); savePrefs({ sidebar: true }); };
   const toggleSidebar = () => compactShell ? setCompactSidebar(!compactSidebar) : savePrefs({ sidebar: !sidebarOpen });
-  const sidebarWidth = typeof prefs.sidebarWidth === "number" ? Math.min(480, Math.max(232, prefs.sidebarWidth)) : 288;
+  // 264 by default; under 75rem (a 1000px window) at most 240, so the work keeps two thirds of the window.
+  // N1: under 50rem (about 800px) the rail shows its icons only; "지금" stays lit while chosen on home.
+  const [narrowRail, setNarrowRail] = useState(() => window.matchMedia(NARROW_RAIL).matches);
+  useEffect(() => {
+    const media = window.matchMedia(NARROW_RAIL);
+    const update = () => setNarrowRail(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  const [railAtNow, setRailAtNow] = useState(STARTS_AT_NOW);
+  const [mediumShell, setMediumShell] = useState(() => window.matchMedia(MEDIUM_SHELL).matches);
+  useEffect(() => {
+    const media = window.matchMedia(MEDIUM_SHELL);
+    const update = () => setMediumShell(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  const storedSidebarWidth = typeof prefs.sidebarWidth === "number" ? Math.min(480, Math.max(232, prefs.sidebarWidth)) : 264;
+  const sidebarWidth = mediumShell ? Math.min(240, storedSidebarWidth) : storedSidebarWidth;
+  // The right sidebar (개요 · 연결) of the note in the focused pane: closed unless opened, per window.
+  // Docked only while the panes keep their least width beside it (one pane when zoomed).
+  // A pane holding a conversation and its companion side by side needs both columns' minimums.
+  const besideExtra = useBesideRoom();
+  // A document side by side asks for its editor's width (Hallmark U4); the right sidebar docks only where that is kept.
+  const paneNeed = (pane: Pane<View>) => activeTab(pane).view.kind === "document" ? EDITOR_MIN_WIDTH + 2 : 0;
+  const needOf = !layout.grid && layout.panes.length > 1 ? (id: string) => { const pane = layout.panes.find((entry) => entry.id === id); return pane ? paneNeed(pane) : 0; } : undefined;
+  const paneMinimum = (editorFocus || paneFocus ? MIN_PANE : minimumSize(treeOf(layout), !!layout.grid, needOf).width) + besideExtra;
+  const right = useRightSidebar({ prefs, savePrefs, scope: single ? "window" : "main", compact: compactShell, minimum: paneMinimum, ready: layoutReady && state.ready });
+  const toggleRight = useRef(right.toggle);
+  toggleRight.current = right.toggle;
+  const readArtifactText = useCallback((artifactId: string) => api ? api.artifactText(artifactId).then((result) => result.text) : Promise.reject(new Error("no api")), [api]);
   const sortMode: SortMode = SORT_MODES.includes(prefs.treeSort as SortMode) ? (prefs.treeSort as SortMode) : "manual";
   const treeOpen = useMemo(() => readOpenState(prefs.tree), [prefs.tree]);
 
@@ -580,7 +803,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     if (!owner) return undefined;
     const kept = pane.sessionId ? state.sessions[pane.sessionId] : undefined;
     const candidate = kept && kept.workId === owner.id ? kept : pane.id === layout.focus && activeSession?.workId === owner.id ? activeSession : activeOf(owner) || undefined;
-    if (pane.view.kind === "document" || pane.view.kind === "split") {
+    if (pane.view.kind === "document") {
       const document = state.artifacts[pane.view.artifactId];
       // An external citation has its own workspace. Null must not silently
       // reattach the project conversation from a different workspace.
@@ -590,17 +813,38 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   };
   const layoutLoaded = useRef(false);
   const layoutSaved = useRef("");
+  const tabsLeftTold = useRef(0);
+  /** Tabs of the stored record this window cannot show (a newer view kind): written back as they were. */
+  const parkedTabs = useRef<ParkedTab[]>([]);
   const restoreWorkspaceLayout = (raw: unknown, fallback: Layout<View>) => {
     const latest = stateRef.current;
-    const restored = restoreLayout(raw, isView, fallback);
+    // Skin 2 · B: a tab that cannot be read (or whose item is gone) is skipped, not the whole layout.
+    let ofGoneProjects = 0;
+    const gone = (tab: PaneTab<View>) => {
+      const owner = projectOfTab(tab);
+      const projectGone = (owner !== null && !latest.works[owner]) || (tab.view.kind === "project" && !latest.works[tab.view.workId]);
+      if (projectGone) ofGoneProjects++;
+      return projectGone || (tab.view.kind === "document" && !latest.artifacts[tab.view.artifactId]);
+    };
+    const reading = readLayout(upgradeStoredLayout(raw), isView, fallback, (tab) => !gone(tab));
+    const restored = reading.layout;
+    parkedTabs.current = reading.parked;
+    const notice = skippedNotice(reading.skipped, ofGoneProjects);
+    if (notice) setToast(notice);
     const panes = restored.panes.map((pane) => {
       const missingWork = pane.workId && !latest.works[pane.workId];
       const at = pane.view;
-      const missingDoc = (at.kind === "document" || at.kind === "split") && !latest.artifacts[at.artifactId];
+      const missingDoc = at.kind === "document" && !latest.artifacts[at.artifactId];
       const missingProject = at.kind === "project" && !latest.works[at.workId];
       return missingWork || missingDoc || missingProject ? { ...pane, view: { kind: "new" as const, folderId: null }, workId: null, sessionId: null } : pane;
     });
+    // A companion whose document is gone is closed; its conversation stays.
     let upgraded = withTabs({ ...restored, panes });
+    for (const tab of upgraded.panes.flatMap(tabsOf)) {
+      const beside = besideOf(tab.view);
+      if (beside?.kind === "document" && !latest.artifacts[beside.artifactId]) upgraded = withoutCompanion(upgraded, tab.id);
+    }
+    upgraded = oneViewPerDocument(upgraded);
     if (!restored.panes.some((pane) => pane.tabs)) {
       for (const pane of upgraded.panes) for (const artifactId of openDocs[pane.workId ?? ""] ?? []) {
         const artifact = latest.artifacts[artifactId];
@@ -613,16 +857,21 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     if (!state.ready || layoutLoaded.current) return;
     layoutLoaded.current = true;
     if (single) { setLayoutReady(true); return; }
-    const key = typeof state.prefs.layoutScope === "string" && (state.prefs.layoutScope === GLOBAL_LAYOUT || state.workspaces[state.prefs.layoutScope]) ? state.prefs.layoutScope : GLOBAL_LAYOUT;
+    const key = layoutKey({ remote: Boolean(api?.isRemote), scope: state.prefs.layoutScope, workspaces: state.workspaces });
     void layoutPersistence?.read(key).then((record) => {
       const upgraded = restoreWorkspaceLayout(record?.layout ?? state.prefs.paneLayout ?? readJson(PANE_LAYOUT_KEY, null), layoutRef.current);
       layoutScopeRef.current = key; setLayoutScope(key);
-      updateLayout(() => upgraded); setLayoutReady(true);
+      // A choice made on this device's copy while the record was read is not undone (keepChosen).
+      updateLayout((current) => keepChosen(upgraded, current, navigated.current)); setLayoutReady(true);
     }).catch((error: unknown) => setLayoutProblem({ key, message: error instanceof Error ? error.message : String(error) }));
   }, [state.ready, single, layoutPersistence]);
   useEffect(() => {
     if (!layoutReady || single || layoutSwitching.current || !layoutPersistence) return;
-    const saved = { version: 2, ...layout };
+    // Never more than the gateway keeps (M11): past 128 the oldest are left out of the record, said once.
+    const { layout: stored, left, keptUnsaved, unsavedLeft } = storedTabs(layout, workId);
+    if (left > tabsLeftTold.current) setToast(`열린 탭이 128개를 넘어 오래된 탭 ${left}개는 다음에 열 때 다시 열리지 않습니다.${keptUnsaved && !unsavedLeft ? " 고치던 문서의 탭은 모두 남겨 두었습니다." : ""} 대화와 문서는 그대로 있습니다.`);
+    tabsLeftTold.current = left;
+    const saved = { version: 2, ...stored, ...(parkedTabs.current.length ? { parked: parkedTabs.current } : {}) };
     const json = JSON.stringify(saved);
     if (layoutSaved.current === json) return;
     layoutSaved.current = json;
@@ -639,8 +888,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
 
   // A document shown becomes a tab of its work (at most 8, the oldest goes).
   useEffect(() => {
-    if (view.kind !== "document" && view.kind !== "split") return;
-    const artifact = state.artifacts[view.artifactId];
+    const artifact = state.artifacts[viewDocument(view) ?? ""];
     if (!artifact) return;
     setOpenDocs((current) => {
       const list = current[artifact.workId] ?? [];
@@ -648,7 +896,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     });
   }, [view, state.artifacts]);
   useEffect(() => localStorage.setItem(OPEN_DOCS_KEY, JSON.stringify(openDocs)), [openDocs]);
-  const docsOf = (owner: Work | undefined) => owner ? [...new Set(layout.panes.flatMap(tabsOf).filter((tab) => tab.workId === owner.id).flatMap((tab) => tab.view.kind === "document" || tab.view.kind === "split" ? [tab.view.artifactId] : []).concat(openDocs[owner.id] ?? []))].filter((id) => state.artifacts[id]) : [];
+  const docsOf = (owner: Work | undefined) => owner ? [...new Set(layout.panes.flatMap(tabsOf).filter((tab) => tab.workId === owner.id).flatMap((tab) => viewDocument(tab.view) ?? []).concat(openDocs[owner.id] ?? []))].filter((id) => state.artifacts[id]) : [];
   const openDocIds = docsOf(work);
 
   // Load the transcript of the visible session once.
@@ -663,6 +911,15 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       cancelled = true;
     };
   }, [api, activeSession, state.transcripts, fail]);
+  // An archived conversation shown on purpose (보관함, the right sidebar's 연결) is not the work's
+  // active one, but its pane shows it: load its transcript too.
+  const shownArchived = restoredSession?.archivedAt && restoredSession.workId === work?.id ? restoredSession : null;
+  useEffect(() => {
+    if (!api || !shownArchived || state.transcripts[shownArchived.id]) return;
+    let cancelled = false;
+    api.items(shownArchived.id).then((result) => !cancelled && dispatch({ type: "transcript", sessionId: shownArchived.id, transcript: result })).catch(fail);
+    return () => { cancelled = true; };
+  }, [api, shownArchived?.id, state.transcripts, fail]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // "어느 세션에 보낼까요?" picker, answered through a promise.
   const [picker, setPicker] = useState<{ workId: string; excludeSessionId: string | null; resolve: (session: Session | null) => void } | null>(null);
@@ -682,13 +939,68 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
         void api?.browser
           .focus()
           .then((result) => {
-            if (!result.ok) setToast(result.message);
+            if (!result.ok) setToast(failure(result.message));
           })
           .catch(fail),
       pause: (session, paused) => void api?.browser.pause(session.id, paused).catch(fail),
     }),
     [api, fail, setToast],
   );
+
+  // A conversation shown as itself: a chat, or a read-only one (archived, or an AI whose document is gone).
+  showConversation.current = (session, work, opened) => {
+    const target = stateRef.current.works[session.workId] ?? (work ? stateRef.current.works[work.id] : undefined);
+    if (!target) return;
+    if (single) {
+      // A detached window stays one window: it switches to the session picked in it.
+      navigateTo({ workId: target.id, sessionId: session.id, view: { kind: "work" } }, () => {
+        setSingle(session.id);
+        showInWindow(session.id);
+        opened?.();
+      });
+      return;
+    }
+    // Already shown in the other pane: the focus goes there (never the same conversation twice).
+    panesRef.current.focusIfShown(`session:${session.id}`);
+    // The row names the conversation: where its companion lies over it, the conversation comes back.
+    desk.conversation(layoutRef.current.focus, { workId: target.id, sessionId: session.id, view: { kind: "work" } }, () => {
+      // An archived one is only looked at (its pane keeps it): it does not become the project's active conversation.
+      if (becomesActive(target, session)) {
+        dispatch({ type: "focus", work: target, session });
+        void api?.updateWork(target.id, { activeSessionId: session.id }).catch(fail);
+      }
+      opened?.();
+    });
+  };
+  // Document AIs being restored (되돌리기, or their document coming back from 보관함) while a tab
+  // shows them read-only: once live again, that tab gives way to the document with the AI beside
+  // it — never to another conversation of the project.
+  const awaitingBeside = useRef(new Set<string>());
+  useEffect(() => {
+    for (const id of [...awaitingBeside.current]) {
+      const session = state.sessions[id];
+      if (!session || (!session.documentAgent && !session.pageAgent)) { awaitingBeside.current.delete(id); continue; }
+      if (!opensBeside(session) || (session.documentAgent && !state.artifacts[session.documentAgent.artifactId])) continue;
+      awaitingBeside.current.delete(id);
+      const plan = restoredAgentPlan(layoutRef.current, session, (artifactId) => Boolean(state.artifacts[artifactId]));
+      if (plan.kind === "none") continue;
+      const artifactId = session.documentAgent!.artifactId;
+      const reveal = () => setRevealAgents((current) => ({ ...current, [artifactId]: { sessionId: session.id } }));
+      const close = () => updateLayout((current) => closeTab(current, plan.paneId, plan.tabId, { view: { kind: "new", folderId: null }, workId: null, sessionId: null }));
+      if (plan.kind === "replace") {
+        updateLayout((current) => updateTabView(current, plan.tabId, () => plan.content.view));
+        if (plan.shown) reveal();
+      } else if (plan.shown) navigateTo(plan.content, () => { reveal(); close(); });
+      else close();
+    }
+  }, [state.sessions, state.artifacts, navigateTo, updateLayout]);
+  /** 되돌리기 of a document: its AIs shown read-only in a tab follow it back (above). */
+  const restoreDocument = useCallback((artifactId: string) => {
+    if (!api) return Promise.reject(new Error("연결되지 않았습니다."));
+    const shown = Object.values(stateRef.current.sessions).filter((session) => session.documentAgent?.artifactId === artifactId && findTab(layoutRef.current, `session:${session.id}`)).map((session) => session.id);
+    for (const id of shown) awaitingBeside.current.add(id);
+    return api.restoreDocument(artifactId).catch((error: unknown) => { for (const id of shown) awaitingBeside.current.delete(id); throw error; });
+  }, [api]);
 
   const actions: WorkActions = useMemo(
     () => ({
@@ -765,12 +1077,23 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       },
       pickSession: (work: Work, exclude: Session | null) =>
         new Promise<Session | null>((resolve) => setPicker({ workId: work.id, excludeSessionId: exclude?.id ?? null, resolve })),
+      // From a conversation (the note's ⋯, a file just made or opened there): beside that conversation.
       openArtifact: (artifactId: string) => {
         void api?.request<{ handled: boolean; ok?: boolean }>("POST", "/api/office-drive/reopen", { artifactId }).then(result => {
-          if (!result.handled) setView({ kind: "document", artifactId, proposalId: null });
+          if (!result.handled) { if (!besideRef.current.open(artifactId)) setView({ kind: "document", artifactId, proposalId: null }); }
           else if (!result.ok) throw new Error("Drive 문서를 열지 못했습니다. 연결 상태를 확인해 주세요.");
         }).catch(fail);
       },
+      // A card in the conversation, a 연결 row: beside it; with no conversation there, a tab of its own.
+      openBeside: (artifactId: string, proposalId?: string) => {
+        const show = () => { if (!besideRef.current.open(artifactId, proposalId ?? null)) docTabRef.current(artifactId, proposalId); };
+        if (proposalId) { show(); return; }
+        void api?.request<{ handled: boolean; ok?: boolean }>("POST", "/api/office-drive/reopen", { artifactId }).then(result => {
+          if (!result.handled) show();
+          else if (!result.ok) throw new Error("Drive 문서를 열지 못했습니다. 연결 상태를 확인해 주세요.");
+        }).catch(fail);
+      },
+      openPageBeside: (pageId: string) => besideRef.current.openPage(pageId),
       openFile: async (target: Work, path: string, workspaceId?: string) => {
         if (!api) return;
         try {
@@ -825,30 +1148,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
         createWorktreeWorkspace: async (...args) => { if (!api) throw new Error("연결을 기다려 주세요."); return api.createWorktreeWorkspace(...args); },
         cancelWorktreeCreation: async (...args) => { if (!api) throw new Error("연결을 기다려 주세요."); return api.cancelWorktreeCreation(...args); },
       },
-      selectSession: (target, session) => {
-        if (session.pageAgent) {
-          navigateTo({ workId: target.id, sessionId: session.id, view: { kind: "browser", pageId: session.pageAgent.pageId } });
-          return;
-        }
-        if (session.documentAgent) {
-          navigateTo({ workId: target.id, sessionId: session.id, view: { kind: "document", artifactId: session.documentAgent.artifactId, proposalId: null } });
-          return;
-        }
-        if (single) {
-          // A detached window stays one window: it switches to the session picked in it.
-          navigateTo({ workId: target.id, sessionId: session.id, view: { kind: "work" } }, () => {
-            setSingle(session.id);
-            showInWindow(session.id);
-          });
-          return;
-        }
-        // Already shown in the other pane: the focus goes there (never the same conversation twice).
-        panesRef.current.focusIfShown(`session:${session.id}`);
-        navigateTo({ workId: target.id, sessionId: session.id, view: { kind: "work" } }, () => {
-          dispatch({ type: "focus", work: target, session });
-          if (target.activeSessionId !== session.id) void api?.updateWork(target.id, { activeSessionId: session.id }).catch(fail);
-        });
-      },
+      selectSession: (target, session) => entries.select(target, session),
       renameSession: (session, purpose) => void api?.updateSession(session.id, { purpose }).catch(fail),
       setModel: (session, choice) => void api?.updateSession(session.id, { model: choice.model, effort: choice.effort }).catch(fail),
       setAccess: (session, provider, mode) => {
@@ -869,26 +1169,32 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
         navigateTo({ workId: target.id, sessionId: null, view: { kind: "project", workId: target.id } });
       },
       openSidebar: showSidebar,
+      openArchive: () => setView({ kind: "archive" }),
       restore: (target) => {
         if (!api) return;
+        // A document AI restored while a tab shows it read-only goes beside its document (below).
+        if (target.kind === "session") awaitingBeside.current.add(target.id);
         const request =
           target.kind === "folder" ? api.updateFolder(target.id, { archived: false }) : target.kind === "work" ? api.updateWork(target.id, { archived: false }) : api.updateSession(target.id, { archived: false });
-        void request.then(() => setToast("되돌렸습니다.")).catch(fail);
+        void request.then(() => setToast("되돌렸습니다.")).catch((error) => { awaitingBeside.current.delete(target.id); fail(error); });
       },
       browser: browserActions,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [api, fail, savePrefs, setToast, setView, browserActions, single],
+    [api, fail, savePrefs, setToast, setView, browserActions, single, entries],
   );
 
+  /** A document in a tab of its own (from the navigator, home, a project note, the palette). */
+  const docTabRef = useRef<(artifactId: string, proposalId?: string) => void>(() => undefined);
+  docTabRef.current = (artifactId, proposalId) => {
+    panesRef.current.focusIfShown(`doc:${artifactId}`);
+    const artifact = stateRef.current.artifacts[artifactId];
+    if (artifact) navigateTo({ workId: artifact.workId, sessionId: null, view: { kind: "document", artifactId, proposalId: proposalId ?? null } });
+  };
   const docActions: DocActions = useMemo(
     () => ({
       openArtifact: (artifactId, proposalId) => {
-        const show = () => {
-          panesRef.current.focusIfShown(`doc:${artifactId}`);
-          const artifact = state.artifacts[artifactId];
-          if (artifact) navigateTo({ workId: artifact.workId, sessionId: null, view: { kind: "document", artifactId, proposalId: proposalId ?? null } });
-        };
+        const show = () => docTabRef.current(artifactId, proposalId);
         if (proposalId) { show(); return; }
         void api?.request<{ handled: boolean; ok?: boolean }>("POST", "/api/office-drive/reopen", { artifactId }).then(result => {
           if (!result.handled) show();
@@ -918,11 +1224,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
           fail(error);
         }
       },
-      openSession: (sessionId: string) => {
-        const session = state.sessions[sessionId];
-        const target = session ? state.works[session.workId] : undefined;
-        if (session && target) actions.selectSession(target, session);
-      },
+      openSession: entries.byId,
       resendHandoff: async (handoff) => {
         if (!api) return;
         try {
@@ -933,7 +1235,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
         }
       },
     }),
-    [api, fail, state.artifacts, state.sessions, state.works, actions, setToast, setView],
+    [api, fail, state.artifacts, state.sessions, state.works, actions, setToast, setView, entries],
   );
 
   const startWork = async (
@@ -963,15 +1265,41 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     }
   };
 
+  /** The AI each open document view draws, as it reports (what counts as looked at). */
+  const [drawnAgents, setDrawnAgents] = useState<Record<string, string | null>>({});
+  const onRevealDone = useCallback((artifactId: string, request: AgentReveal) => setRevealAgents((current) => (current[artifactId] === request ? { ...current, [artifactId]: null } : current)), []);
+  const onAgentDrawn = useCallback((artifactId: string, sessionId: string | null) => setDrawnAgents((current) => (current[artifactId] === sessionId ? current : { ...current, [artifactId]: sessionId })), []);
+  // A document's AI drawn in a view has its conversation loaded: its column beside the document
+  // shows it, and the main conversation's line about it opens it.
+  const loadingTranscripts = useRef(new Set<string>());
+  const drawnIds = Object.values(drawnAgents).filter((id): id is string => Boolean(id)).sort().join(",");
+  useEffect(() => {
+    if (!api) return;
+    for (const id of drawnIds ? drawnIds.split(",") : []) {
+      if (state.transcripts[id] || loadingTranscripts.current.has(id) || !state.sessions[id]) continue;
+      loadingTranscripts.current.add(id);
+      // Asked once: a failure is said and not repeated; a loaded one may be asked again after a reconnect clears it.
+      void api.items(id).then((transcript) => { dispatch({ type: "transcript", sessionId: id, transcript }); loadingTranscripts.current.delete(id); }).catch(fail);
+    }
+  }, [api, drawnIds, state.transcripts, state.sessions, fail]);
   const pendingApprovals = Object.values(state.sessions).filter((session) => session.status === "awaitingApproval" && !session.archivedAt);
+  // Where the list column is belongs to this window (nav/place.ts); it follows what is opened.
+  const [navPlace, setNavPlace] = useNavPlace(placePrefix(api?.remoteHostId), prefs.navigator);
+  const listWorkId = view.kind === "project" ? view.workId : view.kind === "work" || view.kind === "document" ? work?.id ?? null : null;
+  useListFollows(placePrefix(api?.remoteHostId), single ? null : listWorkId, state.ready && layoutReady && !single, prefs.navigator);
+  // 확인 필요, one story (Hallmark merge): while home's 지금 ledger is the focused view it lists what
+  // waits as entries under its own count, so the top bar's 확인 N steps back and the sidebar's 지금
+  // keeps only counts. Everywhere else the sidebar lists them and 확인 N jumps to the first.
+  const homeLedgerShown = view.kind === "new" && view.folderId === null && readHomeMode(prefs.homeMode) === "now";
 
   // New replies: kept by the gateway, so every window agrees. Looking at a session marks it seen,
   // except right after the user marked it unread while looking at it.
-  const visibleSession = (view.kind === "work" || view.kind === "split") && activeSession ? activeSession : null;
+  const visibleSession = view.kind === "work" && activeSession ? activeSession : null;
   const attentionSessionId = view.kind === "document"
-    ? (activeSession?.documentAgent?.artifactId === view.artifactId ? activeSession.id : Object.values(state.sessions).filter(session => session.documentAgent?.artifactId === view.artifactId && !session.archivedAt).sort((a, b) => b.createdAt - a.createdAt)[0]?.id ?? null)
+    ? documentAttentionSession(view.artifactId, drawnAgents[view.artifactId] ?? null, activeSession, state.sessions)
     : view.kind === "browser" ? browserState.pages.find(page => page.pageId === view.pageId)?.sessionId ?? null
-    : visibleSession?.id ?? null;
+    // A conversation its companion lies over is not what the person is looking at.
+    : (coveredTabs[focusedTabId] ? null : visibleSession?.id) ?? null;
   const attentionSession = useRef<string | null>(null); attentionSession.current = attentionSessionId;
   const presenceWatcher = useRef<ReturnType<typeof watchAttentionPresence> | null>(null);
   useEffect(() => {
@@ -985,8 +1313,15 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   }, [attentionInbox, attentionState.list, attentionState.supported, prefs.notify, single]);
   // The other pane's conversation is on screen too (unless the window is too narrow to show it).
   const [narrowPanes, setNarrowPanes] = useState(false);
-  const visibleSessions = layout.panes.filter((pane) => (!narrowPanes || pane.id === layout.focus) && (pane.view.kind === "work" || pane.view.kind === "split")).map(sessionIn).filter((session): session is Session => Boolean(session));
-  const visibleIds = visibleSessions.map((session) => session.id).join(",");
+  // Everything a completion could be watched in: pane tabs on screen, and a document's or web page's AI column beside it.
+  const panelKey = useSyncExternalStore(shownPanels.subscribe, shownPanels.getSnapshot);
+  const onScreen = sessionsOnScreen(layout, { narrow: narrowPanes, sessionOf: (pane) => (coveredTabs[activeTab(pane).id] ? undefined : sessionIn(pane)?.id), panels: shownPanels.ids() });
+  const visibleSessions = [...onScreen].map((id) => state.sessions[id]).filter((session): session is Session => Boolean(session));
+  const visibleIds = `${visibleSessions.map((session) => session.id).join(",")}|${panelKey}`;
+  const onScreenRef = useRef(onScreen); onScreenRef.current = onScreen;
+  const noticeSession = notices.current?.kind === "completion" ? notices.current.completion.id : null;
+  const waitingSession = notices.waiting?.kind === "completion" ? notices.waiting.completion.id : null;
+  useEffect(() => { showNotice({ type: "seen", onScreen: onScreenRef.current }); }, [visibleIds, noticeSession, waitingSession]);
   const keptUnread = useRef<string | null>(null);
   useEffect(() => {
     if (keptUnread.current && !visibleSessions.some((session) => session.id === keptUnread.current)) keptUnread.current = null;
@@ -995,7 +1330,8 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   useEffect(() => {
     if (!api) return;
     for (const shown of visibleSessions) {
-      if (!shown) continue;
+      // An archived conversation is only looked at: it stays as it was (unseen too).
+      if (!shown || !lookingChangesState(shown)) continue;
       // A failure counts as seen too once looked at (opening the work then goes elsewhere, entry.ts).
       const failed = unseenFailure(shown);
       if (!(isUnseen(shown) || failed) || keptUnread.current === shown.id) continue;
@@ -1024,21 +1360,6 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   const switchable = recent.map((id) => state.sessions[id]).filter((session): session is Session => Boolean(session && !session.archivedAt)).slice(0, 8);
   const [switcher, setSwitcher] = useState<number | null>(null);
   const switcherRef = useRef<number | null>(null);
-  const openSession = useCallback(
-    (session: Session) => {
-      if (session.pageAgent) {
-        navigateTo({ workId: session.workId, sessionId: session.id, view: { kind: "browser", pageId: session.pageAgent.pageId } });
-        return;
-      }
-      if (session.documentAgent) {
-        navigateTo({ workId: session.workId, sessionId: session.id, view: { kind: "document", artifactId: session.documentAgent.artifactId, proposalId: null } });
-        return;
-      }
-      const target = state.works[session.workId];
-      if (target) actions.selectSession(target, session);
-    },
-    [state.works, actions],
-  );
   const openAttention = useCallback(async (id: string, onOpened?: () => void) => {
     if (!api) return;
     const target = await attentionInbox.target(id);
@@ -1053,13 +1374,17 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       const transcript = await api.items(target.sessionId); dispatch({ type: "transcript", sessionId: target.sessionId, transcript });
     }
     setAttentionOpen(false);
-    navigateTo({ workId: target.workId, sessionId: target.sessionId, view: target.pageId ? { kind: "browser", pageId: target.pageId } : target.artifactId ? { kind: "document", artifactId: target.artifactId, proposalId: null } : { kind: "work" } }, () => {
+    const shown = () => {
       if (target.taskRef.executorKind === "native_agent") setTaskPanelOpen(true);
       else setFocusItem({ sessionId: target.sessionId, itemId: target.itemId, nonce: Date.now() });
       void attentionInbox.read(id).catch(attentionInbox.reportError);
       onOpened?.();
-    });
-  }, [api, attentionInbox, navigateTo]);
+    };
+    // A document's or web tab's AI goes through the one opener: beside its document with its
+    // conversation out while live, the read-only conversation itself once archived.
+    if (session.documentAgent || session.pageAgent) entries.openThen(session, shown);
+    else navigateTo({ workId: target.workId, sessionId: target.sessionId, view: target.pageId ? { kind: "browser", pageId: target.pageId } : target.artifactId ? { kind: "document", artifactId: target.artifactId, proposalId: null } : { kind: "work" } }, shown);
+  }, [api, attentionInbox, navigateTo, entries]);
   const openingAttention = useRef<string | null>(null);
   useEffect(() => { if (attentionRequest) setPendingAttentionId(attentionRequest.id); }, [attentionRequest]);
   useEffect(() => {
@@ -1117,8 +1442,13 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     const session = event.type === "item.upserted" ? stateRef.current.sessions[event.sessionId] : undefined;
     const alert = completedTurns.current.take(event, session, session ? stateRef.current.works[session.workId]?.title ?? "" : "", !single && prefsRef.current.notify !== false);
     if (!alert) return;
-    if (!document.hidden && document.hasFocus()) setToast({ text: alert.body + " · 답변 완료", action: { label: "열기", run: () => openSession(alert.session) } });
-    // The host owns OS notifications; the foreground toast still follows every live completion.
+    // An answer the user is watching arrives with nothing laid over it; any other one says so
+    // on its tab and sidebar row (unseen dot) and in the top bar, next to the bell.
+    const windowShown = !document.hidden && document.hasFocus();
+    if (windowShown && completionSurface(alert.session.id, visibleSessionIds(onScreenRef.current, windowShown)) === "toast") {
+      showNotice({ type: "show", slot: { kind: "completion", completion: { id: alert.session.id, provider: alert.session.provider, text: `${alert.body}: 새 답`, others: [] } } });
+    }
+    // The host owns OS notifications.
     if (inDesktop && attentionInbox.getState().supported === false) void notify("Achmage Workbench", "작업이 완료되었습니다.", alert.session.id).catch(() => undefined);
   };
   // Approval/error attention still follows status transitions.
@@ -1230,6 +1560,9 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
           event.preventDefault();
           showSidebar();
           requestNavigatorFocus();
+        } else if (combo === shortcuts.rightSidebar) {
+          event.preventDefault();
+          toggleRight.current(true);
         }
       }
     };
@@ -1267,34 +1600,76 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
 
   // ── work screen modes (design 3.2): 대화 · 문서 · 검토 · 나란히 · 읽기, while a document is open ──
   const lastDoc = useRef<Record<string, string>>({});
-  const shownDoc = view.kind === "document" || view.kind === "split" ? view.artifactId : null;
+  const shownDoc = viewDocument(view);
   useEffect(() => {
     if (work && shownDoc) lastDoc.current[work.id] = shownDoc;
   }, [work, shownDoc]);
-  /** The document a pane's modes are about: the one shown, else the one shown last in its work. */
-  const modeDocFor = (at: View, owner: Work | undefined, ids: string[]) => {
-    if (at.kind === "document" || at.kind === "split") return at.artifactId;
-    const remembered = owner ? lastDoc.current[owner.id] : undefined;
-    return remembered && ids.includes(remembered) ? remembered : (ids[ids.length - 1] ?? null);
-  };
-  const modeDocId = modeDocFor(view, work, openDocIds);
+  /** The project's documents open in a tab now, in any pane (not the ones only remembered as once opened). */
+  const tabDocsOf = (owner: Work | undefined) => owner ? [...new Set(layout.panes.flatMap(tabsOf).filter((tab) => tab.workId === owner.id).flatMap((tab) => viewDocument(tab.view) ?? []))].filter((id) => state.artifacts[id]) : [];
+  /** The document a pane's modes are about (workmodes.ts); none open, no modes. */
+  const modeDocFor = (at: View, owner: Work | undefined) => modeDocument(at, tabDocsOf(owner), owner ? lastDoc.current[owner.id] : undefined);
+  const modeDocId = modeDocFor(view, work);
   const [reading, setReading] = useState<{ artifactId: string; start: ReadingPosition } | null>(null);
   const workMode: WorkMode | null = work && modeDocId && !startScreen ? modeOf(view, Boolean(reading)) : null;
   const reviewTarget = modeDocId ? reviewProposal(state, modeDocId) : null;
+  // ── 곁 화면: a document or web page beside its conversation, in that conversation's tab ──
+  /** Close what is beside a conversation (a web page stays listed as a tab behind it). */
+  const closeCompanion = (paneId: PaneId, tabId: string) => desk.closeBeside(paneId, tabId);
+  /** The conversation a pane's document goes back to: the one its AI was started from, else the pane's own. */
+  const conversationOf = (pane: Pane<View>): PaneContent<View> => {
+    const shown = sessionIn(pane);
+    return { workId: pane.workId, sessionId: shown?.documentAgent ? shown.documentAgent.parentSessionId : pane.sessionId, view: { kind: "work" } };
+  };
+  /** "대화 옆에" (나란히): the person moves a document beside the conversation `at`. Its tab saves — after the question, when it holds an editor — and closes. */
+  const showBeside = (paneId: PaneId, at: PaneContent<View>, beside: Companion) =>
+    desk.moveBeside(paneId, { workId: at.workId, sessionId: at.sessionId }, beside, () => showSessionOf(at.workId, at.sessionId));
+  /**
+   * A document opened from a conversation (a file card, the note's ⋯, a 연결 row) comes beside that
+   * conversation — unless it already has a view (a tab of its own, another conversation's
+   * companion): then the app goes to that view, and nothing is saved or closed. False: the focused
+   * pane shows no conversation of the document's project.
+   */
+  const openBeside = (artifactId: string, proposalId: string | null = null) => {
+    const pane = focusedPane(layoutRef.current);
+    const artifact = stateRef.current.artifacts[artifactId];
+    if (!artifact || pane.view.kind !== "work" || pane.workId !== artifact.workId || !sessionIn(pane)) return false;
+    return desk.openBeside(pane.id, { kind: "document", artifactId, proposalId });
+  };
+  /** A web page opened from a conversation's 연결 comes beside it (the page keeps running wherever it is shown). */
+  const openPageBeside = (pageId: string) => {
+    const pane = focusedPane(layoutRef.current);
+    if (pane.view.kind !== "work" || !pane.workId || !sessionIn(pane)) return false;
+    return desk.openBeside(pane.id, { kind: "browser", pageId });
+  };
+  besideRef.current = { open: openBeside, openPage: openPageBeside };
+
   const setWorkMode = (mode: WorkMode) => {
     if (!work || !modeDocId || mode === workMode) return;
     if (mode === "read") {
       // Start reading where the document is read now (or was, when it is not on screen).
-      const body = workMode === "doc" || workMode === "split" ? document.querySelector<HTMLElement>(FOCUSED_DOC) : null;
+      const body = workMode === "doc" || workMode === "review" || workMode === "split" ? document.querySelector<HTMLElement>(FOCUSED_DOC) : null;
       setReading({ artifactId: modeDocId, start: body ? readingPosition(body) : (keptPosition(`doc:${modeDocId}`) ?? { page: null, fraction: 0 }) });
       return;
     }
-    if (mode === "review" && !reviewTarget) return setToast("검토할 수정안이 없습니다.");
-    if (mode === "split" && layout.panes.length > 1) return setToast("두 칸으로 볼 때는 '나란히'를 쓰지 않습니다. 문서를 다른 칸으로 끌어 놓으세요.");
+    if (mode === "review" && !reviewTarget) return setToast(failure("검토할 수정안이 없습니다."));
     setReading(null);
-    setView(viewFor(mode, { docId: modeDocId, proposalId: reviewTarget?.id ?? null, from: workMode, chatDraft: `work:${work.id}:${activeSession?.id ?? "none"}` }));
+    const pane = focusedPane(layoutRef.current);
+    if (mode === "chat") {
+      // 대화: the conversation alone — its companion closes; from a document's tab, its conversation.
+      if (besideOf(pane.view)) closeCompanion(pane.id, activeTab(pane).id);
+      else { const back = conversationOf(pane); if (back.sessionId !== pane.sessionId) navigateTo(back); else setViewOf(pane.id, { kind: "work" }); }
+    } else if (mode === "split") {
+      // 나란히: the document beside its conversation, in that conversation's tab.
+      showBeside(pane.id, pane.view.kind === "work" ? { workId: pane.workId, sessionId: pane.sessionId, view: pane.view } : conversationOf(pane), { kind: "document", artifactId: modeDocId, proposalId: null });
+    // 문서 · 검토: the document's own tab (one beside the conversation is given its tab: it only read there).
+    } else setViewOf(pane.id, { kind: "document", artifactId: modeDocId, proposalId: mode === "review" ? reviewTarget?.id ?? null : null }, undefined, true);
   };
   useWorkModeKeys(workMode !== null, setWorkMode);
+  /** 읽기 and 검토 from the focused conversation, by pointer (the note's ⋯), while a document of its project is open. */
+  const conversationModes = (here: boolean): DocModes | undefined => {
+    const artifact = here && workMode !== null && modeDocId ? state.artifacts[modeDocId] : undefined;
+    return artifact ? { artifactId: artifact.id, name: artifact.name, onRead: () => setWorkMode("read"), onReview: reviewTarget ? () => setWorkMode("review") : null } : undefined;
+  };
   const closeReader = (position: ReadingPosition) => {
     if (!reading) return;
     keepPosition(`doc:${reading.artifactId}`, position);
@@ -1313,17 +1688,13 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   // The compare view of a proposal is "검토"; closing it is "문서" again (in the pane showing it).
   const reviewOf = useMemo(() => {
     const review = (id: string) => (proposalId: string | null) =>
-      updateLayout((current) => updateTabView(current, id, (view) => view.kind === "document" && view.proposalId !== proposalId ? { ...view, proposalId } : view));
+      updateLayout((current) => updateTabView(current, id, (view) => {
+        if (view.kind === "document") return view.proposalId !== proposalId ? { ...view, proposalId } : view;
+        const beside = besideOf(view);
+        return view.kind === "work" && beside?.kind === "document" && beside.proposalId !== proposalId ? { ...view, beside: { ...beside, proposalId } } : view;
+      }));
     return Object.fromEntries(layout.panes.flatMap((pane) => tabsOf(pane).map((tab) => [tab.id, review(tab.id)])));
   }, [updateLayout, layout.panes.flatMap((pane) => tabsOf(pane).map((tab) => tab.id)).sort().join(",")]);
-  const modeBar = workMode ? <WorkModeBar mode={workMode} onMode={setWorkMode} canReview={Boolean(reviewTarget)} canSplit={layout.panes.length < 2} /> : null;
-  /** The other pane's bar, as it is: a press there gives that pane the focus first, and its bar is then this one. */
-  const barFor = (pane: Pane<View>, owner: Work | undefined, ids: string[]) => {
-    const docId = owner ? modeDocFor(pane.view, owner, ids) : null;
-    const mode = docId ? modeOf(pane.view, false) : null;
-    return mode && docId ? <WorkModeBar mode={mode} onMode={() => undefined} canReview={Boolean(reviewProposal(state, docId))} canSplit={false} /> : null;
-  };
-
   const appearanceApi: AppearanceApi = {
     appearance,
     appTheme,
@@ -1348,11 +1719,15 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     openSettings: (provider, theme) => {
       const target = provider ?? focusedProvider;
       setSheet({ provider: target, theme: theme ?? engineTheme(appearance[target], appTheme) });
+      // 설정 › 화면 is where a look is chosen now (release unit B).
+      setSettingsAt("screen");
     },
   };
 
   // ── what sidebar rows and menus do ──────────────────────────────────────
   const [deletingWork, setDeletingWork] = useState<Work | null>(null);
+  /** A document AI being renamed (it has no sidebar row to rename in place). */
+  const [renamingSession, setRenamingSession] = useState<Session | null>(null);
   const deleteProject = async (owner: Work) => {
     if (!api) return;
     for (const pane of layoutRef.current.panes) for (const tab of tabsOf(pane)) if (tab.workId === owner.id) await leaveGuards.current[tab.id]?.();
@@ -1457,7 +1832,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
 
   const detachSessionWindow = useCallback((session: Session) => {
     if (api?.isRemote) {
-      setToast("원격 호스트의 세션은 새 창으로 열 수 없습니다. 현재 창의 탭이나 나란히 보기를 사용하세요.");
+      setToast(failure("원격 호스트의 세션은 새 창으로 열 수 없습니다. 현재 창의 탭이나 나란히 보기를 사용하세요."));
       return;
     }
     void detachSession(session.id, session.purpose, inDesktop).catch(fail);
@@ -1466,7 +1841,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   const creationTarget = useCallback((paneId: PaneId, owner?: Work | null): NewDocumentTarget => {
     const pane = paneById(layoutRef.current, paneId);
     const at = pane?.view;
-    const artifact = at && (at.kind === "document" || at.kind === "split") ? stateRef.current.artifacts[at.artifactId] : undefined;
+    const artifact = stateRef.current.artifacts[viewDocument(at) ?? ""];
     const page = at?.kind === "browser" ? sharedBrowser.getState().pages.find(entry => entry.pageId === at.pageId) : undefined;
     const workId = owner?.id ?? artifact?.workId ?? page?.workId ?? (at?.kind === "project" ? at.workId : pane?.workId);
     const session = pane?.sessionId ? stateRef.current.sessions[pane.sessionId] : undefined;
@@ -1482,7 +1857,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       const page = await openBrowserTab(sharedBrowser, api, stateRef.current, { profileId: source?.profileId, ...target });
       const content: PaneContent<View> = { view: { kind: "browser", pageId: page.pageId }, workId: page.workId, sessionId: page.sessionId };
       const targetId = findTab(layoutRef.current, contentKey(content))?.pane.id ?? paneId;
-      afterLeaving(targetId, content.view, () => updateLayout(current => ({ ...setPane(current, targetId, content), focus: targetId })));
+      afterLeaving(targetId, content.view, () => updateLayout(current => ({ ...setPane(current, targetId, content), focus: targetId })), findTab(layoutRef.current, contentKey(content))?.tab.id ?? null);
       return true;
     } catch (error) { fail(error); return false; }
     finally { browserOpening.current = false; }
@@ -1509,12 +1884,12 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   const creationMenu = useCallback((paneId: PaneId, owner: Work | null, x: number, y: number, folderId?: string | null): MenuRequest => {
     const target = creationTarget(paneId, owner);
     const project = target.workId ? stateRef.current.works[target.workId] : undefined;
-    const space = target.workspaceId ? stateRef.current.workspaces[target.workspaceId] : undefined;
     const at = paneById(layoutRef.current, paneId)?.view;
     const commands = createActions({ ...target, folderId: folderId !== undefined ? folderId : project?.folderId ?? (at?.kind === "new" ? at.folderId : null) });
-    const entry = (action: CreateAction): MenuEntry => ({ kind: "item", label: action.label, icon: action.icon, onSelect: () => runCreateAction(paneId, action) });
-    return { x, y, title: project ? `${project.title}${space ? ` · ${space.label}` : ""}` : "새로 만들기", items: [
-      { kind: "submenu", label: "새 문서·디자인", icon: "file", items: commands.filter(action => action.kind === "document").map(entry) },
+    // Skin 2 · B: a new web page belongs to the project; the menu says which.
+    const entry = (action: CreateAction): MenuEntry => ({ kind: "item", label: action.kind === "browser" && project ? `「${project.title}」에 새 웹 페이지` : action.label, icon: action.icon, onSelect: () => runCreateAction(paneId, action) });
+    return { x, y, title: project ? project.title : "새로 만들기", items: [
+      { kind: "submenu", label: "새 문서", icon: "file", items: commands.filter(action => action.kind === "document").map(entry) },
       ...commands.filter(action => action.kind === "session" || action.kind === "browser").map(entry), { kind: "separator" },
       ...commands.filter(action => action.kind === "directory" || action.kind === "folder" || action.kind === "project").map(entry),
     ] };
@@ -1526,36 +1901,59 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   };
 
   const menuFor = useCallback(
-    (row: Row, x: number, y: number): MenuRequest | null => {
+    (row: Row, x: number, y: number, removal?: DocumentRemovalPlan): MenuRequest | null => {
       if (!api) return null;
       if (row.type === "docs" || row.type === "section" && row.workId) {
         const owner = row.type === "docs" ? row.work : state.works[row.workId!];
         return creationMenu(layoutRef.current.focus, owner ?? null, x, y);
       }
       const copy = (text: string, done: string) => () => void copyText(text).then(() => setToast(done));
-      if (row.type === "session") {
-        const { session, work: owner } = row;
+      // A session's actions: on its row, and for a document AI (no row of its own) under its
+      // document row's menu and in its conversation's head beside the document.
+      const sessionItems = (session: Session, owner: Work): MenuEntry[] => {
         const busy = isBusy(session);
+        const shortcuts = readShortcuts(state.prefs.navShortcuts) ?? [];
+        const shortcut = { kind: "session" as const, id: session.id };
+        const pinned = session.pinned || shortcuts.some((other) => sameShortcut(other, shortcut));
         const resume = resumeCommand(session, { ...owner, cwd: state.workspaces[session.workspaceId ?? ""]?.cwd ?? session.worktree?.cwd ?? owner.cwd });
         const unseenNow = isUnseen(session);
         const linked = linkOfSession(state, session.id);
-        const items: MenuEntry[] = [
+        const exports: MenuEntry = {
+          kind: "submenu",
+          label: "마크다운으로 내보내기",
+          icon: "markdown",
+          items: [
+            { kind: "item", label: "작업 폴더에 저장", icon: "download", hint: "세션 기록/", onSelect: () => void exportSession(session, "work") },
+            { kind: "item", label: inDesktop ? "다른 곳에 저장…" : "내려받기", icon: "folderOpen", onSelect: () => void exportSession(session, "path") },
+            { kind: "item", label: "마크다운 복사", icon: "copy", onSelect: () => void exportSession(session, "text") },
+          ],
+        };
+        // An archived conversation takes nothing: its menu keeps what still works on it (opening it to
+        // read, its name, its place in the list, reading it out) and offers 되돌리기 for 보관; what the
+        // gateway refuses for it (sending, a schedule, a link that sends, stopping) is not offered.
+        const archived = Boolean(session.archivedAt);
+        const items: (MenuEntry | null)[] = [
           { kind: "item", label: "열기", icon: "chat", hint: "Enter", onSelect: () => openSession(session) },
           ...(single ? [] : [{ kind: "item" as const, label: "오른쪽에 열기", icon: "columns" as const, hint: "Ctrl+클릭", onSelect: () => panesRef.current.placeItem({ kind: "session", id: session.id }, "right") }]),
           ...(single === session.id ? [] : [{ kind: "item" as const, label: "새 창으로 떼어 내기", icon: "openNew" as const, disabled: api.isRemote, disabledReason: "원격 연결에서는 현재 창의 탭이나 나란히 보기를 사용하세요.", onSelect: () => detachSessionWindow(session) }]),
-          { kind: "item", label: "이름 바꾸기", icon: "edit", hint: "F2", onSelect: () => setSidebarPending({ rename: session.id }) },
+          { kind: "item", label: "이름 바꾸기", icon: "edit", hint: session.documentAgent ? undefined : "F2", onSelect: () => (session.documentAgent ? setRenamingSession(session) : setSidebarPending({ rename: session.id })) },
+          ...(session.pageAgent ? [{ kind: "item" as const, label: "웹 탭 닫기", icon: "x" as const, hint: "대화는 보관함에 유지", onSelect: () => void sharedBrowser.close(session.pageAgent!.pageId).catch(fail) }] : []),
           { kind: "separator" },
-          { kind: "item", label: session.pinned ? "고정 풀기" : "고정", icon: "pin", onSelect: () => void api.updateSession(session.id, { pinned: !session.pinned }).catch(fail) },
-          {
-            kind: "item",
+          // A pinned session is kept in 바로가기 (`pinned` follows).
+          { kind: "item", label: pinned ? "고정 풀기" : "고정", icon: "pin", hint: "바로가기", onSelect: () => {
+            savePrefs({ navShortcuts: pinned ? shortcuts.filter((other) => !sameShortcut(other, shortcut)) : addShortcuts(shortcuts, [shortcut]) });
+            void api.updateSession(session.id, { pinned: !pinned }).catch(fail);
+          } },
+          ...(archived ? [] : [{
+            kind: "item" as const,
             label: "예약 작업…",
-            icon: "clock",
+            icon: "clock" as const,
             hint: (() => {
               const count = state.schedules.filter((entry) => entry.sessionId === session.id && entry.enabled).length;
               return count ? `${count}개` : undefined;
             })(),
             onSelect: () => setScheduling(session.id),
-          },
+          }]),
           { kind: "item", label: session.muted ? "알림 켜기" : "알림 끄기", icon: "bell", hint: session.muted ? "이 세션은 알리지 않음" : undefined, onSelect: () => void api.updateSession(session.id, { muted: !session.muted }).catch(fail) },
           {
             kind: "item",
@@ -1563,11 +1961,13 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
             icon: unseenNow ? "eye" : "bell",
             onSelect: () => {
               if (!unseenNow && visibleSessions.some((shown) => shown.id === session.id)) keptUnread.current = session.id;
+              // 지금's open row keeps it unread too (until a newer answer); marking it read forgets that.
+              if (unseenNow) forgetUnread(session.id); else keepUnread(session.id, session.previewAt);
               void api.updateSession(session.id, { seen: unseenNow }).catch(fail);
             },
           },
           { kind: "separator" },
-          linked
+          archived ? null : linked
             ? {
                 kind: "submenu",
                 label: `세션 잇기 ⇄ ${hopsText(linked)}${linked.state === "paused" ? " · 멈춤" : ""}`,
@@ -1582,31 +1982,24 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
                   { kind: "item", label: "끊기", danger: true, onSelect: () => linkApi.stop(linked) },
                 ],
               }
-            : { kind: "item", label: "세션 잇기…", icon: "link", hint: "다른 세션과 주고받기", onSelect: () => linkApi.openDialog([session.id]) },
-          ...(pkmHandle.current?.tree?.status.path && !busy ? [{ kind: "item" as const, label: "인사이트 초안…", icon: "bulb" as const, onSelect: () => pkmHandle.current?.setDialog({ kind: "insight", sessionId: session.id }) }] : []),
-          {
-            kind: "submenu",
-            label: "마크다운으로 내보내기",
-            icon: "markdown",
-            items: [
-              { kind: "item", label: "작업 폴더에 저장", icon: "download", hint: "세션 기록/", onSelect: () => void exportSession(session, "work") },
-              { kind: "item", label: inDesktop ? "다른 곳에 저장…" : "내려받기", icon: "folderOpen", onSelect: () => void exportSession(session, "path") },
-              { kind: "item", label: "마크다운 복사", icon: "copy", onSelect: () => void exportSession(session, "text") },
-            ],
-          },
+            : { kind: "item", label: "다른 대화와 잇기…", icon: "link", hint: "두 대화가 답을 주고받습니다", onSelect: () => linkApi.openDialog([session.id]) },
+          exports,
           { kind: "separator" },
           ...(inDesktop ? [{ kind: "item" as const, label: "작업 폴더 열기", icon: "folderOpen" as const, onSelect: () => void openPath(owner.cwd) }] : []),
           { kind: "item", label: "작업 폴더 경로 복사", icon: "copy", onSelect: copy(owner.cwd, "경로를 복사했습니다.") },
-          ...(resume
-            ? [{ kind: "item" as const, label: "터미널에서 이어 하기 명령 복사", icon: "terminal" as const, onSelect: copy(resume, "명령을 복사했습니다. 터미널에 붙여 넣으면 같은 대화를 이어 갑니다.") }]
+          ...(resume && !archived
+            ? [{ kind: "submenu" as const, label: "고급", icon: "terminal" as const, items: [{ kind: "item" as const, label: "터미널에서 이어 하기 명령 복사", icon: "terminal" as const, onSelect: copy(resume, "명령을 복사했습니다. 터미널에 붙여 넣으면 같은 대화를 이어 갑니다.") }] }]
             : []),
           { kind: "item", label: `${PROVIDER_LABEL[session.provider]} 외형…`, icon: "palette", onSelect: () => appearanceApi.openSettings(session.provider) },
           { kind: "separator" },
-          ...(busy ? [{ kind: "item" as const, label: "멈추기", icon: "stop" as const, onSelect: () => actions.interrupt(session) }] : []),
-          { kind: "item", label: "보관", icon: "archive", hint: "Delete", disabled: busy, disabledReason: "진행 중인 세션을 멈춘 뒤 보관할 수 있습니다.", onSelect: () => archive({ kind: "session", id: session.id }) },
+          ...(busy && !archived ? [{ kind: "item" as const, label: "멈추기", icon: "stop" as const, onSelect: () => actions.interrupt(session) }] : []),
+          archived
+            ? { kind: "item", label: "되돌리기", icon: "restore", disabled: restoreRefusal(session, (id) => Boolean(state.artifacts[id])) !== null, disabledReason: restoreRefusal(session, (id) => Boolean(state.artifacts[id])) ?? undefined, onSelect: () => actions.restore({ kind: "session", id: session.id }) }
+            : { kind: "item", label: "보관", icon: "archive", hint: "Delete", disabled: busy, disabledReason: "진행 중인 대화를 멈춘 뒤 보관할 수 있습니다.", onSelect: () => archive({ kind: "session", id: session.id }) },
         ];
-        return { x, y, title: session.purpose, items };
-      }
+        return items.filter((entry): entry is MenuEntry => entry !== null);
+      };
+      if (row.type === "session") return { x, y, title: row.session.purpose, items: renameFirst(sessionItems(row.session, row.work)) };
       if (row.type === "work") {
         const owner = row.work;
         const busy = row.sessions.some((session) => isBusy(session));
@@ -1639,11 +2032,11 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
           ...(inDesktop ? [{ kind: "item" as const, label: "작업 폴더 열기", icon: "folderOpen" as const, onSelect: () => void openPath(owner.cwd) }] : []),
           { kind: "item", label: "작업 폴더 경로 복사", icon: "copy", onSelect: copy(owner.cwd, "경로를 복사했습니다.") },
           { kind: "separator" },
-          { kind: "item", label: "보관", icon: "archive", hint: "Delete", disabled: busy, disabledReason: "진행 중인 세션이 끝나면 보관할 수 있습니다.", onSelect: () => archive({ kind: "work", id: owner.id }) },
-          { kind: "item", label: "프로젝트 삭제…", icon: "trash", disabled: busy, disabledReason: "진행 중인 세션이 끝나면 삭제할 수 있습니다.", onSelect: () => setDeletingWork(owner) },
+          { kind: "item", label: "보관", icon: "archive", hint: "Delete", disabled: busy, disabledReason: "진행 중인 대화가 끝나면 보관할 수 있습니다.", onSelect: () => archive({ kind: "work", id: owner.id }) },
+          { kind: "item", label: "프로젝트 삭제…", icon: "trash", disabled: busy, disabledReason: "진행 중인 대화가 끝나면 삭제할 수 있습니다.", onSelect: () => setDeletingWork(owner) },
         ];
         items.splice(1, 0, { kind: "item", label: "프로젝트 페이지", icon: "project", onSelect: () => actions.openProject(owner) }, { kind: "item", label: "카드로 보기", icon: "grid", onSelect: () => setView({ kind: "pkm", target: { kind: "work", id: owner.id } }) });
-        return { x, y, title: owner.title, items };
+        return { x, y, title: owner.title, items: renameFirst(items) };
       }
       if (row.type === "folder") {
         const folder = row.folder;
@@ -1657,7 +2050,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
           { kind: "separator" },
           { kind: "item", label: "보관 (안의 것 포함)", icon: "archive", hint: "Delete", onSelect: () => archive({ kind: "folder", id: folder.id }) },
         ];
-        return { x, y, title: folder.name, items };
+        return { x, y, title: folder.name, items: renameFirst(items) };
       }
       if (row.type === "doc") {
         const artifact = row.artifact;
@@ -1670,17 +2063,64 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
                 { kind: "item" as const, label: "템플릿으로 하위 페이지…", icon: "page" as const, onSelect: () => pkmHandle.current?.setDialog({ kind: "template", workId: artifact.workId, parentId: artifact.id }) },
               ]
             : []),
+          // Its AI conversations have no rows of their own: each opens beside the document here.
+          // Its AI conversations have no rows of their own: each carries every action its row had.
+          ...(row.agents.length ? [{ kind: "separator" as const }, ...row.agents.map((agent): MenuEntry => ({ kind: "submenu", label: `문서 AI, ${PROVIDER_LABEL[agent.provider]}${statusText(agent) ? `, ${statusText(agent)}` : ""}`, icon: "chat", items: sessionItems(agent, row.work) }))] : []),
+          { kind: "separator" },
           { kind: "item", label: "다른 앱으로 열기", icon: "arrowRight", onSelect: () => void api.openExternal(artifact.id).catch(fail) },
-          ...(inDesktop ? [{ kind: "item" as const, label: "파일 위치 열기", icon: "folderOpen" as const, onSelect: () => void openPath(artifact.path, true) }] : []),
+          ...(inDesktop ? [{ kind: "item" as const, label: "폴더에서 보기", icon: "folderOpen" as const, onSelect: () => void openPath(artifact.path, true) }] : []),
           { kind: "item", label: "경로 복사", icon: "copy", onSelect: copy(artifact.path, "경로를 복사했습니다.") },
+          { kind: "separator" },
+          // What the gateway says can be done with this file, asked as the menu opened. Each item
+          // sends exactly its own action; 목록에서 빼기 never touches the file.
+          ...(removal && !removal.actions.length
+            ? [{ kind: "item" as const, label: "목록에서 빼기", icon: "x" as const, disabled: true, disabledReason: removal.reason ?? "지금은 뺄 수 없습니다.", onSelect: () => undefined }]
+            : [{ kind: "item" as const, label: "목록에서 빼기", icon: "x" as const, hint: "파일은 그대로", onSelect: () => void removeDoc(artifact, "unlisted") }]),
+          ...(removal?.actions.includes("trash") ? [{ kind: "item" as const, label: "휴지통으로 옮기기", icon: "trash" as const, hint: "보관함에서 되돌림", danger: true, onSelect: () => void removeDoc(artifact, "trash") }] : []),
         ];
         return { x, y, title: artifact.name, items };
       }
       return null;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [api, state, actions, archive, exportSession, openPath, openSession, visibleIds, startNew, docActions, fail, setToast, linkApi, single, creationMenu, detachSessionWindow],
+    [api, state, actions, archive, exportSession, openPath, openSession, visibleIds, startNew, docActions, fail, setToast, linkApi, single, creationMenu, detachSessionWindow, sharedBrowser, savePrefs],
   );
+
+  /**
+   * 목록에서 빼기 / 휴지통으로 옮기기, both undone by 되돌리기 (here, or in 보관함). The open editors are
+   * asked first for unsaved edits; the gateway then does exactly the chosen action or refuses. A
+   * refused trash (the file is no longer the app's to move) offers 목록에서 빼기 instead.
+   */
+  const editors = useRef(new EditorRegistry());
+  const onEditorHandle = useCallback((artifactId: string, viewId: string, handle: EditorHandle | null) => editors.current.set(artifactId, viewId, handle), []);
+  // Skin 2 · B: at the shared tab cap a tab with unsaved edits (or an editor that cannot tell) never steps back.
+  useEffect(() => {
+    setTabKeeper((tab) => { const artifactId = viewDocument(tab.view as View); return Boolean(artifactId && editors.current.states(artifactId).some((dirty) => dirty !== false)); });
+    return () => setTabKeeper(null);
+  }, []);
+  documentTabsRef.current = (artifactId: string) => documentTabs(artifactId);
+  const [unsavedAsk, setUnsavedAsk] = useState<{ name: string; certain: boolean; answer: (go: boolean) => void } | null>(null);
+  /** The tabs (in every pane) showing a document, alone or beside its conversation. */
+  const documentTabs = (artifactId: string) => layoutRef.current.panes.flatMap((pane) => tabsOf(pane)
+    .filter((tab) => viewDocument(tab.view) === artifactId).map((tab) => ({ pane, tab })));
+  const [refusedTrash, setRefusedTrash] = useState<{ artifact: Artifact; reason: string } | null>(null);
+  async function removeDoc(artifact: Artifact, action: "trash" | "unlisted"): Promise<void> {
+    if (!api) return;
+    try {
+      const result = await removeAfterSaving(editors.current.states(artifact.id),
+        (certain) => new Promise<boolean>((answer) => setUnsavedAsk({ name: artifact.name, certain, answer })),
+        () => leaveEditors(documentTabs(artifact.id).flatMap(({ tab }) => (leaveGuards.current[tab.id] ? [() => leaveGuards.current[tab.id]!()] : []))),
+        () => api.removeDocument(artifact.id, action));
+      if (result === "cancelled") return;
+      setToast({
+        text: result.removed?.kind === "trash" ? "문서를 앱 휴지통으로 옮겼습니다" : "목록에서 뺐습니다. 파일은 그대로입니다",
+        action: { label: "되돌리기", run: () => void restoreDocument(artifact.id).catch(fail) },
+      });
+    } catch (error) {
+      if (action === "trash" && error instanceof ApiRequestError && error.code === "removal_changed") return setRefusedTrash({ artifact, reason: error.message });
+      fail(error);
+    }
+  }
 
   function openWorkNow(target: Work) {
     // The session that needs the user: 확인 필요 › 오류 › 새 답 › the one looked at last (entry.ts),
@@ -1694,7 +2134,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     }
     panesRef.current.focusIfShown(chosen ? `session:${chosen.id}` : `work:${latest.id}`);
     navigateTo({ workId: target.id, sessionId: chosen?.id ?? null, view: { kind: "work" } }, () => {
-      if (chosen && chosen.id !== latest.activeSessionId) {
+      if (chosen && becomesActive(latest, chosen)) {
         dispatch({ type: "focus", work: latest, session: chosen });
         void api?.updateWork(latest.id, { activeSessionId: chosen.id }).catch(fail);
       }
@@ -1715,10 +2155,47 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     [api, fail],
   );
 
+  /** Skin 2 · B: a browser page as tab content (one tab per page: `browser:<pageId>`). */
+  const pageContent = (page: { pageId: string; workId: string; sessionId: string | null }): PaneContent<View> => ({ view: { kind: "browser", pageId: page.pageId }, workId: page.workId, sessionId: page.sessionId });
+  const focusedTab = activeTab(focusedPane(layout));
+  const webRows: WebRowActions = {
+    pages: browserState.pages, closedPages: browserState.closedPages ?? [],
+    currentId: focusedTab.view.kind === "browser" ? contentKey(focusedTab) : null,
+    open: (item) => {
+      const page = item.pageId ? browserState.pages.find((entry) => entry.pageId === item.pageId && entry.status !== "closed") : undefined;
+      if (!page || !item.id.startsWith("browser:")) { if (item.agent) openSession(item.agent); return; }
+      void sharedBrowser.releaseHeld(page.pageId, true);
+      navigateTo(pageContent(page));
+    },
+    reopen: (item) => {
+      if (!item.pageId) return;
+      void sharedBrowser.reopen(item.pageId).then((page) => navigateTo(pageContent(page))).catch(fail);
+    },
+    close: (item) => {
+      if (!item.pageId) return;
+      const shown = findTab(layoutRef.current, `browser:${item.pageId}`);
+      if (shown) closeTabNow(shown.pane.id, shown.tab.id);
+      else void sharedBrowser.close(item.pageId).catch(fail);
+    },
+    forget: (item) => { if (item.pageId) void sharedBrowser.forget(item.pageId).catch(fail); },
+    openAgent: (item) => { if (item.agent) openSession(item.agent); },
+    create: (owner) => { void openBrowserRef.current(layoutRef.current.focus, { workId: owner.id }); },
+  };
+  // Laid over the work (a narrow window, the phone), the column leaves once an item is chosen — also
+  // when it is the one already on screen (nothing else changes then, so the view's effect cannot close it).
+  const chosen = () => { if (compactShell) overlay.chosen(); };
   const sidebarActions: SidebarActions = {
-    openSession,
-    openWork: (target) => actions.openProject(target),
-    openDoc: (artifact: Artifact) => docActions.openArtifact(artifact.id),
+    web: webRows,
+    closeWebTab: session => { if (session.pageAgent) void sharedBrowser.close(session.pageAgent.pageId).catch(fail); },
+    openSession: (session) => { openSession(session); chosen(); },
+    openWork: (target) => { actions.openProject(target); chosen(); },
+    openDoc: (artifact: Artifact) => { docActions.openArtifact(artifact.id); chosen(); },
+    docRemoval: (artifact) => api ? api.documentRemoval(artifact.id) : Promise.reject(new Error("연결되지 않았습니다.")),
+    // The pane's session names the AI; the document view draws that one (also when already open)
+    // and opens its conversation.
+    // Like every other choice in the laid-over column, opening a document with its AI closes the column (fix 1:
+    // on a phone, a document already on screen with its AI left the column open over it).
+    openDocAgent: (...args: Parameters<typeof entries.documentRow>) => { const result = entries.documentRow(...args); chosen(); return result; },
     newSession: ({ folderId, work: owner, provider }) => {
       if (owner) void actions.newSession(owner, provider ?? engine).then(session => { if (session) actions.selectSession(owner, session); });
       else startNew(folderId ?? null);
@@ -1751,6 +2228,18 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     linkSessions: (pair) => linkApi.openDialog(pair.map((session) => session.id)),
     importConversations: () => setImportOpen(true),
     openRight: single ? undefined : (item) => placeItem(item, "right"),
+    // N1: a project chosen in the list brings back the tab the person had open in it (the focused
+    // pane's most recent, else another pane's), else its project note. Nothing else moves or stops.
+    chooseProject: (target) => {
+      const found = lastTabOf(layoutRef.current, target.id);
+      overlay.keepOpen(projectChoiceMoves({ focusedTabId, focusedWorkId: workId, viewKind: view.kind }, target.id, found ? found.tab.id : null));
+      if (found) selectTabNow(found.pane.id, found.tab.id);
+      else actions.openProject(target);
+    },
+    openNotifications: () => setAttentionOpen(true),
+    openTasks: () => setTaskPanelOpen(true),
+    // The existing home views (HomeModes "프로젝트" board/table, "흐름" calendar), opened in the centre.
+    openHomeView: (mode) => { savePrefs({ homeMode: mode }); startNew(null); },
   };
 
   const visibleLink = visibleSession ? linkOfSession(state, visibleSession.id) : null;
@@ -1760,7 +2249,8 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       ? []
       : [
           { id: "new", label: "새로 만들기", icon: "plus" as const, hint: shortcuts.newWork, run: () => openCreate.current() },
-          { id: "home", label: "홈", icon: "home" as const, run: () => startNew(null) },
+          // One name for the place (the rail, the page, the tab, the bar): 지금; "홈" still finds it.
+          { id: "home", label: "지금", aliases: ["홈"], icon: "home" as const, run: () => startNew(null) },
         ]),
     ...(visibleSession
       ? [
@@ -1773,18 +2263,19 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       : []),
     visibleLink
       ? { id: "link-view", label: `주고받은 내용 보기 (세션 잇기 ${hopsText(visibleLink)})`, icon: "link" as const, run: () => linkApi.openView(visibleLink.id) }
-      : { id: "link", label: "세션 잇기… (다른 세션과 주고받기)", icon: "link" as const, run: () => linkApi.openDialog(visibleSession ? [visibleSession.id] : []) },
+      : { id: "link", label: "다른 대화와 잇기… (두 대화가 답을 주고받습니다)", icon: "link" as const, run: () => linkApi.openDialog(visibleSession ? [visibleSession.id] : []) },
     ...(single ? [] : [{ id: "import", label: "다른 곳의 대화 가져오기 (터미널·다른 앱의 Claude Code·Codex)", icon: "restore" as const, run: () => setImportOpen(true) }]),
     { id: "archive", label: "보관함 열기", icon: "archive", run: () => setView({ kind: "archive" }) },
     { id: "sidebar", label: sidebarOpen ? "사이드바 숨기기" : "사이드바 보이기", icon: "sidebar", run: toggleSidebar },
     { id: "theme", label: focusedTheme === "dark" ? "라이트 화면으로" : "다크 화면으로", icon: focusedTheme === "dark" ? "sun" : "moon", run: () => savePrefs({ theme: focusedTheme === "dark" ? "light" : "dark" }) },
     { id: "appearance", label: "엔진 외형 설정", icon: "palette", run: () => appearanceApi.openSettings() },
+    { id: "settings", label: "설정", icon: "settings", run: () => { setSettingsListFirst(true); setSettingsAt(readSettingsSection(prefsRef.current.settingsSection)); } },
     { id: "integrations", label: "MCP·스킬 보기", icon: "tool", run: () => setIntegrationsOpen(true) },
     { id: "office-settings", label: "문서 AI 설정", icon: "tool", run: () => setOfficeSettingsOpen(true) },
     { id: "dropbox", label: "Dropbox 폴더 연결", icon: "folder", run: () => setDropboxOpen(true) },
     { id: "office-import", label: "이음오피스 설정 가져오기", icon: "folder", run: () => setOfficeImportOpen(true) },
     { id: "office-knowledge", label: "지식베이스", icon: "tool", run: () => openKnowledge() },
-    { id: "connections", label: "연결과 설정", icon: "dots", run: () => setMenuOpen(true) },
+    { id: "connections", label: "더 보기 메뉴", icon: "dots", run: () => setMenuOpen(true) },
     { id: "onboarding", label: "처음 안내 다시 보기", icon: "eye", run: () => setOnboardingAgain(true) },
   ];
 
@@ -1794,9 +2285,10 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   /** What a pane shows, as keys: the same conversation or document is never in both panes. */
   const keysOf = (pane: Pane<View>): string[] => {
     const at = pane.view;
-    if (at.kind === "work" || at.kind === "split") {
+    if (at.kind === "work") {
       const shown = sessionIn(pane);
-      return [...(shown ? [`session:${shown.id}`] : pane.workId ? [`work:${pane.workId}`] : []), ...(at.kind === "split" ? [`doc:${at.artifactId}`] : [])];
+      const beside = besideOf(at);
+      return [...(shown ? [`session:${shown.id}`] : pane.workId ? [`work:${pane.workId}`] : []), ...(beside ? [beside.kind === "document" ? `doc:${beside.artifactId}` : `browser:${beside.pageId}`] : [])];
     }
     if (at.kind === "document") return [`doc:${at.artifactId}`];
     if (at.kind === "presentation") return [`presentation:${at.id}`];
@@ -1808,7 +2300,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     return [`home:${at.folderId ?? ""}`];
   };
   const itemKey = (item: PaneItem): string => {
-    if (item.kind === "session" && state.sessions[item.id]?.pageAgent) return `browser:${state.sessions[item.id]!.pageAgent!.pageId}`;
+    if (item.kind === "session" && state.sessions[item.id]?.pageAgent && !state.sessions[item.id]?.archivedAt) return `browser:${state.sessions[item.id]!.pageAgent!.pageId}`;
     if (item.kind === "session" && state.sessions[item.id]?.documentAgent) return `doc:${state.sessions[item.id]!.documentAgent!.artifactId}`;
     if (item.kind === "work") {
       const owner = state.works[item.id];
@@ -1826,10 +2318,9 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   /** What a pane opened for an item shows. */
   const contentOf = (item: PaneItem): PaneContent<View> | null => {
     if (item.kind === "session") {
+      // The opener's route: a live document AI beside its document, an archived one as itself.
       const session = state.sessions[item.id];
-      if (session?.pageAgent) return { view: { kind: "browser", pageId: session.pageAgent.pageId }, workId: session.workId, sessionId: session.id };
-      if (session?.documentAgent) return { view: { kind: "document", artifactId: session.documentAgent.artifactId, proposalId: null }, workId: session.workId, sessionId: session.id };
-      return session ? { view: { kind: "work" }, workId: session.workId, sessionId: session.id } : null;
+      return session ? sessionRoute(session, (artifactId) => Boolean(state.artifacts[artifactId])).content : null;
     }
     if (item.kind === "work") {
       const owner = state.works[item.id];
@@ -1848,7 +2339,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   const showSessionOf = (ownerId: string | null, sessionId: string | null) => {
     const owner = ownerId ? state.works[ownerId] : undefined;
     const session = sessionId ? state.sessions[sessionId] : undefined;
-    if (owner && session && !session.documentAgent && !session.pageAgent && session.workId === owner.id && owner.activeSessionId !== session.id) {
+    if (owner && session && becomesActive(owner, session)) {
       dispatch({ type: "focus", work: owner, session });
       void api?.updateWork(owner.id, { activeSessionId: session.id }).catch(fail);
     }
@@ -1859,17 +2350,18 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     if (!layoutPersistence || !layoutReady || single) return;
     window.clearTimeout(layoutSaveTimer.current);
     const key = layoutScopeRef.current;
-    try { await layoutPersistence.write(key, { version: 2, ...layoutRef.current }); }
+    try { await layoutPersistence.write(key, { version: 2, ...layoutRef.current, ...(parkedTabs.current.length ? { parked: parkedTabs.current } : {}) }); }
     catch (error) { setLayoutProblem({ key, message: error instanceof Error ? error.message : String(error) }); throw error; }
   };
   openWorkspaceRef.current = async (workspace) => {
     if (!api || !layoutPersistence || !layoutReady || layoutSwitching.current) return false;
     const key = workspace?.id ?? GLOBAL_LAYOUT;
-    if (key === layoutScopeRef.current) return true;
+    // A remote client keeps its one device record (skin 2 · B): a workspace chosen there opens its conversation.
+    if (key === layoutScopeRef.current && !api.isRemote) return true;
     layoutSwitching.current = true;
     try {
       await flushEditors();
-      if (single) {
+      if (single || api.isRemote) {
         if (!workspace) return false;
         const owner = stateRef.current.works[workspace.workId];
         if (!owner || workspace.removedAt || workspace.archivedAt) return false;
@@ -1908,7 +2400,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       if (!keepLocal) await flushEditors();
       const key = layoutProblem.key;
       const record = await layoutPersistence.read(key);
-      if (keepLocal && layoutReady) await layoutPersistence.write(key, { version: 2, ...layoutRef.current });
+      if (keepLocal && layoutReady) await layoutPersistence.write(key, { version: 2, ...layoutRef.current, ...(parkedTabs.current.length ? { parked: parkedTabs.current } : {}) });
       else {
         const restored = restoreWorkspaceLayout(record?.layout ?? prefsRef.current.paneLayout, singleLayout<View>({ kind: "new", folderId: null }, null));
         layoutScopeRef.current = key; setLayoutScope(key); layoutSaved.current = "";
@@ -1920,7 +2412,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     finally { layoutSwitching.current = false; }
   };
   /** The conversation the focused pane keeps showing once it loses the focus. */
-  const keptOf = (pane: Pane<View>) => (pane.view.kind === "work" || pane.view.kind === "split" ? (sessionIn(pane)?.id ?? null) : null);
+  const keptOf = (pane: Pane<View>) => (pane.view.kind === "work" ? (sessionIn(pane)?.id ?? null) : null);
   const focusPaneNow = (id: PaneId) => {
     const current = layoutRef.current;
     const target = paneById(current, id);
@@ -1942,6 +2434,8 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       selectTabNow(existing.pane.id, existing.tab.id);
       return true;
     }
+    // Beside the conversation on screen in the focused pane: it is shown already.
+    if (keysOf(focusedPane(layoutRef.current)).includes(key)) return true;
     const id = shownElsewhere(layoutRef.current, (pane) => keysOf(pane).includes(key));
     if (id) focusPaneNow(id);
     return id !== null;
@@ -1953,20 +2447,35 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   };
   const effectOf = (item: PaneItem, target: PaneTarget) => item.kind === "tab" ? "swap" : (target.side !== "center" && movesOut(layoutRef.current, item) ? "split" : effectAt(layoutRef.current, target, showsItem(item)));
   const placeItemAt = (item: PaneItem, target: PaneTarget) => {
+    // 오른쪽에 열기 / a drag places without going through the desk: still the person's choice.
+    navigated.current = true;
     if (item.kind === "tab") {
       const source = layoutRef.current.panes.flatMap(tabsOf).find((tab) => tab.id === item.id);
       const run = () => updateLayout((current) => moveTab(current, item.id, target, target.tabIndex));
-      if (source && target.side === "center") afterLeaving(target.paneId, source.view, run);
+      if (source && target.side === "center") afterLeaving(target.paneId, source.view, run, item.id);
       else run();
       return;
     }
     const content = single ? null : contentOf(item);
     if (!content) return;
     const current = layoutRef.current;
+    // A document beside a conversation is not opened a second time by dragging it: the app goes to it.
+    const besideHolder = item.kind === "doc" ? viewsOfDocument(current, item.id).find((holder) => holder.beside) : undefined;
+    if (besideHolder) { selectTabNow(besideHolder.paneId, besideHolder.tabId); return; }
     const existingTab = findTab(current, contentKey(content));
+    // A document AI placed in a pane has its conversation brought out there, as when it is opened.
+    const placed = item.kind === "session" ? state.sessions[item.id] : undefined;
+    const reveal = placed ? sessionRoute(placed, (artifactId) => Boolean(state.artifacts[artifactId])).reveal : null;
+    const askReveal = () => { if (reveal) setRevealAgents((latest) => ({ ...latest, [reveal.artifactId]: { sessionId: reveal.sessionId } })); };
     if (existingTab) {
-      updateLayout((latest) => moveTab(latest, existingTab.tab.id, target, target.tabIndex));
+      updateLayout((latest) => {
+        const moved = moveTab(latest, existingTab.tab.id, target, target.tabIndex);
+        const holder = reveal ? findTab(moved, contentKey(content)) : null;
+        // Its document's tab names this AI once it is the one on screen there.
+        return holder && activeTab(holder.pane).id === holder.tab.id ? setPane(moved, holder.pane.id, content) : moved;
+      });
       showSessionOf(content.workId, content.sessionId);
+      askReveal();
       return;
     }
     const shows = showsItem(item);
@@ -1975,18 +2484,13 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     const effect = conversation ? "split" : effectAt(current, target, shows);
     const holder = current.panes.find(shows);
     const shown = holder ? { workId: holder.workId, sessionId: sessionIn(holder)?.id ?? holder.sessionId } : content;
-    // "나란히" is one pane's mode: a second pane keeps the side of it the user was on.
-    const unsplit: View | null = conversation
-      ? { kind: "work" }
-      : current.panes.length === 1 && leaving.view.kind === "split" && effect === "split"
-        ? leaving.view.focus === "chat"
-          ? { kind: "work" }
-          : { kind: "document", artifactId: leaving.view.artifactId, proposalId: null }
-        : null;
+    // The document dragged out of its only pane leaves its conversation behind in that pane.
+    const unsplit: View | null = conversation ? { kind: "work" } : null;
     const keep = conversation ? (sessionIn(leaving)?.id ?? null) : keptOf(leaving);
     const run = () => {
       updateLayout((latest) => placeAt(unsplit ? setPane(latest, leaving.id, { view: unsplit }) : latest, content, target, keep, shows));
       if (shown) showSessionOf(shown.workId, shown.sessionId);
+      askReveal();
     };
     if (effect === "replace") afterLeaving(target.paneId, content.view, run);
     else if (unsplit) afterLeaving(leaving.id, unsplit, run);
@@ -1996,7 +2500,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   const splitPaneNow = (id: PaneId, side: Side) => {
     if (single) return;
     const current = layoutRef.current;
-    if (current.panes.length >= MAX_PANES) return setToast(`한 창에는 최대 ${MAX_PANES}칸을 열 수 있습니다.`);
+    if (current.panes.length >= MAX_PANES) return setToast(failure(`한 창에는 최대 ${MAX_PANES}칸을 열 수 있습니다.`));
     const source = paneById(current, id);
     if (source?.view.kind === "terminal" && api) {
       void api.createTerminal(source.view.workspaceId, { requestId: crypto.randomUUID() }).then((entry) => {
@@ -2018,15 +2522,17 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       if (rest.id !== current.focus && previous) showSessionOf(previous.workId, previous.sessionId);
     }, fail, `close-group:${id}`);
   };
-  const selectTabNow = (paneId: string, tabId: string) => {
+  const selectTabNow = (paneId: string, tabId: string, then?: () => void) => {
     const group = paneById(layoutRef.current, paneId);
     const tab = group && tabsOf(group).find((entry) => entry.id === tabId);
     if (!tab) return;
     afterLeaving(paneId, tab.view, () => {
       updateLayout((current) => activateTab(current, paneId, tabId));
       showSessionOf(tab.workId, tab.sessionId);
-    });
+      then?.();
+    }, tabId);
   };
+  selectTabRef.current = selectTabNow;
   const closeTabNow = (paneId: string, tabId: string) => {
     const guard = leaveGuards.current[tabId];
     leaveGate.current.run(paneId, guard ? () => guard("close") : null, () => {
@@ -2036,27 +2542,32 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   panesRef.current = { focusIfShown, placeItem };
   const paneActions = useMemo<PaneActions>(() => ({ openBeside: (item) => panesRef.current.placeItem(item, "right") }), []);
   /** A pane's header: what it shows, and what dragging the header carries. */
+  /** An answer that landed off screen, until it is looked at. */
+  const unseenAnswer = (session: Session | undefined) => Boolean(session && unseen.has(session.id) && !isWorking(session));
   const paneHead = (pane: Pane<View>): PaneHead => {
     const at = pane.view;
     if (at.kind === "presentation") return { title: `${state.artifacts[at.artifactId]?.name ?? "HTML"} · 발표`, icon: <FormatBadge format="html" />, item: null };
     const owner = pane.workId ? state.works[pane.workId] : undefined;
-    const artifact = at.kind === "document" || at.kind === "split" ? state.artifacts[at.artifactId] : undefined;
-    if (artifact) return { project: owner?.title, kindLabel: "문서", title: artifact.name, icon: <FormatBadge format={artifact.format} />, hint: artifact.path, item: { kind: "doc", id: artifact.id } };
+    const artifact = at.kind === "document" ? state.artifacts[at.artifactId] : undefined;
+    if (artifact) {
+      const agent = Object.values(state.sessions).filter(entry => entry.documentAgent?.artifactId === artifact.id && !entry.archivedAt).sort((a, b) => b.createdAt - a.createdAt)[0];
+      return { project: owner?.title, kindLabel: "문서", title: artifact.name, icon: <FormatBadge format={artifact.format} />, hint: artifact.path, unseen: unseenAnswer(agent), state: agent ? rowState(agent) : null, item: { kind: "doc", id: artifact.id } };
+    }
     if (at.kind === "work" && owner) {
       const shown = sessionIn(pane);
       return {
         title: shown?.purpose ?? owner.title,
-        project: owner.title, kindLabel: shown?.pageAgent ? "웹 AI" : shown?.documentAgent ? "문서 AI" : "채팅", status: shown ? statusText(shown) : undefined,
-        icon: shown ? <EngineMark provider={shown.provider} size={14} /> : <Icon name="project" size={14} />,
+        project: owner.title, kindLabel: shown?.pageAgent ? "웹 AI" : shown?.documentAgent ? "문서 AI" : "대화", status: shown ? statusText(shown) : undefined, unseen: unseenAnswer(shown), state: shown ? rowState(shown) : null,
+        icon: shown ? <EngineMark provider={shown.provider} size={14} /> : <ItemIcon kind="project" size={14} />,
         hint: owner.cwd,
         item: shown ? { kind: "session", id: shown.id } : { kind: "work", id: owner.id },
       };
     }
-    if (at.kind === "project") return { kindLabel: "프로젝트", title: `${state.works[at.workId]?.title ?? "프로젝트"} · 프로젝트`, icon: <Icon name="project" size={14} />, item: { kind: "project", id: at.workId } };
+    if (at.kind === "project") return { kindLabel: "프로젝트", title: state.works[at.workId]?.title ?? "프로젝트", icon: <ItemIcon kind="project" size={14} />, item: { kind: "project", id: at.workId } };
     if (at.kind === "terminal") return { project: owner?.title, kindLabel: "터미널", title: at.label, icon: <Icon name="terminal" size={14} />, hint: state.workspaces[at.workspaceId]?.cwd, item: null };
     if (at.kind === "browser") {
       const page = browserState.pages.find(entry => entry.pageId === at.pageId);
-      return { project: owner?.title, kindLabel: "웹", title: page?.title || "웹 탭", icon: <Icon name="globe" size={14} />, hint: page?.url, item: null };
+      return { project: owner?.title, kindLabel: "웹", title: page?.title || "웹 탭", icon: <ItemIcon kind="web" size={14} />, hint: page?.url, unseen: unseenAnswer(sessionIn(pane)), state: sessionIn(pane) ? rowState(sessionIn(pane)!) : null, item: null };
     }
     if (at.kind === "pkm") {
       const target = at.target;
@@ -2069,7 +2580,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       };
     }
     if (at.kind === "archive") return { title: "보관함", icon: <Icon name="archive" size={14} />, item: null };
-    return { title: at.kind === "new" && at.folderId ? "새 작업" : "홈", icon: <Icon name="home" size={14} />, item: null };
+    return { title: at.kind === "new" && at.folderId ? "새 작업" : "지금", icon: <Icon name="home" size={14} />, item: null, home: !(at.kind === "new" && at.folderId) };
   };
 
   useEffect(() => {
@@ -2080,7 +2591,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       let next = current;
       for (const page of pages) {
         const key = `browser:${page.pageId}`;
-        if (!findTab(next, key)) {
+        if (!findTab(next, key) && !viewsOfPage(next, page.pageId).length) {
           const owner = next.panes.find(pane => tabsOf(pane).some(tab => tab.view.kind === "work" && tab.sessionId === page.agentSessionId));
           next = addBackgroundTab(next, owner?.id ?? next.focus, { view: { kind: "browser", pageId: page.pageId }, workId: page.workId, sessionId: page.sessionId });
         }
@@ -2112,10 +2623,15 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   }
 
   const showStart = startScreen;
+  const onboardingUp = Boolean(state.ready && api && (prefs.onboarding !== "done" || onboardingAgain));
+  // The Doory attribution, once per launch, on whatever screen the app opens (LaunchCredit; not in a
+  // window that holds one conversation — that is a second window of the same launch).
+  const launchCredit = single ? null : <LaunchCredit place={`${view.kind}:${JSON.stringify(view)}`} />;
+  // (N1: the brand mark lives on the rail; the top bar keeps it only in a window of its own.)
   /** A work's open documents as tabs, in a pane. */
   // The conversation, alone or beside a document ("나란히"). A detached window shows its own
   // session, whichever one the work has in front elsewhere; so does a pane without the focus.
-  const workView = (shown: Work, session: Session | undefined, pinned: boolean, paneTabs: ReactNode, ids: string[], modes: ModeProps) => (
+  const workView = (shown: Work, session: Session | undefined, pinned: boolean, paneTabs: ReactNode, ids: string[], modes: ModeProps, docModes?: DocModes) => (
     <WorkView
       api={api!}
       onToast={setToast}
@@ -2132,6 +2648,8 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       sidebarOpen={sidebarOpen}
       prefs={prefs}
       modes={{ ...modes, groupedTabs: !single }}
+      pages={browserState.pages}
+      docModes={docModes}
     />
   );
   /** Each pane wears its own engine's paper; the focused one the look in focus (and the one being edited). */
@@ -2151,7 +2669,6 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     const session = sessionIn(pane);
     const ids = focused ? openDocIds : docsOf(owner);
     const paneTabs = null;
-    const bar = focused ? modeBar : barFor(pane, owner, ids);
     const pinned = focused ? Boolean(single) : true;
     const tabUi = tabsOf(pane).find((tab) => tab.id === tabId)?.ui;
     const start = at.kind === "new" || (at.kind === "work" && !owner);
@@ -2160,81 +2677,91 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       return presentation ? <iframe data-office-presentation={at.ownerTabId} title={`${presentation.title || "HTML"} 발표`} src={presentation.url} sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads" allowFullScreen style={{ width: "100%", height: "100%", border: 0, display: "block" }} /> : null;
     }
     if (at.kind === "terminal") return <Suspense fallback={<LoadingView label="터미널을 여는 중…" shape="work" />}><TerminalView api={api} id={at.terminalId} focused={focused && tabActive} uiState={tabUi} onUiState={uiOf[tabId]} onList={() => { const space = state.workspaces[at.workspaceId]; if (space) setTerminalWorkspace(space); }} /></Suspense>;
-    if (at.kind === "browser" || (singleSession?.pageAgent && at.kind === "work")) {
-      const pageId = at.kind === "browser" ? at.pageId : singleSession!.pageAgent!.pageId;
-      return <BrowserView key={pageId} browser={sharedBrowser} api={api} state={state} pageId={pageId} visible={tabActive && (!narrowPanes || focused)} parentSessionId={owner ? activeOf(owner)?.id ?? null : null} actions={actions}
+    const closeThisTab = () => updateLayout((current) => closeTab(current, pane.id, tabId, { view: { kind: "new", folderId: null }, workId: null, sessionId: null }));
+    /** A web page: in a tab of its own with its AI beside it, or (`hosted`) beside a conversation. */
+    const browserView = (pageId: string, hosted?: { onClose: () => void; onWide: () => void; over: boolean; back: string | null }) => (
+      <BrowserView key={pageId} browser={sharedBrowser} api={api} state={state} pageId={pageId} visible={tabActive && (!narrowPanes || focused)} parentSessionId={owner ? activeOf(owner)?.id ?? null : null} actions={actions}
         engine={engine}
+        hosted={hosted}
         onStart={(text, provider, choice) => {
           const page = sharedBrowser.getState().pages.find(page => page.pageId === pageId);
           return startWork(text, provider, null, null, choice, page ? { kind: "work", workId: page.workId } : { kind: "new" }, pane.id);
         }}
         onNew={target => setNewBrowser({ ...target, paneId: pane.id })}
-        onClosed={() => closeTabNow(pane.id, tabId)} onOpenSession={openSession} onLeaveGuard={guardOf[tabId]}
+        onClosed={hosted ? () => updateLayout((current) => withoutCompanion(current, tabId)) : closeThisTab} onOpenSession={openSession} onLeaveGuard={guardOf[tabId]}
+        onSessionMenu={(agent, x, y) => {
+          const request = menuFor({ type: "session", id: agent.id, depth: 0, session: agent, work: state.works[agent.workId] }, x, y);
+          if (request) setContextMenu(request);
+        }}
         onTranscript={(sessionId, transcript) => dispatch({ type: "transcript", sessionId, transcript })}
-        focusItem={focusItem && state.sessions[focusItem.sessionId]?.pageAgent?.pageId === pageId ? focusItem : null} onFocusDone={() => setFocusItem(null)} />;
-    }
-    if ((at.kind === "document" || at.kind === "split") && owner) {
-      // Next to its own conversation in the other pane, a document needs no drawer of it.
-      const besideChat = split && Boolean(session) && layout.panes.some((other) => other.id !== pane.id && other.view.kind === "work" && sessionIn(other)?.id === session?.id);
-      return (
-        <Suspense fallback={<LoadingView label="문서를 여는 중…" shape="document" />}>
-          <SplitView
-            split={at.kind === "split"}
-            ratio={typeof prefs.splitRatio === "number" ? prefs.splitRatio : 0.5}
-            onRatio={(ratio) => savePrefs({ splitRatio: ratio })}
-            focus={at.kind === "split" ? at.focus : "doc"}
-            onFocus={(side) => setViewOf(pane.id, (current) => (current.kind === "split" && current.focus !== side ? { ...current, focus: side } : current))}
-            tabs={paneTabs}
-            left={(slot) => workView(owner, session, pinned, null, ids, { bar, slot, draftKey: at.kind === "split" ? at.draftKey : undefined, split: true, single: Boolean(single), uiState: tabUi, onUiState: uiOf[tabId] })}
-            right={(slot) => (
-              <DocumentView
-                key={at.artifactId}
-                api={api}
-                state={state}
-                artifactId={at.artifactId}
-                focusProposalId={at.kind === "document" ? at.proposalId : null}
-                focusItem={focusItem && state.sessions[focusItem.sessionId]?.documentAgent?.artifactId === at.artifactId ? focusItem : null}
-                onFocusDone={() => setFocusItem(null)}
-                work={owner}
-                session={session ?? null}
-                tabs={at.kind === "split" ? null : paneTabs}
-                openDocIds={ids}
-                onLeaveGuard={guardOf[tabId]}
-                onMcpClose={() => updateLayout((current) => closeTab(current, pane.id, tabId, { view: { kind: "new", folderId: null }, workId: null, sessionId: null }))}
-                uiState={tabUi}
-                onUiState={uiOf[tabId]}
-                onBack={() => {
-                  if (session?.documentAgent) navigateTo({ workId: owner.id, sessionId: session.documentAgent.parentSessionId, view: { kind: "work" } });
-                  else setViewOf(pane.id, { kind: "work" });
-                }}
-                onToast={setToast}
-                onOpenArtifact={(artifactId, scope) => setViewOf(pane.id, { kind: "document", artifactId, proposalId: null }, scope)}
-                onPresent={(value) => {
-                  const id = crypto.randomUUID(); presentations.current.set(id, value);
-                  setViewOf(pane.id, { kind: "presentation", id, artifactId: at.artifactId, ownerTabId: tabId }, { workId: owner.id, workspaceId: state.artifacts[at.artifactId]?.workspaceId, preserveSource: true });
-                }}
-                pickFile={inDesktop ? pickFileNative : null}
-                onPickTarget={() => actions.pickSession(owner, session ?? null)}
-                onAiSettings={() => setOfficeSettingsOpen(true)}
-                onExternalSetup={() => setIeumAppOpen(true)}
-                onAnswer={(answered, itemId, decision, response) => actions.answer(answered, itemId, decision, response)}
-                onSend={async (target, text, refs, handoffTo, create, attachments) => {
-                  let source = target;
-                  if (!source) source = await actions.newSession(owner, engine);
-                  if (!source) return false;
-                  if (handoffTo) return actions.handoff(source, handoffTo, text, refs, attachments);
-                  return actions.send(source, text, refs, create, "auto", attachments);
-                }}
-                modes={{ bar, slot, draftKey: at.kind === "split" ? at.draftKey : undefined, split: at.kind === "split" || besideChat, onReview: reviewOf[tabId] }}
-              />
-            )}
-          />
-        </Suspense>
-      );
-    }
+        focusItem={!hosted && focusItem && state.sessions[focusItem.sessionId]?.pageAgent?.pageId === pageId ? focusItem : null} onFocusDone={() => setFocusItem(null)} />
+    );
+    if (at.kind === "browser" || (singleSession?.pageAgent && !singleSession.archivedAt && at.kind === "work")) return browserView(at.kind === "browser" ? at.pageId : singleSession!.pageAgent!.pageId);
+    /** A document: in a tab of its own with its AI beside it, or (`hosted`) beside a conversation. */
+    const documentView = (project: Work, artifactId: string, proposalId: string | null, shown: Session | null, hosted?: { onClose: () => void; onWide: () => void; onAgent: (agent: Session) => void; over: boolean; back: string | null }) => (
+      <DocumentView
+        key={artifactId}
+        api={api}
+        state={state}
+        artifactId={artifactId}
+        focusProposalId={proposalId}
+        focusItem={!hosted && focusItem && state.sessions[focusItem.sessionId]?.documentAgent?.artifactId === artifactId ? focusItem : null}
+        onFocusDone={() => setFocusItem(null)}
+        work={project}
+        session={shown}
+        visible={tabActive && (!narrowPanes || focused)}
+        tabs={paneTabs}
+        openDocIds={ids}
+        onLeaveGuard={guardOf[tabId]}
+        onMcpClose={hosted ? () => updateLayout((current) => withoutCompanion(current, tabId)) : closeThisTab}
+        // The conversation's tab keeps the conversation's place; a companion's view is not its to remember.
+        uiState={hosted ? undefined : tabUi}
+        onUiState={hosted ? undefined : uiOf[tabId]}
+        onAgentDrawn={onAgentDrawn}
+        onEditorHandle={onEditorHandle}
+        revealAgent={hosted ? null : revealAgents[artifactId] ?? null}
+        onRevealDone={onRevealDone}
+        hosted={hosted}
+        queued={actions.queued}
+        onReview={reviewOf[tabId]}
+        onRead={() => setWorkMode("read")}
+        onBeside={hosted ? undefined : () => showBeside(pane.id, conversationOf(pane), { kind: "document", artifactId, proposalId: null })}
+        onSessionMenu={(agent, x, y) => {
+          const request = menuFor({ type: "session", id: agent.id, depth: 0, session: agent, work: project }, x, y);
+          if (request) setContextMenu(request);
+        }}
+        onBack={() => {
+          if (hosted) return hosted.onClose();
+          const back = conversationOf(pane);
+          if (back.sessionId !== pane.sessionId) navigateTo(back);
+          else setViewOf(pane.id, { kind: "work" });
+        }}
+        onToast={setToast}
+        onOpenArtifact={(opened, scope) => setViewOf(pane.id, { kind: "document", artifactId: opened, proposalId: null }, scope)}
+        onPresent={(value) => {
+          const id = crypto.randomUUID(); presentations.current.set(id, value);
+          setViewOf(pane.id, { kind: "presentation", id, artifactId, ownerTabId: tabId }, { workId: project.id, workspaceId: state.artifacts[artifactId]?.workspaceId, preserveSource: true });
+        }}
+        pickFile={inDesktop ? pickFileNative : null}
+        onPickTarget={() => actions.pickSession(project, shown)}
+        onAiSettings={() => setOfficeSettingsOpen(true)}
+        onExternalSetup={() => setIeumAppOpen(true)}
+        onAnswer={(answered, itemId, decision, response) => actions.answer(answered, itemId, decision, response)}
+        onSend={async (target, text, refs, handoffTo, create, attachments) => {
+          let source = target;
+          if (!source) source = await actions.newSession(project, engine);
+          if (!source) return false;
+          if (handoffTo) return actions.handoff(source, handoffTo, text, refs, attachments);
+          return actions.send(source, text, refs, create, "auto", attachments);
+        }}
+      />
+    );
+    if (at.kind === "document" && owner) return <Suspense fallback={<LoadingView label="문서를 여는 중…" shape="document" />}>{documentView(owner, at.artifactId, at.proposalId, session ?? null)}</Suspense>;
     if (at.kind === "project") {
       return (
         <ProjectView
+          // One page per note: a tab that goes on to another project starts that project's page anew.
+          key={at.workId}
           api={api}
           state={state}
           workId={at.workId}
@@ -2244,6 +2771,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
             if (itemId) setFocusItem({ sessionId: target.id, itemId, nonce: Date.now() });
           }}
           onOpenProject={actions.openProject}
+          onShowInList={single ? undefined : (section) => showProjectSection(at.workId, section)}
           onOpenNote={(path) => setView({ kind: "pkm", target: { kind: "note", path } })}
           onOpenDocument={(artifactId, proposalId) => {
             const artifact = state.artifacts[artifactId];
@@ -2252,18 +2780,36 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
           onToast={setToast}
           onError={fail}
           openMenu={setContextMenu}
+          onOpenFolder={inDesktop ? (path) => void openPath(path) : undefined}
           onCreate={anchor => { const box = anchor.getBoundingClientRect(); setContextMenu(creationMenu(pane.id, state.works[at.workId] ?? null, box.left, box.bottom)); }}
         />
       );
     }
     if (at.kind === "pkm") return <PkmCenter target={at.target} active={focused && tabActive} onNavigate={target => updateLayout(current => updateTabView(current, tabId, () => ({ kind: "pkm", target })))} />;
-    if (at.kind === "archive") return <ArchiveView state={state} onRestore={actions.restore} onOpenSession={openSession} onOpenWork={openWorkNow} onDeleteWork={setDeletingWork} onClose={() => setView({ kind: "work" })} />;
+    if (at.kind === "archive") return <ArchiveView state={state} onRestore={actions.restore} onOpenSession={openSession} onOpenWork={openWorkNow} onDeleteWork={setDeletingWork}
+      onRestoreDoc={(artifact) => void restoreDocument(artifact.id).then(() => setToast(`「${artifact.name}」을(를) 되돌렸습니다.`)).catch(fail)}
+      onSaveDocElsewhere={(artifact) => void (async () => {
+        if (!api) return;
+        if (!inDesktop) {
+          // A browser cannot pick a place: the file is downloaded; the trash keeps its own.
+          saveBlobAs(await api.trashFile(artifact.id), artifact.name);
+          setToast("내려받았습니다. 보관함의 기록은 그대로입니다.");
+          return;
+        }
+        const path = await pickSavePath(artifact.name);
+        if (!path) return;
+        const saved = await api.saveDocumentCopy(artifact.id, path);
+        setToast(`「${artifact.name}」을(를) 저장했습니다: ${saved.path}`);
+      })().catch(fail)}
+      onPurgeDoc={(artifact) => api ? api.purgeDocument(artifact.id) : Promise.resolve()}
+      onClose={() => setView({ kind: "work" })} />;
     if (start) {
       return (
         <PaneStart split={split} works={Object.values(state.works).filter(work => !work.archivedAt).sort((a, b) => b.updatedAt - a.updatedAt)} onProject={id => placeItemAt({ kind: "project", id }, { paneId: pane.id, side: "center" })}>
         <StartView
           state={state}
-          autoFocus={focused}
+          // Under the first run the composer does not take the focus (I1); it does once the first run is done.
+          autoFocus={focused && !onboardingUp}
           folderId={at.kind === "new" ? at.folderId : null}
           draftKey={pane.id === "a" ? `new:${at.kind === "new" ? at.folderId ?? "root" : "root"}` : `new:${pane.id}:${at.kind === "new" ? at.folderId ?? "root" : "root"}`}
           onClearFolder={() => setView({ kind: "new", folderId: null })}
@@ -2282,14 +2828,54 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
           homeViews={prefs.homeViews}
           onHomeViews={(views) => savePrefs({ homeViews: views })}
           motion={prefs.brandMotion !== false}
+          onHero={shown => heroIn(tabId, shown)}
           pickFolder={inDesktop ? pickFolderNative : null}
           engine={engine}
           setEngine={setEngine}
+          onConnectEngine={() => setSettingsAt("engines")}
         />
         </PaneStart>
       );
     }
-    return owner ? workView(owner, session, pinned, paneTabs, ids, { bar, single: Boolean(single), paned: split || !focused, uiState: tabUi, onUiState: uiOf[tabId] }) : null;
+    if (!owner) return null;
+    // 곁 화면: the conversation keeps its place and its input; what it opened is beside it. Asking
+    // there goes to this conversation (it is its document, its page).
+    const beside = besideOf(at);
+    // Laid over its conversation, the way back says that conversation's one state (rowState: e.g. 확인 필요; nothing when 완료).
+    const backState = session && !session.archivedAt ? rowState(session) : null;
+    const hosted = { onClose: () => closeCompanion(pane.id, tabId), over: Boolean(coveredTabs[tabId]), back: backState && backState.id !== "done" ? backState.word : null };
+    const besideDoc = beside?.kind === "document" ? state.artifacts[beside.artifactId] : undefined;
+    const companion = besideDoc && beside?.kind === "document"
+      ? (
+        <Suspense fallback={<LoadingView label="문서를 여는 중…" shape="document" />}>
+          {documentView(state.works[besideDoc.workId] ?? owner, besideDoc.id, beside.proposalId,
+            // An external citation has its own workspace: the conversation is not its AI's parent.
+            session && session.workId === besideDoc.workId && session.workspaceId === besideDoc.workspaceId ? session : null,
+            // 탭으로 열어 고치기 / 문서 AI: the person's move to the document's own tab (beside the conversation it only read).
+            { ...hosted, onWide: () => setViewOf(pane.id, { kind: "document", artifactId: besideDoc.id, proposalId: null }, undefined, true), onAgent: (agent) => openSession(agent) })}
+        </Suspense>
+      )
+      : beside?.kind === "browser"
+        ? browserView(beside.pageId, { ...hosted, onWide: () => {
+          const page = sharedBrowser.getState().pages.find((entry) => entry.pageId === beside.pageId);
+          if (page) navigateTo({ view: { kind: "browser", pageId: page.pageId }, workId: page.workId, sessionId: page.sessionId }, undefined, true);
+        } })
+        : null;
+    return (
+      <Beside
+        chat={workView(owner, session, pinned, paneTabs, ids, { single: Boolean(single), paned: split || !focused || companion !== null, uiState: tabUi, onUiState: uiOf[tabId] }, conversationModes(focused && tabActive))}
+        content={companion}
+        over="content"
+        // A document is read beside the conversation: the read view's minimum, else it lies over.
+        contentMin={besideDoc ? readMinimum(besideDoc.format) : undefined}
+        ratio={typeof prefs.splitRatio === "number" ? prefs.splitRatio : 0.45}
+        onRatio={(ratio) => savePrefs({ splitRatio: ratio })}
+        resetRatio={0.45}
+        chatLabel="대화"
+        contentLabel={beside?.kind === "browser" ? "웹 페이지" : "문서"}
+        onCovered={(covered) => setCoveredTabs((current) => (Boolean(current[tabId]) === covered ? current : { ...current, [tabId]: covered }))}
+      />
+    );
   };
   const workspaceLayoutTools = !single ? <WorkspaceLayoutTools inline={compactShell} count={layout.panes.length} disabled={!layoutReady} onPreset={(count: PanePreset) => {
             closeMenu();
@@ -2311,19 +2897,131 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       : view.kind === "archive"
         ? "보관함"
         : view.kind === "project"
-          ? `${state.works[view.workId]?.title ?? "프로젝트"} · 프로젝트`
+          // The kind ("프로젝트") stands before the name in the bar (Hallmark U4): the name alone here.
+          ? (state.works[view.workId]?.title ?? "프로젝트")
           : view.kind === "pkm"
           ? pkmTitle(state, view.target, pkmHandle.current?.tree?.status.name ?? null, view.target.kind === "view" ? pkmHandle.current?.pkmState?.views.find((entry) => view.target.kind === "view" && entry.id === view.target.id)?.name : null)
           : showStart
             ? view.kind === "new" && view.folderId
               ? "새 작업"
-              : "홈"
+              : "지금"
             : (work?.title ?? "");
+
+  /** The top bar's ⋯: only the live actions and one way into 설정 (release unit B). */
+  const openSettings = (section?: SettingsSection) => {
+    closeMenu();
+    setSettingsListFirst(!section);
+    setSettingsAt(section ?? readSettingsSection(prefsRef.current.settingsSection));
+  };
+  const settingsSections = SETTINGS_SECTIONS.filter((entry) => !(api.isRemote && (entry.id === "messenger" || entry.id === "vault" || entry.id === "advanced")));
+  const showSettingsSection = (section: SettingsSection) => {
+    setSettingsAt(section);
+    if (section !== "screen") setSheet(null);
+    savePrefs({ settingsSection: section });
+  };
+  const closeSettings = () => { setSettingsAt(null); setSheet(null); setSettingsListFirst(false); setMessengerKind(null); };
+  /** A setting that opens its own dialog: 설정 closes first (no dialog on top of a dialog); it reopens on the same section. */
+  const fromSettings = (open: () => void) => () => { closeSettings(); open(); };
+  const settingsBody = () => (
+    <>
+              <div className="compact-toolbar-menu">
+                {phoneBar ? <>
+                  <button type="button" className="ghost-button shell-create" aria-haspopup="menu" onClick={(event) => { const anchor = event.currentTarget; closeMenu(); openCreate.current(anchor); }}><Icon name="plus" size={16} />새로 만들기</button>
+                  <button type="button" className="ghost-button shell-bell" aria-haspopup="dialog" onClick={() => { closeMenu(); setAttentionOpen(true); }}><Icon name="bell" size={16} />알림{attentionState.list.unread ? <span className="shell-attention-count">{attentionState.list.unread}</span> : null}</button>
+                  <button type="button" className="ghost-button shell-right-sidebar" onClick={() => { closeMenu(); right.toggle(false); }}><Icon name="sidebarRight" size={16} />{right.open ? "개요와 연결 닫기" : "개요와 연결"}</button>
+                </> : null}
+                <button type="button" className="ghost-button shell-tasks" aria-haspopup="dialog" onClick={() => { closeMenu(); setTaskPanelOpen(true); }}><Icon name="clock" size={16} />작업 현황</button>
+                {view.kind === "document" && !editorFocus ? <button type="button" className="ghost-button" onClick={() => { closeMenu(); setExpandedEditorTab(null); }}><Icon name="expandAll" size={16} />편집기에 집중</button> : null}
+                {compactShell ? workspaceLayoutTools : null}
+                <button type="button" className="ghost-button shell-theme" onClick={() => { savePrefs({ theme: focusedTheme === "dark" ? "light" : "dark" }); closeMenu(); }}><Icon name={focusedTheme === "dark" ? "sun" : "moon"} size={16} />{focusedTheme === "dark" ? "밝은 화면으로" : "어두운 화면으로"}</button>
+                <div className="menu-divider" />
+                <button type="button" className="ghost-button shell-settings" aria-haspopup="dialog" onClick={() => openSettings()}><Icon name="settings" size={16} />설정<kbd className="menu-shortcut">Ctrl+,</kbd></button>
+              </div>
+    </>
+  );
+  const settingsSection = (section: SettingsSection): ReactNode => {
+    switch (section) {
+      case "general": return <GeneralSection
+        startScreen={prefs.startScreen === "last" ? "last" : "home"} onStartScreen={(next) => savePrefs({ startScreen: next })}
+        notifications={prefs.notify !== false} onNotifications={(next) => savePrefs({ notify: next })}
+        brandMotion={prefs.brandMotion !== false} onBrandMotion={(next) => savePrefs({ brandMotion: next })}
+        worksDir={<WorksDirRow api={api} pickFolder={inDesktop ? (start) => pickFolderNative("새 프로젝트 폴더 위치", start) : null} />}
+        background={<BackgroundHost api={api} />}
+        onPropertyTemplate={fromSettings(() => setPropertyTemplateOpen(true))}
+        shortcutSettings={<ShortcutSettings shortcuts={shortcuts} onRecording={setRecordingShortcut} onChange={(id, combo) => {
+          const saved = { ...((prefs.shortcuts as Record<string, string> | undefined) ?? {}) };
+          if (combo) saved[id] = combo;
+          else delete saved[id];
+          savePrefs({ shortcuts: saved });
+        }} />}
+        onOnboarding={fromSettings(() => setOnboardingAgain(true))} />;
+      case "screen": return <AppearancePanel target={sheet ?? { provider: focusedProvider, theme: focusedTheme }} onTarget={setSheet} themePref={themePref} onThemePref={(pref) => savePrefs({ theme: pref })} palette={palette} onPalette={(next) => savePrefs({ palette: next })} uiFont={uiFont} onUiFont={(next) => savePrefs({ uiFont: next })} usagePlace={usagePlace} onUsagePlace={(next) => savePrefs({ usagePlace: next })} />;
+      case "engines": return <EnginesSection providers={state.providers} connected={state.connected} engineActions={engineActions}
+        onRefresh={() => void api.refreshProviders().catch(fail)} browser={state.browser} browserActions={browserActions}
+        onIntegrations={fromSettings(() => setIntegrationsOpen(true))} voice={<OnboardingModelCache api={api} />} />;
+      case "devices": return <DevicesSection local={!api.isRemote} panel={devicePanel?.()} onConnections={onConnections ? fromSettings(onConnections) : undefined}
+        onPush={fromSettings(() => setPushSettingsOpen(true))} onMessenger={api.isRemote ? undefined : () => showSettingsSection("messenger")} />;
+      case "messenger": return <PhoneMessenger key={messengerKind ?? "both"} kind={messengerKind ?? undefined} embedded api={api} openExternal={openExternal} copy={copyText} readClipboard={() => navigator.clipboard.readText()} onClose={closeSettings} />;
+      case "vault": return <VaultPanel api={api} />;
+      case "documents": return <DocumentsSection tools={state.tools} onInstallIeum={fromSettings(() => setIeumAppOpen(true))} onRefreshTools={() => void api.refreshTools().catch(fail)}
+        onOfficeSettings={fromSettings(() => setOfficeSettingsOpen(true))} onDropbox={fromSettings(() => setDropboxOpen(true))}
+        onOfficeImport={fromSettings(() => setOfficeImportOpen(true))} onKnowledge={fromSettings(openKnowledge)}
+        imageUpload={<ImageUploadRow api={api} onOpen={fromSettings(() => setImageUploadOpen(true))} />}
+        vault={<VaultSettingsRow onOpen={closeSettings} />} editorAi={api.isRemote ? undefined : <EditorAiRow api={api} />} />;
+      case "advanced": return <AdvancedSection onDesktop={api.isRemote ? undefined : fromSettings(() => setDesktopOpen(true))}
+        onExtensions={api.isRemote ? undefined : fromSettings(() => setExtensionsOpen(true))} onEventHub={api.isRemote ? undefined : fromSettings(() => setEventHubOpen(true))} />;
+      case "about": return <AboutSection hostLabel={state.hostLabel} licences={<LicenceList />} />;
+    }
+  };
+
+  // ── The rail (N1): the six places, one lit; the list column is what it chooses ─────────────
+  const navPrefs = { ...readNavigator(prefs.navigator), rail: navPlace.rail, level: navPlace.level };
+  const saveNavigator = (patch: Record<string, unknown>) => savePrefs((current) => ({ navigator: { ...((current.navigator && typeof current.navigator === "object" ? current.navigator : {}) as Record<string, unknown>), ...patch } }));
+  const homeShown = view.kind === "new" && view.folderId === null;
+  const railLit: RailPlace | null = litPlace({ homeShown, atNow: railAtNow, sidebarOpen, rail: navPrefs.rail });
+  const runningCount = Object.values(state.sessions).filter((session) => (session.status === "starting" || session.status === "running" || session.status === "interrupting") && !sessionHidden(state, session)).length;
+  const showList = (dest: RailDest) => {
+    setRailAtNow(false);
+    // 프로젝트 again, inside a project: back to every project (the list only, as "← 프로젝트 목록").
+    if (dest === "projects" && navPrefs.rail === "projects" && sidebarOpen && navPrefs.level === "project") setNavPlace({ level: "projects" });
+    else if (dest !== navPrefs.rail) setNavPlace({ rail: dest });
+    if (!sidebarOpen) showSidebar();
+    else if (dest === navPrefs.rail) requestNavigatorFocus();
+  };
+  // Skin 2 (unit D): the project page's figures (대화 N, 문서 N, 웹 N) put the list on that project's
+  // section. Where the list is (rail, level, project) is this window's (unit A's place); only the
+  // section's fold is a shared preference.
+  const showProjectSection = (workId: string, section: "chats" | "docs" | "web") => {
+    setRailAtNow(false);
+    setNavPlace({ rail: "projects", level: "project", project: workId });
+    if (navPrefs.sections[section]) saveNavigator({ sections: { ...navPrefs.sections, [section]: false } });
+    if (!sidebarOpen) showSidebar();
+    window.setTimeout(() => {
+      const head = document.querySelector<HTMLElement>(`.nav-inside-${section} .nav-fold`);
+      head?.scrollIntoView?.({ block: "nearest" });
+      head?.focus();
+    }, 80);
+  };
+  const onRailPlace = (place: RailPlace) => {
+    // 지금 is home's 지금 (not a view home was last switched to: 보드·표, 달력, 문서 are reached from the list).
+    if (place === "now") { setRailAtNow(true); if (readHomeMode(prefs.homeMode) !== "now") savePrefs({ homeMode: "now" }); startNew(null); }
+    else if (place === "search") setPaletteOpen("palette");
+    else showList(place);
+  };
+  const railSettings = (
+    <div className="anchor rail-settings">
+      <button type="button" className={`rail-key${settingsAt ? " pressed" : ""}`} data-rail="settings" tabIndex={-1} aria-label="설정" title="설정 (Ctrl+,)" aria-haspopup="dialog" onClick={() => openSettings()}>
+        <span className="rail-icon" aria-hidden><Icon name="settings" size={20} /></span>
+        <span className="rail-label">설정</span>
+      </button>
+    </div>
+  );
 
   return (
     <VoiceEnvironment.Provider value={api}>
     <AppearanceContext.Provider value={appearanceApi}>
     <UnseenContext.Provider value={unseen}>
+    <ShownPanelsContext.Provider value={shownPanels}>
     <DocContext.Provider value={{ state, actions: docActions }}>
     <LinkContext.Provider value={linkApi}>
     <PaneActionsContext.Provider value={single ? null : paneActions}>
@@ -2343,43 +3041,41 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       onOpenArtifact={revealPage}
     >
     <div
-      className="app look-scope"
+      className={`app look-scope${single ? "" : " with-rail"}`}
+      data-usage-place={usagePlace}
       data-theme={focusedTheme}
       data-bubble={focusedLook.bubble}
       data-frame={focusedLook.frame ? "on" : "off"}
       data-glow={focusedLook.glow}
       style={lookStyle(focusedLook)}
     >
-      <header className="topbar">
+      {!single ? <Rail modeKeys={workMode !== null} lit={railLit} attention={needsCount(state)} running={runningCount} compact={narrowRail} searchHint={`찾기 (${shortcuts.palette ?? "Ctrl+K"})`} onPlace={onRailPlace} onRunning={() => showList("activity")} settings={railSettings} greet={brandGreet} onGreeted={brandGreeted} /> : null}
+      <header className={`topbar${shownNotice ? " has-notice" : ""}${standingNotice || standingVault !== null ? " has-standing-notice" : ""}`}>
         <div className="topbar-left">
           {single ? (
             <span className="brand" aria-label="Achmage">
-              <Icon name="home" size={18} />
-              <span className="hig-app-name">Workbench</span>
+              <Wordmark className="brand-wordmark" />
+              <BrandSymbol className="brand-compact" size={26} />
             </span>
           ) : (
             <>
               <button
                 type="button"
                 className={`icon-button${sidebarOpen ? " pressed" : ""}`}
-                onClick={() => editorFocus ? setExpandedEditorTab(focusedTabId) : toggleSidebar()}
+                // Laid over (narrow, the phone): one press leaves the editor's focus AND brings the list.
+                onClick={() => { if (editorFocus) { setExpandedEditorTab(focusedTabId); if (compactShell) setCompactSidebar(true); } else toggleSidebar(); }}
                 aria-label={sidebarOpen ? "사이드바 닫기" : "사이드바 열기"}
                 title={sidebarOpen ? "사이드바 닫기" : "사이드바 열기"}
               >
                 <Icon name="sidebar" size={18} />
               </button>
-              <button type="button" className="brand" onClick={() => startNew(null)} title="홈" aria-label="Achmage 홈">
-                <Icon name="home" size={18} className="hig-home-icon" />
-                <span className="hig-app-name">Workbench</span>
-              </button>
             </>
           )}
-          {!sidebarOpen && !single && !editorFocus ? (
+          {/* The sidebar's head (찾기, 새로 만들기) stands in the bar while the sidebar is away: one of each on screen. */}
+          {/* 찾기 is the bar's search field (centre) and the rail's 찾기; 새로 만들기 stands in while the list is away. */}
+          {!sidebarOpen && !single && !editorFocus && !phoneBar ? (
             <>
-              <button type="button" className="ghost-button" onClick={() => setPaletteOpen("palette")} title="찾기 (Ctrl+K)">
-                <Icon name="search" size={15} /> 찾기
-                {unseen.size ? <span className="count-chip new" title="새 답">{unseen.size}</span> : null}
-              </button>
+              <button type="button" className="ghost-button shell-create" aria-haspopup="menu" aria-label="새로 만들기" title={`새 문서·세션·폴더 (${shortcuts.newWork})`} onClick={event => openCreate.current(event.currentTarget)}><Icon name="plus" size={16} /><span className="shell-label">새로 만들기</span></button>
             </>
           ) : null}
         </div>
@@ -2390,25 +3086,39 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
             onSave={(next) => void api.updateWork(work.id, { title: next }).catch(fail)}
             onDone={() => setEditingTitle(false)}
           />
+        ) : !single && showStart && !(view.kind === "new" && view.folderId) ? (
+          // 지금: the focused tab, the rail and the page's head already say it (ruling 3) — the bar does not repeat it.
+          <span className="topbar-title topbar-title-quiet" aria-hidden />
         ) : (
           <button
             type="button"
             className="topbar-title"
+            // Faded out under a notice: out of the tab order and not operable until it returns.
+            inert={Boolean(shownNotice)}
             title={work && view.kind === "work" && !showStart && !single ? "눌러서 작업 이름 바꾸기" : title}
             onClick={() => work && view.kind === "work" && !showStart && !single && setEditingTitle(true)}
           >
-            <span className="shell-location-kind">{view.kind === "browser" ? "웹" : view.kind === "document" || view.kind === "split" ? "문서" : view.kind === "project" ? "프로젝트" : view.kind === "work" ? "대화" : view.kind === "pkm" ? "자료" : "작업공간"}</span>
+            {/* 지금 is a place, not a kind of item: its name stands alone (the rail and the page say 지금 too). */}
+            {/* An app page (보관함, 새 작업…) has no kind word: "작업공간" was a developer's word (fix 1). */}
+            {showStart || !["browser", "document", "project", "work", "pkm"].includes(view.kind) ? null : <span className="shell-location-kind">{view.kind === "browser" ? "웹" : view.kind === "document" ? "문서" : view.kind === "project" ? "프로젝트" : view.kind === "work" ? "대화" : "자료"}</span>}
             <span>{title}</span>
           </button>
         )}
+        {!single ? <TopSearch shortcut={shortcuts.palette ?? "Ctrl+K"} onOpen={(typed) => { setPaletteSeed(typed); setPaletteOpen("palette"); }} /> : null}
+        {shownNotice ? <TopNotice slot={shownNotice} serial={notices.serial} onClose={closeNotice} onOpen={entries.byId} /> : null}
+        {/* A layout that could not be read or saved stands on its own row under the bar until one of its ways out is taken. */}
+        {standingNotice ? <TopNotice className="layout-problem" standing serial={0} onClose={() => undefined} onOpen={() => undefined}
+              slot={{ kind: "error", text: standingNotice.message, action: { label: layoutReady ? "저장된 배치 불러오기" : "다시 불러오기", run: () => void resolveLayoutProblem(false) } }}
+              more={layoutReady ? { label: "현재 배치로 저장", run: () => void resolveLayoutProblem(true) } : undefined} /> : null}
+        {standingVault !== null ? <TopNotice className="layout-problem vault-problem" standing serial={0} onClose={() => undefined} onOpen={() => undefined}
+              slot={{ kind: "error", text: `비밀 보관함을 열지 못했습니다. ${standingVault}`, action: { label: "다시 시도", run: () => void retryVault() } }} /> : null}
+        {/* At most three actions (알림, 화면 배치, and 확인 N while something waits); the rest is one ⋯ away. */}
         <div className="topbar-right">
-          {onConnections ? <button type="button" className="ghost-button small shell-connections" onClick={onConnections} aria-label={connectionLabel ?? "기기 연결"} title={connectionLabel ?? "기기 연결"} aria-haspopup="dialog"><Icon name="link" size={18} /><span>{connectionLabel ?? "기기 연결"}</span></button> : null}
-          <button type="button" className="ghost-button small shell-create" aria-haspopup="menu" title={`새 문서·세션·폴더 (${shortcuts.newWork})`} onClick={event => openCreate.current(event.currentTarget)}><Icon name="plus" size={15} /> 새로 만들기<Icon name="chevronDown" size={12} /></button>
-          <button type="button" className="ghost-button small shell-tasks" aria-label="작업 현황" title="작업 현황" aria-haspopup="dialog" aria-expanded={taskPanelOpen} onClick={() => setTaskPanelOpen(true)}><Icon name="clock" size={18} /></button>
-          <button type="button" className="ghost-button small" aria-haspopup="dialog" aria-expanded={attentionOpen} aria-label={attentionState.list.unread ? `알림 · 읽지 않음 ${attentionState.list.unread}개` : "알림"} onClick={() => setAttentionOpen(true)}><Icon name="bell" size={18} />{attentionState.list.unread ? <span className="shell-attention-count">{attentionState.list.unread}</span> : null}</button>
-          {view.kind === "document" ? <button type="button" className="ghost-button small" onClick={() => setExpandedEditorTab(editorFocus ? focusedTabId : null)}><Icon name={editorFocus ? "columns" : "expandAll"} size={14} />{editorFocus ? "작업공간 보기" : "편집기에 집중"}</button> : null}
-          {!compactShell ? workspaceLayoutTools : null}
-          {pendingApprovals.length && !single ? (
+          {/* Working on another computer is a state the bar keeps saying; reaching one is in ⋯. */}
+          {onConnections && connectionLabel && connectionLabel !== "기기 연결" ? <button type="button" className="ghost-button small shell-connections shell-host" onClick={onConnections} aria-label={connectionLabel} title={connectionLabel} aria-haspopup="dialog"><Icon name="link" size={16} /><span className="shell-label">{connectionLabel}</span></button> : null}
+          {/* In focus the way back stays in the bar; going into focus is in ⋯. */}
+          {view.kind === "document" && editorFocus ? <button type="button" className="ghost-button small shell-focus" onClick={() => setExpandedEditorTab(focusedTabId)}><Icon name="columns" size={16} /><span className="shell-label">작업 화면으로</span></button> : null}
+          {pendingApprovals.length && !single && !homeLedgerShown ? (
             <button
               type="button"
               className="attention-button"
@@ -2422,115 +3132,48 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
             </button>
           ) : null}
           {!state.connected && state.ready ? <span className="offline">연결 끊김</span> : null}
-          <button
-            type="button"
-            className="icon-button shell-theme"
-            onClick={() => savePrefs({ theme: focusedTheme === "dark" ? "light" : "dark" })}
-            aria-label={focusedTheme === "dark" ? "라이트 화면으로" : "다크 화면으로"}
-            title={focusedTheme === "dark" ? "라이트 화면으로" : "다크 화면으로"}
-          >
-            <Icon name={focusedTheme === "dark" ? "sun" : "moon"} size={18} />
-          </button>
+{!phoneBar ?           <button type="button" className="ghost-button small shell-bell" aria-haspopup="dialog" aria-expanded={attentionOpen} aria-label={attentionState.list.unread ? `알림, 읽지 않음 ${attentionState.list.unread}개` : "알림"} title="알림" onClick={() => setAttentionOpen(true)}><Icon name="bell" size={18} />{attentionState.list.unread ? <span className="shell-attention-count">{attentionState.list.unread}</span> : null}</button> : null}
+          {!compactShell ? workspaceLayoutTools : null}
           <div className="anchor">
-            <button type="button" className="icon-button" onClick={() => setMenuOpen(!menuOpen)} aria-label="연결과 설정" aria-expanded={menuOpen}>
+            <button type="button" className={`icon-button${menuOpen ? " pressed" : ""}`} onClick={() => setMenuOpen(!menuOpen)} aria-label="더 보기" title="작업 현황, 화면, 설정" aria-expanded={menuOpen}>
               <Icon name="dots" size={18} />
             </button>
-            <Popover open={menuOpen} onClose={closeMenu} align="right">
-              {compactShell ? <div className="compact-toolbar-menu">
-                {onConnections ? <button type="button" className="ghost-button" onClick={() => { closeMenu(); onConnections(); }}><Icon name="link" size={18} />{connectionLabel ?? "기기 연결"}</button> : null}
-                <button type="button" className="ghost-button" onClick={() => { closeMenu(); setTaskPanelOpen(true); }}><Icon name="clock" size={18} />작업 현황</button>
-                {workspaceLayoutTools}
-                <button type="button" className="ghost-button" onClick={() => { savePrefs({ theme: focusedTheme === "dark" ? "light" : "dark" }); closeMenu(); }}><Icon name={focusedTheme === "dark" ? "sun" : "moon"} size={18} />{focusedTheme === "dark" ? "라이트 화면으로" : "다크 화면으로"}</button>
-              </div> : null}
-              <Connections
-                backgroundHost={<><BackgroundHost api={api} /><div className="connection"><button type="button" className="button small" onClick={() => { closeMenu(); setPushSettingsOpen(true); }}>모바일 알림</button></div>{!api.isRemote ? <div className="connection"><div className="menu-label">선택 기능</div><div className="feature-actions"><button type="button" className="button small" onClick={() => { closeMenu(); setDesktopOpen(true); }}>외부 앱</button><button type="button" className="button small" onClick={() => { closeMenu(); setExtensionsOpen(true); }}>실행 확장</button><button type="button" className="button small" onClick={() => { closeMenu(); setEventHubOpen(true); }}>이벤트 Hub</button></div></div> : null}</>}
-                onOfficeSettings={() => { closeMenu(); setOfficeSettingsOpen(true); }}
-                onDropbox={() => { closeMenu(); setDropboxOpen(true); }}
-                onOfficeImport={() => { closeMenu(); setOfficeImportOpen(true); }}
-                onKnowledge={() => { closeMenu(); openKnowledge(); }}
-                onIntegrations={() => {
-                  closeMenu();
-                  setIntegrationsOpen(true);
-                }}
-                onOnboarding={() => {
-                  closeMenu();
-                  setOnboardingAgain(true);
-                }}
-                tools={state.tools}
-                onInstallIeum={() => setIeumAppOpen(true)}
-                onRefreshTools={() => void api.refreshTools().catch(fail)}
-                browser={state.browser}
-                browserActions={browserActions}
-                providers={state.providers}
-                connected={state.connected}
-                hostLabel={state.hostLabel}
-                themePref={themePref}
-                onTheme={(pref) => savePrefs({ theme: pref })}
-                onAppearance={() => {
-                  closeMenu();
-                  appearanceApi.openSettings();
-                }}
-                onRefresh={() => void api.refreshProviders().catch(fail)}
-                engineActions={engineActions}
-                startScreen={prefs.startScreen === "last" ? "last" : "home"}
-                onStartScreen={(next) => savePrefs({ startScreen: next })}
-                brandMotion={prefs.brandMotion !== false}
-                onBrandMotion={(next) => savePrefs({ brandMotion: next })}
-                notifications={prefs.notify !== false}
-                onNotifications={(next) => savePrefs({ notify: next })}
-                onPropertyTemplate={() => {
-                  closeMenu();
-                  setPropertyTemplateOpen(true);
-                }}
-                shortcutSettings={
-                  <ShortcutSettings
-                    shortcuts={shortcuts}
-                    onChange={(id, combo) => {
-                      const saved = { ...((prefs.shortcuts as Record<string, string> | undefined) ?? {}) };
-                      if (combo) saved[id] = combo;
-                      else delete saved[id];
-                      savePrefs({ shortcuts: saved });
-                    }}
-                    onRecording={setRecordingShortcut}
-                  />
-                }
-                imageUpload={
-                  <ImageUploadRow
-                    api={api}
-                    onOpen={() => {
-                      closeMenu();
-                      setImageUploadOpen(true);
-                    }}
-                  />
-                }
-                vault={<VaultSettingsRow onOpen={closeMenu} />}
-                worksDir={<WorksDirRow api={api} pickFolder={inDesktop ? (start) => pickFolderNative("새 프로젝트 폴더 위치", start) : null} />}
-              />
+            <Popover open={menuAt === "top"} onClose={closeMenu} align="right">
+              {settingsBody()}
             </Popover>
           </div>
+{!phoneBar ? (
+          <button type="button" className={`icon-button shell-right-sidebar${right.open ? " pressed" : ""}`} {...right.toggleProps} aria-label="오른쪽 사이드바" title={`오른쪽 사이드바 · 개요와 연결 (${shortcuts.rightSidebar})`}>
+            <Icon name="sidebarRight" size={18} />
+          </button>
+          ) : null}
         </div>
       </header>
 
-      {layoutProblem ? <div className="layout-problem" role="alert"><span>{layoutProblem.message}</span><button type="button" className="button small" onClick={() => void resolveLayoutProblem(false)}>{layoutReady ? "저장된 배치 불러오기" : "다시 불러오기"}</button>{layoutReady ? <button type="button" className="button small" onClick={() => void resolveLayoutProblem(true)}>현재 배치로 저장</button> : null}</div> : null}
 
       <div className={`body${sidebarOpen && state.ready ? " with-sidebar" : ""}`}>
       {compactShell && sidebarOpen ? <button className="sidebar-scrim" type="button" aria-label="사이드바 닫고 작업으로 돌아가기" onClick={() => setCompactSidebar(false)} /> : null}
       {sidebarOpen && state.ready ? (
         <Sidebar
           state={state}
-          currentWorkId={view.kind === "project" ? view.workId : view.kind === "work" || view.kind === "document" || view.kind === "split" ? work?.id ?? null : null}
+          currentWorkId={listWorkId}
           visibleSessionId={view.kind === "project" ? null : visibleSession?.id ?? null}
-          currentDocId={view.kind === "document" || view.kind === "split" ? view.artifactId : null}
+          currentDocId={view.kind === "document" ? view.artifactId : null}
           open={treeOpen}
           onOpenChange={(next: TreeOpenState) => savePrefs({ tree: next })}
           sortMode={sortMode}
           homeActive={view.kind === "new" && view.folderId === null}
+          homeOwnsNow={homeLedgerShown}
+          atNow={railLit === "now"}
+          onLeaveNow={() => showList("projects")}
           onSortMode={(mode) => savePrefs({ treeSort: mode })}
           width={sidebarWidth}
           onWidth={(width) => savePrefs({ sidebarWidth: width })}
+          paneMinimum={paneMinimum}
           actions={sidebarActions}
           pending={sidebarPending}
           onPendingDone={() => setSidebarPending(null)}
+          unreadNotices={attentionState.list.unread}
           prefs={prefs}
           onPrefs={savePrefs}
           api={api}
@@ -2546,6 +3189,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
           layout={layout}
           maximized={editorFocus || paneFocus}
           onMaximize={id => { focusPaneNow(id); setPaneFocus(value => !value); }}
+          onPresent={() => void sharedBrowser.present()}
           enabled={!single}
           onResize={(id, ratio) => updateLayout((current) => resizeSplit(current, id, ratio))}
           onFocus={focusPaneNow}
@@ -2556,12 +3200,23 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
           head={paneHead}
           scope={paneScope}
           effectOf={effectOf}
-          tabBar={single ? undefined : (pane) => <GroupTabs pane={pane} head={paneHead} onSelect={(tabId) => selectTabNow(pane.id, tabId)} onClose={(tabId) => closeTabNow(pane.id, tabId)} onReorder={(tabId, index) => updateLayout((current) => moveTab(current, tabId, { paneId: pane.id, side: "center" }, index))} onNew={anchor => { const box = anchor.getBoundingClientRect(); setContextMenu(creationMenu(pane.id, null, box.left, box.bottom)); }} />}
+          tabBar={single ? undefined : (pane) => <GroupTabs pane={pane} head={paneHead} scope={{ workId: scopes[pane.id]?.workId ?? scopeWorkId, label: scopes[pane.id]?.named && scopes[pane.id]?.workId ? state.works[scopes[pane.id]!.workId!]?.title ?? null : null, all: navPrefs.tabsAll, projectName: (id) => state.works[id]?.title ?? "프로젝트", onShowAll: (all) => saveNavigator({ tabsAll: all }) }} onSelect={(tabId) => selectTabNow(pane.id, tabId)} onClose={(tabId) => closeTabNow(pane.id, tabId)} onReorder={(tabId, index) => updateLayout((current) => moveTab(current, tabId, { paneId: pane.id, side: "center" }, index))} onNew={anchor => { const box = anchor.getBoundingClientRect(); setContextMenu(creationMenu(pane.id, null, box.left, box.bottom)); }} />}
           render={(pane, info) => paneView(pane, info.focused, info.split, info.tabId, info.active)}
+          // A document beside another pane keeps its editor's width (the page, not two letters a line); the conversation gives way first.
+          minWidthOf={paneNeed}
           onNarrow={setNarrowPanes}
+          foot={launchCredit && !onboardingUp ? launchCredit : null}
         />
       )}
+      {right.shown && state.ready && layoutReady ? (
+        <RightSidebar {...right.sidebarProps} note={sideNoteOf(view, single ? visibleSession : sessionIn(focusedPane(layout)) ?? visibleSession, state.artifacts)} state={state} pages={browserState.pages} readText={readArtifactText}
+          // From a conversation's 연결: its document, or the web page it opened, comes beside it; a conversation opens as itself.
+          onOpenSession={(session) => { if (!(session.pageAgent && !session.archivedAt && sharedBrowser.available && browserState.pages.some((page) => page.pageId === session.pageAgent!.pageId && page.status !== "closed") && actions.openPageBeside(session.pageAgent.pageId))) openSession(session); }}
+          onOpenArtifact={(artifactId) => actions.openBeside(artifactId)}
+          onOpenPage={sharedBrowser.available && !single ? (page) => void openBrowserRef.current(layoutRef.current.focus, { workspaceId: page.workspaceId, workId: page.workId, profileId: page.profileId, url: page.url }) : undefined} />
+      ) : null}
       </div>
+      {usagePlace === "bottom" && !single ? <UsageLine providers={state.providers} onRefresh={() => api?.refreshProviders().catch(fail) ?? Promise.resolve()} /> : null}
       {reading && state.artifacts[reading.artifactId] ? (
         <Suspense fallback={null}>
           <Reader api={api} state={state} artifact={state.artifacts[reading.artifactId]!} start={reading.start} onClose={closeReader} />
@@ -2572,12 +3227,12 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       {newBrowser ? <NewBrowserDialog browser={sharedBrowser} workspaces={Object.values(state.workspaces)} target={newBrowser} onClose={() => setNewBrowser(null)} onOpen={page => {
         const content: PaneContent<View> = { view: { kind: "browser", pageId: page.pageId }, workId: page.workId, sessionId: page.sessionId };
         const targetId = findTab(layoutRef.current, contentKey(content))?.pane.id ?? newBrowser.paneId;
-        afterLeaving(targetId, content.view, () => updateLayout(current => ({ ...setPane(current, targetId, content), focus: targetId })));
+        afterLeaving(targetId, content.view, () => updateLayout(current => ({ ...setPane(current, targetId, content), focus: targetId })), findTab(layoutRef.current, contentKey(content))?.tab.id ?? null);
       }} /> : null}
       {workLinksOpen ? <WorkLinkDialog state={state} initialSource={sessionIn(focusedPane(layout))?.id} visibleIds={layout.panes.map(pane => sessionIn(pane)?.id).filter((id): id is string => !!id)} onSend={actions.handoff} onOpen={openSession} onClose={() => setWorkLinksOpen(false)} /> : null}
       {taskPanelOpen ? <TaskPanel api={api} workId={view.kind === "project" ? view.workId : work?.id} onClose={() => setTaskPanelOpen(false)} onOpen={(sessionId, itemId) => {
         const target = stateRef.current.sessions[sessionId];
-        if (!target) { setToast("원문 대화를 찾을 수 없습니다."); return; }
+        if (!target) { setToast(failure("원문 대화를 찾을 수 없습니다.")); return; }
         setTaskPanelOpen(false);
         openSession(target);
         if (itemId) setFocusItem({ sessionId, itemId, nonce: Date.now() });
@@ -2596,26 +3251,26 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       {desktopOpen && !api.isRemote ? <DesktopTargetPicker api={api} sessions={Object.values(state.sessions).filter(session => !session.archivedAt).map(session => ({ id: session.id, label: `${state.works[session.workId]?.title ?? "프로젝트"} · ${session.purpose}` }))} onClose={() => setDesktopOpen(false)} /> : null}
       {extensionsOpen && !api.isRemote ? <ExtensionLibrary api={api} workspaces={Object.values(state.workspaces).filter(space => !space.archivedAt && !space.removedAt).map(space => ({ id: space.id, label: `${state.works[space.workId]?.title ?? "프로젝트"} · ${space.label}` }))} onClose={() => setExtensionsOpen(false)} /> : null}
       {eventHubOpen && !api.isRemote ? <EventHub api={api} onClose={() => setEventHubOpen(false)} /> : null}
+      {settingsAt && api ? <SettingsSheet section={settingsSections.some((entry) => entry.id === settingsAt) ? settingsAt : "general"} sections={settingsSections} onSection={showSettingsSection} onClose={closeSettings} listFirst={settingsListFirst}>
+        {settingsSection(settingsSections.some((entry) => entry.id === settingsAt) ? settingsAt : "general")}
+      </SettingsSheet> : null}
       {dropboxOpen && api ? <DropboxDialog api={api} pickFolder={inDesktop ? (start) => pickFolderNative("Dropbox 폴더 선택", start) : null} openExternal={openExternal} onClose={() => setDropboxOpen(false)} onOpened={({ work, artifact }) => { setDropboxOpen(false); navigateTo({ workId: work.id, sessionId: null, view: artifact ? { kind: "document", artifactId: artifact.id, proposalId: null } : { kind: "project", workId: work.id } }); }} /> : null}
       {officeImportOpen && api ? <OfficeImportDialog api={api} onClose={() => setOfficeImportOpen(false)} /> : null}
       {api && <OfficeDrive api={api} theme={appTheme} />}
       {ieumAppOpen ? <IeumAppDialog api={api} status={state.tools?.ieumApp} onClose={() => setIeumAppOpen(false)} /> : null}
       {knowledgeMounted && api ? <div hidden={!knowledgeOpen}><KnowledgeLibrary api={api} state={state} workId={view.kind === "project" ? view.workId : work?.id} theme={appTheme} visible={knowledgeOpen} onOpen={artifact => { navigateTo({ workId: artifact.workId, sessionId: null, view: { kind: "document", artifactId: artifact.id, proposalId: null } }); setKnowledgeOpen(false); }} onClose={() => { setKnowledgeOpen(false); setKnowledgeMounted(false); }} /></div> : null}
-      {state.ready && api && (prefs.onboarding !== "done" || onboardingAgain) ? (
+      {onboardingUp ? (
         <Onboarding
+          foot={launchCredit}
           api={api}
           hostLabel={state.hostLabel}
-          artifacts={Object.values(state.artifacts)}
-          suspended={ieumAppOpen || dropboxOpen || connectionsOpen || importOpen}
-          onOpenDropbox={api.isRemote ? undefined : () => setDropboxOpen(true)}
-          onOpenVault={api.isRemote ? undefined : () => pkmHandle.current?.setDialog({ kind: "vault" })}
-          onOpenDevices={onConnections}
-          onOpenDocument={artifactId => {
-            const artifact = stateRef.current.artifacts[artifactId];
-            if (artifact) navigateTo({ view: { kind: "document", artifactId, proposalId: null }, workId: artifact.workId, sessionId: null });
-          }}
-          onCreateDocument={() => setNewDocument({ ...creationTarget(layoutRef.current.focus), paneId: layoutRef.current.focus })}
-          onImportHistory={api.isRemote ? undefined : () => setImportOpen(true)}
+          suspended={ieumAppOpen || dropboxOpen || connectionsOpen || importOpen || settingsAt !== null || newDocument !== null}
+          // MERGE (ux/two-messengers): pass `kind` on to PhoneMessenger's one-kind prop in the "messenger" settings case.
+          onOpenMessenger={api.isRemote ? undefined : (kind) => { setMessengerKind(kind); setSettingsAt("messenger"); }}
+          themePref={themePref}
+          onTheme={(pref) => savePrefs({ theme: pref })}
+          palette={palette}
+          onPalette={(next) => savePrefs({ palette: next })}
           providers={state.providers}
           tools={state.tools}
           engineActions={engineActions}
@@ -2630,18 +3285,17 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
           }}
         />
       ) : null}
-      {sheet ? (
-        <AppearanceSheet
-          target={sheet}
-          onTarget={setSheet}
-          themePref={themePref}
-          onThemePref={(pref) => savePrefs({ theme: pref })}
-          onClose={() => setSheet(null)}
-        />
-      ) : null}
       {engineMenu ? <EngineMenu provider={engineMenu.provider} x={engineMenu.x} y={engineMenu.y} onClose={closeEngineMenu} /> : null}
       {contextMenu ? <ContextMenu request={contextMenu} onClose={closeContextMenu} /> : null}
-      {deletingWork ? <ProjectDeleteDialog work={deletingWork} sessions={Object.values(state.sessions).filter(session => session.workId === deletingWork.id).length} onDelete={() => deleteProject(deletingWork)} onClose={() => setDeletingWork(null)} /> : null}
+      {/* Opened from a row's menu or a ⋯: closing returns the focus there, not to the page. */}
+      {moveAsk ? <MoveQuestion name={moveAsk.name} certain={moveAsk.certain} same={moveAsk.same} onSave={moveAsk.go} onDrop={moveAsk.drop} onClose={() => setMoveAsk(null)} /> : null}
+      {unsavedAsk ? <FromMenu><ConfirmDialog title="저장하지 않은 내용이 있습니다" tone="primary" lines={[unsavedAsk.certain ? `「${unsavedAsk.name}」에 저장하지 않은 편집이 있습니다. 저장한 뒤 계속합니다.` : `「${unsavedAsk.name}」 편집기에 저장하지 않은 편집이 있을 수 있습니다. 저장을 확인한 뒤 계속합니다.`]} confirmLabel="저장하고 계속" busyLabel="저장하는 중…"
+        onConfirm={async () => unsavedAsk.answer(true)} onClose={() => { unsavedAsk.answer(false); setUnsavedAsk(null); }} /></FromMenu> : null}
+      {refusedTrash ? <FromMenu><ConfirmDialog title="휴지통으로 옮길 수 없습니다" tone="primary" lines={[refusedTrash.reason, "목록에서만 빼면 파일은 그대로 둡니다."]} confirmLabel="목록에서 빼기" busyLabel="빼는 중…"
+        onConfirm={() => removeDoc(refusedTrash.artifact, "unlisted")} onClose={() => setRefusedTrash(null)} /></FromMenu> : null}
+      {renamingSession ? <FromMenu><RenameDialog title="문서 AI 이름 바꾸기" value={renamingSession.purpose} onSave={(purpose) => api ? api.updateSession(renamingSession.id, { purpose }).then(() => undefined) : Promise.resolve()} onClose={() => setRenamingSession(null)} /></FromMenu> : null}
+      {deletingWork ? <ProjectDeleteDialog work={deletingWork} sessions={Object.values(state.sessions).filter(session => session.workId === deletingWork.id).length}
+        trashedDocuments={Object.values(state.removedArtifacts).filter(artifact => artifact.workId === deletingWork.id && artifact.removed?.kind === "trash").length} onDelete={() => deleteProject(deletingWork)} onClose={() => setDeletingWork(null)} /> : null}
       {newDocument && api ? <NewDocumentDialog api={api} state={state} request={newDocument} onClose={() => setNewDocument(null)} onOpen={artifact => setViewOf(newDocument.paneId, { kind: "document", artifactId: artifact.id, proposalId: null }, artifact)} /> : null}
       {newDirectory && api && state.workspaces[newDirectory] ? <NewDirectoryDialog api={api} workspace={state.workspaces[newDirectory]!} onClose={() => setNewDirectory(null)} onCreated={created => setToast({ text: `폴더를 만들었습니다: ${created.path}`, action: { label: inDesktop ? "폴더 열기" : "경로 복사", run: () => void openPath(created.path) } })} /> : null}
       {paletteOpen ? (
@@ -2661,7 +3315,8 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
           onOpenDoc={(artifact) => docActions.openArtifact(artifact.id)}
           onOpenNote={single ? undefined : (path, location) => setView({ kind: "pkm", target: { kind: "note", path, location } })}
           onOpenView={single ? undefined : (id) => setView({ kind: "pkm", target: { kind: "view", id } })}
-          onClose={() => setPaletteOpen(null)}
+          onClose={() => { setPaletteOpen(null); setPaletteSeed(""); }}
+          initialQuery={paletteSeed}
         />
       ) : null}
       {switcher !== null ? <Switcher state={state} sessions={switchable} index={switcher} unseen={unseen} /> : null}
@@ -2697,30 +3352,13 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
         />
       ) : null}
 
-      {toast ? (
-        <div className="toast" role="status" onClick={() => setToastState(null)}>
-          <span>{toast.text}</span>
-          {toast.action ? (
-            <button
-              type="button"
-              className="toast-action"
-              onClick={(event) => {
-                event.stopPropagation();
-                toast.action!.run();
-                setToastState(null);
-              }}
-            >
-              {toast.action.label}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
       <VaultDialogHost pickFolder={inDesktop ? pickFolderNative : null} />
     </div>
     </PkmProvider>
     </PaneActionsContext.Provider>
     </LinkContext.Provider>
     </DocContext.Provider>
+    </ShownPanelsContext.Provider>
     </UnseenContext.Provider>
     </AppearanceContext.Provider>
     </VoiceEnvironment.Provider>

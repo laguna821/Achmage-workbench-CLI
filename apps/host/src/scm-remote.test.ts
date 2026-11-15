@@ -3,13 +3,18 @@ import { randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import type { ScmJob, ScmRemoteRequest } from "@workbench/contracts";
 import { Store } from "./store.ts";
 import { EventBus } from "./bus.ts";
 import { SessionManager } from "./sessions.ts";
 import { redactGit } from "./scm-remote.ts";
 
+// These tests read git's own words ("CONFLICT", "stale info") in the output the gateway passes on;
+// on a machine whose language is not English (ko_KR here) git says them in that language. The git the
+// gateway starts inherits this process's environment: run it in the C locale for these tests only.
+beforeAll(() => { vi.stubEnv("LC_ALL", "C"); vi.stubEnv("LANGUAGE", ""); });
+afterAll(() => { vi.unstubAllEnvs(); });
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
 const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-c", "core.quotePath=false", "-C", cwd, ...args], { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }).trim();

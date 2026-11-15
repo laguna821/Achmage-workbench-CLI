@@ -1,0 +1,131 @@
+Achmage Workbench — rhwp v0.9.0 form of a 0.8.7 engine patch (third_party/hop/patches-0.9.0).
+Origin: HOP 0008 (third_party/hop/patches/0008-hop-empty-anchor-table-outer-bottom.patch, sha256 fc9795376d359925eba5c8ac8904fca006c709ff75013b3da28e4fabffef71bb; original author hop-workbench <hop@localhost>)
+Status: upstream-test
+Differs from the 0.8.7 form: 0.9.0 already resumes the body below the outer bottom margin of an empty-anchor top-and-bottom table (margin and next spacing-before combine as the larger, as Hancom 2024); the 0.8.7 code is not re-applied.
+Regression test: renderer::typeset::paragraph::hop_rules::tests::hop_0008_body_resumes_below_the_outer_bottom_margin_of_an_empty_anchor_table (new)
+
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: h4a <h4a@localhost>
+Date: Sat, 14 Nov 2026 11:53:05 +0900
+Subject: [PATCH] HOP 0008 hop-empty-anchor-table-outer-bottom (0.9.0 port:
+ already upstream, test added)
+
+
+diff --git a/src/renderer/typeset/paragraph/hop_rules.rs b/src/renderer/typeset/paragraph/hop_rules.rs
+index 551d2e23..aebc568e 100644
+--- a/src/renderer/typeset/paragraph/hop_rules.rs
++++ b/src/renderer/typeset/paragraph/hop_rules.rs
+@@ -275,3 +275,113 @@ mod hop_0007_document_tests {
+         );
+     }
+ }
++
++#[cfg(test)]
++mod hop_0008_tests {
++    //! [HOP patch 0008] Hancom 2024 resumes the body below an empty-anchor TopAndBottom table at the table
++    //! bottom plus its outer bottom margin, collapsed with the next paragraph's spacing before (the larger
++    //! one wins). (0.9.0: upstream already does this — layout through the computed empty host /
++    //! `host_spacing` outer bottom, typeset with the same reservation — so the 0.8.7 hunks are not
++    //! re-applied; this test pins it.)
++    use crate::document_core::DocumentCore;
++    use crate::model::control::Control;
++
++    fn boxes(node: &serde_json::Value, out: &mut Vec<(String, i64, f64, f64)>) {
++        let kind = node["type"].as_str().unwrap_or_default().to_string();
++        let y = node["bbox"]["y"].as_f64().unwrap_or(0.0);
++        let h = node["bbox"]["h"].as_f64().unwrap_or(0.0);
++        if kind == "Table" || kind == "TextLine" {
++            out.push((kind.clone(), node["pi"].as_i64().unwrap_or(-1), y, y + h));
++        }
++        if kind != "Table" {
++            for c in node["children"].as_array().into_iter().flatten() {
++                boxes(c, out);
++            }
++        }
++    }
++
++    /// Empty paragraph holding a 2x2 TopAndBottom table, then `lines` lines of text.
++    /// Returns (table bottom, next first line top, next spacing before px, page count,
++    /// last line bottom on page 1, body bottom).
++    fn layout(margin_hu: i16, spacing_json: &str, lines: usize) -> (f64, f64, f64, u32, f64, f64) {
++        let mut core = DocumentCore::new_empty();
++        core.create_blank_document_native().unwrap();
++        core.create_table_native(0, 0, 0, 2, 2).unwrap();
++        let n = core.document.sections[0].paragraphs.len();
++        core.insert_text_native(0, n - 1, 0, &vec!["가"; lines].join("\n"))
++            .unwrap();
++        core.apply_para_format_native(0, n - 1, spacing_json).unwrap();
++        for p in &mut core.document.sections[0].paragraphs {
++            // rhwp-composed lines (no stored ladder), as in 0.8.7's test documents.
++            for seg in &mut p.line_segs {
++                seg.tag |= crate::model::paragraph::LineSeg::TAG_IMPLEMENTATION_PROPERTY;
++            }
++            for c in &mut p.controls {
++                if let Control::Table(t) = c {
++                    t.common.treat_as_char = false;
++                    t.common.text_wrap = crate::model::shape::TextWrap::TopAndBottom;
++                    t.common.vert_rel_to = crate::model::shape::VertRelTo::Para;
++                    t.common.vertical_offset = 0;
++                    t.outer_margin_bottom = margin_hu;
++                }
++            }
++        }
++        core.recompose_section(0);
++        core.paginate();
++        let sb = core
++            .styles
++            .para_styles
++            .get(core.document.sections[0].paragraphs[n - 1].para_shape_id as usize)
++            .map_or(0.0, |s| s.spacing_before);
++        let v: serde_json::Value =
++            serde_json::from_str(&core.build_page_tree(0).unwrap().root.to_json()).unwrap();
++        let mut out = Vec::new();
++        boxes(&v, &mut out);
++        let table_bottom = out.iter().find(|b| b.0 == "Table").expect("table").3;
++        let next_top = out
++            .iter()
++            .find(|b| b.0 == "TextLine" && b.1 as usize == n - 1)
++            .expect("next line")
++            .2;
++        let body = v["children"]
++            .as_array()
++            .unwrap()
++            .iter()
++            .find(|c| c["type"] == "Body")
++            .map(|b| b["bbox"]["y"].as_f64().unwrap() + b["bbox"]["h"].as_f64().unwrap())
++            .unwrap();
++        (table_bottom, next_top, sb, core.page_count(), out.last().unwrap().3, body)
++    }
++
++    #[test]
++    fn hop_0008_body_resumes_below_the_outer_bottom_margin_of_an_empty_anchor_table() {
++        let px = |hu: i16| crate::renderer::hwpunit_to_px(hu as i32, crate::renderer::DEFAULT_DPI);
++        // Margin only: the whole 1280 HU (12.8 pt).
++        let (bottom, top, sb, ..) = layout(1280, r#"{"spacingBefore":0}"#, 2);
++        assert_eq!(sb, 0.0);
++        assert!((top - bottom - px(1280)).abs() < 0.2, "gap {}", top - bottom);
++        // No margin: right below the table.
++        let (bottom0, top0, ..) = layout(0, r#"{"spacingBefore":0}"#, 2);
++        assert!((top0 - bottom0).abs() < 0.2, "gap {}", top0 - bottom0);
++        // Margin larger than the next spacing before: the margin, not their sum.
++        let (bottom, top, sb, ..) = layout(1280, r#"{"spacingBefore":880}"#, 2);
++        assert!(sb > 1.0 && sb < px(1280), "spacing before {sb}");
++        assert!((top - bottom - px(1280)).abs() < 0.2, "gap {} sb {sb}", top - bottom);
++        // Spacing before larger than the margin: the spacing before, not their sum.
++        let (bottom_m, top_m, sb_m, ..) = layout(300, r#"{"spacingBefore":4000}"#, 2);
++        let (bottom_0, top_0, ..) = layout(0, r#"{"spacingBefore":4000}"#, 2);
++        assert!(sb_m > px(300), "spacing before {sb_m}");
++        assert!(
++            ((top_m - bottom_m) - (top_0 - bottom_0)).abs() < 0.2,
++            "a margin smaller than the spacing adds nothing: {} vs {}",
++            top_m - bottom_m,
++            top_0 - bottom_0
++        );
++        // Typeset reserves the same margin: the page ends inside the body, one line earlier.
++        let (.., pages_m, last_m, body) = layout(1280, r#"{"spacingBefore":0}"#, 80);
++        let (.., pages_0, last_0, _) = layout(0, r#"{"spacingBefore":0}"#, 80);
++        assert!(last_m <= body + 0.5 && last_0 <= body + 0.5, "{last_m} {last_0} {body}");
++        assert!(last_m < last_0, "the margin costs room on page 1: {last_m} vs {last_0}");
++        assert!(pages_m >= pages_0);
++    }
++}

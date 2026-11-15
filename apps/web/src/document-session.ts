@@ -5,6 +5,10 @@ import type { Api } from "./api.ts";
 // Each webview gets a fresh identity. A copied sessionStorage must not clone edit ownership.
 export const windowId = `window-${crypto.randomUUID()}`;
 
+// Views of this window on their way out: their close can reach the gateway after the claim of the
+// view that takes their place (each view has its own request queue). The new view waits for it.
+const closing = new Map<string, Promise<void>>();
+
 export function useDocumentSession(rootApi: Api, artifactId: string | null, sessionId: string | null, wantsWrite = true) {
   const [viewId] = useState(() => `view-${crypto.randomUUID()}`);
   const [registration, setRegistration] = useState<DocumentRegistration | null>(null);
@@ -19,6 +23,7 @@ export function useDocumentSession(rootApi: Api, artifactId: string | null, sess
   useEffect(() => {
     let stopped = false;
     let hiddenPage = false;
+    const waited = new Set<string>();
     token.current = null; setRegistration(null); setError(null);
     if (!artifactId) return;
     const run = (claim = false) => {
@@ -31,6 +36,14 @@ export function useDocumentSession(rootApi: Api, artifactId: string | null, sess
           if (hiddenPage) { await rootApi.closeDocument(viewId, windowId); return; }
           if (stopped) return;
           token.current = result.writeToken; confirmed.current = result; setRegistration(result); setError(null);
+          // Read-only only because this window's earlier view of the document has not finished
+          // closing: claim again once it has. A view still open (another tab, another window)
+          // keeps its lease — it is never in `closing`.
+          const leaving = wantsWrite && !result.writeToken && result.writer?.windowId === windowId ? closing.get(result.writer.viewId) : undefined;
+          if (leaving && !waited.has(result.writer!.viewId)) {
+            waited.add(result.writer!.viewId);
+            void leaving.then(() => { if (!stopped) void run(true); });
+          }
         } catch (error) {
           if (stopped) return;
           token.current = null;
@@ -53,7 +66,10 @@ export function useDocumentSession(rootApi: Api, artifactId: string | null, sess
       stopped = true; token.current = null; update.current = async () => {};
       window.clearInterval(timer); window.removeEventListener("focus", wake); document.removeEventListener("visibilitychange", wake);
       window.removeEventListener("pagehide", pageHide); window.removeEventListener("pageshow", pageShow);
-      queue.current = queue.current.catch(() => undefined).then(() => rootApi.closeDocument(viewId, windowId)).catch(() => undefined);
+      const closed = queue.current.catch(() => undefined).then(() => rootApi.closeDocument(viewId, windowId)).then(() => undefined, () => undefined);
+      queue.current = closed;
+      closing.set(viewId, closed);
+      void closed.then(() => { if (closing.get(viewId) === closed) closing.delete(viewId); });
     };
   }, [rootApi, artifactId, viewId, wantsWrite]);
   // Switching conversations changes the editor's AI capability immediately, even if
@@ -68,7 +84,8 @@ export function useDocumentSession(rootApi: Api, artifactId: string | null, sess
     const previous = progress.current;
     progress.current = { ...previous, dirty, revision };
     if (previous.dirty !== dirty || previous.revision !== revision) return update.current();
-    return Promise.resolve();
+    // Already reported: resolves once that report (still on its way, perhaps) is answered.
+    return queue.current.then(() => undefined, () => undefined);
   }, []);
   const claim = useCallback(() => update.current(true), []);
   const sync = useCallback(async (dirty: boolean, revision: number, expectedSession?: string | null) => {

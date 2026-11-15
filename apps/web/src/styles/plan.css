@@ -10,29 +10,25 @@
   background: var(--accent-soft);
 }
 
-/* The plan inside the card that asks: plain text on the card, no box in a box. */
-.plan-approval .plan-approval-text {
+/* The plan inside the entry that asks: its own text on the entry's sheet, no box and no stripe. */
+.transcript .plan-approval .plan-approval-text {
   max-height: 320px;
-  margin: 2px 0 var(--space-1);
-  padding: 2px 0 2px var(--space-3);
+  margin: 0;
+  padding: var(--space-xs) var(--space-md) var(--space-sm);
   overflow: auto;
-  border-left: 1px solid color-mix(in srgb, var(--amber) 35%, var(--line));
-  font-size: var(--fs-ui);
+  color: var(--text);
+  font-size: var(--text-md);
 }
 
-.plan-approval .plan-approval-text > :first-child {
+.transcript .plan-approval .plan-approval-text :is(h1, h2, h3, h4) {
+  margin: var(--space-xs) 0 var(--space-2xs);
+  font-size: var(--text-md);
+}
+
+.transcript .plan-approval .plan-approval-text > :first-child {
   margin-top: 0;
 }
 
-.plan-approval .plan-approval-text > :last-child {
+.transcript .plan-approval .plan-approval-text > :last-child {
   margin-bottom: 0;
-}
-
-.plan-tag {
-  padding: 1px 6px;
-  border-radius: var(--r-xs);
-  background: var(--accent-soft);
-  color: var(--active-text);
-  font-size: var(--fs-micro);
-  font-weight: 600;
 }

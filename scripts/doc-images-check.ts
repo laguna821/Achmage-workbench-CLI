@@ -3,7 +3,7 @@
 // engines, no model) and a stand-in for Cloudflare R2 (a small S3 server here that checks each
 // request's SigV4 signature with the secret it knows, keeps the objects and serves them at a
 // public address). The same steps run in a Codex work and in a Claude work:
-//   - "그림 올리기 · Cloudflare R2": fill the keys, "연결 확인" (put, public read, delete), save; the
+//   - 설정 › 문서 도구 › "그림 올릴 곳 설정…" (was "그림 올리기 · Cloudflare R2"): fill the keys, "연결 확인" (put, public read, delete), save; the
 //     secret never comes back to the screen; the settings file is 0600.
 //   - Markdown: a pasted picture shows a placeholder while it uploads, then `![image](public url)`;
 //     the preview shows it. R2 refusing: a toast and the picture in the work folder's assets/,
@@ -185,7 +185,7 @@ exit 1
 );
 
 // ── the gateway ────────────────────────────────────────────────────────
-const child = spawn(process.execPath, ["apps/host/src/main.ts"], {
+const child = spawn(process.execPath, [process.env.HOST_ENTRY ?? "apps/host/src/main.ts"], {
   env: {
     ...process.env,
     WORKBENCH_DATA_DIR: dataDir,
@@ -264,12 +264,12 @@ const png = (seed: number, name = "image.png") => ({ b64: makePng(180 + seed * 1
 async function openDoc(page: Page, name: string) {
   // The documents menu is in the conversation view.
   if (await page.locator(".doc-tab.conversation").count()) await page.locator(".doc-tab.conversation").click();
-  await page.locator(".docs-button").click();
-  await page.locator(".docs-menu").getByText(name, { exact: true }).click();
+  await page.locator(".note-head-more").click();
+  await page.locator(".note-menu").getByText(name, { exact: true }).click();
 }
 const editorFrame = (page: Page, kind: string) => page.frames().find((frame) => frame.url().includes(`/office/${kind}.html`));
 const saveState = (page: Page) => page.locator(".save-state").innerText().catch(() => "");
-const waitSaved = (page: Page, revision: number, timeout = 25_000) => until(async () => (await saveState(page)).includes(`r${revision} 저장됨`), timeout);
+const waitSaved = (page: Page, revision: number, timeout = 25_000) => until(async () => (await saveState(page)).includes(`${revision}판 저장됨`), timeout);
 
 async function flow(provider: Provider, index: number) {
   const label = provider === "codex" ? "Codex" : "Claude";
@@ -295,20 +295,24 @@ async function flow(provider: Provider, index: number) {
   page.on("response", (response) => response.status() >= 500 && logs.push(`[${label} HTTP ${response.status()}] ${response.url().replace(/token=[^&]+/, "token=…").slice(0, 160)}`));
   const shot = (name: string) => page.screenshot({ path: join(outDir, `${provider}-${name}`) });
   const pass = (step: string, ok: boolean, detail = "") => check(`[${label}] ${step}`, ok, detail);
-  const toast = async () => (await page.locator(".toast").innerText().catch(() => "")).replace(/\s+/g, " ");
+  const toast = async () => (await page.locator(".top-notice").innerText().catch(() => "")).replace(/\s+/g, " ");
   try {
     await page.addInitScript((id) => localStorage.setItem("workbench.lastWork", id), work.id);
     await page.goto(`${ready.url}/?token=${ready.token}`);
-    await page.waitForSelector(".docs-button");
+    await page.waitForSelector(".note-head-more");
 
     // ── R2 settings ─────────────────────────────────────────────────────
-    await page.locator('button[aria-label="연결과 설정"]').click();
-    await page.getByText("그림 올리기 · Cloudflare R2…").waitFor();
-    const row = (await page.locator(".connections").innerText()).replace(/\s+/g, " ");
-    await page.getByText("그림 올리기 · Cloudflare R2…").click();
+    // 설정 › 문서 도구 › 문서에 붙여 넣는 그림 › "그림 올릴 곳 설정…" (was ⋯ "그림 올리기 · Cloudflare R2…").
+    await page.locator('.nav-rail button[data-rail="settings"]').click();
+    await page.locator('.settings-dialog[open] .settings-nav [data-section="documents"]').click();
+    const imageRow = page.locator('.settings-dialog[open] .settings-pane[data-section="documents"] .settings-row', { hasText: "문서에 붙여 넣는 그림" });
+    await imageRow.getByRole("button", { name: "그림 올릴 곳 설정…" }).waitFor();
+    await until(async () => !(await imageRow.locator(".settings-state").innerText()).includes("확인 중"), 5000);
+    const row = (await imageRow.innerText()).replace(/\s+/g, " ");
+    await imageRow.getByRole("button", { name: "그림 올릴 곳 설정…" }).click();
     await page.waitForSelector(".image-upload-sheet");
     if (index === 0) {
-      pass("⋯ 메뉴에 R2 줄(설정 전: 작업 폴더 저장)", /설정 안 됨/.test(row) && /assets/.test(row), row.slice(row.indexOf("문서에 붙여"), row.indexOf("문서에 붙여") + 90));
+      pass("설정 › 문서 도구에 그림 줄(설정 전: 작업 폴더에 저장)", /작업 폴더에 저장/.test(row) && /assets/.test(row), row.slice(0, 120));
       // First the Worker way, with the CMDS Eagle plugin's three values; the R2 API token is the other way.
       const labels = (await page.locator(".image-upload-sheet .image-upload-field > span").allInnerTexts()).join(" · ");
       await shot("00-r2-worker-form.png");
@@ -341,7 +345,7 @@ async function flow(provider: Provider, index: number) {
       await page.waitForSelector(".image-upload-sheet .image-upload-state.ok", { timeout: 5000 }).catch(() => undefined);
       const secretValue = await page.locator('.image-upload-sheet input[name="r2-secretAccessKey"]').inputValue();
       const placeholder = await page.locator('.image-upload-sheet input[name="r2-secretAccessKey"]').getAttribute("placeholder");
-      pass("다시 연 설정: 연결됨, 비밀 키 칸은 비어 있고 '저장됨'", /연결됨/.test(row) && secretValue === "" && (placeholder ?? "").includes("저장됨"), `${row.slice(row.indexOf("Cloudflare R2"), row.indexOf("Cloudflare R2") + 30)} · ${placeholder}`);
+      pass("다시 연 설정: 설정 줄은 'Cloudflare R2에 올림', 비밀 키 칸은 비어 있고 '저장됨'", /Cloudflare R2에 올림/.test(row) && secretValue === "" && (placeholder ?? "").includes("저장됨"), `${row.slice(row.indexOf("Cloudflare R2"), row.indexOf("Cloudflare R2") + 30)} · ${placeholder}`);
     }
     await page.locator('.image-upload-sheet button[aria-label="닫기"]').click();
 
@@ -437,7 +441,7 @@ async function flow(provider: Provider, index: number) {
 
     // ── Word ────────────────────────────────────────────────────────────
     await openDoc(page, "계획.docx");
-    await until(async () => Boolean(editorFrame(page, "docs")) && (await saveState(page)).includes("r1 저장됨"), 60_000);
+    await until(async () => Boolean(editorFrame(page, "docs")) && (await saveState(page)).includes("1판 저장됨"), 60_000);
     const docs = editorFrame(page, "docs")!;
     await docs.locator(".ProseMirror p").first().waitFor({ timeout: 20_000 });
     await page.waitForTimeout(1200);
@@ -479,7 +483,7 @@ async function flow(provider: Provider, index: number) {
 
     // ── PowerPoint ──────────────────────────────────────────────────────
     await openDoc(page, "표지.pptx");
-    await until(async () => Boolean(editorFrame(page, "slides")) && (await saveState(page)).includes("r1 저장됨"), 60_000);
+    await until(async () => Boolean(editorFrame(page, "slides")) && (await saveState(page)).includes("1판 저장됨"), 60_000);
     const slides = editorFrame(page, "slides")!;
     await slides.locator(".konvajs-content").first().waitFor({ timeout: 30_000 });
     await page.waitForTimeout(1500);
@@ -521,7 +525,7 @@ async function flow(provider: Provider, index: number) {
 
     // ── Excel ───────────────────────────────────────────────────────────
     await openDoc(page, "비품.xlsx");
-    await until(async () => Boolean(editorFrame(page, "sheets")) && (await saveState(page)).includes("r1 저장됨"), 60_000);
+    await until(async () => Boolean(editorFrame(page, "sheets")) && (await saveState(page)).includes("1판 저장됨"), 60_000);
     const sheets = editorFrame(page, "sheets")!;
     // Pictures go in once the workbook is ready (the editor says so in its status line).
     await until(async () => (await sheets.locator("body").innerText()).includes("통합 문서를 모두 로드했습니다"), 30_000);

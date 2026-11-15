@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+
 import { join } from "node:path";
 import { crc32, deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
@@ -9,6 +9,7 @@ import { cleanTemplates, engineImageBytes, imageSize, parseDrawRequest, reserveI
 import { SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
 import { emptyStatus, type AdapterSink, type ProviderAdapter } from "./providers/types.ts";
+import { tempDir } from "./test-temp.ts";
 
 /** A real PNG of the given size (one gray pixel row repeated). */
 function png(width: number, height: number) {
@@ -64,7 +65,7 @@ class Engine implements ProviderAdapter {
   }
 }
 
-function setup(dir = mkdtempSync(join(tmpdir(), "wb-imagegen-"))) {
+function setup(dir = tempDir("wb-imagegen-")) {
   const store = new Store(join(dir, "state.sqlite"));
   const manager = new SessionManager(store, new EventBus(), { hostId: "h", hostLabel: "노트북", managedWorksDir: join(dir, "works"), dataDir: dir });
   const claude = new Engine("claude", () => manager.sink);
@@ -82,7 +83,7 @@ const images = (manager: SessionManager, sessionId: string) =>
 
 describe("picture bytes", () => {
   it("takes the file Codex saved, else the base64 data, and only real images", () => {
-    const dir = mkdtempSync(join(tmpdir(), "wb-imagegen-bytes-"));
+    const dir = tempDir("wb-imagegen-bytes-");
     const data = png(30, 20);
     const saved = join(dir, "ig_1.png");
     writeFileSync(saved, data);
@@ -105,7 +106,7 @@ describe("picture bytes", () => {
   });
 
   it("never overwrites a picture: the next free name gets a number", () => {
-    const cwd = mkdtempSync(join(tmpdir(), "wb-imagegen-names-"));
+    const cwd = tempDir("wb-imagegen-names-");
     const at = new Date(2026, 9, 28).getTime();
     const first = reserveImagePath(cwd, "파란 원", at, "png");
     expect(first).toBe(join(cwd, "images", "2026-10-28-파란-원.png"));
@@ -186,7 +187,7 @@ describe("drawing", () => {
     expect(images(manager, session.id)[0]?.image.status).toBe("drawing");
 
     // Codex saved the picture under its own home; the gateway copies it into the work folder.
-    const home = mkdtempSync(join(tmpdir(), "wb-codex-home-"));
+    const home = tempDir("wb-codex-home-");
     writeFileSync(join(home, "ig_1.png"), png(120, 80));
     manager.sink.image?.(session.id, { id: "ig_1", status: "completed", result: null, savedPath: join(home, "ig_1.png"), revisedPrompt: "A blue circle", failure: null });
     codex.end(session.id);

@@ -96,7 +96,7 @@ describe("saved views over the vault, pages and sessions", () => {
       { label: "🔵 I", ids: ["note:20. Information (I)/수업.md"] },
       { label: "값 없음", ids: ["note:20. Information (I)/단계없음.md"] },
     ]);
-    expect((await pkm.state()).views.map((view) => view.name)).toEqual(["이번 주 노트", "진행 중인 세션"]);
+    expect((await pkm.state()).views.map((view) => view.name)).toEqual(["이번 주 노트", "진행 중인 대화"]);
     const saved = pkm.saveView({ name: "AI 교육", query: "#AI_교육", groupBy: null });
     expect((await pkm.state()).views.find((view) => view.id === saved.id)?.count).toBe(2);
     pkm.deleteView(saved.id);
@@ -154,5 +154,18 @@ describe("rules", () => {
     expect(preview.find((change) => change.workId === old.id)).toMatchObject({ ruleName: "디스크 위치대로", from: null, to: "projects", suggested: true });
     expect(pkm.applyRules([old.id])).toEqual({ applied: 1 });
     expect(folders.get(manager.view.works.get(old.id)!.folderId!)?.name).toBe("projects");
+  });
+});
+
+describe("the seeded saved views (design review I5)", () => {
+  it("a new install's level 1 says 대화, not 세션", () => {
+    const { pkm } = setup();
+    expect(pkm.views().map((view) => view.name)).toEqual(["이번 주 노트", "진행 중인 대화"]);
+  });
+  it("an existing install's stored view keeps the name the person has", () => {
+    const { dir, pkm } = setup();
+    const store = new Store(join(dir, "state.sqlite"));
+    store.setMeta("pkm.views", JSON.stringify([{ id: "view-running", name: "진행 중인 세션", query: "kind:session status:running", groupBy: null }]));
+    expect(pkm.views().map((view) => view.name)).toEqual(["진행 중인 세션"]);
   });
 });

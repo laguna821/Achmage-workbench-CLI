@@ -5,7 +5,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin: 0 2px;
+  margin: 0 var(--space-3xs);
   padding: 1px 9px;
   border: 1px dashed var(--line);
   border-radius: var(--r-full);
@@ -57,7 +57,7 @@
 
 .image-upload-field {
   display: grid;
-  gap: 4px;
+  gap: var(--space-2xs);
   font-size: var(--fs-meta);
   color: var(--text-soft);
 }
@@ -79,8 +79,8 @@
 .image-upload-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 14px 0 4px;
+  gap: var(--space-xs);
+  padding: 14px 0 var(--space-2xs);
 }
 
 .image-upload-actions .button {
@@ -92,8 +92,8 @@
 .image-upload-check {
   display: grid;
   gap: 6px;
-  margin: 10px 0 4px;
-  padding: 10px 12px;
+  margin: 10px 0 var(--space-2xs);
+  padding: 10px var(--space-sm);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   background: var(--surface-muted);
@@ -135,7 +135,7 @@
 }
 
 .image-upload-formats strong {
-  margin-right: 4px;
+  margin-right: var(--space-2xs);
   color: var(--text);
 }
 

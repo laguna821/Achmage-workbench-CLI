@@ -47,6 +47,15 @@ export type ProjectNote = {
   questions: ProjectEntry[];
   /** The body after the front matter (the whole note text people read). */
   body: string;
+  /** The body without its `## 결정` / `## 열린 질문` sections: the note's own words. */
+  free?: string;
+  /**
+   * The stretches of the note's own words outside `## 결정` / `## 열린 질문`, with offsets in the
+   * whole file: each is edited on its own (`PUT …/run`), every other byte left as it is.
+   */
+  runs?: { start: number; end: number; text: string }[];
+  /** The whole file, for "원문 전체" (and its line endings). */
+  source?: string;
   /** Why the note could not be read as one (broken front matter, unreadable file), or null. */
   problem: string | null;
   /** The note's latest recorded revision and who wrote it (an engine's write is shown with a way back). */
@@ -133,6 +142,11 @@ export type ProjectPage = {
   /** Property names to suggest when adding one (the vault's, other projects'), with their kinds. */
   knownKeys?: { key: string; type: PropertyType }[];
   noteTemplate?: { folderId: string; folderName: string } | null;
+  /**
+   * When the front matter cannot be read: the last revision that could, its properties (shown in
+   * their place) and both texts to compare. Revert puts that revision back, whoever changed it since.
+   */
+  lastReadable?: { revision: number; author: "user" | "engine" | "external"; sessionId: string | null; at: number; rows: PropertyRow[]; text: string; current: string } | null;
 };
 
 /** Classification-folder templates seed new notes only; ancestors supply the fallback. */
@@ -141,18 +155,6 @@ export type FolderNoteTemplate = {
   own: string | null;
   effective: { folderId: string; folderName: string; markdown: string } | null;
   fields: PropertyField[];
-};
-
-/** The Achmage work a project note names (`achmage_work`), as the user's Achmage runtime describes it (read-only). */
-export type AchmageBrief = {
-  workId: string;
-  /** False: the runtime does not know that work. */
-  found: boolean;
-  title: string | null;
-  lastCapturedAt: number | null;
-  devices: string[];
-  /** A summary from its context, when the runtime had one to give. */
-  summary: string | null;
 };
 
 /**
@@ -198,10 +200,20 @@ export type PropertyRow = {
   present: boolean;
   fromTemplate: boolean;
   hint?: string;
+  /**
+   * False when the value is written in a shape the page does not edit in place (a block or folded
+   * scalar, a map, an anchor, a list with comments): shown, and changed in the source.
+   */
+  editable?: boolean;
 };
 
 /** A write to the note, kept a while so "되돌리기" can put the bytes back. */
-export type ProjectWrite = { token: string; created: boolean; summary: string; page: ProjectPage };
+export type ProjectWrite = {
+  token: string;
+  created: boolean;
+  summary: string;
+  page: ProjectPage;
+};
 
 export type ProjectEntryRequest = {
   section: "decision" | "question";
@@ -209,6 +221,8 @@ export type ProjectEntryRequest = {
   /** Where it came from, linked from the line (`workbench://session/<id>#<item>`). */
   sessionId?: string | null;
   itemId?: string | null;
+  /** The revision the person saw; any change since refuses the line (after recording that change). */
+  baseRevision?: number | null;
 };
 
 /** What the next request of a session will be told changed since its last one (알릴 변경). */

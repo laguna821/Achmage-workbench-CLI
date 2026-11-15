@@ -1,0 +1,751 @@
+/* Hallmark · shape: app screen · genre: modern-minimal · theme: Furrow (deal 1/3) · redesign: full · governed by styles/tokens.css (stamp, critique and the one token source there) · states: 8 */
+/*
+ * THE CONTROL FAMILY (Hallmark U2). One recipe per kind of control, each with all eight states:
+ * rest · hover · focus-visible · pressed · selected/current · disabled · loading · error.
+ *
+ * The recipes attach to the classes the markup already has (no class, prop, data-* hook or label is
+ * renamed). Every other stylesheet keeps only the layout of these controls (size, padding, gaps,
+ * place); their paint (fill, edge, ink, mould, radius, press, focus, disabled look) lives here.
+ * A place that needs its controls to wear the family differently (the composer's quiet tools, the
+ * dark terminal's keys) sets the recipe's variables, never the paint.
+ *
+ * Material: Furrow's moulded keys at 6px, worn by Achmage: a lit top edge and a shaded foot; a key
+ * sinks 1px when pressed and stays sunk while it is held on (a toggle, an open menu); the one
+ * primary key is Achmage blue; a key that cannot be pressed is flat, washed and says so to the
+ * cursor; a key at work shows a turning ring where its label was, at the same width.
+ *
+ * Variables (set on the control, resolved there):
+ *   --c-fill --c-ink --c-edge --c-lift      rest: fill, label ink, edge colour, mould
+ *   --c-fill-hover --c-ink-hover --c-edge-hover
+ *   --c-fill-press --c-sink                  pressed: fill and the sunk shadow
+ *   --c-sel-fill --c-sel-ink --c-sel-edge    selected, current, held on
+ *   --c-off-fill --c-off-ink --c-off-edge    disabled
+ * Durations come from tokens.css (--dur-micro press and colour); only colour, shadow and transform
+ * move; the focus ring never animates; reduced motion keeps every state and drops the travel.
+ */
+
+/* The ring that turns while a control is at work. */
+@property --c-spin {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes c-turn { to { transform: rotate(1turn); } }
+@keyframes c-turn-field { to { --c-spin: 1turn; } }
+@keyframes c-wait { 50% { opacity: 0.35; } }
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════
+   1. KEYS — text keys, icon keys and select triggers share one state machine.
+   .button (secondary) · .button.primary · .ghost-button · .text-button · .hk-btn (+--filled
+   --tinted --bordered --plain --icon) · .icon-button (+.primary, .small) · .hig-icon-button ·
+   .hk-bar-btn · .select-button · .plain-select · .ui-select (+.plain) · .ui-stat-button ·
+   .pn-prop-button · .attention-button. Extra classes riding on these (.project-button,
+   .queue-button, .fork-button, .flow-feeds-button, .feature-pill) choose variants below.
+   ════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* Secondary key (the default): white key, a rule-dark edge — flat (skin 2: no lit top, no shaded foot). */
+:where(.button, .ghost-button, .text-button, .hk-btn, .icon-button, .hig-icon-button, .hk-bar-btn, .select-button, .plain-select, .ui-select, .ui-stat-button, .pn-prop-button, .attention-button, .composer-tools > summary) {
+  --c-fill: var(--surface);
+  --c-ink: var(--text);
+  --c-edge: var(--line-strong);
+  --c-lift: none;
+  --c-fill-hover: color-mix(in oklab, var(--c-fill) 93%, var(--c-ink));
+  --c-ink-hover: var(--c-ink);
+  --c-edge-hover: color-mix(in oklab, var(--c-edge) 72%, var(--c-ink));
+  --c-fill-press: color-mix(in oklab, var(--c-fill) 86%, var(--c-ink));
+  --c-sink: none;
+  --c-sel-fill: var(--active-bg);
+  --c-sel-ink: var(--active-text);
+  --c-sel-edge: var(--current-line);
+  --c-off-fill: var(--surface-muted);
+  --c-off-ink: color-mix(in oklab, var(--muted) 62%, var(--c-off-fill));
+  --c-off-edge: var(--line);
+}
+/* (the defaults carry no weight: every variant and place below overrides them) */
+:is(.button, .ghost-button, .text-button, .hk-btn, .icon-button, .hig-icon-button, .hk-bar-btn, .select-button, .plain-select, .ui-select, .ui-stat-button, .pn-prop-button, .attention-button, .composer-tools > summary) {
+  background-color: var(--c-fill);
+  border-color: var(--c-edge);
+  border-radius: var(--radius-pill);
+  color: var(--c-ink);
+  box-shadow: var(--c-lift);
+  cursor: pointer;
+  transition: background-color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out), transform var(--dur-micro) var(--ease-out);
+}
+
+/* Primary key: navy ink, paper words, flat — one fill, no mould (skin 2, the owner's drafts); one a view. */
+:is(.button.primary, .icon-button.primary, .hk-btn--filled) {
+  --c-fill: var(--key-primary);
+  --c-ink: var(--on-key-primary);
+  --c-edge: var(--key-primary);
+  --c-lift: none;
+  --c-fill-hover: color-mix(in oklab, var(--key-primary) 86%, var(--on-key-primary));
+  --c-edge-hover: var(--c-fill-hover);
+  --c-fill-press: color-mix(in oklab, var(--key-primary) 76%, var(--on-key-primary));
+  --c-sink: none;
+  --c-sel-fill: var(--c-fill-press);
+  --c-sel-ink: var(--on-key-primary);
+  --c-sel-edge: var(--c-edge);
+  --c-off-fill: color-mix(in oklab, var(--key-primary) 12%, var(--surface));
+  --c-off-ink: color-mix(in oklab, var(--key-primary) 48%, var(--surface));
+  --c-off-edge: transparent;
+}
+
+/* Quiet key: no key until the hand is on it (tool rows, heads, inline edits). Its edge width is
+   whatever its layout gave it (most have none). */
+:is(.ghost-button, .text-button, .icon-button:not(.primary), .hig-icon-button, .hk-btn--plain, .hk-bar-btn, .plain-select, .ui-select.plain, .ui-stat-button, .pn-prop-button) {
+  --c-fill: transparent;
+  --c-ink: var(--text-soft);
+  --c-edge: transparent;
+  --c-lift: none;
+  --c-fill-hover: var(--hover);
+  --c-ink-hover: var(--text);
+  --c-edge-hover: transparent;
+  --c-fill-press: var(--pressed);
+  --c-sink: none;
+  --c-sel-edge: transparent;
+  --c-off-fill: transparent;
+  --c-off-ink: color-mix(in oklab, var(--muted) 58%, var(--bg));
+  --c-off-edge: transparent;
+}
+/* A quiet key that carries its own words in another ink (a link-like action, a value in a card). */
+:is(.ui-stat-button, .pn-prop-button) { --c-ink: currentColor; --c-ink-hover: currentColor; }
+/* Tinted (the browser's "ask" key): the secondary key on a blue wash. */
+.hk-btn--tinted { --c-fill: var(--accent-soft); --c-ink: var(--active-text); --c-edge: var(--accent-line); }
+/* Bordered kit key = the secondary key. */
+.hk-btn--bordered { --c-fill: var(--surface); --c-edge: var(--line-strong); }
+
+/* Select trigger: a field that opens a list. Flat (it shows a value, it is not a key), the field's
+   3:1 edge; open = held. */
+:is(.select-button, .ui-select:not(.plain)) {
+  --c-edge: var(--field-line);
+  --c-lift: none;
+  --c-sink: none;
+  --c-edge-hover: color-mix(in oklab, var(--field-line) 55%, var(--text));
+}
+/* The project picker shows a chosen project in the current-place edge (teal; skin 2: no blue). */
+.select-button.project-button.existing { --c-edge: var(--current-line); }
+
+/* "Needs you" (확인 N): the tangerine as a fill with ink on it, the one place it is a key. */
+.attention-button {
+  --c-fill: var(--color-attention-soft);
+  --c-ink: var(--color-attention-text);
+  --c-edge: color-mix(in oklab, var(--color-attention) 40%, var(--color-attention-soft));
+  --c-edge-hover: var(--color-attention);
+  --c-fill-hover: color-mix(in oklab, var(--color-attention-soft) 85%, var(--color-attention));
+  --c-fill-press: color-mix(in oklab, var(--color-attention-soft) 72%, var(--color-attention));
+}
+
+/* Destructive keys keep the family's shape and say it in red ink. */
+:is(.button, .ghost-button, .text-button, .icon-button, .hk-btn):is(.danger, .hk-btn--destructive) {
+  --c-ink: var(--danger);
+  --c-ink-hover: color-mix(in oklab, var(--danger) 82%, var(--text));
+  --c-off-ink: color-mix(in oklab, var(--danger) 45%, var(--c-off-fill));
+}
+
+/* Where the family is worn quiet: the composer's tools, heads and tool rows. */
+:is(.hig-composer, .composer-bar) :is(.select-button, .ghost-button, .plain-select, .composer-tools > summary),
+.composer-bar .select-button {
+  --c-fill: transparent;
+  --c-ink: var(--muted);
+  --c-edge: transparent;
+  --c-lift: none;
+  --c-fill-hover: var(--hover);
+  --c-ink-hover: var(--text);
+  --c-edge-hover: transparent;
+  --c-fill-press: var(--pressed);
+  --c-sink: none;
+  --c-sel-edge: transparent;
+  --c-off-fill: transparent;
+  --c-off-edge: transparent;
+}
+:is(.note-head-tools, .turn-pin-tail, .pane-head-tools, .side-head-row, .list-tools) .icon-button:not(.primary) { --c-ink: var(--muted); }
+/* The composer's tools menu, open: held like any open menu key. */
+.hig-composer .composer-tools[open] > summary { background-color: var(--c-sel-fill); color: var(--c-sel-ink); box-shadow: none; }
+/* The stop key while a turn runs: the secondary key, square. */
+.hig-composer .composer-bar .stop-secondary { --c-fill: var(--surface); --c-ink: var(--text); --c-edge: var(--line); --c-lift: none; --c-sink: none; }
+/* The composer's send key off (nothing to send): a flat well, not a washed blue. */
+.hig-composer .composer-bar .icon-button.primary { --c-off-fill: var(--surface-muted); --c-off-ink: var(--muted); --c-off-edge: transparent; }
+
+/* The terminal is a dark sheet of its own: its keys wear the family in its ink. */
+:is(.terminal-toolbar, .terminal-find, .terminal-ended, .terminal-message) .button {
+  --c-fill: var(--color-terminal-key);
+  --c-ink: var(--color-terminal-ink);
+  --c-edge: var(--color-terminal-edge);
+  --c-lift: none;
+  --c-off-fill: var(--color-terminal-bar);
+  --c-off-ink: var(--color-terminal-edge);
+  --c-off-edge: var(--color-terminal-rule);
+}
+
+/* ── the eight states ── */
+@media (hover: hover) {
+  :is(.button, .ghost-button, .text-button, .hk-btn, .icon-button, .hig-icon-button, .hk-bar-btn, .select-button, .plain-select, .ui-select, .ui-stat-button, .pn-prop-button, .attention-button, .composer-tools > summary):hover:where(:not(:disabled, [aria-disabled="true"], [aria-busy="true"])) {
+    background-color: var(--c-fill-hover);
+    border-color: var(--c-edge-hover);
+    color: var(--c-ink-hover);
+  }
+}
+/* Selected / held on: a toggle that is on, an open menu, the current choice. It stays sunk. */
+:is(.button, .ghost-button, .text-button, .hk-btn, .icon-button, .hig-icon-button, .hk-bar-btn, .select-button, .plain-select, .ui-select, .ui-stat-button, .pn-prop-button, .attention-button, .composer-tools > summary):is(.pressed, .on, [aria-pressed="true"], [aria-expanded="true"], [aria-checked="true"]) {
+  background-color: var(--c-sel-fill);
+  border-color: var(--c-sel-edge);
+  color: var(--c-sel-ink);
+  box-shadow: var(--c-sink);
+}
+@media (hover: hover) {
+  :is(.button, .ghost-button, .text-button, .hk-btn, .icon-button, .hig-icon-button, .hk-bar-btn, .select-button, .plain-select, .ui-select, .ui-stat-button, .pn-prop-button, .attention-button, .composer-tools > summary):is(.pressed, .on, [aria-pressed="true"], [aria-expanded="true"], [aria-checked="true"]):hover:where(:not(:disabled, [aria-disabled="true"], [aria-busy="true"])) {
+    background-color: color-mix(in oklab, var(--c-sel-fill) 90%, var(--c-sel-ink));
+    border-color: var(--c-sel-edge);
+    color: var(--c-sel-ink);
+  }
+}
+/* Pressed: the key sinks 1px and its mould turns inward, for as long as the hand is down. */
+:is(.button, .ghost-button, .text-button, .hk-btn, .icon-button, .hig-icon-button, .hk-bar-btn, .select-button, .plain-select, .ui-select, .ui-stat-button, .pn-prop-button, .attention-button, .composer-tools > summary):active:where(:not(:disabled, [aria-disabled="true"], [aria-busy="true"])),
+:is(.button, .ghost-button, .text-button, .hk-btn, .icon-button, .hig-icon-button, .hk-bar-btn, .select-button, .plain-select, .ui-select, .ui-stat-button, .pn-prop-button, .attention-button, .composer-tools > summary):is(.pressed, .on, [aria-pressed="true"], [aria-expanded="true"], [aria-checked="true"]):active:where(:not(:disabled, [aria-disabled="true"], [aria-busy="true"])) {
+  background-color: var(--c-fill-press);
+  box-shadow: var(--c-sink);
+  transform: translateY(1px);
+  transition-duration: 0ms, 0ms, 0ms, 0ms, 0ms;
+}
+/* Disabled: flat (a key you cannot press is not raised), washed, and the cursor says no. The
+   native attribute or aria-disabled carries it to assistive tech; the reason is the control's title. */
+:is(.button, .ghost-button, .text-button, .hk-btn, .icon-button, .hig-icon-button, .hk-bar-btn, .select-button, .plain-select, .ui-select, .ui-stat-button, .pn-prop-button, .attention-button, .composer-tools > summary):is(:disabled, [aria-disabled="true"]) {
+  background-color: var(--c-off-fill);
+  border-color: var(--c-off-edge);
+  color: var(--c-off-ink);
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 1;
+  transform: none;
+}
+/* Error: the action failed on this control (or its value is invalid): red edge and red ink. */
+:is(.button, .ghost-button, .text-button, .hk-btn, .icon-button, .hig-icon-button, .hk-bar-btn, .select-button, .plain-select, .ui-select, .ui-stat-button, .pn-prop-button, .attention-button, .composer-tools > summary)[aria-invalid="true"] {
+  border-color: var(--danger);
+  color: var(--danger);
+  --c-sel-edge: var(--danger);
+}
+:is(.ghost-button, .text-button, .icon-button:not(.primary), .hig-icon-button, .plain-select, .ui-select.plain)[aria-invalid="true"] { background-color: var(--danger-soft); }
+/* A filled key that failed turns red as a whole: red ink on blue cannot be read. */
+:is(.button.primary, .icon-button.primary, .hk-btn--filled)[aria-invalid="true"] { background-color: var(--danger); border-color: color-mix(in oklab, var(--danger) 80%, var(--color-ink)); color: var(--on-accent); }
+/* Loading: the label stays in place, unseen, so the key keeps its width; a ring turns over it. */
+:is(.button, .ghost-button, .text-button, .hk-btn, .icon-button, .hig-icon-button, .hk-bar-btn, .select-button, .plain-select, .ui-select, .ui-stat-button, .pn-prop-button, .attention-button, .composer-tools > summary)[aria-busy="true"] {
+  contain: layout;
+  background-color: var(--c-fill);
+  border-color: var(--c-edge);
+  box-shadow: var(--c-lift);
+  color: transparent;
+  cursor: progress;
+}
+:is(.button, .ghost-button, .text-button, .hk-btn, .icon-button, .hig-icon-button, .hk-bar-btn, .select-button, .plain-select, .ui-select, .ui-stat-button, .pn-prop-button, .attention-button, .composer-tools > summary)[aria-busy="true"] > * { visibility: hidden; }
+:is(.button, .ghost-button, .text-button, .hk-btn, .icon-button, .hig-icon-button, .hk-bar-btn, .select-button, .plain-select, .ui-select, .ui-stat-button, .pn-prop-button, .attention-button, .composer-tools > summary)[aria-busy="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 14px;
+  height: 14px;
+  margin: auto;
+  border: 2px solid var(--c-ink);
+  border-inline-start-color: transparent;
+  border-radius: var(--radius-round);
+  animation: c-turn 720ms linear infinite;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════
+   2. MENU ITEMS — .ui-menu-item (the shared Menu), .context-menu-item (right-click),
+   .menu-item (older popovers). The highlight follows pointer and keys; a press darkens it; the
+   current choice is held in blue; a row that cannot be chosen is faint and says why below it.
+   ════════════════════════════════════════════════════════════════════════════════════════════ */
+:is(.ui-menu-item, .context-menu-item, .menu-item) {
+  --c-fill: transparent;
+  --c-ink: var(--text);
+  --c-fill-hover: var(--hover);
+  --c-fill-press: var(--pressed);
+  --c-off-ink: color-mix(in oklab, var(--muted) 62%, var(--surface));
+  background-color: var(--c-fill);
+  color: var(--c-ink);
+  border-radius: var(--radius-well);
+  box-shadow: none;
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
+}
+:is(.ui-menu-item, .context-menu-item, .menu-item).danger { --c-ink: var(--danger); }
+:is(.ui-menu-item[data-active], .context-menu-item.active, .context-menu-item:focus-visible, .menu-item:focus-visible) { background-color: var(--c-fill-hover); }
+@media (hover: hover) {
+  :is(.context-menu-item, .menu-item):hover:where(:not(:disabled, [aria-disabled="true"], [aria-busy="true"])) { background-color: var(--c-fill-hover); }
+}
+/* One focus ring, inside the menu's edge. */
+:is(.ui-menu-item, .context-menu-item, .menu-item):focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+:is(.ui-menu-item, .context-menu-item, .menu-item):is([aria-checked="true"], [aria-selected="true"], .active:not(.context-menu-item)) {
+  background-color: var(--accent-soft);
+  color: var(--active-text);
+}
+:is(.ui-menu-item, .context-menu-item, .menu-item):is([aria-checked="true"], [aria-selected="true"], .active:not(.context-menu-item)):is([data-active], :hover, :focus-visible) { background-color: color-mix(in oklab, var(--accent-soft) 88%, var(--active-text)); }
+:is(.ui-menu-item, .context-menu-item, .menu-item):active:where(:not(:disabled, [aria-disabled="true"], [aria-busy="true"])) {
+  background-color: var(--c-fill-press);
+  transition-duration: 0ms;
+}
+:is(.ui-menu-item, .context-menu-item, .menu-item):is(:disabled, [aria-disabled="true"]) {
+  background-color: transparent;
+  color: var(--c-off-ink);
+  cursor: not-allowed;
+}
+:is(.ui-menu-item, .context-menu-item, .menu-item):is(:disabled, [aria-disabled="true"]) :is(.ui-menu-icon, .context-menu-icon) { color: inherit; }
+:is(.ui-menu-item, .context-menu-item, .menu-item)[aria-invalid="true"] { color: var(--danger); background-color: var(--danger-soft); }
+:is(.ui-menu-item, .context-menu-item, .menu-item)[aria-busy="true"] { contain: layout; cursor: progress; padding-inline-end: var(--space-xl); }
+:is(.ui-menu-item, .context-menu-item, .menu-item)[aria-busy="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0 var(--space-xs) 0 auto;
+  width: 12px;
+  height: 12px;
+  margin: auto 0;
+  border: 2px solid var(--muted);
+  border-inline-start-color: transparent;
+  border-radius: var(--radius-round);
+  animation: c-turn 720ms linear infinite;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════
+   3. ROWS — the sidebar's rows (.side-row), the outline (.outline-row), the kit's sidebar items.
+   Rows press by colour only (they are long; they do not travel). Current = a blue wash.
+   ════════════════════════════════════════════════════════════════════════════════════════════ */
+:is(.side-row, .outline-row, .hk-sidebar__item) {
+  --c-fill: transparent;
+  --c-ink: inherit;
+  --c-fill-hover: var(--hover);
+  --c-fill-press: var(--pressed);
+  --c-off-ink: color-mix(in oklab, var(--muted) 62%, var(--bg));
+  background-color: var(--c-fill);
+  border-radius: var(--radius-pill);
+  /* A list may mark its current row with a 2px inside bar (skin 2, R14): it sets --c-mark. */
+  box-shadow: var(--c-mark, none);
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
+}
+.side-row { --c-ink: var(--text-soft); color: var(--c-ink); }
+.sidebar .side-row { --c-ink: var(--text); }
+.outline-row { color: var(--c-ink); }
+@media (hover: hover) {
+  :is(.side-row, .outline-row, .hk-sidebar__item):hover:where(:not(:disabled, [aria-disabled="true"])) { background-color: var(--c-fill-hover); }
+}
+:is(.side-row, .outline-row, .hk-sidebar__item):focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+:is(.side-row, .outline-row, .hk-sidebar__item):is(.current, .selected, [aria-current="page"], [aria-current="true"], [aria-selected="true"]), .outline-row[aria-current="location"] {
+  background-color: var(--color-current-soft);
+  color: var(--text);
+}
+:is(.side-row, .outline-row, .hk-sidebar__item):is(.current, .selected, [aria-current="page"], [aria-current="true"], [aria-selected="true"]):hover, .outline-row[aria-current="location"]:hover { background-color: color-mix(in oklab, var(--color-current-soft) 90%, var(--text)); }
+.side-row:is(.current, .selected) .side-row-icon { color: var(--color-current); }
+:is(.side-row, .outline-row, .hk-sidebar__item):active:where(:not(:disabled, [aria-disabled="true"])) { background-color: var(--c-fill-press); transition-duration: 0ms; }
+:is(.side-row, .outline-row, .hk-sidebar__item):is(.current, .selected, [aria-current="page"], [aria-current="true"], [aria-selected="true"]):active, .outline-row[aria-current="location"]:active { background-color: color-mix(in oklab, var(--color-current-soft) 80%, var(--text)); }
+:is(.side-row, .outline-row, .hk-sidebar__item):is(:disabled, [aria-disabled="true"]) { color: var(--c-off-ink); background-color: transparent; cursor: not-allowed; }
+:is(.side-row, .outline-row, .hk-sidebar__item)[aria-invalid="true"] { color: var(--danger); }
+:is(.side-row, .outline-row, .hk-sidebar__item)[aria-busy="true"] { contain: layout; cursor: progress; }
+:is(.side-row, .outline-row, .hk-sidebar__item)[aria-busy="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0 var(--space-xs) 0 auto;
+  width: 12px;
+  height: 12px;
+  margin: auto 0;
+  border: 2px solid var(--muted);
+  border-inline-start-color: transparent;
+  border-radius: var(--radius-round);
+  animation: c-turn 720ms linear infinite;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════
+   4. TABS — the document tab strip (.group-tab around its [role=tab]) and the view tabs
+   (.view-tab). The current tab is the sheet itself with a teal rule on top (N1: the brand teal
+   marks the current selection and "working"; blue is the one primary key); pressing darkens.
+   ════════════════════════════════════════════════════════════════════════════════════════════ */
+.group-tab {
+  background-color: transparent;
+  border-color: transparent;
+  border-radius: var(--radius-pill) var(--radius-pill) 0 0;
+  color: var(--chrome-muted);
+  box-shadow: none;
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
+}
+.group-tab [role="tab"] { background: none; color: inherit; }
+@media (hover: hover) {
+  .group-tab:not(.active):hover { background-color: color-mix(in oklab, var(--chrome-bg) 92%, var(--chrome-text)); color: var(--chrome-text); }
+}
+.group-tab:not(.active):has([role="tab"]:active) { background-color: color-mix(in oklab, var(--chrome-bg) 86%, var(--chrome-text)); color: var(--chrome-text); transition-duration: 0ms; }
+.group-tab.active {
+  background-color: var(--bg);
+  border-color: var(--chrome-line);
+  color: var(--chrome-text);
+  box-shadow: inset 0 2px 0 var(--color-current);
+}
+/* Side by side, only the focused pane's current tab carries the teal rule; the others' is ink-grey (Hallmark U4). */
+.panes .pane:has(> .pane-head):not(.focused) .group-tab.active { box-shadow: inset 0 2px 0 var(--line-strong); }
+.group-tab.active:has([role="tab"]:active) { background-color: color-mix(in oklab, var(--bg) 94%, var(--chrome-text)); }
+.group-tab [role="tab"]:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: var(--radius-well); }
+.group-tab:has([role="tab"]:is(:disabled, [aria-disabled="true"])) { color: color-mix(in oklab, var(--chrome-muted) 60%, var(--chrome-bg)); }
+.group-tab:has([role="tab"]:is(:disabled, [aria-disabled="true"])) [role="tab"] { cursor: not-allowed; }
+.group-tab:has([role="tab"][aria-invalid="true"]) { color: var(--danger); }
+.group-tab:has([role="tab"][aria-busy="true"]) [role="tab"] { cursor: progress; }
+.group-tab [role="tab"][aria-busy="true"]::after {
+  content: ""; flex: none; width: 10px; height: 10px;
+  border: 2px solid var(--muted); border-inline-start-color: transparent; border-radius: var(--radius-round);
+  animation: c-turn 720ms linear infinite;
+}
+
+.view-tab {
+  background-color: transparent;
+  border-radius: var(--radius-pill) var(--radius-pill) 0 0;
+  color: var(--muted);
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
+}
+@media (hover: hover) { .view-tab:hover:where(:not(:disabled, [aria-disabled="true"])) { background-color: var(--hover); color: var(--text); } }
+.view-tab:active:where(:not(:disabled, [aria-disabled="true"])) { background-color: var(--pressed); color: var(--text); transition-duration: 0ms; }
+.view-tab:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.view-tab.on { color: var(--text); }
+.view-tab:is(:disabled, [aria-disabled="true"]) { color: color-mix(in oklab, var(--muted) 60%, var(--bg)); cursor: not-allowed; }
+.view-tab[aria-invalid="true"] { color: var(--danger); }
+.view-tab[aria-busy="true"] { cursor: progress; }
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════
+   5. SEGMENTED — the kit's .hk-seg (sliding cell) and the older .segmented. A tray in the
+   well; the chosen cell is a raised key in it; a press sinks the cell's label 1px.
+   ════════════════════════════════════════════════════════════════════════════════════════════ */
+:is(.hk-seg, .segmented) {
+  background-color: var(--surface-muted);
+  border-radius: var(--radius-pill);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+:is(.hk-seg > button, .hk-seg__item, .segmented button) {
+  background-color: transparent;
+  border-radius: var(--radius-well);
+  box-shadow: none;
+  color: var(--muted);
+  transition: color var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out);
+}
+@media (hover: hover) {
+  :is(.hk-seg > button, .hk-seg__item, .segmented button):hover:where(:not(:disabled, [aria-disabled="true"], [aria-checked="true"], [aria-selected="true"], .active)) { color: var(--text); background-color: color-mix(in oklab, var(--surface-muted) 90%, var(--text)); }
+}
+:is(.hk-seg > button, .hk-seg__item, .segmented button):focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.hk-seg__indicator,
+.hk-seg:not([data-hk]) .hk-seg__item[aria-checked="true"],
+.segmented button.active {
+  background-color: var(--surface);
+  border-radius: var(--radius-well);
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+:is(.hk-seg > button, .hk-seg__item, .segmented button):is([aria-checked="true"], [aria-selected="true"], .active) { color: var(--text); }
+:is(.hk-seg > button, .hk-seg__item, .segmented button):active:where(:not(:disabled, [aria-disabled="true"])) { color: var(--text); background-color: color-mix(in oklab, var(--surface-muted) 82%, var(--text)); transform: translateY(1px); transition-duration: 0ms; }
+:is(.hk-seg > button, .hk-seg__item, .segmented button):is(:disabled, [aria-disabled="true"]) { color: color-mix(in oklab, var(--muted) 55%, var(--surface-muted)); cursor: not-allowed; }
+:is(.hk-seg, .segmented)[aria-invalid="true"] { box-shadow: inset 0 0 0 1px var(--danger); }
+:is(.hk-seg, .segmented)[aria-busy="true"] { cursor: progress; }
+:is(.hk-seg > button, .hk-seg__item, .segmented button)[aria-busy="true"] { contain: layout; color: transparent; cursor: progress; }
+:is(.hk-seg > button, .hk-seg__item, .segmented button)[aria-busy="true"]::after {
+  content: ""; position: absolute; inset: 0; width: 12px; height: 12px; margin: auto;
+  border: 2px solid var(--muted); border-inline-start-color: transparent; border-radius: var(--radius-round);
+  animation: c-turn 720ms linear infinite;
+}
+/* The home's mode switch sits on the desk: its tray is the desk, its key the sheet. */
+.home-mode-nav .home-mode-bar { background-color: var(--chrome-bg); box-shadow: inset 0 0 0 1px var(--chrome-line); }
+.home-mode-nav .home-mode-bar > button { color: var(--chrome-muted); }
+.home-mode-nav .home-mode-bar > button[aria-checked="true"] { color: var(--chrome-accent); }
+.home-mode-nav .home-mode-bar .hk-seg__indicator { background-color: var(--chrome-surface); }
+/* The engine switch above a start box is a pair of quiet keys with a held one, not a tray. */
+:is(.browse-entry, .start-view) .engine-tabs { background-color: transparent; box-shadow: none; }
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════
+   6. CHIPS — filters (.filter-chip), work chips (.work-chip), attachments (.attach-chip, and
+   the one that opens a file: .attach-file-button), a note's properties (button.note-prop).
+   A chip is a small key: an edge, a press of 1px, on = held in blue, failed = red edge.
+   ════════════════════════════════════════════════════════════════════════════════════════════ */
+:is(.filter-chip, .work-chip, .attach-chip, button.note-prop, .note-props .workspace-trigger) {
+  --c-fill: var(--surface);
+  --c-ink: var(--text-soft);
+  --c-edge: var(--line);
+  background-color: var(--c-fill);
+  border-color: var(--c-edge);
+  border-radius: var(--radius-pill);
+  color: var(--c-ink);
+  box-shadow: none;
+  transition: background-color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out), transform var(--dur-micro) var(--ease-out);
+}
+:is(button.note-prop, .note-props .workspace-trigger, .note-prop) { --c-fill: transparent; --c-edge: transparent; --c-ink: var(--muted); }
+.note-prop { background-color: transparent; color: var(--muted); border-radius: var(--radius-pill); }
+.projects-mode .work-chip { --c-fill: var(--surface-muted); --c-ink: var(--text); --c-edge: transparent; }
+.work-chip.more { --c-ink: var(--faint); }
+@media (hover: hover) {
+  :is(button.filter-chip, a.work-chip, button.work-chip, .work-chip[role="button"], .attach-file-button, button.note-prop, .note-props .workspace-trigger):hover:where(:not(:disabled, [aria-disabled="true"], [aria-busy="true"])) {
+    background-color: color-mix(in oklab, var(--c-fill) 94%, var(--text));
+    border-color: color-mix(in oklab, var(--c-edge) 60%, var(--text));
+    color: var(--text);
+  }
+  .work-chip:hover { background-color: color-mix(in oklab, var(--c-fill) 94%, var(--text)); }
+}
+:is(.filter-chip, .work-chip, .attach-file-button, button.note-prop, .note-props .workspace-trigger):active:where(:not(:disabled, [aria-disabled="true"], [aria-busy="true"])) {
+  background-color: color-mix(in oklab, var(--c-fill) 88%, var(--text));
+  transform: translateY(1px);
+  transition-duration: 0ms;
+}
+:is(.filter-chip, .work-chip, .attach-chip, button.note-prop, .note-props .workspace-trigger):is(.on, [aria-pressed="true"], [aria-expanded="true"], [aria-checked="true"], [aria-selected="true"]) {
+  background-color: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--active-text);
+}
+:is(.filter-chip, .work-chip, .attach-chip, button.note-prop, .note-props .workspace-trigger):is(:disabled, [aria-disabled="true"]) {
+  background-color: var(--surface-muted);
+  border-color: var(--line);
+  border-style: dashed;
+  color: color-mix(in oklab, var(--muted) 60%, var(--surface-muted));
+  cursor: not-allowed;
+  transform: none;
+}
+:is(.filter-chip, .work-chip, .attach-chip, button.note-prop, .note-props .workspace-trigger):is(.failed, [aria-invalid="true"]) { border-color: var(--danger); }
+.attach-chip.failed .attach-size { color: var(--danger); }
+:is(.filter-chip, .work-chip, .attach-chip, button.note-prop, .note-props .workspace-trigger)[aria-busy="true"] { contain: layout; color: transparent; cursor: progress; }
+:is(.filter-chip, .work-chip, .attach-chip, button.note-prop, .note-props .workspace-trigger)[aria-busy="true"] > * { visibility: hidden; }
+:is(.filter-chip, .work-chip, .attach-chip, button.note-prop, .note-props .workspace-trigger)[aria-busy="true"]::after {
+  content: ""; position: absolute; inset: 0; width: 12px; height: 12px; margin: auto;
+  border: 2px solid var(--muted); border-inline-start-color: transparent; border-radius: var(--radius-round);
+  animation: c-turn 720ms linear infinite;
+}
+/* The small × inside a chip is a quiet icon key. */
+.attach-chip button { background-color: transparent; color: var(--muted); border-radius: var(--radius-well); transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out); }
+@media (hover: hover) { .attach-chip button:hover:not(:disabled) { background-color: var(--hover); color: var(--text); } }
+.attach-chip button:active:not(:disabled) { background-color: var(--pressed); transform: translateY(1px); }
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════
+   7. CHECK, RADIO, SWITCH — native boxes in the accent; the app's switches (.browser-switch,
+   [role=switch] boxes, .check-row.switch-row) as a track with a thumb; a project note's own
+   checkbox (.pn-prop-check). Disabled is the native attribute, the cursor and a washed track.
+   ════════════════════════════════════════════════════════════════════════════════════════════ */
+input:is([type="checkbox"], [type="radio"]) { accent-color: var(--color-teal-ink); cursor: pointer; }
+input:is([type="checkbox"], [type="radio"]):disabled { cursor: not-allowed; }
+label:has(> input:is([type="checkbox"], [type="radio"]):disabled) { color: color-mix(in oklab, var(--muted) 62%, var(--bg)); cursor: not-allowed; }
+input:is([type="checkbox"], [type="radio"])[aria-invalid="true"] { outline: 2px solid var(--danger); outline-offset: 1px; }
+label:has(> input[aria-busy="true"]) { cursor: progress; }
+/* The native box answers the hand with a halo: a hover ring of the ink, deeper when pressed. */
+@media (hover: hover) { input:is([type="checkbox"], [type="radio"]):hover:not(:disabled) { box-shadow: 0 0 0 3px var(--pressed); } }
+input:is([type="checkbox"], [type="radio"]):active:not(:disabled) { box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-teal) 28%, transparent); transform: translateY(1px); }
+input:is([type="checkbox"], [type="radio"])[aria-busy="true"] { cursor: progress; outline: 2px dotted var(--muted); outline-offset: 2px; animation: c-wait 900ms var(--ease-in-out) infinite; }
+
+/* Switches: the appearance sheet's rows (.check-row.switch-row input), the browser's switch
+   (.browser-switch, a button with role=switch) and the drawing switch (.draw-switch-track beside a
+   hidden checkbox) share one track and thumb. Off: a well with a 3:1 edge; on: Achmage blue. */
+:is(.check-row.switch-row input, .browser-switch, .draw-switch-track) {
+  background-color: var(--surface-muted);
+  border-color: transparent;
+  border-radius: var(--radius-round);
+  box-shadow: inset 0 0 0 1px var(--field-line);
+  transition: background-color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out);
+}
+.check-row.switch-row input::before, .browser-switch > span, .draw-switch-track::after { /* pseudo-elements cannot sit inside :is() (the rule was dropped: no knob) */
+  background-color: var(--switch-knob, var(--surface)); /* dark lifts it off the well (tokens.css) */
+  border-radius: var(--radius-round);
+  box-shadow: var(--shadow-thumb), 0 0 0 1px var(--line);
+}
+@media (hover: hover) {
+  :is(.check-row.switch-row:hover input, .browser-switch:hover, .draw-switch:hover .draw-switch-track):where(:not(:disabled, :checked, .on)) { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--field-line) 50%, var(--text)); }
+  :is(.check-row.switch-row, .draw-switch):hover { background-color: var(--hover); }
+}
+:is(.check-row.switch-row input:checked, .browser-switch:is(.on, [aria-checked="true"]), .draw-switch.on .draw-switch-track) {
+  background-color: var(--switch-on);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--switch-on) 80%, var(--color-ink));
+}
+/* On: the knob is the sheet again, as before (only the off knob needed lifting in dark). */
+.check-row.switch-row input:checked::before, .browser-switch:is(.on, [aria-checked="true"]) > span, .draw-switch.on .draw-switch-track::after { background-color: var(--surface); }
+:is(.check-row.switch-row input:active, .browser-switch:active, .draw-switch:active .draw-switch-track):where(:not(:disabled)) { background-color: color-mix(in oklab, var(--surface-muted) 86%, var(--text)); transition-duration: 0ms; }
+:is(.check-row.switch-row input:checked:active, .browser-switch.on:active, .draw-switch.on:active .draw-switch-track) { background-color: color-mix(in oklab, var(--switch-on) 84%, var(--color-ink)); }
+.draw-switch input:focus-visible + .draw-switch-track { outline: 2px solid var(--focus); outline-offset: 2px; }
+:is(.check-row.switch-row input:disabled, .browser-switch:disabled, .draw-switch:has(input:disabled) .draw-switch-track) {
+  background-color: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+  cursor: not-allowed;
+}
+.check-row.switch-row input:disabled::before, .browser-switch:disabled > span, .draw-switch:has(input:disabled) .draw-switch-track::after { background-color: var(--surface-muted); box-shadow: 0 0 0 1px var(--line); }
+:is(.check-row.switch-row:has(input:disabled), .check-row.switch-row.disabled, .draw-switch:has(input:disabled)) { color: color-mix(in oklab, var(--muted) 62%, var(--bg)); cursor: not-allowed; }
+:is(.check-row.switch-row:has(input:disabled), .check-row.switch-row.disabled, .draw-switch:has(input:disabled)):hover { background-color: transparent; }
+:is(.check-row.switch-row input[aria-invalid="true"], .browser-switch[aria-invalid="true"], .draw-switch:has(input[aria-invalid="true"]) .draw-switch-track) { box-shadow: inset 0 0 0 2px var(--danger); }
+.check-row.switch-row input[aria-busy="true"]::before, .browser-switch[aria-busy="true"] > span, .draw-switch:has(input[aria-busy="true"]) .draw-switch-track::after { background-color: var(--line-strong); box-shadow: none; animation: c-wait 900ms var(--ease-in-out) infinite; }
+:is(.check-row.switch-row input[aria-busy="true"], .browser-switch[aria-busy="true"], .draw-switch:has(input[aria-busy="true"]) .draw-switch-track) { box-shadow: inset 0 0 0 1px var(--field-line); background-image: repeating-linear-gradient(135deg, transparent 0 3px, var(--hover) 3px 6px); }
+:is(.check-row.switch-row:has(input[aria-busy="true"]), .browser-switch[aria-busy="true"], .draw-switch:has(input[aria-busy="true"])) { cursor: progress; }
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════
+   8. CARD LINKS — a file card in a conversation (.doc-card), a bento card that opens
+   (button.ui-card), the switcher's cards (.session-card). Hover deepens the edge; a press
+   darkens the sheet and sinks it 1px; current = a blue edge.
+   ════════════════════════════════════════════════════════════════════════════════════════════ */
+:is(.doc-card, button.ui-card, .session-card) {
+  --c-fill: var(--surface);
+  --c-edge: var(--line);
+  background-color: var(--c-fill);
+  border-color: var(--c-edge);
+  box-shadow: none;
+  transition: background-color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out), transform var(--dur-micro) var(--ease-out);
+}
+.ui-card { background-color: var(--surface); border-color: var(--line); }
+.session-card { --c-fill: var(--bg); --c-edge: color-mix(in oklab, var(--accent) 30%, var(--line)); }
+.session-card[data-tone="attention"] { --c-edge: color-mix(in oklab, var(--amber) 55%, var(--line)); }
+@media (hover: hover) {
+  :is(.doc-card, button.ui-card, .session-card):hover:where(:not(:disabled, [aria-disabled="true"], [aria-busy="true"])) { border-color: color-mix(in oklab, var(--c-edge) 55%, var(--text)); }
+}
+:is(.doc-card, button.ui-card, .session-card):is(.focused, .selected, [aria-current="true"], [aria-current="page"], [aria-selected="true"]) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+:is(.doc-card, button.ui-card, .session-card):active:where(:not(:disabled, [aria-disabled="true"], [aria-busy="true"])) {
+  background-color: color-mix(in oklab, var(--c-fill) 95%, var(--text));
+  transform: translateY(1px);
+  transition-duration: 0ms;
+}
+:is(.doc-card, button.ui-card, .session-card):is(:disabled, [aria-disabled="true"]) {
+  background-color: var(--surface-muted);
+  border-style: dashed;
+  color: color-mix(in oklab, var(--muted) 70%, var(--surface-muted));
+  cursor: not-allowed;
+}
+:is(.doc-card, button.ui-card, .session-card)[aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
+:is(.doc-card, button.ui-card, .session-card)[aria-busy="true"] { contain: layout; cursor: progress; }
+:is(.doc-card, button.ui-card, .session-card)[aria-busy="true"]::after {
+  content: ""; position: absolute; inset: 0 var(--space-sm) 0 auto; width: 14px; height: 14px; margin: auto 0;
+  border: 2px solid var(--muted); border-inline-start-color: transparent; border-radius: var(--radius-round);
+  animation: c-turn 720ms linear infinite;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════
+   9. FIELDS — text, search and textarea boxes in dialogs, sheets and forms. White ground, the
+   3:1 edge at a constant width; hover deepens the edge; focus is the ring, inset; invalid is a red
+   edge (the message says what to do); disabled is a well with a faint value; a field at work
+   shows a turning ring in its right-edge slot.
+   ════════════════════════════════════════════════════════════════════════════════════════════ */
+:is(.pn-input, .sheet-input, .sheet-select, .color-row .hex, .search-field, .menu-form input, .hk-field__control, .hk-select, .queued-edit textarea, .works-dir-form input, .list-filter input, .folder-hex input, .project-filter input, .note-path-form input, .view-tab-input),
+:is(.feature-dialog, .voice-panel, .stage-dialog, .linked-dialog, .new-document-dialog, .session-picker, .schedule-dialog, .dropbox-dialog, .office-settings-dialog, .terminal-dialog, .workspace-services-dialog, .workspace-service-inspect, .agent-profile-editor, .browser-create-dialog, .work-link-dialog, .draw-form, .inline-draw, .model-custom-form, .onboarding-card, .preparation-settings, .preparation-options, .schedule-form, .schedule-policy, .schedule-when-row, .schedule-hours, .search-property-filter, .setup-code-row, .scm-commit-form, .scm-remote-fields, .scm-resolution, .scm-compare-form, .scm-note-editor, .scm-gh-actions, .task-native-compose, .workspace-form) :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="submit"], [type="button"]), textarea, select) {
+  --c-fill: var(--surface);
+  --c-edge: var(--field-line);
+  background-color: var(--c-fill);
+  border-color: var(--c-edge);
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  box-shadow: none;
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  transition: border-color var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out);
+}
+@media (hover: hover) {
+  :is(.pn-input, .sheet-input, .sheet-select, .color-row .hex, .search-field, .menu-form input, .hk-field__control, .hk-select, .queued-edit textarea, .works-dir-form input, .list-filter input, .folder-hex input, .project-filter input, .note-path-form input, .view-tab-input):hover:where(:not(:disabled, [aria-disabled="true"], :focus, :focus-within)),
+  :is(.feature-dialog, .voice-panel, .stage-dialog, .linked-dialog, .new-document-dialog, .session-picker, .schedule-dialog, .dropbox-dialog, .office-settings-dialog, .terminal-dialog, .workspace-services-dialog, .workspace-service-inspect, .agent-profile-editor, .browser-create-dialog, .work-link-dialog, .draw-form, .inline-draw, .model-custom-form, .onboarding-card, .preparation-settings, .preparation-options, .schedule-form, .schedule-policy, .schedule-when-row, .schedule-hours, .search-property-filter, .setup-code-row, .scm-commit-form, .scm-remote-fields, .scm-resolution, .scm-compare-form, .scm-note-editor, .scm-gh-actions, .task-native-compose, .workspace-form) :is(input, textarea, select):hover:where(:not(:disabled, [aria-disabled="true"], :focus, [type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"])) {
+    border-color: color-mix(in oklab, var(--field-line) 50%, var(--text));
+    outline-color: transparent;
+  }
+}
+:is(.pn-input, .sheet-input, .sheet-select, .color-row .hex, .menu-form input, .hk-select, .queued-edit textarea, .works-dir-form input, .list-filter input, .folder-hex input, .project-filter input, .note-path-form input, .view-tab-input):focus-visible,
+:is(.search-field, .hk-field__control):focus-within,
+:is(.feature-dialog, .voice-panel, .stage-dialog, .linked-dialog, .new-document-dialog, .session-picker, .schedule-dialog, .dropbox-dialog, .office-settings-dialog, .terminal-dialog, .workspace-services-dialog, .workspace-service-inspect, .agent-profile-editor, .browser-create-dialog, .work-link-dialog, .draw-form, .inline-draw, .model-custom-form, .onboarding-card, .preparation-settings, .preparation-options, .schedule-form, .schedule-policy, .schedule-when-row, .schedule-hours, .search-property-filter, .setup-code-row, .scm-commit-form, .scm-remote-fields, .scm-resolution, .scm-compare-form, .scm-note-editor, .scm-gh-actions, .task-native-compose, .workspace-form) :is(input, textarea, select):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+:is(.search-field, .hk-field__control) :is(input, textarea):focus-visible { outline: none; }
+:is(.pn-input, .sheet-input, .sheet-select, .color-row .hex, .search-field, .menu-form input, .hk-field__control, .hk-select, .queued-edit textarea, .works-dir-form input, .list-filter input, .folder-hex input, .project-filter input, .note-path-form input, .view-tab-input):is(:disabled, [aria-disabled="true"], :has(:disabled)),
+:is(.feature-dialog, .voice-panel, .stage-dialog, .linked-dialog, .new-document-dialog, .session-picker, .schedule-dialog, .dropbox-dialog, .office-settings-dialog, .terminal-dialog, .workspace-services-dialog, .workspace-service-inspect, .agent-profile-editor, .browser-create-dialog, .work-link-dialog, .draw-form, .inline-draw, .model-custom-form, .onboarding-card, .preparation-settings, .preparation-options, .schedule-form, .schedule-policy, .schedule-when-row, .schedule-hours, .search-property-filter, .setup-code-row, .scm-commit-form, .scm-remote-fields, .scm-resolution, .scm-compare-form, .scm-note-editor, .scm-gh-actions, .task-native-compose, .workspace-form) :is(input, textarea, select):is(:disabled, [aria-disabled="true"]) {
+  background-color: var(--surface-muted);
+  border-color: var(--line);
+  color: color-mix(in oklab, var(--muted) 70%, var(--surface-muted));
+  cursor: not-allowed;
+  opacity: 1;
+}
+:is(.pn-input, .sheet-input, .sheet-select, .color-row .hex, .search-field, .menu-form input, .hk-field__control, .hk-select, .queued-edit textarea, .works-dir-form input, .list-filter input, .folder-hex input, .project-filter input, .note-path-form input, .view-tab-input):is([aria-invalid="true"], :has([aria-invalid="true"])),
+:is(.feature-dialog, .voice-panel, .stage-dialog, .linked-dialog, .new-document-dialog, .session-picker, .schedule-dialog, .dropbox-dialog, .office-settings-dialog, .terminal-dialog, .workspace-services-dialog, .workspace-service-inspect, .agent-profile-editor, .browser-create-dialog, .work-link-dialog, .draw-form, .inline-draw, .model-custom-form, .onboarding-card, .preparation-settings, .preparation-options, .schedule-form, .schedule-policy, .schedule-when-row, .schedule-hours, .search-property-filter, .setup-code-row, .scm-commit-form, .scm-remote-fields, .scm-resolution, .scm-compare-form, .scm-note-editor, .scm-gh-actions, .task-native-compose, .workspace-form) :is(input, textarea, select)[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+:is(.pn-input, .sheet-input, .color-row .hex, .menu-form input, .works-dir-form input, .list-filter input, .folder-hex input, .project-filter input, .note-path-form input)[aria-invalid="true"]:focus-visible,
+:is(.feature-dialog, .voice-panel, .stage-dialog, .linked-dialog, .new-document-dialog, .session-picker, .schedule-dialog, .dropbox-dialog, .office-settings-dialog, .terminal-dialog, .workspace-services-dialog, .workspace-service-inspect, .agent-profile-editor, .browser-create-dialog, .work-link-dialog, .draw-form, .inline-draw, .model-custom-form, .onboarding-card, .preparation-settings, .preparation-options, .schedule-form, .schedule-policy, .schedule-when-row, .schedule-hours, .search-property-filter, .setup-code-row, .scm-commit-form, .scm-remote-fields, .scm-resolution, .scm-compare-form, .scm-note-editor, .scm-gh-actions, .task-native-compose, .workspace-form) :is(input, textarea)[aria-invalid="true"]:focus-visible { outline-color: var(--danger); }
+/* A field at work: a ring turns in the right-edge slot (the field stays editable). */
+:is(.pn-input, .sheet-input, .menu-form input, .works-dir-form input, .list-filter input, .project-filter input, .note-path-form input)[aria-busy="true"],
+:is(.feature-dialog, .voice-panel, .stage-dialog, .linked-dialog, .new-document-dialog, .session-picker, .schedule-dialog, .dropbox-dialog, .office-settings-dialog, .terminal-dialog, .workspace-services-dialog, .agent-profile-editor, .browser-create-dialog, .work-link-dialog, .draw-form, .model-custom-form, .preparation-settings, .schedule-form, .search-property-filter, .setup-code-row, .scm-remote-fields, .scm-compare-form, .workspace-form) input[aria-busy="true"] {
+  padding-inline-end: var(--space-xl);
+  background-image:
+    radial-gradient(closest-side, var(--c-fill) calc(100% - 2.5px), transparent calc(100% - 2px) calc(100% - 0.5px), var(--c-fill) 100%),
+    conic-gradient(from var(--c-spin), var(--muted) 0 72%, transparent 72%);
+  background-position: right var(--space-sm) center, right var(--space-sm) center;
+  background-size: 14px 14px, 14px 14px;
+  background-repeat: no-repeat;
+  animation: c-turn-field 720ms linear infinite;
+}
+
+.search-field:has(input[aria-busy="true"])::after {
+  content: ""; flex: none; width: 12px; height: 12px;
+  border: 2px solid var(--muted); border-inline-start-color: transparent; border-radius: var(--radius-round);
+  animation: c-turn 720ms linear infinite;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════
+   Hit targets (flow.md § App screens): on a coarse pointer every key, row, tab and item is
+   44px (the layout sheets already raise them there); on a fine pointer the visual is the target.
+   Reduced motion: every state still changes; nothing travels; the ring stands still.
+   ════════════════════════════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  :is(.button, .ghost-button, .text-button, .hk-btn, .icon-button, .hig-icon-button, .hk-bar-btn, .select-button, .plain-select, .ui-select, .ui-stat-button, .pn-prop-button, .attention-button, .filter-chip, .work-chip, .attach-file-button, button.note-prop, .doc-card, button.ui-card, .session-card, .hk-seg > button, .hk-seg__item, .segmented button, input):active { transform: none; }
+  :is(.button, .ghost-button, .text-button, .hk-btn, .icon-button, .hig-icon-button, .hk-bar-btn, .select-button, .plain-select, .ui-select, .ui-stat-button, .pn-prop-button, .attention-button, .filter-chip, .work-chip, .attach-chip, button.note-prop, .doc-card, button.ui-card, .session-card, .ui-menu-item, .context-menu-item, .menu-item, .side-row, .outline-row, .hk-sidebar__item, .hk-seg > button, .hk-seg__item, .segmented button)[aria-busy="true"]::after { animation: none; }
+  input[aria-busy="true"], .search-field:has(input[aria-busy="true"])::after, .group-tab [role="tab"][aria-busy="true"]::after { animation: none; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════
+   11. RAIL (N1) — the deep-navy rail's keys: an icon over a short label. Rest is the rail's quiet
+   label colour; hover lifts a navy step; press sinks 1px into a deeper step; the current place is
+   a lighter navy block with white words and its icon in the brand teal (one lit at a time);
+   keyboard focus is a blue ring inside; a key that cannot be used lies flat and faint.
+   ════════════════════════════════════════════════════════════════════════════════════════════ */
+.rail-key {
+  background-color: transparent;
+  color: var(--color-rail-muted);
+  border: 0;
+  border-radius: var(--radius-card);
+  box-shadow: none;
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out), transform var(--dur-micro) var(--ease-out);
+}
+@media (hover: hover) {
+  .rail-key:hover:where(:not(:disabled, [aria-disabled="true"], .current)) { color: var(--color-rail-ink); }
+  .rail-key:hover:where(:not(:disabled, [aria-disabled="true"], .current)) .rail-icon { background-color: var(--color-rail-hover); }
+}
+.rail-key:active:where(:not(:disabled, [aria-disabled="true"])) { color: var(--color-rail-ink); transform: translateY(1px); transition-duration: 0ms; }
+.rail-key:active:where(:not(:disabled, [aria-disabled="true"])) .rail-icon { background-color: var(--color-rail-current); }
+/* The current place: a lifted tile behind the icon (not a tall block), white icon and label. */
+.rail-key:is(.current, .pressed, [aria-expanded="true"]) { color: var(--color-rail-ink); }
+.rail-key:is(.current, .pressed, [aria-expanded="true"]) .rail-icon { background-color: var(--color-rail-current); }
+.rail-key.current .rail-icon { color: var(--color-rail-ink); box-shadow: inset 0 -2px 0 var(--color-rail-mark); }
+.rail-key:focus-visible { outline: 2px solid var(--color-rail-focus); outline-offset: -2px; }
+.rail-key:is(:disabled, [aria-disabled="true"]) { color: color-mix(in oklab, var(--color-rail-muted) 50%, var(--color-rail)); cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) { .rail-key:active { transform: none; } }
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════
+   12. DIALOGS (release unit B) — ONE recipe for the confirm and form dialogs a person meets in the
+   first hour (새 문서, 새 폴더, 이름 바꾸기, 보관과 삭제 확인, 기기 연결, 예약, the feature dialogs):
+   opaque white, radius 14, one soft shadow (dark: a lightness step + hairline ring), title 19/600,
+   body 16, keys at the foot on the right as [취소] [the verb] with ONE filled navy key; a
+   destructive verb is never the filled navy key (it wears the danger ink). Width ≤ 560 for a form,
+   ≤ 720 for content. Opening never scrolls the page; closing returns the focus to the opener.
+   ════════════════════════════════════════════════════════════════════════════════════════════ */
+:is(.nav-dialog, dialog.feature-dialog, dialog.new-document-dialog, dialog.host-connections-dialog, .schedule-dialog, dialog.ieum-app-dialog, dialog.office-import-dialog) {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-entry);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-dialog);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: 1.6;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+:is(.nav-dialog, dialog.feature-dialog, dialog.new-document-dialog, dialog.host-connections-dialog, .schedule-dialog, dialog.ieum-app-dialog, dialog.office-import-dialog) :is(h2) {
+  margin: 0;
+  font: 600 var(--text-lg)/1.4 var(--font-ui);
+  letter-spacing: normal;
+  text-wrap: balance;
+}
+.nav-dialog { width: min(560px, calc(100vw - 32px)); padding: var(--space-lg) var(--space-lg) var(--space-md); gap: var(--space-sm); }
+.nav-dialog p { font-size: var(--text-md); line-height: 1.6; }
+dialog.feature-dialog { width: min(720px, calc(100vw - 32px)); }
+dialog.new-document-dialog { width: min(560px, calc(100vw - 32px)); }
+:is(.nav-dialog-foot, dialog.new-document-dialog footer, .host-connections-foot) { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--space-xs); }
+:is(dialog.feature-dialog, dialog.new-document-dialog, dialog.host-connections-dialog)::backdrop { background: var(--scrim); }
+.nav-dialog .settings-path { margin: 0; }
+@media (max-width: 40rem) {
+  :is(.nav-dialog, dialog.feature-dialog, dialog.new-document-dialog) { width: calc(100vw - 16px); }
+  :is(.nav-dialog-foot, dialog.new-document-dialog footer) .button { min-height: 44px; }
+}

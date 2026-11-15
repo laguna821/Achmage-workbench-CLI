@@ -5,7 +5,7 @@
   "version": "0.4.1",
   "identifier": "kr.achmage.workbench",
   "build": {
-    "frontendDist": "../../web/dist",
+    "frontendDist": "../placeholder",
     "beforeBuildCommand": "node scripts/clean-web.mjs"
   },
   "app": {

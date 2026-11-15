@@ -135,13 +135,13 @@ async function editText(p: Page, word: string, typed: string) {
 try {
   await page.addInitScript((id) => localStorage.setItem("workbench.lastWork", id), work.id);
   await page.goto(`${ready.url}/?token=${ready.token}`);
-  await page.waitForSelector(".docs-button");
-  await page.locator(".docs-button").click();
-  await page.locator(".docs-menu").getByText("표지.pptx", { exact: true }).click();
+  await page.waitForSelector(".note-head-more");
+  await page.locator(".note-head-more").click();
+  await page.locator(".note-menu").getByText("표지.pptx", { exact: true }).click();
   await waitFor("slide stage", async () => (await editorFrame(page)?.locator(".konvajs-content").count()) === 1 || ((await editorFrame(page)?.locator(".konvajs-content").count()) ?? 0) > 0, 60_000);
   await page.waitForTimeout(1500);
   await page.screenshot({ path: join(outDir, "01-open.png") });
-  check("문서 화면 안에서 PPT 편집기로 열림", (await status(page)).includes("r1 저장됨"), await status(page));
+  check("문서 화면 안에서 PPT 편집기로 열림", (await status(page)).includes("1판 저장됨"), await status(page));
 
   const visibleAi = await editorFrame(page)!.locator("body").evaluate(() =>
     Array.from(document.querySelectorAll(".ai-entry, .ai-dock, .stage-ai-bar, .ai-ask-trigger")).filter((el) => el.getClientRects().length > 0).length,
@@ -152,7 +152,7 @@ try {
   await editText(page, "특강", " — 워크벤치");
   await waitStatus(page, "저장 안 됨");
   await page.keyboard.press("Control+s");
-  await waitStatus(page, "r2 저장됨");
+  await waitStatus(page, "2판 저장됨");
   const r2 = await textOf(2);
   check("제목 고치고 Ctrl+S → r2, 파일에 반영", r2.includes("가을 특강 — 워크벤치"), r2.split("\n")[0]);
   await page.screenshot({ path: join(outDir, "02-saved.png") });
@@ -166,7 +166,7 @@ try {
 
   // Back, then a revision made elsewhere while I have unsaved edits: refused, then "keep my edits".
   await page.locator(".doc-tab-open", { hasText: "표지.pptx" }).click();
-  await waitStatus(page, "r3 저장됨", 60_000);
+  await waitStatus(page, "3판 저장됨", 60_000);
   await page.waitForTimeout(1500);
   await editText(page, "특강", " 또");
   await waitStatus(page, "저장 안 됨");
@@ -175,13 +175,13 @@ try {
   await page.screenshot({ path: join(outDir, "03-conflict.png") });
   check("편집 중 다른 곳에서 r4 → 충돌 안내", true, (await page.locator(".doc-conflict").innerText()).replace(/\s+/g, " ").slice(0, 100));
   await page.getByRole("button", { name: "내 편집을 새 판으로" }).click();
-  await waitStatus(page, "r5 저장됨", 30_000);
+  await waitStatus(page, "5판 저장됨", 30_000);
   const r5 = await textOf(5);
   check("내 편집을 새 판으로 → r5, r4는 기록에 남음", r5.includes("탭 또") && (await textOf(4)).includes("질문으로부터"), r5.replace(/\n/g, " / "));
 
   // A revision made elsewhere with nothing unsaved here: the editor shows it.
   await editElsewhere("시작하는", "출발하는");
-  await waitFor("editor shows r6", async () => (await editorFrame(page)?.locator(".konvajs-content").count() ?? 0) > 0 && (await status(page)).includes("r6 저장됨"), 60_000);
+  await waitFor("editor shows r6", async () => (await editorFrame(page)?.locator(".konvajs-content").count() ?? 0) > 0 && (await status(page)).includes("6판 저장됨"), 60_000);
   check("저장 안 된 편집이 없으면 새 판(r6)을 바로 보여 줌", (await page.locator(".doc-conflict").count()) === 0);
 } catch (error) {
   check("실행", false, error instanceof Error ? error.message.split("\n")[0]! : String(error));

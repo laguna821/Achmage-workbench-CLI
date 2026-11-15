@@ -34,3 +34,27 @@ it("keeps the request band stable when a compact pane makes its mounted height s
   fireEvent.scroll(scroller);
   expect(view.container.querySelector(".turn-pin")).toBeTruthy();
 });
+
+it("puts 맨 아래로 on a band of its own under the conversation, inside the reading column — never over the words", () => {
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (this: HTMLElement) { return this.classList.contains("transcript") ? 200 : 0; });
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) { return this.classList.contains("transcript") ? 1000 : 0; });
+  const view = render(<DocContext.Provider value={{ state: initialState, actions: {} as DocActions }}><section className="pane"><Transcript sessionId="jump" items={[{ kind: "user", id: "u", text: "요청", at: 1 }, { kind: "assistant", id: "a", text: "긴 답변", at: 2, streaming: false }]} provider="codex" running={false} loading={false} onAnswer={() => {}} /></section></DocContext.Provider>);
+  const scroller = view.container.querySelector<HTMLElement>(".transcript")!;
+  // At the end: nothing.
+  scroller.scrollTop = 800; fireEvent.scroll(scroller);
+  expect(view.container.querySelector(".jump-band")).toBeNull();
+  // Scrolled up: the band, after the scroller (not inside it), holding the column and the button.
+  fireEvent.wheel(scroller, { deltaY: -40 });
+  scroller.scrollTop = 100; fireEvent.scroll(scroller);
+  const band = view.container.querySelector<HTMLElement>(".jump-band")!;
+  expect(band).toBeTruthy();
+  expect(scroller.contains(band)).toBe(false);
+  expect(band.parentElement).toBe(scroller.parentElement);
+  const button = band.querySelector<HTMLButtonElement>(".jump-band-inner > button")!;
+  expect(button.textContent).toContain("맨 아래로");
+  expect(view.container.querySelector(".to-bottom")).toBeNull();
+  // jsdom has no scrollTo: stand in for it on this scroller.
+  scroller.scrollTo = ((options: ScrollToOptions) => { scroller.scrollTop = options.top ?? 0; }) as typeof scroller.scrollTo;
+  fireEvent.click(button);
+  expect(scroller.scrollTop).toBe(1000);
+});

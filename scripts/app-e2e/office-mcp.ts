@@ -33,7 +33,9 @@ export async function officeMcpScenario(ctx: Ctx, launch: Omit<LaunchOptions, "n
     try { return JSON.parse(text); } catch { return text; }
   };
   const openSettings = async () => {
-    const { wd } = ctx.app; await wd.frame(null); await wd.click(await wd.waitFor('button[aria-label="연결과 설정"]'));
+    // 설정 › 문서 도구 (was the ⋯ "연결과 설정" popover): the rail's 설정 key, then the section.
+    const { wd } = ctx.app; await wd.frame(null); if (!await wd.find(".settings-dialog[open]")) await wd.click(await wd.waitFor('button[data-rail="settings"]'));
+    await wd.click(await wd.waitFor('.settings-dialog[open] .settings-nav [data-section="documents"]')); await wd.waitFor('.settings-dialog[open] .settings-pane[data-section="documents"]');
     const button = await wd.execute<Record<string, string>>('return [...document.querySelectorAll("button")].find(b => b.textContent.trim() === "문서 AI 설정…");');
     await wd.click(button); await wd.frame(await wd.waitFor('iframe[title="문서 AI 설정 화면"]')); await wd.waitFor("#set-mcp-port", 20000); await installProbe(wd);
   };

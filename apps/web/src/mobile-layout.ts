@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import { readVisibleViewport, resolveVisibleSurfaceFrame } from "../../../vendor/paseo/mobile-web/viewport.ts";
 import "./mobile-layout.css";
 
@@ -53,7 +54,32 @@ export function installMobileLayout() {
   };
 }
 
-/** Paseo's compact composer uses Return for a new line and the visible button to send. */
+/** Paseo's compact composer uses Return for a new line and the visible button to send: on a touch
+ * screen only. A narrow window under a mouse keeps the desktop's keys (Return sends), as its controls
+ * keep their desktop size (Hallmark merge: input follows the pointer, never the window's width). */
 export function compactInput() {
-  return window.matchMedia("(max-width: 900px), (pointer: coarse)").matches;
+  return window.matchMedia("(pointer: coarse)").matches;
 }
+
+/** A phone: a touch screen, or a window under 40rem. What replaces instead of sharing (a document's
+ * AI over its document) asks this, never a pane's width — a narrow pane on a desktop is not a phone. */
+export const PHONE_LAYOUT = "(pointer: coarse), (width < 40rem)";
+const phoneQuery = () => (typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia(PHONE_LAYOUT) : null);
+export const isPhoneLayout = () => Boolean(phoneQuery()?.matches);
+const watchPhone = (changed: () => void) => {
+  const query = phoneQuery();
+  query?.addEventListener?.("change", changed);
+  window.addEventListener("resize", changed);
+  return () => { query?.removeEventListener?.("change", changed); window.removeEventListener("resize", changed); };
+};
+export const usePhoneLayout = () => useSyncExternalStore(watchPhone, isPhoneLayout, () => false);
+
+/** A phone-width window (under 40rem): the top bar keeps the list key, the place's name, 확인 N and ⋯. */
+export const PHONE_WIDTH = "(width < 40rem)";
+const widthQuery = () => (typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia(PHONE_WIDTH) : null);
+const watchWidth = (changed: () => void) => {
+  const query = widthQuery();
+  query?.addEventListener?.("change", changed);
+  return () => query?.removeEventListener?.("change", changed);
+};
+export const usePhoneWidth = () => useSyncExternalStore(watchWidth, () => Boolean(widthQuery()?.matches), () => false);

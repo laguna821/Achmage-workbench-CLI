@@ -38,7 +38,8 @@ export function patchOfficeExecution(code: string, id: string, root: string, mod
       return send(instruction, undefined, state.scope);
     },
     lock: (locked) => {
-      depsRef.current.getEditor()?.setEditable(!locked);
+      // No update event: the renderer counts every update as an edit (an untouched document said 저장 안 됨, U38).
+      depsRef.current.getEditor()?.setEditable(!locked, false);
       for (const element of document.querySelectorAll('.app-content, .ribbon')) element.inert = locked;
     },
   }), []);

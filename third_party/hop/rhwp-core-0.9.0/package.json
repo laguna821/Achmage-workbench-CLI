@@ -1,0 +1,53 @@
+{
+  "name": "@rhwp/core",
+  "version": "0.9.0-workbench.3",
+  "description": "rhwp 0.9.0 with the 0.9.0 forms of the Ieum and HOP patches (third_party/hop/patches-0.9.0), PDF import off; built beside the shipped 0.8.7 engine, not used by the app yet",
+  "private": true,
+  "type": "module",
+  "main": "rhwp.js",
+  "types": "rhwp.d.ts",
+  "license": "MIT",
+  "author": "Edward Kim",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edwardkim/rhwp.git"
+  },
+  "sideEffects": [
+    "./snippets/*"
+  ],
+  "rhwp": {
+    "tag": "v0.9.0",
+    "commit": "c9095c5f67632e6721e800ccc7fb43ea49d26682",
+    "patchSet": "third_party/hop/patches-0.9.0/manifest.json",
+    "patches": [
+      "0003-footnote-area-below-body-flow.patch",
+      "0005-stored-restart-opens-next-page.patch",
+      "0013-restyle-per-attribute-everywhere.patch",
+      "0016-single-cell-resize.patch",
+      "0015-canvas-metric-requests-without-advances.patch",
+      "0001-hop-font-metrics-hallym.patch",
+      "0005-hop-line-break-size.patch",
+      "0009-hop-hwpx-plain-margins.patch",
+      "0010-hop-hang-trailing-space.patch",
+      "0002-hop-auto-tab-left.patch",
+      "0003-hop-canvas-synthetic-bold.patch",
+      "0007-hop-widow-orphan-keep-next.patch",
+      "0011-hop-tab-justify.patch",
+      "0008-hop-empty-anchor-table-outer-bottom.patch",
+      "0020-topbottom-float-anchor-flow.patch",
+      "0014-page-number-pos-insert.patch",
+      "0021-password-document-stays-protected.patch",
+      "0022-hwpx-bindata-reuse-exact-deflate.patch"
+    ],
+    "ieumCommit": "30ff4f051f067fcb2baf1ab416c40718c802ca35",
+    "hopCommit": "d533eb4360db034cd45d87b0751c0d742c6d6ca6",
+    "features": [
+      "console_error_panic_hook",
+      "wasm-api"
+    ],
+    "wasmPack": "0.15.0",
+    "rustc": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+    "wasmBytes": 18418059,
+    "wasmSha256": "259f87cb96c5caa207c48b82226ed83979910b545ce2095101fe51960f52c425"
+  }
+}

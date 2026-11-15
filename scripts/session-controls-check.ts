@@ -28,7 +28,7 @@ const check = (step: string, ok: boolean, detail = "") => {
   console.log(`${ok ? "PASS" : "FAIL"} ${step}${detail ? ` — ${detail}` : ""}`);
 };
 
-const child = spawn(process.execPath, ["apps/host/src/main.ts"], {
+const child = spawn(process.execPath, [process.env.HOST_ENTRY ?? "apps/host/src/main.ts"], {
   env: {
     ...process.env,
     WORKBENCH_DATA_DIR: dataDir,
@@ -82,6 +82,8 @@ async function flow(provider: Provider) {
   };
   const idle = () => until(async () => (await session(engine.id)).status === "idle", 15_000);
   const approvals = async () => (await items(engine.id)).filter((item): item is Extract<TranscriptItem, { kind: "approval" }> => item.kind === "approval");
+  // Hallmark U5: access and the context ring live in the composer's 도구 sheet (the quiet row).
+  const openTools = async () => { if (!(await page.locator(".work-view .composer-tools[open]").count())) await page.locator(".work-view .composer-tools > summary").click(); };
   const ring = async () => Number.parseInt((await page.locator(".context-gauge").innerText()).replace(/\D+/g, "") || "0", 10);
   try {
     await page.addInitScript((id) => localStorage.setItem("workbench.lastWork", id), work.id);
@@ -116,6 +118,7 @@ async function flow(provider: Provider) {
     pass("전체 접근에서는 묻지 않고 명령을 실행", (await approvals()).length === before && commands === 2, `approvals ${before}→${(await approvals()).length}, commands=${commands}`);
 
     // ── the context ring and "지금 압축" ──────────────────────────────────────────────────────
+    await openTools();
     await page.waitForSelector(".context-gauge", { timeout: 5000 });
     const full = await ring();
     await page.locator(".context-gauge").click();
@@ -131,6 +134,7 @@ async function flow(provider: Provider) {
     pass("컨텍스트 고리가 차고, '지금 압축' 뒤에 줄어듦(답이 아니라 안내로 남음)", noticed && full > 0 && after < full && ends === 2, `${full}% → ${after}% · ${detail.replace(/\s+/g, " ").slice(0, 80)}`);
 
     // ── "묻기" brings the question back ────────────────────────────────────────────────────────
+    await openTools();
     await page.locator(".access-select").click();
     await page.waitForSelector(".access-menu");
     await shot("03-access-menu.png");

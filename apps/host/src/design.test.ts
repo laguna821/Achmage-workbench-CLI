@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ApprovalDecision, ProviderStatus, Session, Work } from "@workbench/contracts";
@@ -9,6 +9,7 @@ import { blankDesign, designAssetPath, designOutline, designProblem } from "./de
 import { HttpError, SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
 import { emptyStatus, type AdapterSink, type ProviderAdapter } from "./providers/types.ts";
+import { tempDir } from "./test-temp.ts";
 
 class ScriptedAdapter implements ProviderAdapter {
   readonly provider = "codex" as const;
@@ -43,7 +44,7 @@ class ScriptedAdapter implements ProviderAdapter {
 }
 
 function setup() {
-  const dir = mkdtempSync(join(tmpdir(), "wb-design-"));
+  const dir = tempDir("wb-design-");
   const store = new Store(join(dir, "state.sqlite"));
   const manager = new SessionManager(store, new EventBus(), { hostId: "h", hostLabel: "노트북", managedWorksDir: join(dir, "works"), dataDir: dir });
   const codex = new ScriptedAdapter(() => manager.sink);

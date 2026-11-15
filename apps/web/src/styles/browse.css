@@ -52,8 +52,8 @@
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
-  gap: 4px 12px;
-  padding: 6px 10px 8px;
+  gap: var(--space-2xs) var(--space-sm);
+  padding: 6px 10px var(--space-xs);
 }
 
 .browser-head .browser-note {
@@ -78,8 +78,6 @@
   height: 20px;
   padding: 0;
   border: 1px solid var(--line);
-  border-radius: var(--r-full);
-  background: var(--surface-muted);
   cursor: pointer;
 }
 
@@ -89,19 +87,11 @@
   left: 2px;
   width: 14px;
   height: 14px;
-  border-radius: 50%;
-  background: var(--faint);
-  transition: transform 0.15s ease, background 0.15s ease;
-}
-
-.browser-switch.on {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+  transition: transform var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out);
 }
 
 .browser-switch.on > span {
   transform: translateX(14px);
-  background: var(--accent);
 }
 
 .browser-window,
@@ -110,8 +100,8 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
-  padding: 4px 10px 8px;
+  gap: var(--space-xs);
+  padding: var(--space-2xs) 10px var(--space-xs);
 }
 
 .browser-row,
@@ -145,7 +135,7 @@
   inset: 0 auto 0 0;
   border-radius: inherit;
   background: var(--accent);
-  transition: width 0.3s ease;
+  /* the bar's width follows the figure at once: width never animates (Floor 2) */
 }
 
 .browser-address {
@@ -158,8 +148,8 @@
   flex: 1;
   min-width: 0;
   height: 30px;
-  padding: 0 8px;
-  border: 1px solid var(--line);
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--field-line);
   border-radius: var(--r-sm);
   background: var(--bg);
   color: var(--text);
@@ -173,7 +163,7 @@
   align-items: flex-start;
   gap: 6px;
   width: 100%;
-  padding: 8px;
+  padding: var(--space-xs);
   border-radius: var(--r-md);
   background: var(--amber-soft);
   color: var(--amber-text);
@@ -182,12 +172,12 @@
 }
 
 .browser-access {
-  padding: 4px 10px 6px;
+  padding: var(--space-2xs) 10px 6px;
 }
 
 .connections .browser-login,
 .connections .browser-install {
-  padding: 4px 0 2px;
+  padding: var(--space-2xs) 0 var(--space-3xs);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -201,6 +191,3 @@
   }
 }
 
-.browser-row .button:disabled {
-  opacity: 0.45;
-}

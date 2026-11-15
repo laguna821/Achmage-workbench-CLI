@@ -1,59 +1,160 @@
-/* A single starting surface and a browser toolbar, using HIG Kit controls. */
+/* Home, the start screen (Hallmark U6): today's ledger. A page head (오늘, the date, the four ways to
+   look), what waits on the person as entries, then new answers, then where they left off as ruled
+   rows, and the request as one quiet row on the column's lower edge. Below: the web tab's toolbar
+   and the blank tab's search, which share this sheet. Tokens and the U2 recipes only. */
+
+/* ── The page and its column ─────────────────────────────────────────────────────────────── */
 .start-view { background: var(--bg); }
-.start-view .start-inner { width: min(100% - 48px, 720px); padding-block: 48px 32px; }
-.start-view:not(.with-board) .start-inner { margin-block: auto; }
-.start-view.with-board .start-inner { padding-block: 48px 24px; }
-.home-title { font: 600 1.625rem/2rem var(--font-ui); color: var(--text); text-align: center; letter-spacing: 0; margin: 0 0 32px; }
-.browse-start { display: grid; gap: 12px; width: 100%; }
-.browse-start .browse-start-modes { justify-self: center; width: auto; margin: 0; background: var(--surface-muted); padding: 3px; border: 0; border-radius: 12px; }
+.start-view.with-board { padding: 0; --home-gutter: var(--space-lg); --home-measure: var(--column); }
+.start-view.with-board:has(.home-modes:not(.mode-now)) { --home-measure: 1192px; }
+/* Full-width bands whose content sits on one column: the head, the modes, the request row. */
+.start-view.with-board :is(.home-head, .home-modes, .home-dock) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
+  padding-inline: max(var(--home-gutter), calc((100% - var(--home-measure)) / 2));
+}
+
+/* ── The page head: the place, today's date, the four ways to look ───────────────────────── */
+.home-head { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: var(--space-sm) var(--space-lg); padding-block: var(--space-xl) var(--space-lg); }
+.home-head-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-2xs) var(--space-sm); min-width: 0; }
+.start-view .home-title { margin: 0; font: var(--weight-strong) var(--text-2xl)/var(--leading-head) var(--font-display); letter-spacing: var(--tracking-display); color: var(--text); text-align: left; word-break: keep-all; overflow-wrap: break-word; }
+.home-date { margin: 0; font-size: var(--text-sm); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* The mode switch sits in the head now: no band of its own, nothing sticky. */
+.home-head .home-mode-nav { position: static; display: block; padding: 0; border: 0; background: none; }
+.home-head .home-mode-bar > button { padding-inline: var(--space-md); white-space: nowrap; }
+
+/* ── The modes' own head: the view tabs, and ONE "보기" key for the tools ─────────────────── */
+.start-view .home-modes { padding-block: 0 var(--space-xl); }
+.start-view .view-head { margin-bottom: var(--space-lg); }
+.view-head > .view-fold { flex: 0 0 auto; align-self: center; display: inline-flex; align-items: center; gap: var(--space-2xs); height: 28px; margin: 0 0 var(--space-2xs) auto; padding: 0 var(--space-xs); font-size: var(--text-sm); white-space: nowrap; }
+.view-fold-count { min-width: 1.25rem; padding: 0 var(--space-2xs); border-radius: var(--radius-well); background: var(--accent-soft); color: var(--active-text); font-size: var(--text-xs); font-weight: var(--weight-strong); font-variant-numeric: tabular-nums; text-align: center; }
+/* Unfolded, the tools lie in a ruled strip under the tabs, left to right in the order they act. */
+.view-head > .view-tools { flex: 1 0 100%; order: 3; justify-content: flex-start; gap: var(--space-2xs); margin: 0; padding: var(--space-xs) 0; border-top: 1px solid var(--line); }
+.view-tools .view-tool { font-size: var(--text-sm); }
+/* Opening is state: the strip settles in from under the key (transform and opacity, short). */
+.view-head > .view-tools { animation: view-strip-in var(--dur-short) var(--ease-out); }
+@keyframes view-strip-in { from { opacity: 0; transform: translateY(calc(var(--space-2xs) * -1)); } }
+@media (prefers-reduced-motion: reduce) { .view-head > .view-tools { animation: none; } }
+.view-tools .view-tool-value { margin-left: var(--space-3xs); }
+.view-tools .view-tool-value::before { content: none; }
+
+/* ── Sections: a real head (19), an ink rule over each list, rows at 14 ──────────────────── */
+.start-view .home-board { gap: var(--space-xl); margin-top: 0; }
+.start-view .home-section { gap: 0; }
+.start-view .home-section > :is(.group-head, .section-label) { display: flex; align-items: center; gap: var(--space-xs); margin: 0 0 var(--space-xs); font: var(--weight-strong) var(--text-lg)/var(--leading-head) var(--font-body); color: var(--text); word-break: keep-all; }
+.start-view .home-section > .group-head .group-toggle { gap: var(--space-xs); }
+.start-view .home-section > .group-head .home-count { margin: 0; color: var(--muted); font-size: var(--text-sm); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
+.start-view .home-section > .group-head > :not(.group-toggle) { margin-left: auto; }
+/* "Needs you" is the one tangerine on the page: a fill with ink on it, on its count. */
+.start-view .bucket-attention > .group-head { color: var(--text); }
+.start-view .bucket-attention > .group-head .home-count { padding: 0 var(--space-xs); border-radius: var(--radius-pill); background: var(--color-attention); color: var(--color-attention-ink); font-weight: var(--weight-strong); }
+.start-view .bucket-trouble > .group-head { color: var(--text); }
+.start-view .bucket-trouble > .group-head .home-count { padding: 0 var(--space-xs); border-radius: var(--radius-pill); background: var(--color-error-soft); color: var(--color-error); font-weight: var(--weight-strong); }
+
+.home-ledger { border-top: 1px solid var(--rule-ink); }
+.home-ledger > .home-row, .home-ledger > .home-more { border-bottom: 1px solid var(--line); }
+.start-view .home-ledger > .home-row { border-radius: 0; }
+.start-view .home-ledger > .home-row.expanded { background: var(--surface-muted); }
+.start-view .home-row-line { gap: var(--space-2xs); padding-right: var(--space-2xs); }
+.start-view .home-row .home-session { gap: var(--space-sm); padding: var(--space-sm) var(--space-xs); border-radius: 0; }
+.start-view .home-row .home-session:active { background: var(--pressed); }
+.start-view .home-row .engine-mark[data-provider] { color: var(--muted); }
+.start-view .home-session-main { gap: var(--space-3xs); }
+.start-view .home-session-title { font-size: var(--text-sm); font-weight: var(--weight-medium); }
+.start-view .home-session-work { font-weight: var(--weight-regular); }
+.start-view .home-session-preview { font-size: var(--text-sm); }
+.home-session-time { flex: 0 0 auto; color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.start-view .home-ledger > .home-more { display: block; width: 100%; margin: 0; padding: var(--space-xs); font-size: var(--text-sm); text-align: left; }
+.start-view .home-reply { padding: 0 var(--space-md) var(--space-sm) var(--space-xl); font-size: var(--text-sm); }
+.start-view .home-quiet { margin: 0; padding: var(--space-sm) 0; border-top: 1px solid var(--rule-ink); color: var(--muted); font-size: var(--text-sm); }
+.start-view .home-works { gap: var(--space-sm); }
+
+/* 문서: a tile's facts side by side, parted by space, not by middle dots. */
+.start-view .doc-tile-meta { display: flex; gap: var(--space-xs); min-width: 0; font-variant-numeric: tabular-nums; }
+.start-view .doc-tile-work { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.start-view .doc-tile-meta > :not(.doc-tile-work) { flex: 0 0 auto; }
+
+/* ── Entries waiting on the person: U5's entry (styles/work-entry.css), nothing repainted here.
+   Home adds only the list's spacing, the summary's two-line clamp and the reply opened in place. ── */
+.home-entries { display: grid; gap: var(--space-sm); }
+.home-entry .entry-head .engine-mark[data-provider] { color: currentColor; }
+.home-entry .home-entry-detail { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-entry .home-entry-line { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.home-entry .home-reply { padding: var(--space-xs) var(--space-md) var(--space-sm); border-top: 1px solid var(--color-rule); }
+.home-entry .entry-keys .home-row-toggle { display: inline-flex; align-items: center; gap: var(--space-2xs); }
+
+/* ── Empty: what belongs here, and the request row right under it is the one action ──────── */
+.home-empty { padding-block: var(--space-md) var(--space-lg); border-top: 1px solid var(--rule-ink); }
+.home-empty-head { margin: 0 0 var(--space-xs); font: var(--weight-strong) var(--text-lg)/var(--leading-head) var(--font-body); color: var(--text); word-break: keep-all; }
+.home-empty p { max-width: 34em; margin: 0; color: var(--muted); font-size: var(--text-md); line-height: var(--leading-body); word-break: keep-all; }
+
+/* ── The request row: the conversation's own composer (U5's quiet row: 도구 ……… engine │ send),
+   on the column's lower edge while the ledger scrolls. Same heights, same 도구 sheet, same send key,
+   same focus (the ring turns blue, no glow); only where it stands is home's. ───────────────────── */
+.home-dock { position: sticky; bottom: 0; z-index: var(--z-sticky); margin-top: auto; padding-block: var(--space-xs) var(--space-sm); background: var(--bg); }
+.start-view:has(.home-empty) .home-dock { position: static; margin-top: 0; }
+.home-request .browse-start { display: flex; align-items: flex-end; gap: var(--space-xs); }
+.home-request .browse-start .browse-start-modes { flex: 0 0 auto; margin-bottom: var(--space-xs); }
+.home-request .browse-entry { flex: 1 1 auto; min-width: 0; }
+.look-scope .start-view .home-request .browse-entry .hig-composer,
+.look-scope .start-view .home-request .browse-entry .hig-composer:focus-within { box-shadow: none; }
+.look-scope .start-view .home-request .browser-search { flex: 1 1 auto; box-shadow: none; }
+
+/* A folder picked from the sidebar: the same head, the request right under it. */
+.start-view:not(.with-board) .start-inner { width: min(100% - 2 * var(--space-lg), var(--column)); margin-block: 0; padding-block: 0 var(--space-xl); }
+.start-view:not(.with-board) .home-head { padding-inline: 0; }
+.start-folder { display: flex; align-items: center; gap: var(--space-xs); margin: 0 0 var(--space-sm); color: var(--muted); font-size: var(--text-sm); }
+.start-view.with-board > .column { padding-bottom: var(--space-sm); }
+
+/* ── Widths: 1440 and 1280 as drawn; under 1000 the head stacks its switch under the title;
+   in a narrow pane (two panes, a phone) the gutters close and the entries' cells stack ─────── */
+@media (max-width: 743px) {
+  .start-view.with-board { --home-gutter: var(--space-md); }
+  .home-head { padding-block: var(--space-lg) var(--space-md); }
+}
+@container work-pane (max-width: 500px) {
+  .start-view.with-board { --home-gutter: var(--space-sm); }
+  .home-head .home-mode-nav { width: 100%; }
+}
+
+/* ── The web tab (a blank tab offers the same entry: search or ask) ─────────────────────── */
+.browse-start { display: grid; gap: var(--space-sm); width: 100%; }
+.browse-start .browse-start-modes { justify-self: center; margin: 0; }
 .browse-entry { min-width: 0; position: relative; }
-.browse-entry .engine-tabs { width: fit-content; margin: 0 0 8px 8px; padding: 0; background: transparent; border: 0; border-radius: 8px; box-shadow: none; }
-.browse-entry .engine-tabs > button { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; }
-.browse-entry .engine-tabs > button[aria-checked="true"] { background: var(--surface-muted); box-shadow: none; }
+.browse-entry .engine-tabs { width: fit-content; margin: 0 0 var(--space-xs) var(--space-xs); background: transparent; }
+.browse-entry .engine-tabs > button { padding: var(--space-2xs) var(--space-sm); }
+
 .browse-entry .composer-area { margin: 0; }
-.browse-entry .composer { border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow-soft); }
-.browse-entry .composer textarea { font-size: 17px; }
-.browse-entry .composer:focus-within { border-color: var(--accent); box-shadow: var(--composer-focus); }
-.browser-search { border: 1px solid var(--line); border-radius: 18px; background: var(--surface); padding: 12px 16px; gap: 12px; margin: 0; box-shadow: var(--shadow-soft); color: var(--muted); }
-.browser-search:focus-within { border-color: var(--accent); box-shadow: var(--composer-focus); }
-.browser-search input { border: 0; box-shadow: none; background: transparent; padding: 8px 0; font: 400 17px/1.5 var(--font-ui); color: var(--text); outline: none; }
-.browser-search-go { width: 32px; height: 32px; min-width: 32px; padding: 6px; border-radius: 999px; }
-.start-credit { font: 400 12px/1.5 var(--font-ui); color: var(--muted); margin-top: 24px; }
-.start-credit a { display: inline-flex; align-items: center; min-height: 28px; color: inherit; }
-.home-recent { margin-top: 40px; }
-.home-recent > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
-.home-recent h2 { margin: 0; font: 600 .9375rem/1.4 var(--font-ui); }
-.home-recent .text-button { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; color: var(--muted); }
-.home-recent-list { display: grid; gap: 4px; }
-.home-recent-list > button { display: flex; gap: 12px; align-items: center; min-height: 44px; padding: 12px; border: 0; border-radius: 8px; color: var(--text); background: var(--surface-muted); text-align: left; }
-.home-recent-list > button:hover { background: var(--surface-raised); }
-.home-recent-list > button span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The border (and the engine line on top) comes from the shared composer rules. */
+.browse-entry .composer { border-radius: var(--radius-entry); box-shadow: var(--shadow-soft); }
+.browse-entry .composer textarea { font-size: var(--text-read); }
+.browse-entry .composer:focus-within { box-shadow: var(--composer-focus); }
+.browser-search { border: 1px solid var(--field-line); border-radius: var(--radius-entry); background: var(--surface); padding: var(--space-sm) var(--space-md); gap: var(--space-sm); margin: 0; box-shadow: var(--shadow-soft); color: var(--muted); }
+.browser-search:focus-within { border-color: var(--color-focus); box-shadow: var(--composer-focus); }
+.look-scope[data-theme="light"] .browse-entry .composer,
+.look-scope[data-theme="light"] .browser-search { box-shadow: var(--shadow-composer), var(--shadow-soft); }
+.look-scope[data-theme="light"] .browse-entry .composer:focus-within,
+.look-scope[data-theme="light"] .browser-search:focus-within { box-shadow: var(--composer-focus); }
+.browser-search input { border: 0; box-shadow: none; background: transparent; padding: var(--space-xs) 0; font: 400 var(--text-read)/1.5 var(--font-ui); color: var(--text); outline: none; }
+.browser-search-go { width: 32px; height: 32px; min-width: 32px; padding: var(--space-2xs); border-radius: var(--radius-round); }
 .browser-view { container-type: inline-size; container-name: web-tab; background: var(--bg); }
-.browser-toolbar { gap: 8px; padding: 8px 12px; min-height: 48px; background: var(--chrome-bg); border-color: var(--chrome-line); color: var(--chrome-text); }
+.browser-toolbar { gap: var(--space-xs); padding: var(--space-xs) var(--space-sm); min-height: 48px; background: var(--chrome-bg); border-color: var(--chrome-line); color: var(--chrome-text); }
 .browser-navigation { gap: 0; }
-.browser-toolbar form { position: relative; padding-right: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.browser-toolbar form { position: relative; padding-right: 0; border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--surface); }
 .browser-toolbar form:focus-within { outline: 2px solid var(--chrome-accent); outline-offset: 1px; }
-.browser-toolbar input { padding: 6px 12px; background: transparent; border: 0; box-shadow: none; outline: none; min-height: 32px; color: var(--chrome-text); font-size: 13px; }
+.browser-toolbar input { padding: var(--space-2xs) var(--space-sm); background: transparent; border: 0; box-shadow: none; outline: none; min-height: 32px; color: var(--chrome-text); font-size: var(--text-sm); }
 .browser-address-go { background: transparent; border: 0; color: var(--muted); }
-.browser-ask { display: inline-flex; align-items: center; gap: 8px; padding-inline: 12px; white-space: nowrap; font-size: 13px; }
+.browser-ask { display: inline-flex; align-items: center; gap: var(--space-xs); padding-inline: var(--space-sm); white-space: nowrap; font-size: var(--text-sm); }
 .browser-ask[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
 .browser-more .popover { min-width: 220px; }
-.browser-conversation { flex-basis: clamp(300px, 32%, 460px); background: var(--bg); }
-.browser-conversation > header { padding: 16px; border-bottom: 1px solid var(--line); }
-.browser-conversation header strong { font-size: 15px; font-weight: 600; }
-.browser-conversation header small { font-size: 12px; margin-top: 4px; }
-.browser-blank { padding: 32px; gap: 24px; }
-.browser-blank h2 { font: 600 26px/32px var(--font-ui); margin: 0; }
-.browser-create-dialog { border-radius: 18px; box-shadow: var(--elev-3); background: var(--surface); color: var(--text); }
+.browser-blank { padding: 32px; gap: var(--space-lg); }
+.browser-blank h2 { font: 600 var(--text-2xl)/32px var(--font-ui); margin: 0; }
+.browser-create-dialog { border-radius: var(--radius-entry); box-shadow: var(--elev-3); background: var(--surface); color: var(--text); }
 @container web-tab (max-width: 650px) {
-  .browser-toolbar { padding-inline: 8px; gap: 4px; }
-  .browser-navigation .hig-icon-button { width: 28px; padding: 5px; }
-  .browser-ask { padding: 6px 8px; }
-  .browser-content:has(.browser-conversation) .browser-viewport { display: none; }
-  .browser-conversation { flex: 1 1 100%; border-left: 0; }
-  .browser-blank { padding: 16px; }
-}
-@media (max-width: 743px) {
-  .start-view .start-inner, .start-view.with-board .start-inner { width: calc(100% - 32px); padding-block: 32px 24px; }
-  .home-title { margin-bottom: 24px; }
+  .browser-toolbar { padding-inline: var(--space-xs); gap: var(--space-2xs); }
+  .browser-navigation .hig-icon-button { width: 28px; padding: var(--space-2xs); }
+  .browser-ask { padding: var(--space-2xs) var(--space-xs); }
+  .browser-blank { padding: var(--space-md); }
 }

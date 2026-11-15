@@ -6,14 +6,20 @@ import { fileURLToPath } from 'node:url';
 import { pdfHostPlugin } from './pdf-platform.mjs';
 import { officeProviderHostPlugin } from './office-provider-platform.mjs';
 import { officeFileParsePlugin } from './office-file-parse-platform.mjs';
+import { hwpEnginePlugin } from './hwp-engine-platform.mjs';
+import { RESOLVE_GUARD_BANNER, REQUIRE_BANNER, TICKET_HOLDERS } from './host-resolve-guard.mjs';
 import { extensionRuntimeExternals, copyExtensionRuntimeAssets } from '../extension-runtime/package-assets.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 await import('./emit-paseo-host.mjs');
 const pin = readFileSync(new URL('../vendor/ieumoffice.PINNED', import.meta.url), 'utf8').match(/^commit: (.+)$/m)?.[1];
 if (execFileSync('git', ['-C', `${root}vendor/ieumoffice`, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() !== pin) throw new Error('Ieum source differs from the reviewed pin');
-await build({
+const entryPoints = { 'voice-worker': 'vendor/paseo/voice-server/src/server/speech/providers/local/worker-process.ts', 'workbench-service': 'apps/host/src/daemon/cli.ts', host: 'apps/host/src/main.ts', 'hwp-cli': 'apps/host/src/hwp-cli.ts', 'hangul-picture-job': 'apps/host/src/hangul-picture-job.ts', 'ieum-setup': 'apps/host/src/ieum-setup.ts', 'cleanup-legacy': 'apps/host/src/cleanup-legacy.ts', 'pdf-structure-job': 'apps/host/src/pdf-structure-job.mjs', 'workbench-client': 'packages/client/src/cli.ts', 'workbench-mcp': 'packages/client/src/mcp.ts' };
+const pick = (holders) => Object.fromEntries(Object.entries(entryPoints).filter(([name]) => TICKET_HOLDERS.includes(name) === holders));
+// The resolve guard only in the bundles that hold the vault's ticket (host-resolve-guard.mjs); the job
+// bundles without it (the voice worker loads its runtime from <data>/voice: check F2).
+for (const [entries, banner] of [[pick(true), RESOLVE_GUARD_BANNER], [pick(false), REQUIRE_BANNER]]) await build({
   absWorkingDir: root,
-  entryPoints: { 'voice-worker': 'vendor/paseo/voice-server/src/server/speech/providers/local/worker-process.ts', 'workbench-service': 'apps/host/src/daemon/cli.ts', host: 'apps/host/src/main.ts', 'hwp-cli': 'apps/host/src/hwp-cli.ts', 'office-reveal': 'apps/host/src/office-reveal.mjs', 'ieum-setup': 'apps/host/src/ieum-setup.ts', 'cleanup-legacy': 'apps/host/src/cleanup-legacy.ts', 'pdf-structure-job': 'apps/host/src/pdf-structure-job.mjs', 'workbench-client': 'packages/client/src/cli.ts', 'workbench-mcp': 'packages/client/src/mcp.ts' },
+  entryPoints: entries,
   outdir: process.env.WORKBENCH_HOST_BUILD_DIR ?? 'apps/host/dist', outExtension: { '.js': '.mjs' },
   external: extensionRuntimeExternals,
   bundle: true, platform: 'node', format: 'esm', target: 'node24', logLevel: 'warning',
@@ -21,11 +27,16 @@ await build({
     __WORKBENCH_GOOGLE_CLIENT_ID__: JSON.stringify(process.env.WORKBENCH_GOOGLE_CLIENT_ID ?? ''),
     __WORKBENCH_GOOGLE_CLIENT_SECRET__: JSON.stringify(process.env.WORKBENCH_GOOGLE_CLIENT_SECRET ?? ''),
   },
-  plugins: [pdfHostPlugin(), officeProviderHostPlugin(), officeFileParsePlugin()],
-  banner: { js: "import{createRequire as __cr}from'module';const require=__cr(import.meta.url);" },
+  plugins: [pdfHostPlugin(), officeProviderHostPlugin(), officeFileParsePlugin(), hwpEnginePlugin()],
+  banner: { js: banner },
 });
 
 await copyExtensionRuntimeAssets(process.env.WORKBENCH_HOST_BUILD_DIR ?? "apps/host/dist");
+
+// The first-page picture's rasterizer (resvg, MPL-2.0): its WebAssembly beside the job, and its notice.
+const hostOut = resolve(root, process.env.WORKBENCH_HOST_BUILD_DIR ?? "apps/host/dist");
+cpSync(`${root}node_modules/@resvg/resvg-wasm/index_bg.wasm`, resolve(hostOut, "resvg_bg.wasm"));
+cpSync(`${root}third_party/resvg-wasm`, resolve(hostOut, "licenses/resvg-wasm"), { recursive: true });
 
 // Official import-only installer; preserves its Apache notice and package-relative helpers.
 const desktopInstallerTarget = resolve(root, process.env.WORKBENCH_HOST_BUILD_DIR ?? "apps/host/dist", "node_modules/@workbench/agent-desktop-installer");

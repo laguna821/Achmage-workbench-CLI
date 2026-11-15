@@ -24,13 +24,15 @@ try {
   let wd = ctx.app.wd; await wd.setWindowRect({ width: 1440, height: 1000 });
   const api = <T>(method: string, path: string, body?: unknown) => ctx!.app.api<T>(method, path, body);
   const clickText = async (text: string) => { const element = await wd.execute<any>('return [...document.querySelectorAll("button")].find(e=>e.textContent.trim()===arguments[0]);', text); if (!element) throw new Error(`Missing button: ${text}`); await wd.click(element); };
+  // 설정 (one dialog; was the ⋯ "연결과 설정" popover): the rail's 설정 key, then the section in its left list.
+  const openAppSettings = async (section: string) => { await wd.frame(null); if (!await wd.find(".settings-dialog[open]")) await wd.click(await wd.waitFor('button[data-rail="settings"]')); await wd.click(await wd.waitFor(`.settings-dialog[open] .settings-nav [data-section="${section}"]`)); await wd.waitFor(`.settings-dialog[open] .settings-pane[data-section="${section}"]`); };
   const inputText = async (selector: string, text: string) => {
     const input = await wd.waitFor(selector); await wd.click(input);
     await wd.keys([{ type: "keyDown", value: KEY.control }, { type: "keyDown", value: "a" }, { type: "keyUp", value: "a" }, { type: "keyUp", value: KEY.control }]);
     await wd.sendKeys(input, text);
   };
   phase = "import preview";
-  await wd.click(await wd.waitFor('button[aria-label="연결과 설정"]')); await clickText("이음오피스 설정 가져오기…");
+  await openAppSettings("documents"); await clickText("이음오피스 설정 가져오기…");
   await inputText('.office-import-dialog input:not([type="checkbox"])', source); await clickText("가져올 항목 확인"); await wd.waitFor(".office-import-preview");
   report.check(S, "AI 키 없이 문서 표시 설정만 선택해 가져오기", await wd.execute<boolean>('return document.querySelector(".office-import-preview").innerText.includes("문서 표시 설정 가져오기") && document.querySelectorAll(".office-import-preview input[type=checkbox]").length===1;'), undefined, await shot(ctx, "preferences-import.png"));
   await clickText("선택한 항목 가져오기");
@@ -39,7 +41,7 @@ try {
   report.check(S, "원본 설정 보존·표시 설정 이행·실행 동의 제외", readFileSync(join(source, "app-settings.json"), "utf8") === original && !readFileSync(prefsPath, "utf8").includes("mcpEnabled"));
   await clickText("완료");
   phase = "settings UI";
-  await wd.click(await wd.waitFor('button[aria-label="연결과 설정"]')); await clickText("문서 AI 설정…");
+  await openAppSettings("documents"); await clickText("문서 AI 설정…");
   await wd.frame(await wd.waitFor('iframe[title="문서 AI 설정 화면"]')); await installProbe(wd);
   await wd.waitFor('.wb-document-preferences:not(:disabled)');
   report.check(S, "설정 화면에 가져온 작성자와 글자 크기 표시", await wd.execute<boolean>('return document.querySelector("#set-author-name").value==="가져온 작성자" && document.querySelector(".wb-font-size").value==="18";'));

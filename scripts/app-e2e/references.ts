@@ -70,7 +70,7 @@ export async function referencesScenario(ctx: Ctx) {
   const latestHash = createHash("sha256").update(readFileSync(source.path)).digest("hex");
   ctx.report.check(S, "+로 다시 붙인 후속 요청은 저장한 최신 판을 읽고 이전 요청은 고정 유지", again && second?.refs?.some((ref) => ref.artifactId === source.id && ref.revision > fixed.revision && ref.sha256 === latestHash && !ref.savedSnapshot) === true && (await messages())[0]?.refs?.some((ref) => ref.artifactId === source.id && ref.sha256 === fixed.sha256) === true && original !== readFileSync(source.path, "utf8"));
   await until(async () => (await snapshot()).sessions.find((row) => row.id === session.id)?.status === "idle");
-  await clickText(`${right} .doc-header > button`, "대화");
+  await wd.click(await wd.waitFor(`${right} .doc-header .doc-back`));
   const chat = '.pane:not([hidden]) .work-view';
   await wd.click(await wd.waitFor(`${chat} [aria-label="문서·파일 붙이기"]`));
   await clickText(`${chat} [role="menuitem"]`, source.name);

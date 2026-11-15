@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PROVIDER_LABEL, type HomeViews, type ProjectPick, type Provider, type Session, type Work } from "@workbench/contracts";
+import { PROVIDER_LABEL, type HomeViews, type ProjectPick, type Provider, type ProviderStatus, type Session, type Work } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import { entryClient, pickedWork } from "../entry.ts";
 import { folderPath, type State } from "../state.ts";
 import { readHomeMode, type HomeMode } from "../overview.ts";
-import { workHidden } from "../tree.ts";
 import { BrowseStart } from "./BrowseStart.tsx";
 import { Composer } from "./Composer.tsx";
 import { HomeModes } from "./HomeModes.tsx";
@@ -15,6 +14,7 @@ import { EngineMark } from "./EngineMark.tsx";
 import { ProjectChoice } from "./ProjectChoice.tsx";
 import { useAppearance } from "../appearance.ts";
 import { Segmented } from "./ui/Hig.tsx";
+import { NoteBanner } from "../conversation/NoteBanner.tsx";
 
 const ENGINE_KEY = "workbench.lastEngine";
 
@@ -30,11 +30,24 @@ export function useEngineChoice() {
 }
 
 /**
- * Engine tabs above the input box. Each tab wears its engine's own look (mark, color, type), and the
- * selected engine's look covers the screen, so the choice is visible before anything is sent.
+ * The engine a new request goes to: a pair of keys, the held one carrying its engine's mark (one mark
+ * per row: the mark says which is chosen, the other is a name). In a request row it stands where the
+ * conversation's engine control stands, at the right beside send (Hallmark merge: one row language).
  */
-export function EngineTabs({ value, onChange }: { value: Provider; onChange: (provider: Provider) => void }) {
-  return <Segmented className="engine-tabs" value={value} onChange={onChange} label="엔진" options={(["claude", "codex"] as const).map(provider => ({ value: provider, label: <><EngineMark provider={provider} size={15} />{PROVIDER_LABEL[provider]}</> }))} />;
+/** `ready`: an engine that is not connected carries no mark, so its key does not look ready (I6). */
+export function EngineTabs({ value, onChange, ready }: { value: Provider; onChange: (provider: Provider) => void; ready?: (provider: Provider) => boolean }) {
+  return <Segmented className="engine-tabs" value={value} onChange={onChange} label="엔진" options={(["claude", "codex"] as const).map(provider => ({ value: provider, label: <>{provider === value && (ready?.(provider) ?? true) ? <EngineMark provider={provider} size={15} /> : null}{PROVIDER_LABEL[provider]}</> }))} />;
+}
+
+const engineReady = (status: ProviderStatus | undefined) => Boolean(status?.installed && status.loggedIn);
+/** No engine can take a request yet: both were looked for (at least one answered) and none is installed and signed in. */
+export function noEngineReady(providers: Partial<Record<Provider, ProviderStatus>> | undefined) {
+  const found = Object.values(providers ?? {});
+  return found.length > 0 && !found.some(engineReady);
+}
+/** 지금 with no engine connected: one line above the request row, and the way to connect one. */
+export function EngineMissing({ onConnect }: { onConnect?: () => void }) {
+  return <NoteBanner label="AI 엔진" action={onConnect ? { label: "AI 엔진 연결", run: onConnect } : undefined}>AI 엔진이 아직 연결되지 않았습니다. 연결하면 여기서 바로 일을 맡길 수 있습니다.</NoteBanner>;
 }
 
 /** Pick a working folder: none (app-managed), a recent one, or a folder chosen in the system dialog. */
@@ -118,9 +131,9 @@ function FolderChoice({
 }
 
 /**
- * Home: the brand, a new session right away (the input is ready at once, the logo only greets),
- * then what is going on across all works. With a folder picked from the sidebar it is just the
- * start of a new work there.
+ * Home: today's ledger (what waits on the person, then new answers, then where they left off),
+ * the request row on its lower edge. The wordmark stays in the top bar. With a folder picked from
+ * the sidebar it is just the start of a new work there.
  */
 export function StartView({
   state,
@@ -142,6 +155,7 @@ export function StartView({
   pickFolder,
   engine,
   setEngine,
+  onConnectEngine,
 }: {
   state: State;
   folderId: string | null;
@@ -158,7 +172,7 @@ export function StartView({
   onOpenSession: (session: Session, itemId?: string) => void;
   onOpenDoc: (artifactId: string) => void;
   api: Api;
-  /** The overview mode kept in the screen preferences (지금 · 보드 · 지도 · 흐름 · 문서). */
+  /** The overview mode kept in the screen preferences (지금 · 프로젝트 · 흐름 · 문서). */
   homeMode: unknown;
   onHomeMode: (mode: HomeMode) => void;
   /** Each mode's views (screen preferences `homeViews`). */
@@ -167,13 +181,17 @@ export function StartView({
   pickFolder: (() => Promise<string | null>) | null;
   engine: Provider;
   setEngine: (provider: Provider) => void;
-  /** The logo's short entrance (off in settings or with reduced motion). */
+  /** 설정 › AI 엔진 (the line shown when no engine is connected). */
+  onConnectEngine?: () => void;
+  /** The logo's short entrance (off in settings or with reduced motion). Home no longer shows the
+   * wordmark (it stays in the top bar), so nothing here enters; kept for the caller's wiring. */
   motion?: boolean;
+  /** Whether the home wordmark is on screen in this view: never now, so this is not called. */
+  onHero?: (shown: boolean) => void;
 }) {
   const { openMenu } = useAppearance();
   const [cwd, setCwd] = useState<string | null>(null);
   const [choice, setChoice] = useState<ModelChoice>({ model: null, effort: null });
-  const [overviewOpen, setOverviewOpen] = useState(false);
   // "같은 폴더 = 같은 프로젝트": a folder that already has a live work sends there unless picked otherwise.
   const client = useMemo(() => entryClient(api), [api]);
   const [pick, setPick] = useState<ProjectPick>({ kind: "auto" });
@@ -194,74 +212,85 @@ export function StartView({
   const works = Object.values(state.works).sort((a, b) => b.updatedAt - a.updatedAt);
   const recentFolders = [...new Set(works.filter((work) => !work.cwdManaged).map((work) => work.cwd))].slice(0, 5);
   const path = folderPath(state, folderId);
-  // The overview needs something to show; a first launch is just the brand and the input.
-  const board = !path.length && Object.values(state.works).some((work) => !workHidden(state, work));
-  /* Attribution Assurance License: shown each time the app starts (the design editor is doory). */
-  const credit = (
-    <p className="start-credit">
-      디자인 편집기: Doory by Siam, creator and maintainer of Doory,{" "}
-      <a href="https://github.com/shaongitbd/doory" target="_blank" rel="noreferrer">
-        https://github.com/shaongitbd/doory
-      </a>
-    </p>
+  // Home navigation is available from the first launch, including its empty views.
+  // A folder-specific "new work" remains a composer, not the all-projects overview.
+  const board = !path.length;
+  const mode = readHomeMode(homeMode);
+  // The request: the conversation's own quiet row (Composer with `engine`, Hallmark U5): the words,
+  // then 도구 ……… the engine │ send. The model, the folder and the project the request goes to wait in
+  // 도구's sheet, each with its own label and menu; what is set there is named on the closed key.
+  // On home it sits on the ledger's lower edge; with a folder picked it is the page's one thing.
+  const folderName = cwd ? cwd.split("/").filter(Boolean).slice(-1)[0] ?? cwd : null;
+  const missing = noEngineReady(state.providers) ? <EngineMissing onConnect={onConnectEngine} /> : null;
+  const request = (
+    <BrowseStart onSearch={onOpenBrowser} autoFocus={autoFocus} initialMode="ask">
+      <Composer
+        provider={engine}
+        draftKey={draftKey ?? `new:${folderId ?? "root"}`}
+        placeholder={target ? "이 프로젝트에서 할 일을 입력하세요" : "AI에게 맡길 일을 입력하세요"}
+        busy={false}
+        autoFocus={autoFocus}
+        onSend={(text) => onStart(text, engine, cwd, choice, pick)}
+        engine={
+          <EngineTabs
+            value={engine}
+            ready={(provider) => engineReady(state.providers[provider])}
+            onChange={(next) => {
+              setEngine(next);
+              setChoice({ model: null, effort: null });
+            }}
+          />
+        }
+        toolsOn={[...(choice.model ? [choice.model] : []), ...(folderName ? [folderName] : []), ...(pick.kind === "work" && target ? [target.title] : [])]}
+        target={<ModelPicker models={state.providers[engine]?.models ?? []} value={choice} onChange={setChoice} onRefresh={() => api.refreshProviders(engine)} />}
+        tools={
+          <>
+            <FolderChoice
+              value={cwd}
+              recent={recentFolders}
+              onChange={(next) => {
+                setCwd(next);
+                setPick({ kind: "auto" });
+              }}
+              pickFolder={pickFolder}
+              project={pick.kind === "work" ? target : null}
+            />
+            <ProjectChoice state={state} target={target} folderWork={folderWork} hasFolder={Boolean(cwd)} onChange={setPick} />
+          </>
+        }
+      />
+    </BrowseStart>
+  );
+
+  // A folder picked from the sidebar: a page with one job, a new work in that folder.
+  const entry = (
+    <div className="column start-inner">
+      <header className="home-head">
+        <div className="home-head-title">
+          <h1 className="home-title">{path.at(-1)?.name ?? "새 작업"}</h1>
+        </div>
+      </header>
+      <div className="start-folder">
+        <Icon name="folder" size={14} />
+        {path.map((folder) => folder.name).join(" / ")}에 새 작업
+        <button type="button" className="icon-button small" onClick={onClearFolder} aria-label="분류 해제">
+          <Icon name="x" size={12} />
+        </button>
+      </div>
+      <section className="home-request" aria-label="새 요청">
+        {missing}
+        {request}
+      </section>
+    </div>
   );
 
   return (
     <main className={`start-view${board ? " with-board" : ""}`} onContextMenu={(event) => openMenu(event, engine)}>
-      <div className="column start-inner">
-        <h1 className="home-title">무엇을 시작할까요?</h1>
-        {path.length ? (
-          <div className="start-folder">
-            <Icon name="folder" size={14} />
-            {path.map((folder) => folder.name).join(" / ")}에 새 작업
-            <button type="button" className="icon-button small" onClick={onClearFolder} aria-label="분류 해제">
-              <Icon name="x" size={12} />
-            </button>
-          </div>
-        ) : null}
-        <BrowseStart onSearch={onOpenBrowser} autoFocus={autoFocus} initialMode="ask">
-        <EngineTabs
-          value={engine}
-          onChange={(next) => {
-            setEngine(next);
-            setChoice({ model: null, effort: null });
-          }}
-        />
-        <Composer
-          draftKey={draftKey ?? `new:${folderId ?? "root"}`}
-          placeholder={target ? "이 프로젝트에서 할 일을 입력하세요" : "AI에게 맡길 일을 입력하세요"}
-          busy={false}
-          autoFocus={autoFocus}
-          onSend={(text) => onStart(text, engine, cwd, choice, pick)}
-          target={
-            <>
-              <ModelPicker models={state.providers[engine]?.models ?? []} value={choice} onChange={setChoice} onRefresh={() => api.refreshProviders(engine)} />
-              <FolderChoice
-                value={cwd}
-                recent={recentFolders}
-                onChange={(next) => {
-                  setCwd(next);
-                  setPick({ kind: "auto" });
-                }}
-                pickFolder={pickFolder}
-                project={pick.kind === "work" ? target : null}
-              />
-              <ProjectChoice state={state} target={target} folderWork={folderWork} hasFolder={Boolean(cwd)} onChange={setPick} />
-            </>
-          }
-        />
-        </BrowseStart>
-        {board ? <section className="home-recent" aria-label="최근 프로젝트">
-          <header><h2>이어서 하기</h2><button type="button" className="text-button" aria-expanded={overviewOpen} onClick={() => setOverviewOpen(!overviewOpen)}>{overviewOpen ? "간단히 보기" : "작업 모아보기"}<Icon name={overviewOpen ? "chevronUp" : "chevronDown"} size={14} /></button></header>
-          {!overviewOpen ? <div className="home-recent-list">{works.filter(work => !workHidden(state, work)).slice(0, 3).map(work => <button type="button" key={work.id} onClick={() => (onOpenProject ?? onOpenWork)(work)}><Icon name="project" size={18} /><span>{work.title}</span><Icon name="chevronRight" size={14} /></button>)}</div> : null}
-        </section> : null}
-        {!overviewOpen || !board ? credit : null}
-      </div>
-      {board && overviewOpen ? (
+      {board ? (
         <HomeModes
           api={api}
           state={state}
-          mode={readHomeMode(homeMode)}
+          mode={mode}
           onMode={onHomeMode}
           views={homeViews}
           onViews={onHomeViews}
@@ -269,9 +298,9 @@ export function StartView({
           onOpenWork={onOpenWork}
           onOpenProject={onOpenProject}
           onOpenDoc={onOpenDoc}
-          footer={<div className="column">{credit}</div>}
+          dock={mode === "now" ? <section className="home-request" aria-label="새 요청">{missing}{request}</section> : null}
         />
-      ) : null}
+      ) : entry}
     </main>
   );
 }

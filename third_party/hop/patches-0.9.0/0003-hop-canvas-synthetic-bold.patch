@@ -1,0 +1,58 @@
+Achmage Workbench — rhwp v0.9.0 form of a 0.8.7 engine patch (third_party/hop/patches-0.9.0).
+Origin: HOP 0003 (third_party/hop/patches/0003-hop-canvas-synthetic-bold.patch, sha256 e1398a1bcc5e3e7221b40b850c061074d8799306f78552ffa0637c060b368391; original author hop-workbench <hop@localhost>)
+Status: upstream-test
+Differs from the 0.8.7 form: 0.9.0 already drops bold from the canvas font when the face has no bold and strokes after every fill (fill_positioned_text); applying the 0.8.7 code would stroke twice.
+Regression test: renderer::canvas_text_font::tests::hop_0003_hallym_gothic_bold_is_synthetic_on_canvas (new)
+
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: h4a <h4a@localhost>
+Date: Sat, 14 Nov 2026 11:49:27 +0900
+Subject: [PATCH] HOP 0003 hop-canvas-synthetic-bold (0.9.0 port: already
+ upstream, test added)
+
+
+diff --git a/src/renderer/canvas_text_font.rs b/src/renderer/canvas_text_font.rs
+index 0941eb68..8ef33753 100644
+--- a/src/renderer/canvas_text_font.rs
++++ b/src/renderer/canvas_text_font.rs
+@@ -109,3 +109,40 @@ pub(crate) fn family_chain(style: &TextStyle) -> String {
+         fallback
+     )
+ }
++
++#[cfg(test)]
++mod hop_0003_tests {
++    use super::*;
++
++    /// [HOP patch 0003] 한/글 2024 는 자체 Bold 가 없는 face(한림고딕체 — 파일마다 family 가
++    /// 따로 등록됨)의 굵게를 보통 윤곽 + 0.02 em 획으로 찍는다. Canvas 도 SVG/PDF 처럼
++    /// "bold" 를 브라우저에 요청하지 않고 획을 더해야 한다.
++    /// (0.9.0: upstream already does this — `for_positioned_text` drops "bold " when
++    /// `faux_bold_stroke_width` applies, and `WebCanvasRenderer::fill_positioned_text` strokes
++    /// after every fill — so the 0.8.7 hunks are not re-applied (no double stroke); this test pins
++    /// the decision for the Hallym Gothic face that HOP 0001 registers.)
++    #[test]
++    fn hop_0003_hallym_gothic_bold_is_synthetic_on_canvas() {
++        let style = TextStyle {
++            font_family: "한림고딕체".into(),
++            font_size: 20.0,
++            bold: true,
++            ..Default::default()
++        };
++        let font = CanvasTextFont::for_positioned_text(&style, 0.0);
++        assert!(
++            !font.descriptor().contains("bold "),
++            "합성 굵게는 bold face 를 요청하지 않는다: {}",
++            font.descriptor()
++        );
++        let stroke = super::super::faux_bold_stroke_width(&style, font.draw_size())
++            .expect("한림고딕체 굵게는 합성 획을 쓴다");
++        assert!((stroke - 0.4).abs() < 1e-9, "0.02 em: {stroke}");
++
++        let regular = TextStyle {
++            bold: false,
++            ..style
++        };
++        assert_eq!(super::super::faux_bold_stroke_width(&regular, 20.0), None);
++    }
++}

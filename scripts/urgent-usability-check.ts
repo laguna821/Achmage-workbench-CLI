@@ -93,7 +93,7 @@ try {
   await page.getByRole('textbox', { name: '찾을 말' }).press('Escape');
   await page.locator('.palette').waitFor({ state: 'detached' });
   await page.getByRole('button', { name: '새 문서 또는 세션 만들기' }).click();
-  for (const label of ['새 워드 문서', '새 한글 문서', '새 디자인 (doory)', 'Claude 새 세션', 'Codex 새 세션']) check(`tab + exposes ${label}`, await page.getByRole('menuitem', { name: label, exact: true }).count() === 1);
+  for (const label of ['새 워드 문서', '새 한글 문서', '새 디자인', 'Claude와 새 대화', 'Codex와 새 대화']) check(`tab + exposes ${label}`, await page.getByRole('menuitem', { name: label, exact: true }).count() === 1);
   await page.getByRole('menuitem', { name: '새 Markdown 문서', exact: true }).click();
   check('new document defaults to the current project', await page.locator('.new-document-dialog select').first().inputValue() === work.id);
   await page.locator('.new-document-dialog input[placeholder]').fill('병렬 수작업');
@@ -104,8 +104,8 @@ try {
   await page.frameLocator('iframe[title^="Markdown 편집기"]').locator('[contenteditable="true"]').first().waitFor();
   await page.screenshot({ path: join(out, 'editor-new-menu.png') });
   await page.getByRole('button', { name: '새 문서 또는 세션 만들기' }).click();
-  check('creation menu remains available inside the full-screen editor', await page.getByRole('menuitem', { name: '새 디자인 (doory)', exact: true }).isVisible());
-  await page.getByRole('menuitem', { name: '새 디자인 (doory)', exact: true }).click();
+  check('creation menu remains available inside the full-screen editor', await page.getByRole('menuitem', { name: '새 디자인', exact: true }).isVisible());
+  await page.getByRole('menuitem', { name: '새 디자인', exact: true }).click();
   await page.locator('.new-document-dialog input[placeholder]').fill('손으로 만드는 디자인');
   await page.getByRole('button', { name: '만들고 열기', exact: true }).click();
   await page.locator('.new-document-dialog').waitFor({ state: 'detached' });
@@ -114,13 +114,13 @@ try {
   const documentMessages = await Promise.all(designState.sessions.filter((s: any) => s.documentAgent).map((s: any) => api(`/api/sessions/${s.id}/items`)));
   check('doory creation opens a real canvas with no AI request', designState.artifacts.some((a: any) => a.format === 'design' && a.name.includes('손으로')) && documentMessages.every((result: any) => !result.items.some((i: any) => i.kind === 'user')));
   await page.getByRole('button', { name: '새 문서 또는 세션 만들기' }).click();
-  await page.getByRole('menuitem', { name: 'Codex 새 세션', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Codex와 새 대화', exact: true }).click();
   await until(async () => (await api('/api/snapshot')).sessions.filter((s: any) => !s.documentAgent).length === 2);
   check('new session belongs to the existing project', (await api('/api/snapshot')).sessions.every((s: any) => s.workId === work.id));
   await page.locator('.sidebar').waitFor();
   const projectArea = page.locator('.list-pane,.side-tree-section').first();
   await projectArea.dispatchEvent('contextmenu', { button: 2, clientX: 150, clientY: 400 });
-  check('blank project space opens app creation menu', await page.getByRole('menuitem', { name: '새 워드 문서', exact: true }).isVisible() && await page.getByRole('menuitem', { name: 'Claude 새 세션', exact: true }).isVisible());
+  check('blank project space opens app creation menu', await page.getByRole('menuitem', { name: '새 워드 문서', exact: true }).isVisible() && await page.getByRole('menuitem', { name: 'Claude와 새 대화', exact: true }).isVisible());
   await page.keyboard.press('Escape');
   const reportedPrompt = '방금 이 앱을 새로 설치했는데 간단한 마크다운 문서를 하나 만들어봐 mermaid 그림이랑 테이블도 같이 포함해서';
   await page.locator('.composer-input:visible').fill(reportedPrompt);

@@ -24,7 +24,7 @@ describe("project grid presets", () => {
     const grid = applyPanePreset(withTabs(singleLayout<View>({ kind: "new" }, null)), 9, empty);
     const restored = restoreLayout({ version: 2, ...grid }, (v): v is View => !!v && typeof v === "object" && "kind" in v, grid);
     expect(restored.grid).toBe(3);
-    expect(minimumSize(treeOf(restored), true)).toEqual({ width: 734, height: 554 });
+    expect(minimumSize(treeOf(restored), true)).toEqual({ width: 736, height: 556 });
     const geometry = paneGeometry(treeOf(restored), 1080, 700, true);
     expect(Object.values(geometry.panes)).toHaveLength(9);
     for (const rect of Object.values(geometry.panes)) { expect(rect.width).toBeGreaterThan(240); expect(rect.height).toBeGreaterThan(180); }

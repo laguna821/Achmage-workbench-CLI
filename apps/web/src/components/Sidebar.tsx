@@ -1,60 +1,41 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import type { Artifact, Folder, NavigatorPrefs, NavLayout, NavSelection, NavShortcut, ProjectStage, ProjectSummary, UiPrefs, Work } from "@workbench/contracts";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { failure } from "../top-notice.ts";
+import type { Artifact, DocumentRemovalPlan, Folder, NavigatorPrefs, NavSelection, NavShortcut, ProjectStage, ProjectSummary, UiPrefs, Work } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import type { State } from "../state.ts";
-import { holds, linkPair, moveFor, nudge, toggleWork, treeRows, workTreeRows, type Row, type SortMode, type TreeOpenState } from "../tree.ts";
+import { docOpenTarget, holds, linkPair, moveFor, nudge, toggleWork, workHidden, type Row, type SortMode, type TreeOpenState } from "../tree.ts";
 import { useAppearance } from "../appearance.ts";
-import { comboLabel, shortcutsOf } from "../shortcuts.ts";
-import { Icon, type IconName } from "./Icon.tsx";
+import { Icon } from "./Icon.tsx";
 import type { MenuEntry, MenuRequest } from "./ContextMenu.tsx";
 import { UsageCard } from "./UsageCard.tsx";
 import { linkable } from "./LinkSidebar.tsx";
-import { ViewsSection } from "./pkm/ViewsSection.tsx";
-import { VaultSection } from "./pkm/VaultSection.tsx";
 import { useDragController, useGhost, zoneOf, type DragPayload, type DropTarget, type GhostStore } from "./nav/drag.ts";
-import {
-  LIST_WIDTH,
-  NAV_HEIGHT,
-  NAV_WIDTH,
-  addShortcuts,
-  folderCounts,
-  folderOrder,
-  layoutFor,
-  listFor,
-  moveShortcut,
-  projectsOf,
-  sameShortcut,
-  readNavigator,
-  readShortcuts,
-  seedShortcuts,
-  sortFor,
-  tagTree,
-  type TagNode,
-} from "./nav/model.ts";
-import { HomeRow, NavPane, NowSection, ROOT_ROW_ID, ShortcutsSection, beforeLastGroup, viewShortcutEntry } from "./nav/NavPane.tsx";
-import { ListPane, type ListItem } from "./nav/ListPane.tsx";
-import { TreeSection } from "./nav/TreeSection.tsx";
+import { SIDE_WIDTH, addShortcuts, folderCounts, folderOrder, insideSections, levelOneRows, moveShortcut, projectsOf, readNavigator, readShortcuts, sameShortcut, seedShortcuts, sortFor, tagTree, type TagNode } from "./nav/model.ts";
+import { ROOT_ROW_ID, beforeLastGroup } from "./nav/NavPane.tsx";
 import { rowItem, rowLabel, type RowContext } from "./nav/rows.tsx";
+import { RowMenu } from "./nav/RowMenu.tsx";
+import { MIN_PANE } from "../panes.ts";
+import type { LayerAnchor } from "./ui/AnchoredLayer.tsx";
 import { FolderDeleteDialog, FolderStylePanel, TagPrompt } from "./nav/dialogs.tsx";
 import { onNavigatorFocus, takeNavigatorFocus } from "./nav/focus.ts";
+import { addNoteTags, tagsNotice } from "./nav/tags.ts";
+import { ProjectsLevel, type LevelOneState } from "./nav/ProjectsLevel.tsx";
+import { ProjectLevel } from "./nav/ProjectLevel.tsx";
+import { ActivityList, DocsList, NowList, VaultList } from "./nav/Lists.tsx";
+import { placePrefix, useNavPlace, type NavPlace } from "./nav/place.ts";
 import type { NavDialog, NavShared, SidebarActions, Toast } from "./nav/shared.ts";
 import "../styles/navigator.css";
 
-// A single project navigator is the default. Each project opens its overview; disclosure
-// reveals its grouped chats, web AI and documents. Two-pane layouts remain opt-in.
+// The list column (N1, the owner's navigation, 2026-11-14): ONE white column beside the navy rail.
+// The rail chooses what it shows: 프로젝트 (level 1: every project in its folders; level 2: inside
+// one project, "← 프로젝트 목록" back), 문서, 활동 or 볼트. Going back changes the list only: the
+// tabs, the panes and the running AI stay, and level 1 comes back with its folds, scroll and picks.
+// The three old layouts (두 칸 · 위아래 · 한 칸) collapse into it; what they stored is kept.
 
 export type { SidebarActions } from "./nav/shared.ts";
 export { rowItem } from "./nav/rows.tsx";
 
-const MIN_WIDTH = 232;
-const MAX_WIDTH = 480;
 const NO_SHORTCUTS: NavShortcut[] = [];
-
-const LAYOUTS: { id: NavLayout; label: string; icon: IconName }[] = [
-  { id: "tree", label: "프로젝트 목록", icon: "list" },
-  { id: "dual", label: "탐색 + 목록 (고급)", icon: "columns" },
-  { id: "stacked", label: "탐색 / 목록 (고급)", icon: "rows" },
-];
 
 const record = (value: unknown): Record<string, unknown> => (value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {});
 
@@ -69,31 +50,18 @@ function useWindowWidth() {
 }
 
 /** The projects' summaries (what their notes say) and the person's stages, read again when they change. */
-function useProjectData(api: Api, state: State, withSummaries: boolean) {
+function useProjectData(api: Api, state: State) {
   const [summaries, setSummaries] = useState<Map<string, ProjectSummary>>(() => new Map());
   const [stages, setStages] = useState<ProjectStage[]>([]);
-  const version = useMemo(
-    () =>
-      Object.entries(state.pkm)
-        .filter(([key]) => key.startsWith("project:"))
-        .map(([key, value]) => `${key}=${value}`)
-        .join(","),
-    [state.pkm],
-  );
-  const worksKey = useMemo(
-    () =>
-      Object.values(state.works)
-        .map((work) => `${work.id}:${work.archivedAt ?? 0}`)
-        .join(","),
-    [state.works],
-  );
+  const version = useMemo(() => Object.entries(state.pkm).filter(([key]) => key.startsWith("project:")).map(([key, value]) => `${key}=${value}`).join(","), [state.pkm]);
+  const worksKey = useMemo(() => Object.values(state.works).map((work) => `${work.id}:${work.archivedAt ?? 0}`).join(","), [state.works]);
   const loaded = useRef(false);
   useEffect(() => {
     let cancelled = false;
     // Several changes in a row (a turn writing the note, a rule) are read once.
     const timer = window.setTimeout(
       () => {
-        void Promise.all([withSummaries ? api.projects() : Promise.resolve(null), api.projectStages()])
+        void Promise.all([api.projects(), api.projectStages()])
           .then(([list, nextStages]) => {
             if (cancelled) return;
             loaded.current = true;
@@ -108,7 +76,7 @@ function useProjectData(api: Api, state: State, withSummaries: boolean) {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [api, version, worksKey, withSummaries]);
+  }, [api, version, worksKey]);
   return { summaries, stages };
 }
 
@@ -136,6 +104,8 @@ function DragGhost({ store }: { store: GhostStore }) {
   );
 }
 
+export type PrefsPatch = UiPrefs | ((current: UiPrefs) => UiPrefs);
+
 export function Sidebar({
   state,
   currentWorkId,
@@ -147,14 +117,19 @@ export function Sidebar({
   onSortMode,
   width,
   onWidth,
+  paneMinimum = MIN_PANE,
   actions,
   pending,
   onPendingDone,
   homeActive = false,
+  homeOwnsNow = false,
+  atNow = false,
+  onLeaveNow,
   prefs,
   onPrefs,
   api,
   onToast,
+  unreadNotices = 0,
 }: {
   state: State;
   currentWorkId: string | null;
@@ -166,41 +141,48 @@ export function Sidebar({
   onSortMode: (mode: SortMode) => void;
   width: number;
   onWidth: (width: number) => void;
+  /** The least width the work panes need side by side (panes.ts `minimumSize`): the column never takes it. */
+  paneMinimum?: number;
   actions: SidebarActions;
   /** A rename or a new folder asked from a menu. */
   pending: { rename?: string; createIn?: string | null } | null;
   onPendingDone: () => void;
   /** Home is on screen. */
   homeActive?: boolean;
-  /** The screen preferences as last edited (`navigator`, `navShortcuts`), and how to change them. */
+  /** Home's 지금 ledger is on screen: it lists what waits, so 지금 here keeps only the counts. */
+  homeOwnsNow?: boolean;
+  /** The rail's 지금 is lit (home's 지금 on screen): the column shows what 지금 means for navigation. */
+  atNow?: boolean;
+  /** Leave 지금 for the project list (the empty 지금 list's one action). */
+  onLeaveNow?: () => void;
+  /** The screen preferences as last edited (`navigator`, `navShortcuts`), and how to change them (a patch, or a change of the latest). */
   prefs: UiPrefs;
-  onPrefs: (patch: UiPrefs) => void;
+  onPrefs: (patch: PrefsPatch) => void;
   api: Api;
   onToast: (message: Toast) => void;
+  unreadNotices?: number;
 }) {
   const { lookOf, appTheme } = useAppearance();
   const asideRef = useRef<HTMLElement>(null);
-  const treeRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-  const fail = useCallback((error: unknown) => onToast(error instanceof Error ? error.message : String(error)), [onToast]);
+  const fail = useCallback((error: unknown) => onToast(failure(error)), [onToast]);
 
   // ── preferences: the navigator's own object and the shortcuts ───────────────────────────
-  const nav = useMemo(() => readNavigator(prefs.navigator), [prefs.navigator]);
+  // Where the column is (rail, level, project, scroll) belongs to THIS window (nav/place.ts); the
+  // rest of `navigator` (folds, sorts, sections, shortcuts) stays shared in the gateway prefs.
+  const [place, setPlace] = useNavPlace(placePrefix(api.remoteHostId), prefs.navigator);
+  const nav = useMemo(() => ({ ...readNavigator(prefs.navigator), rail: place.rail, level: place.level, project: place.project }), [prefs.navigator, place]);
   const windowWidth = useWindowWidth();
-  const layout = layoutFor(nav, windowWidth);
-  // Several changes before the next render build on each other.
-  const pendingNav = useRef<Record<string, unknown> | null>(null);
-  useEffect(() => {
-    pendingNav.current = null;
-  }, [prefs.navigator]);
-  const saveNav = useCallback(
-    (patch: Partial<NavigatorPrefs>) => {
-      const next = { ...(pendingNav.current ?? record(prefs.navigator)), ...patch };
-      pendingNav.current = next;
-      onPrefs({ navigator: next });
-    },
-    [prefs.navigator, onPrefs],
-  );
+  // Every change builds on the latest stored object (several in a row never undo each other), and
+  // keeps every key it does not know (an older or newer app may have written them).
+  const saveNav = useCallback((patch: Partial<NavigatorPrefs>) => {
+    const { rail, level, project, ...shared } = patch;
+    const here: Partial<NavPlace> = {};
+    if (rail !== undefined) here.rail = rail;
+    if (level !== undefined) here.level = level;
+    if (project !== undefined) here.project = project;
+    if (Object.keys(here).length) setPlace(here);
+    if (Object.keys(shared).length) onPrefs((current) => ({ navigator: { ...record(current.navigator), ...shared } }));
+  }, [onPrefs, setPlace]);
   const stored = useMemo(() => readShortcuts(prefs.navShortcuts), [prefs.navShortcuts]);
   const shortcuts = stored ?? NO_SHORTCUTS;
   const saveShortcuts = useCallback((next: NavShortcut[]) => onPrefs({ navShortcuts: next }), [onPrefs]);
@@ -211,9 +193,8 @@ export function Sidebar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unseeded]);
 
-  // ── what the panes show ─────────────────────────────────────────────────────────────────
-  const navigating = layout !== "tree";
-  const { summaries, stages } = useProjectData(api, state, navigating);
+  // ── what the column shows ───────────────────────────────────────────────────────────────
+  const { summaries, stages } = useProjectData(api, state);
   const docsByWork = useMemo(() => docsByWorkOf(state.artifacts), [state.artifacts]);
   const projects = useMemo(() => projectsOf(state, summaries, visibleSessionId), [state.works, state.sessions, state.folders, summaries, visibleSessionId]); // eslint-disable-line react-hooks/exhaustive-deps
   const counts = useMemo(() => folderCounts(projects, state.folders), [projects, state.folders]);
@@ -221,133 +202,125 @@ export function Sidebar({
   // A folder selected that is gone (deleted, archived) leaves the root selected.
   const selected: NavSelection = nav.selected.kind === "folder" && (!state.folders[nav.selected.id] || state.folders[nav.selected.id]!.archivedAt) ? { kind: "root" } : nav.selected;
   const navState = useMemo(() => ({ ...nav, selected }), [nav, selected.kind === "folder" ? selected.id : selected.kind === "tag" ? selected.tag : selected.kind]); // eslint-disable-line react-hooks/exhaustive-deps
+  const inside = nav.level === "project" && nav.project ? state.works[nav.project] : undefined;
+  const insideWork = inside && !workHidden(state, inside) ? inside : undefined;
+  const level = nav.rail === "projects" && insideWork ? "project" : "projects";
 
+  // Level 1's own state lives here, so it is as it was when the person comes back from inside.
   const [query, setQuery] = useState("");
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [chosen, setChosen] = useState<string[]>([]);
+  const [picked, setPicked] = useState<string[]>([]);
   const [anchor, setAnchor] = useState<string | null>(null);
   const [listFocus, setListFocus] = useState<string | null>(null);
+  const scroll = useRef(place.scroll);
+  const [fieldOpen, setFieldOpen] = useState(false);
+  const local: LevelOneState = { query, setQuery, picked, setPicked, anchor, setAnchor, focusId: listFocus, setFocusId: setListFocus, scroll, keepScroll: (top) => setPlace({ scroll: top }), fieldOpen, setFieldOpen };
+  const [insideQuery, setInsideQuery] = useState("");
   const [treeFocus, setTreeFocus] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [creatingIn, setCreatingIn] = useState<string | null | undefined>(undefined);
   const [dialog, setDialog] = useState<NavDialog | null>(null);
-  const [live, setLive] = useState<{ nav?: number; list?: number; height?: number; width?: number } | null>(null);
+  /** A document row's menu (the shared Menu): at the pointer, or under its ⋯. */
+  const [rowMenu, setRowMenu] = useState<{ rowId: string; request: MenuRequest; anchor: LayerAnchor } | null>(null);
+  const [live, setLive] = useState<number | null>(null);
 
-  const sort = sortFor(navState, selected);
-  const listed = useMemo(
-    () => (navigating ? listFor(projects, selected, { includeSub: nav.includeSub, query, sort, groupSub: nav.groupSub, stages, folders: state.folders, now: Date.now() }) : { entries: [], count: 0 }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [navigating, projects, navState, nav.includeSub, query, sort.key, sort.desc, nav.groupSub, stages, state.folders],
-  );
-  const items = useMemo<ListItem[]>(() => {
-    const out: ListItem[] = [];
-    for (const entry of listed.entries) {
-      if (entry.type === "group") {
-        out.push({ kind: "group", key: entry.key, label: entry.label, count: entry.count });
-        continue;
-      }
-      const work = entry.project.work;
-      const [row, ...children] = workTreeRows(state, work, open, currentWorkId, 0, entry.project.sessions, docsByWork.get(work.id) ?? []);
-      out.push({ kind: "project", project: entry.project, folder: entry.folder, row: row as Extract<Row, { type: "work" }> });
-      for (const child of children) out.push({ kind: "child", row: child });
-    }
-    return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listed, open, currentWorkId, docsByWork]);
-  const rows = useMemo(() => (navigating ? [] : treeRows(state, open, sortMode, currentWorkId)), [navigating, state, open, sortMode, currentWorkId]);
+  // The list follows what is opened (nav/place.ts `followOpen`, driven by the app for every way of
+  // opening); here only the inside search is left behind when the project changes.
+  useEffect(() => setInsideQuery(""), [nav.project]);
 
-  // Every row a drag can land on, by its `data-row-id`.
+  // Every row a drag can land on, by its `data-row-id` (what the column shows now).
   const rowById = useMemo(() => {
     const map = new Map<string, Row>();
-    if (!navigating) {
-      for (const row of rows) map.set(row.id, row);
-      return map;
-    }
     map.set(ROOT_ROW_ID, { type: "section", id: ROOT_ROW_ID, depth: 0, label: "프로젝트" });
     for (const { folder, depth } of folderOrder(state.folders, null)) map.set(folder.id, { type: "folder", id: folder.id, depth, folder, open: true, empty: false });
-    for (const item of items) if (item.kind !== "group") map.set(item.row.id, item.row);
+    for (const project of projects) map.set(project.work.id, { type: "work", id: project.work.id, depth: 0, work: project.work, open: false, expandable: false, sessions: project.sessions, docs: docsByWork.get(project.work.id) ?? [] });
+    if (insideWork) {
+      const sections = insideSections(state, insideWork);
+      for (const row of [...sections.chats, ...sections.docs, ...sections.web]) map.set(row.id, row);
+    }
     return map;
-  }, [navigating, rows, items, state.folders]);
+  }, [state, projects, docsByWork, insideWork]);
 
   // Picks stay among what is listed.
   useEffect(() => {
-    setChosen((current) => (current.length && current.some((id) => !rowById.has(id)) ? current.filter((id) => rowById.has(id)) : current));
+    setPicked((current) => (current.length && current.some((id) => !rowById.has(id)) ? current.filter((id) => rowById.has(id)) : current));
   }, [rowById]);
-  // A new selection starts at the top of its list.
-  const listKey = selected.kind === "folder" ? selected.id : selected.kind === "tag" ? `tag:${selected.tag}` : selected.kind;
-  useEffect(() => {
-    listRef.current?.closest(".list-scroll")?.scrollTo({ top: 0 });
-    setChosen([]);
-    setAnchor(null);
-  }, [listKey]);
 
-  // ── focus ───────────────────────────────────────────────────────────────────────────────
-  const focusTreeRow = useCallback((id: string) => {
-    setTreeFocus(id);
-    window.requestAnimationFrame(() => treeRef.current?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(id)}"]`)?.focus());
+  // ── where the column goes ───────────────────────────────────────────────────────────────
+  const focusIn = useCallback((selector?: string) => {
+    const from = document.activeElement;
+    window.requestAnimationFrame(() => {
+      if (document.activeElement !== from && document.activeElement !== document.body) return;
+      const root = asideRef.current;
+      const target = (selector ? root?.querySelector<HTMLElement>(selector) : null) ?? root?.querySelector<HTMLElement>('[data-list-row][tabindex="0"]') ?? root?.querySelector<HTMLElement>("[data-list-row]");
+      target?.focus();
+      target?.scrollIntoView({ block: "nearest" });
+    });
   }, []);
-  const focusList = useCallback(
-    (id?: string | null) => {
-      // A frame later (the list may just have been drawn), unless the focus went somewhere meanwhile.
-      const from = document.activeElement;
-      window.requestAnimationFrame(() => {
-        if (document.activeElement !== from && document.activeElement !== document.body) return;
-        const root = navigating ? listRef.current : treeRef.current;
-        const target =
-          (id ? root?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(id)}"]`) : null) ??
-          root?.querySelector<HTMLElement>('[role="treeitem"][tabindex="0"]') ??
-          root?.querySelector<HTMLElement>('[role="treeitem"]');
-        target?.focus();
-        target?.scrollIntoView({ block: "nearest" });
-      });
-    },
-    [navigating],
-  );
-  const focusNav = useCallback(() => {
-    const pane = asideRef.current?.querySelector(".nav-pane");
-    (pane?.querySelector<HTMLElement>('[data-nav-row][tabindex="0"]') ?? pane?.querySelector<HTMLElement>("[data-nav-row]"))?.focus();
-  }, []);
-  // "내비게이터로" (Ctrl+Shift+E): asked before the sidebar was there, or while it is.
+  const focusList = useCallback((id?: string | null) => focusIn(id ? `[data-row-id="${CSS.escape(id)}"]` : undefined), [focusIn]);
+  // "내비게이터로" (Ctrl+Shift+E): asked before the column was there, or while it is.
   useEffect(() => {
     if (takeNavigatorFocus()) focusList();
     return onNavigatorFocus(() => {
       if (takeNavigatorFocus()) focusList();
     });
   }, [focusList]);
+  /** Folds open on the way to a folder (its ancestors and itself). */
+  const unfoldTo = useCallback((folderId: string, itself = true) => {
+    const above = new Set<string>();
+    for (let at: string | null = itself ? folderId : (state.folders[folderId]?.parentId ?? null); at && !above.has(at); at = state.folders[at]?.parentId ?? null) above.add(at);
+    if (open.closedFolders.some((id) => above.has(id))) onOpenChange({ ...open, closedFolders: open.closedFolders.filter((id) => !above.has(id)) });
+  }, [state.folders, open, onOpenChange]);
+
+  /** Back to every project: the list only (nothing in the centre moves). */
+  const back = useCallback(() => {
+    saveNav({ level: "projects" });
+    setInsideQuery("");
+    // The project that was open is where the keyboard lands (unless the person picked another row).
+    const target = listFocus ?? nav.project;
+    focusIn(target ? `[data-row-id="${CSS.escape(target)}"]` : undefined);
+  }, [saveNav, focusIn, listFocus, nav.project]);
+  /** Inside a project: the list shows it; the centre brings back its last tab (the app decides). */
+  const choose = useCallback((work: Work) => {
+    saveNav({ rail: "projects", level: "project", project: work.id });
+    setInsideQuery("");
+    setListFocus(work.id);
+    // The keyboard lands on the level's head (its back key), where the person can go on or back.
+    if (asideRef.current?.contains(document.activeElement)) window.requestAnimationFrame(() => asideRef.current?.querySelector<HTMLElement>(".nav-back")?.focus());
+    if (actions.chooseProject) actions.chooseProject(work);
+    else actions.openWork(work);
+  }, [saveNav, actions]);
 
   const select = useCallback(
     (next: NavSelection) => {
-      if (!navigating) {
-        // The single tree has no list: a folder shortcut unfolds its way there instead.
-        if (next.kind !== "folder") return;
-        const above = new Set<string>();
-        for (let at = state.folders[next.id]?.parentId ?? null; at && !above.has(at); at = state.folders[at]?.parentId ?? null) above.add(at);
-        if (open.closedFolders.some((id) => above.has(id))) onOpenChange({ ...open, closedFolders: open.closedFolders.filter((id) => !above.has(id)) });
-        focusTreeRow(next.id);
+      if (next.kind === "folder") {
+        // A folder (from 바로가기): level 1, unfolded on the way, the keyboard on it.
+        saveNav({ rail: "projects", level: "projects" });
+        unfoldTo(next.id);
+        focusList(next.id);
         return;
       }
-      saveNav({ selected: next });
+      saveNav({ rail: "projects", level: "projects", selected: next });
     },
-    [navigating, state.folders, open, onOpenChange, focusTreeRow, saveNav],
+    [saveNav, unfoldTo, focusList],
   );
 
-  // Menus ask for an inline rename or a new folder; in the navigator the row may first need to be listed.
+  // Menus ask for an inline rename or a new folder: the row must be listed first.
   useEffect(() => {
     if (!pending) return;
     if (pending.rename !== undefined) {
       const id = pending.rename;
       setRenaming(id);
-      if (navigating && !rowById.has(id)) {
-        const session = state.sessions[id];
-        const work = state.works[session ? session.workId : id];
-        if (work && !rowById.has(work.id)) saveNav({ selected: work.folderId && state.folders[work.folderId] ? { kind: "folder", id: work.folderId } : { kind: "root" } });
-        if (session && work) onOpenChange(toggleWork(open, work.id, false));
-      }
+      const session = state.sessions[id];
+      const folder = state.folders[id];
+      const work = state.works[id];
+      if (session) saveNav({ rail: "projects", level: "project", project: session.workId });
+      else if (folder) { saveNav({ rail: "projects", level: "projects" }); unfoldTo(id, false); }
+      else if (work) { saveNav({ rail: "projects", level: "projects" }); if (work.folderId) unfoldTo(work.folderId); }
     }
     if (pending.createIn !== undefined) {
       setCreatingIn(pending.createIn);
-      if (pending.createIn && open.closedFolders.includes(pending.createIn)) onOpenChange({ ...open, closedFolders: open.closedFolders.filter((id) => id !== pending.createIn) });
-      if (navigating && nav.sections.projects) saveNav({ sections: { ...nav.sections, projects: false } });
+      saveNav({ rail: "projects", level: "projects" });
+      if (pending.createIn) unfoldTo(pending.createIn);
     }
     onPendingDone();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -377,26 +350,24 @@ export function Sidebar({
     const element = hit.closest<HTMLElement>("[data-row-id]");
     const row = element ? rowById.get(element.dataset.rowId!) : undefined;
     if (!element || !row) return null;
-    const inNav = element.dataset.navFolder !== undefined;
+    const onFolder = element.dataset.navFolder !== undefined;
     if (payload.kind === "projects") {
-      if (!inNav) return { element, mark: "drop-refused", run: null };
+      if (!onFolder) return { element, mark: "drop-refused", run: null };
       const folderId = row.type === "folder" ? row.folder.id : null;
       if (payload.works.every((work) => (work.folderId ?? null) === folderId)) return { element, mark: "drop-refused", run: null };
-      return { element, mark: "drop-inside", hint: ` → ${row.type === "folder" ? row.folder.name : "프로젝트 (폴더 밖)"}`, run: () => moveProjects(payload.works, folderId) };
+      return { element, mark: "drop-inside", hint: ` → ${row.type === "folder" ? row.folder.name : "폴더 밖"}`, run: () => moveProjects(payload.works, folderId) };
     }
     if (payload.kind !== "row") return null;
     const dragged = payload.row;
     if (row.id === dragged.id) return null;
-    if (navigating) {
-      // Folders nest and reorder among folders; the "프로젝트" row takes them to the top.
-      if (dragged.type === "folder") {
-        if (!inNav) return { element, mark: "drop-refused", run: null };
-        const where = row.type === "section" ? "inside" : zoneOf(element, y, true);
-        const move = moveFor(state, dragged, row, where, "manual");
-        return { element, mark: move ? `drop-${where}` : "drop-refused", run: move ? () => actions.move(move) : null };
-      }
-      if (inNav) return { element, mark: "drop-refused", run: null };
+    // Folders nest and reorder among folders; "폴더 밖" takes them to the top.
+    if (dragged.type === "folder") {
+      if (!onFolder) return { element, mark: "drop-refused", run: null };
+      const where = row.type === "section" ? "inside" : zoneOf(element, y, true);
+      const move = moveFor(state, dragged, row, where, "manual");
+      return { element, mark: move ? `drop-${where}` : "drop-refused", run: move ? () => actions.move(move) : null };
     }
+    if (onFolder) return { element, mark: "drop-refused", run: null };
     // As the tree always did: a session links with another, reorders among its own, or becomes a page of a work.
     if (dragged.type === "session" && row.type === "work" && actions.sessionPage) {
       const work = row.work;
@@ -406,9 +377,7 @@ export function Sidebar({
     const where = zoneOf(element, y, holds(row, dragged) || Boolean(pair));
     const link = where === "inside" && pair && linkable(Object.values(state.links), pair.map((session) => session.id)) ? pair : null;
     if (link) return { element, mark: "drop-link", linking: true, text: `⇄ 세션 잇기: ${link[0].purpose} · ${link[1].purpose}`, run: () => actions.linkSessions(link) };
-    // In the list, projects keep their sort order: only sessions move among their own.
-    if (navigating && dragged.type === "work") return { element, mark: "drop-refused", run: null };
-    const move = pair && where === "inside" ? null : moveFor(state, dragged, row, where, navigating ? "manual" : sortMode);
+    const move = pair && where === "inside" ? null : moveFor(state, dragged, row, where, "manual");
     return { element, mark: move ? `drop-${where}` : "drop-refused", run: move ? () => actions.move(move) : null };
   };
 
@@ -464,27 +433,25 @@ export function Sidebar({
     },
   });
 
-  // ── rows as the tree shows them (the single tree, and a project unfolded in the list) ───
+  // ── rows as the tree shows them (inside a project) ──────────────────────────────────────
   const toggleRow = (row: Row) => {
     if (row.type === "folder") {
       const closed = new Set(open.closedFolders);
       if (row.open) closed.add(row.id);
       else closed.delete(row.id);
       onOpenChange({ ...open, closedFolders: [...closed] });
-    } else if (row.type === "work" && row.expandable) {
-      onOpenChange(toggleWork(open, row.id, row.open));
-    } else if (row.type === "docs") {
-      const docs = new Set(open.openDocs);
-      if (row.open) docs.delete(row.work.id);
-      else docs.add(row.work.id);
-      onOpenChange({ ...open, openDocs: [...docs] });
-    }
+    } else if (row.type === "work" && row.expandable) onOpenChange(toggleWork(open, row.id, row.open));
   };
   const activate = (row: Row) => {
     if (row.type === "folder" || row.type === "docs") return toggleRow(row);
-    if (row.type === "work") return actions.openWork(row.work);
+    if (row.type === "work") return choose(row.work);
     if (row.type === "session") return actions.openSession(row.session);
-    if (row.type === "doc") return actions.openDoc(row.artifact);
+    if (row.type === "doc") {
+      // The row and the click agree: the AI shown beside the document is the one the row shows.
+      const target = docOpenTarget(row.agents, visibleSessionId);
+      if (target && actions.openDocAgent) return actions.openDocAgent(row.artifact, target);
+      return actions.openDoc(row.artifact);
+    }
   };
   /** "바로가기에 더하기" or "바로가기에서 빼기" for something. */
   const shortcutToggle = (entry: NavShortcut): MenuEntry =>
@@ -493,42 +460,31 @@ export function Sidebar({
       : { kind: "item", label: "바로가기에 더하기", icon: "star", onSelect: () => saveShortcuts(addShortcuts(shortcuts, [entry])) };
   /** "지우기…": an empty folder goes at once; one with things inside asks first (폴더만 지우기 · 보관). */
   const askDeleteFolder = (folder: Folder) => {
-    const inside = Object.values(state.folders).some((child) => child.parentId === folder.id) || Object.values(state.works).some((work) => work.folderId === folder.id && !work.archivedAt);
-    if (inside) return setDialog({ kind: "delete", folder });
+    const filled = Object.values(state.folders).some((child) => child.parentId === folder.id) || Object.values(state.works).some((work) => work.folderId === folder.id && !work.archivedAt);
+    if (filled) return setDialog({ kind: "delete", folder });
     void api
       .deleteFolder(folder.id)
       .then(() => onToast(`「${folder.name}」 폴더를 지웠습니다.`))
       .catch(fail);
   };
-  /**
-   * A row's menu: the app's, with the navigator's own items. "고정" of a session becomes a shortcut
-   * (shortcuts took the old "고정" section's place); works can be shortcuts; folders get a colour,
-   * an icon, a shortcut and "지우기…".
-   */
-  const openMenuAt = (row: Row, x: number, y: number) => {
+  /** A row's menu: the app's, with the navigator's own items (바로가기; a folder's colour, icon and delete). */
+  const openMenuAt = (row: Row, x: number, y: number, at?: HTMLElement) => {
+    if (row.type === "doc") {
+      // The 삭제 item says what the gateway would do with this file now.
+      const show = (removal?: DocumentRemovalPlan) => {
+        const request = actions.menuFor(row, x, y, removal);
+        if (request) setRowMenu({ rowId: row.id, request, anchor: at ?? { x, y } });
+      };
+      if (actions.docRemoval) void actions.docRemoval(row.artifact).then(show, () => show());
+      else show();
+      return;
+    }
     const request = actions.menuFor(row, x, y);
     if (!request) return;
     let items = request.items;
-    if (row.type === "session") {
-      // A pinned session sat under the old "고정"; now it is kept in 바로가기 (and `pinned` follows).
-      const entry = { kind: "session" as const, id: row.id };
-      const pinned = row.session.pinned || shortcuts.some((other) => sameShortcut(other, entry));
-      items = items.map((item) =>
-        item.kind === "item" && (item.label === "고정" || item.label === "고정 풀기")
-          ? {
-              ...item,
-              label: pinned ? "고정 풀기" : "고정",
-              hint: "바로가기",
-              onSelect: () => {
-                saveShortcuts(pinned ? shortcuts.filter((other) => !sameShortcut(other, entry)) : addShortcuts(shortcuts, [entry]));
-                void api.updateSession(row.id, { pinned: !pinned }).catch(fail);
-              },
-            }
-          : item,
-      );
-    } else if (row.type === "work") {
-      const at = items.findIndex((entry) => entry.kind === "item" && (entry.label === "고정" || entry.label === "고정 풀기"));
-      items = at === -1 ? [...items, shortcutToggle({ kind: "work", id: row.id })] : [...items.slice(0, at + 1), shortcutToggle({ kind: "work", id: row.id }), ...items.slice(at + 1)];
+    if (row.type === "work") {
+      const pin = items.findIndex((entry) => entry.kind === "item" && (entry.label === "고정" || entry.label === "고정 풀기"));
+      items = pin === -1 ? [...items, shortcutToggle({ kind: "work", id: row.id })] : [...items.slice(0, pin + 1), shortcutToggle({ kind: "work", id: row.id }), ...items.slice(pin + 1)];
     } else if (row.type === "folder") {
       const folder = row.folder;
       items = [
@@ -538,55 +494,24 @@ export function Sidebar({
     }
     actions.openMenu({ ...request, items });
   };
-  const navigable: Row[] = rows.filter((entry) => entry.type !== "section");
-  const parentOf = (row: Row): Row | undefined => {
-    const index = rows.indexOf(row);
-    for (let at = index - 1; at >= 0; at -= 1) if (rows[at]!.depth < row.depth && rows[at]!.type !== "section") return rows[at];
-    return undefined;
-  };
   const treeKey = (event: ReactKeyboardEvent, row: Row) => {
-    const index = navigable.indexOf(row);
-    const expandable = (row.type === "folder" && !row.empty) || (row.type === "work" && row.expandable) || row.type === "docs";
-    const isOpen = (row.type === "folder" || row.type === "work" || row.type === "docs") && row.open;
     if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
-      const move = nudge(state, row, event.key === "ArrowUp" ? -1 : 1, sortMode);
+      const move = nudge(state, row, event.key === "ArrowUp" ? -1 : 1, "manual");
       if (move) actions.move(move);
-    } else if (event.key === "ArrowDown") {
-      const next = navigable[index + 1];
-      if (next) focusTreeRow(next.id);
-    } else if (event.key === "ArrowUp") {
-      const previous = navigable[index - 1];
-      if (previous) focusTreeRow(previous.id);
-    } else if (event.key === "ArrowRight") {
-      if (expandable && !isOpen) toggleRow(row);
-      else if (expandable && navigable[index + 1]) focusTreeRow(navigable[index + 1]!.id);
-    } else if (event.key === "ArrowLeft") {
-      if (expandable && isOpen) toggleRow(row);
-      else {
-        const parent = parentOf(row);
-        if (parent) focusTreeRow(parent.id);
-      }
-    } else if (event.key === "Home") {
-      if (navigable[0]) focusTreeRow(navigable[0].id);
-    } else if (event.key === "End") {
-      const last = navigable.at(-1);
-      if (last) focusTreeRow(last.id);
-    } else if (event.key === "Enter") {
-      activate(row);
-    } else if (event.key === "F2" && (row.type === "folder" || row.type === "work" || row.type === "session")) {
-      setRenaming(row.id);
-    } else if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") {
+    } else if (event.key === "Enter") activate(row);
+    else if (event.key === "F2" && (row.type === "folder" || row.type === "work" || row.type === "session")) setRenaming(row.id);
+    else if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") {
       const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
       openMenuAt(row, rect.left + 24, rect.bottom - 4);
-    } else if (event.key === "Delete" && (row.type === "folder" || row.type === "work" || row.type === "session")) {
-      actions.archive({ kind: row.type, id: row.id });
-    } else {
-      return;
-    }
+    } else if (event.key === "Delete" && (row.type === "folder" || row.type === "work" || row.type === "session")) actions.archive({ kind: row.type, id: row.id });
+    else if (event.key === "Delete" && row.type === "doc") {
+      // A document's Delete opens its menu: the person picks 목록에서 빼기 or 휴지통으로 옮기기 there.
+      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+      openMenuAt(row, rect.left + 24, rect.bottom - 4);
+    } else return;
     event.preventDefault();
     event.stopPropagation();
   };
-  // Keyboard focus follows the rows that exist (a folded parent takes the focus of its child).
   useEffect(() => {
     if (treeFocus && !rowById.has(treeFocus)) setTreeFocus(null);
   }, [treeFocus, rowById]);
@@ -598,7 +523,7 @@ export function Sidebar({
     currentWorkId,
     currentDocId,
     focusId: treeFocus,
-    tabId: treeFocus && rowById.has(treeFocus) ? treeFocus : (navigable.find((row) => row.type === "work" && row.id === currentWorkId)?.id ?? navigable[0]?.id ?? null),
+    tabId: treeFocus,
     renaming,
     startRename: setRenaming,
     toggle: toggleRow,
@@ -615,11 +540,17 @@ export function Sidebar({
     onRename: (row, name) => (row.type === "folder" || row.type === "work" || row.type === "session") && actions.rename({ kind: row.type, id: row.id }, name),
     onRenameDone: (row) => {
       setRenaming(null);
-      focusTreeRow(row.id);
+      focusList(row.id);
     },
     onMenu: openMenuAt,
+    onMoreMenu: (row, at) => {
+      const box = at.getBoundingClientRect();
+      openMenuAt(row, box.right, box.bottom, at);
+    },
+    menuOpenId: rowMenu?.rowId ?? null,
     justDragged,
     openRight: actions.openRight,
+    closeWebTab: actions.closeWebTab,
     newSession: (folderId) => actions.newSession({ folderId }),
     newPage: (row) => actions.newPage(row.work),
     creationMenu: actions.creationMenu,
@@ -630,7 +561,7 @@ export function Sidebar({
     state,
     api,
     actions,
-    layout,
+    layout: "dual",
     nav: navState,
     saveNav,
     shortcuts,
@@ -647,6 +578,7 @@ export function Sidebar({
     visibleSessionId,
     currentDocId,
     homeActive,
+    homeOwnsNow,
     theme: appTheme,
     lookOf,
     rowCtx,
@@ -654,7 +586,7 @@ export function Sidebar({
     justDragged,
     select,
     focusList,
-    focusNav,
+    focusNav: () => focusIn(),
     renaming,
     setRenaming,
     creatingIn,
@@ -662,114 +594,38 @@ export function Sidebar({
     setDialog,
     moveProjects,
     rowMenu: openMenuAt,
+    menuUnder: (request, button) => setRowMenu({ rowId: "", request, anchor: button }),
     toast: onToast,
     fail,
+    unreadNotices,
   };
 
-  // ── head menus ──────────────────────────────────────────────────────────────────────────
-  const layoutItems = (): MenuEntry[] => [
-    ...LAYOUTS.map((entry) => ({ kind: "item" as const, label: entry.label, icon: entry.icon, checked: layout === entry.id, onSelect: () => saveNav({ layout: entry.id }) })),
-    { kind: "item", label: "기본 배치로 되돌리기", hint: "프로젝트 목록", checked: nav.layout === null, onSelect: () => saveNav({ layout: undefined }) },
-  ];
-  const menuAt = (button: HTMLElement, title: string, items: MenuEntry[]) => {
-    const box = button.getBoundingClientRect();
-    actions.openMenu({ x: box.left, y: box.bottom + 4, title, items });
-  };
-  const sideMenu = (button: HTMLElement) => {
-    const sections = ["now", "shortcuts", "projects", "tags", "views"] as const;
-    menuAt(button, "사이드바", [
-      { kind: "label", label: "배치" },
-      ...layoutItems(),
-      { kind: "separator" },
-      { kind: "item", label: "모든 섹션 펼치기", icon: "expandAll", onSelect: () => saveNav({ sections: {} }) },
-      { kind: "item", label: "모든 섹션 접기", icon: "collapseAll", onSelect: () => saveNav({ sections: Object.fromEntries(sections.map((id) => [id, true])) }) },
-      { kind: "separator" },
-      { kind: "item", label: "다른 곳의 대화 가져오기…", icon: "restore", onSelect: actions.importConversations },
-    ]);
-  };
-  // The tree's own order (직접 · 최근 · 이름), drawn above everything, never clipped by the tree.
-  const openSort = (button: HTMLElement) => {
-    const choices: [SortMode, string][] = [
-      ["manual", "직접 정한 순서"],
-      ["recent", "최근 활동 순"],
-      ["name", "이름 순"],
-    ];
-    menuAt(button, "정렬", [
-      ...choices.map(([mode, label]) => ({ kind: "item" as const, label, checked: sortMode === mode, onSelect: () => onSortMode(mode) })),
-      { kind: "separator" as const },
-      { kind: "item" as const, label: "다른 곳의 대화 가져오기…", icon: "restore" as const, onSelect: actions.importConversations },
-    ]);
-  };
-
-  // ── sizes: the right edge, the divider between the panes (both remembered) ───────────────
-  const navWidth = live?.nav ?? nav.navWidth;
-  const listWidth = live?.list ?? nav.listWidth;
-  const navHeight = live?.height ?? nav.navHeight;
-  const singleWidth = live?.width ?? width;
+  // ── the column's width (remembered; the work panes keep their least width) ──────────────
+  const shownWidth = live ?? width;
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-  const drag = (event: ReactPointerEvent, onMove: (dx: number, dy: number) => void, onDone: () => void) => {
+  const widest = Math.max(SIDE_WIDTH.min, Math.min(SIDE_WIDTH.max, windowWidth - 8 - paneMinimum));
+  const startEdge = (event: ReactPointerEvent) => {
     event.preventDefault();
     const x0 = event.clientX;
-    const y0 = event.clientY;
-    const move = (pointer: PointerEvent) => onMove(pointer.clientX - x0, pointer.clientY - y0);
+    let latest = width;
+    const move = (pointer: PointerEvent) => { latest = Math.round(clamp(width + pointer.clientX - x0, SIDE_WIDTH.min, widest)); setLive(latest); };
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       document.documentElement.classList.remove("nav-resizing");
-      onDone();
+      setLive(null);
+      if (latest !== width) onWidth(latest);
     };
     document.documentElement.classList.add("nav-resizing");
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
   };
-  const latestSize = useRef<{ nav?: number; list?: number; height?: number; width?: number }>({});
-  const finishResize = () => {
-    const size = latestSize.current;
-    latestSize.current = {};
-    setLive(null);
-    if (size.width !== undefined && size.width !== width) onWidth(size.width);
-    const patch: Partial<NavigatorPrefs> = {};
-    if (size.nav !== undefined && size.nav !== nav.navWidth) patch.navWidth = size.nav;
-    if (size.list !== undefined && size.list !== nav.listWidth) patch.listWidth = size.list;
-    if (size.height !== undefined && size.height !== nav.navHeight) patch.navHeight = Math.round(size.height * 1000) / 1000;
-    if (Object.keys(patch).length) saveNav(patch);
-  };
-  const setSize = (size: { nav?: number; list?: number; height?: number; width?: number }) => {
-    // Whole pixels (a pointer can stand between two).
-    const whole = Object.fromEntries(Object.entries(size).map(([key, value]) => [key, key === "height" ? value : Math.round(value)]));
-    latestSize.current = { ...latestSize.current, ...whole };
-    setLive({ ...latestSize.current });
-  };
-  const startEdge = (event: ReactPointerEvent) => {
-    if (layout === "dual") drag(event, (dx) => setSize({ list: clamp(nav.listWidth + dx, LIST_WIDTH.min, LIST_WIDTH.max) }), finishResize);
-    else drag(event, (dx) => setSize({ width: clamp(width + dx, MIN_WIDTH, MAX_WIDTH) }), finishResize);
-  };
-  const startDivider = (event: ReactPointerEvent) => {
-    if (layout === "dual") {
-      // The split moves; the sidebar keeps its width (as Notebook Navigator's divider).
-      const total = nav.navWidth + nav.listWidth;
-      drag(
-        event,
-        (dx) => {
-          const next = Math.round(clamp(nav.navWidth + dx, NAV_WIDTH.min, Math.min(NAV_WIDTH.max, total - LIST_WIDTH.min)));
-          setSize({ nav: next, list: clamp(total - next, LIST_WIDTH.min, LIST_WIDTH.max) });
-        },
-        finishResize,
-      );
-    } else {
-      const body = (event.currentTarget as HTMLElement).parentElement!.getBoundingClientRect();
-      drag(event, (_dx, dy) => setSize({ height: clamp(nav.navHeight + dy / Math.max(1, body.height), NAV_HEIGHT.min, NAV_HEIGHT.max) }), finishResize);
-    }
-  };
-  const dividerKey = (event: ReactKeyboardEvent) => {
-    const grow = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
+  const edgeKey = (event: ReactKeyboardEvent) => {
+    const grow = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
     if (!grow) return;
     event.preventDefault();
-    if (layout === "dual") {
-      const total = nav.navWidth + nav.listWidth;
-      const next = clamp(nav.navWidth + grow * 16, NAV_WIDTH.min, Math.min(NAV_WIDTH.max, total - LIST_WIDTH.min));
-      saveNav({ navWidth: next, listWidth: clamp(total - next, LIST_WIDTH.min, LIST_WIDTH.max) });
-    } else saveNav({ navHeight: clamp(nav.navHeight + grow * 0.04, NAV_HEIGHT.min, NAV_HEIGHT.max) });
+    const next = clamp(width + grow * 16, SIDE_WIDTH.min, widest);
+    if (next !== width) onWidth(next);
   };
 
   // ── dialogs ─────────────────────────────────────────────────────────────────────────────
@@ -779,24 +635,15 @@ export function Sidebar({
     walk(tags.nodes);
     return out;
   }, [tags]);
+  // One tag per write, in order, per project (nav/tags.ts); a refusal says which went in and which did not.
   const addTags = (works: Work[], added: string[]) =>
-    void Promise.allSettled(
-      works.map((work) => {
-        const current = projects.find((project) => project.work.id === work.id)?.tags ?? work.tags ?? [];
-        return api.setProjectProperty(work.id, "tags", [...new Set([...current, ...added])], "tags");
-      }),
-    ).then((results) => {
-      const failed = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
-      if (failed) fail(failed.reason);
-      const done = results.filter((result) => result.status === "fulfilled").length;
-      if (done) onToast(`${added.map((tag) => `#${tag}`).join(" ")} 태그를 더했습니다${done > 1 ? ` (프로젝트 ${done}개)` : ""}.`);
+    void Promise.all(works.map((work) => addNoteTags(api, work, projects.find((project) => project.work.id === work.id)?.tags ?? work.tags ?? [], added))).then((results) => {
+      const notice = tagsNotice(results);
+      if (notice) onToast(notice.ok ? notice.text : { kind: "error", text: notice.text });
     });
   const deleteDialog = (folder: Folder) => {
     const parent = folder.parentId ? state.folders[folder.parentId] : undefined;
     const parentName = parent?.name ?? "프로젝트";
-    const away = () => {
-      if (selected.kind === "folder" && selected.id === folder.id) saveNav({ selected: parent ? { kind: "folder", id: parent.id } : { kind: "root" } });
-    };
     return (
       <FolderDeleteDialog
         folder={folder}
@@ -808,130 +655,95 @@ export function Sidebar({
           setDialog(null);
           void api
             .deleteFolder(folder.id)
-            .then(() => {
-              away();
-              onToast(`「${folder.name}」 폴더를 지웠습니다. 안의 것은 「${parentName}」(으)로 옮겼습니다.`);
-            })
+            .then(() => onToast(`「${folder.name}」 폴더를 지웠습니다. 안의 것은 「${parentName}」(으)로 옮겼습니다.`))
             .catch(fail);
         }}
         onArchive={() => {
           setDialog(null);
-          away();
           actions.archive({ kind: "folder", id: folder.id });
         }}
       />
     );
   };
 
-  // The combinations set in ⋯ › 단축키, as the buttons' hints.
-  const keys = shortcutsOf(state.prefs);
-  const totalWidth = layout === "dual" ? navWidth + listWidth + 1 : singleWidth;
-  const listPane = (
-    <ListPane
-      shared={shared}
-      items={items}
-      count={listed.count}
-      selected={chosen}
-      setSelected={setChosen}
-      anchor={anchor}
-      setAnchor={setAnchor}
-      focusId={listFocus}
-      setFocusId={setListFocus}
-      query={query}
-      setQuery={setQuery}
-      filterOpen={filterOpen}
-      setFilterOpen={setFilterOpen}
-      treeRef={listRef}
-    />
+  // Level 1 counts its own rows (for the tests and the probe: how many projects are listed).
+  const listedCount = useMemo(
+    () => (nav.rail === "projects" && level === "projects" ? levelOneRows(projects, state.folders, { closedFolders: open.closedFolders, query, filter: selected, sortMode, groupBy: nav.groupBy, sort: sortFor(nav, { kind: "root" }), stages, now: Date.now() }).count : 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [nav.rail, level, projects, state.folders, open.closedFolders, query, selected, sortMode, nav.groupBy, stages],
   );
+  const archived =
+    Object.values(state.folders).filter((folder) => folder.archivedAt).length +
+    Object.values(state.works).filter((work) => work.archivedAt).length +
+    Object.values(state.sessions).filter((session) => session.archivedAt).length +
+    Object.keys(state.removedArtifacts).length;
+
   return (
     <aside
       ref={asideRef}
-      className={`sidebar look-scope nav-${layout}`}
+      className="sidebar look-scope nav-column"
       data-screen="S06"
       aria-label="프로젝트 탐색"
-      onContextMenu={event => {
+      onContextMenu={(event) => {
         if (event.defaultPrevented || !(event.target instanceof Element) || event.target.closest("input,textarea,[contenteditable=true]")) return;
-        if (!event.target.closest(".list-pane,.side-tree-section")) return;
+        if (!event.target.closest(".nav-scroll")) return;
         if (!actions.creationMenu) return;
         event.preventDefault();
-        actions.creationMenu(currentWorkId ? state.works[currentWorkId] ?? null : null, event.clientX, event.clientY);
+        actions.creationMenu(insideWork ?? (currentWorkId ? state.works[currentWorkId] ?? null : null), event.clientX, event.clientY);
+      }}
+      onKeyDown={(event) => {
+        // Alt+← while the column has the focus: back to every project (the list only).
+        if (event.altKey && event.key === "ArrowLeft" && level === "project" && nav.rail === "projects") { event.preventDefault(); back(); }
+        // Ctrl+F in the column: its filter field (this level's).
+        else if ((event.ctrlKey || event.metaKey) && !event.shiftKey && (event.key === "f" || event.code === "KeyF") && (nav.rail === "projects" || nav.rail === "docs")) {
+          event.preventDefault();
+          if (level === "projects") setFieldOpen(true);
+          window.requestAnimationFrame(() => (asideRef.current?.querySelector<HTMLElement>(".nav-find:not(.pressed)")?.click(), asideRef.current?.querySelector<HTMLInputElement>(".nav-field input")?.focus()));
+        }
       }}
       data-theme={appTheme}
-      data-layout={layout}
-      style={{ width: totalWidth, ...(layout === "dual" ? ({ "--nav-width": `${navWidth}px`, "--list-width": `${listWidth}px` } as CSSProperties) : {}) }}
+      data-layout="one"
+      data-rail={atNow ? "now" : nav.rail}
+      data-level={nav.rail === "projects" ? level : undefined}
+      data-listed={nav.rail === "projects" && level === "projects" ? listedCount : undefined}
+      style={{ width: shownWidth }}
     >
-      <div className="side-head">
-        <div className="side-head-row">
-          <button type="button" className="side-new" aria-haspopup="menu" onClick={event => {
-            const box = event.currentTarget.getBoundingClientRect();
-            if (actions.creationMenu) actions.creationMenu(currentWorkId ? state.works[currentWorkId] ?? null : null, box.left, box.bottom, selected.kind === "folder" ? selected.id : undefined);
-            else actions.newSession({});
-          }} title={`새로 만들기 (${comboLabel(keys.newWork)})`}>
-            <Icon name="plus" size={15} /> 새로 만들기
-          </button>
-          <button type="button" className="icon-button small" title="사이드바 메뉴" aria-label="사이드바 메뉴" aria-haspopup="menu" onClick={(event) => sideMenu(event.currentTarget)}>
-            <Icon name="dots" size={16} />
-          </button>
-        </div>
-        <button type="button" className="side-search" onClick={actions.openSearch} title={`찾기 (${comboLabel(keys.palette)})`}>
-          <Icon name="search" size={15} />
-          <span>찾기</span>
-          <kbd>{comboLabel(keys.palette)}</kbd>
-        </button>
-      </div>
-
-      {navigating ? (
-        <div className={`nav-body ${layout}`} style={layout === "stacked" ? ({ "--nav-height": `${navHeight * 100}%` } as CSSProperties) : undefined}>
-          <NavPane shared={shared} />
-          <div
-            className="nav-divider"
-            role="separator"
-            tabIndex={0}
-            aria-orientation={layout === "dual" ? "vertical" : "horizontal"}
-            aria-label="탐색 칸과 목록 칸 사이"
-            onPointerDown={startDivider}
-            onKeyDown={dividerKey}
-            onDoubleClick={() => saveNav(layout === "dual" ? { navWidth: NAV_WIDTH.initial, listWidth: LIST_WIDTH.initial } : { navHeight: NAV_HEIGHT.initial })}
-          />
-          {listPane}
-        </div>
+      {atNow ? (
+        <NowList shared={shared} onProjects={onLeaveNow ?? (() => saveNav({ rail: "projects" }))} />
+      ) : nav.rail === "docs" ? (
+        <DocsList shared={shared} />
+      ) : nav.rail === "activity" ? (
+        <ActivityList shared={shared} />
+      ) : nav.rail === "vault" ? (
+        <VaultList shared={shared} />
+      ) : level === "project" && insideWork ? (
+        <ProjectLevel key={insideWork.id} shared={shared} work={insideWork} query={insideQuery} setQuery={setInsideQuery} onBack={back} />
       ) : (
-        <div className="side-scroll">
-          <HomeRow shared={shared} />
-          <TreeSection shared={shared} rows={rows} treeRef={treeRef} onSort={openSort} />
-          <details className="side-disclosure side-activity">
-            <summary>활동 및 바로가기</summary>
-            <NowSection shared={shared} />
-            <ShortcutsSection shared={shared} />
-          </details>
-          <details className="side-disclosure side-library">
-            <summary>라이브러리</summary>
-            <ViewsSection openMenu={actions.openMenu} folded={Boolean(nav.sections.views)} onFold={(folded) => saveNav({ sections: { ...nav.sections, views: folded } })} menuExtras={(view) => [viewShortcutEntry(shared, view.id)]} />
-            <VaultSection theme={appTheme} openMenu={actions.openMenu} />
-          </details>
-        </div>
+        <ProjectsLevel shared={shared} local={local} docCount={(id) => docsByWork.get(id)?.length ?? 0} onChoose={choose} onFolderNew={(parent) => setCreatingIn(parent)} onSort={onSortMode} />
       )}
 
       <div className="side-foot">
-        <details className="side-disclosure side-usage">
-          <summary>사용량</summary>
-          <UsageCard providers={state.providers} onRefresh={actions.refreshUsage} />
-        </details>
-        <button type="button" className="side-row" onClick={actions.openArchive} title="보관한 세션·작업·폴더">
+        <UsageCard providers={state.providers} onRefresh={actions.refreshUsage} folded={Boolean(nav.sections.usage)} onFold={(folded) => saveNav({ sections: { ...nav.sections, usage: folded } })} />
+        <button type="button" className="side-row" onClick={actions.openArchive} title="보관한 세션·작업·폴더와 지운 문서">
           <Icon name="archive" size={15} className="side-row-icon" />
           <span className="side-row-label">보관함</span>
-          {(() => {
-            const count =
-              Object.values(state.folders).filter((folder) => folder.archivedAt).length +
-              Object.values(state.works).filter((work) => work.archivedAt).length +
-              Object.values(state.sessions).filter((session) => session.archivedAt).length;
-            return count ? <span className="side-row-trail muted">{count}</span> : null;
-          })()}
+          {archived ? <span className="side-row-trail muted">{archived}</span> : null}
         </button>
       </div>
-      <div className="side-resize" onPointerDown={startEdge} role="separator" aria-orientation="vertical" aria-label="사이드바 너비" />
+      <div
+        className="side-resize"
+        role="separator"
+        tabIndex={0}
+        aria-orientation="vertical"
+        aria-label="사이드바 너비"
+        aria-valuemin={SIDE_WIDTH.min}
+        aria-valuemax={widest}
+        aria-valuenow={shownWidth}
+        onPointerDown={startEdge}
+        onKeyDown={edgeKey}
+      />
       <DragGhost store={store} />
+      {rowMenu ? <RowMenu request={rowMenu.request} anchor={rowMenu.anchor} onClose={() => setRowMenu(null)} /> : null}
       {dialog?.kind === "delete" ? deleteDialog(state.folders[dialog.folder.id] ?? dialog.folder) : null}
       {dialog?.kind === "style" && state.folders[dialog.folder.id] ? (
         <FolderStylePanel
@@ -961,6 +773,6 @@ export function Sidebar({
   );
 }
 
-/** A folder row for menus built outside the tree (e.g. from the archive). */
+/** A folder row for menus built outside the column (e.g. from the archive). */
 export const folderRow = (folder: Folder): Row => ({ type: "folder", id: folder.id, depth: 0, folder, open: true, empty: false });
 export type { MenuEntry, MenuRequest };

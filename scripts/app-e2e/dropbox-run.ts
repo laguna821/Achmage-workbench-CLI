@@ -21,14 +21,22 @@ try {
   };
   const activate = async (selector: string) => { const el = await wd.waitFor(selector); await wd.execute('arguments[0].focus()', el); await wd.keys([{ type: "keyDown", value: KEY.enter }, { type: "keyUp", value: KEY.enter }]); };
   const fill = async (selector: string, text: string) => { const el = await wd.waitFor(selector); await wd.click(el); await control("a"); await wd.sendKeys(el, text); };
-  const settings = async () => { await wd.frame(null); await wd.click(await wd.waitFor('button[aria-label="연결과 설정"]')); };
+  // 설정 (one dialog; was the ⋯ "연결과 설정" popover): the rail's 설정 key, then the section in its left list.
+  const openAppSettings = async (section: string) => { await wd.frame(null); if (!await wd.find(".settings-dialog[open]")) await wd.click(await wd.waitFor('button[data-rail="settings"]')); await wd.click(await wd.waitFor(`.settings-dialog[open] .settings-nav [data-section="${section}"]`)); await wd.waitFor(`.settings-dialog[open] .settings-pane[data-section="${section}"]`); };
+  const settings = () => openAppSettings("documents");
   const openDropbox = async () => { await settings(); await click("Dropbox 폴더 연결…"); await wd.waitFor('.dropbox-dialog'); };
   const enter = async () => { await wd.frame(null); await wd.frame(await wd.waitFor('.pane[data-tab-active="true"]:not([hidden]) iframe.office-frame[src*="/markdown.html"]', 20000)); await wd.waitFor('.tiptap[contenteditable="true"]', 20000); };
   const rendered = async (text: string) => { try { await enter(); return await wd.execute<boolean>('return document.querySelector(".tiptap")?.textContent.includes(arguments[0])', text); } catch { return false; } };
   const cloud = join(stage.root, "fixture-Dropbox"), folder = join(cloud, "프로젝트"), file = join(folder, "동기화.md"), conflict = join(folder, "동기화 (person conflicted copy).md");
   mkdirSync(folder, { recursive: true }); writeFileSync(file, "# Dropbox note\n\nBASE NOTE\n"); writeFileSync(conflict, "CONFLICT COPY KEEP\n");
   phase = "Dropbox settings"; await settings();
-  report.check(S, "기본 연결 메뉴는 Dropbox이고 Google Drive는 표시하지 않음", await wd.execute<boolean>('return document.querySelector(".connections")?.textContent.includes("Dropbox 폴더 연결") && !document.querySelector(".connections")?.textContent.includes("Google Drive")'));
+  report.check(S, "설정 › 문서 도구는 Dropbox", await wd.execute<boolean>('const pane=document.querySelector(".settings-dialog[open] .settings-pane[data-section=documents]"); return !!pane && pane.textContent.includes("Dropbox 폴더 연결")'));
+  // Google Drive is shown in NO section of 설정 (tech review 7: the whole dialog, every section).
+  const sections = await wd.execute<string[]>('return [...document.querySelectorAll(".settings-dialog[open] .settings-nav [data-section]")].map((key) => key.getAttribute("data-section"))');
+  const drive: string[] = [];
+  for (const section of sections) { await openAppSettings(section); if (await wd.execute<boolean>('return document.querySelector(".settings-dialog[open]").textContent.includes("Google Drive")')) drive.push(section); }
+  report.check(S, "설정의 어느 칸에도 Google Drive를 표시하지 않음", sections.length > 3 && drive.length === 0, `${sections.length}칸${drive.length ? `, 보임: ${drive.join(", ")}` : ""}`);
+  await settings();
   await click("Dropbox 폴더 연결…"); await wd.waitFor('.dropbox-dialog');
   const detection = await api<DropboxState>("GET", "/api/dropbox"); writeFileSync(report.path("real-folder-detection.json"), JSON.stringify({ readOnly: true, ...detection }, null, 2));
   report.check(S, "이 컴퓨터의 Dropbox 탐지는 읽기 전용이며 자동 연결하지 않음", detection.selected === null && detection.syncStatus === "managed-by-dropbox" && detection.candidates.every(candidate => !candidate.available || existsSync(candidate.path)), `${detection.candidates.length}개 발견 · 등록 정보 ${detection.candidates.filter(candidate => candidate.source === "registered").length}개`);
@@ -63,7 +71,7 @@ try {
   const fresh = await api<Artifact>("POST", `/api/works/${original.workId}/office-documents`, { format: "markdown", name: "오프라인 새 문서" });
   report.check(S, "AI 없는 새 문서도 연결된 Dropbox 프로젝트에 생성", fresh.path.startsWith(folder + "/") && existsSync(fresh.path) && readFileSync(conflict, "utf8") === "CONFLICT COPY KEEP\n");
   phase = "restart persistence"; await ctx.app.close(); ctx.app = await stage.launch({ ...launch, name: "dropbox-restart" }); wd = ctx.app.wd;
-  await wd.waitFor('button[aria-label="연결과 설정"]', 20000); await installProbe(wd); await openDropbox(); await wd.waitFor('.dropbox-files');
+  await wd.waitFor('button[data-rail="settings"]', 20000); await installProbe(wd); await openDropbox(); await wd.waitFor('.dropbox-files');
   report.check(S, "앱 재시작 후 연결 폴더와 프로젝트·문서 판 보존", (await api<DropboxState>("GET", "/api/dropbox")).selected?.path === cloud && (await snapshot()).artifacts.find(artifact => artifact.id === original.id)?.revision === 6);
   phase = "folder temporarily absent"; renameSync(cloud, join(stage.root, "temporarily-unavailable")); await click("폴더 다시 찾기");
   if (!await until(() => wd.execute<boolean>('return document.querySelector(".dropbox-status")?.textContent.includes("현재 찾을 수 없습니다")'), 8000)) throw new Error("Missing folder status not shown");

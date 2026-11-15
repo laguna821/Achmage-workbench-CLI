@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
+
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "./bus.ts";
@@ -11,6 +11,7 @@ import { altText, amzDate, DocImages, imageType, normalizePrefix, parseAccount, 
 import { HttpError } from "./errors.ts";
 import { SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
+import { tempDir } from "./test-temp.ts";
 
 // Images pasted into Markdown documents: SigV4 as AWS documents it, R2 settings that never come
 // back whole, uploads with a work-folder fallback, and previews that stay inside the work folder.
@@ -155,7 +156,7 @@ afterEach(() => {
 });
 
 function setup(endpoint: string | null = null) {
-  const dir = mkdtempSync(join(tmpdir(), "wb-doc-images-"));
+  const dir = tempDir("wb-doc-images-");
   const manager = new SessionManager(new Store(join(dir, "state.sqlite")), new EventBus(), { hostId: "h", hostLabel: "노트북", managedWorksDir: join(dir, "works"), dataDir: dir });
   const work = manager.createWork({ title: "글", cwd: join(dir, "project") });
   mkdirSync(join(work.cwd, "강의"), { recursive: true });

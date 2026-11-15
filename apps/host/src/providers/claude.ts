@@ -99,7 +99,7 @@ type Runtime = {
   engineModel: string | null;
   engineEffort: string | null;
   /** Started with the agent browser's instructions in its system prompt. */
-  browser: boolean;
+  browser: string | null;
   input: InputQueue;
   query: Query;
   mapper: ClaudeTranscriptMapper;
@@ -149,20 +149,43 @@ function readSettings(): string | null {
 }
 
 /** Plan limits as `usage` (get_usage) reports them: utilization 0–100, reset as an ISO time. */
+/** "fable" → "Fable", "sonnet_4" → "Sonnet 4": a model named in a plan key, as a person reads it. */
+const modelWords = (key: string) => key.split("_").filter(Boolean).map((word) => word[0]!.toUpperCase() + word.slice(1)).join(" ");
+
+/**
+ * A plan key as a label (atlas-look, the owner: every limit the engine reports, Fable too). The rule is
+ * general, so a model the plan starts reporting tomorrow is not dropped: five_hour → 5시간, seven_day →
+ * 주간, seven_day_<model> → 주간 <Model>, five_hour_<model> → 5시간 <Model>; any other key with a numeric
+ * utilization keeps its own words. No middle dots.
+ */
+export function planLabel(key: string): string {
+  if (key === "five_hour") return "5시간";
+  if (key === "seven_day") return "주간";
+  if (key.startsWith("five_hour_")) return `5시간 ${modelWords(key.slice(10))}`;
+  if (key.startsWith("seven_day_")) return `주간 ${modelWords(key.slice(10))}`;
+  return modelWords(key);
+}
+
+/** 5시간, 주간, then the per-model weekly ones (Fable first), then the rest; names in code-point order within a rank. */
+function planRank(key: string): number {
+  if (key === "five_hour") return 0;
+  if (key === "seven_day") return 1;
+  if (key === "seven_day_fable") return 2;
+  if (key.startsWith("seven_day_")) return 3;
+  if (key.startsWith("five_hour_")) return 4;
+  return 5;
+}
+
 export function usageFromPlan(limits: unknown): UsageWindow[] {
   const windows = (limits && typeof limits === "object" ? limits : {}) as Record<string, { utilization?: unknown; resets_at?: unknown } | null | undefined>;
-  const labels: [string, string][] = [
-    ["five_hour", "5시간"],
-    ["seven_day", "주간"],
-    ["seven_day_opus", "주간 · Opus"],
-    ["seven_day_sonnet", "주간 · Sonnet"],
-  ];
-  return labels.flatMap(([key, label]) => {
-    const window = windows[key];
-    if (!window || typeof window.utilization !== "number") return [];
-    const resets = typeof window.resets_at === "string" ? Date.parse(window.resets_at) : NaN;
-    return [{ label, usedPercent: Math.round(window.utilization * 10) / 10, resetsAt: Number.isFinite(resets) ? resets : null }];
-  });
+  return Object.keys(windows)
+    .filter((key) => { const window = windows[key]; return Boolean(window) && typeof window === "object" && typeof window!.utilization === "number"; })
+    .sort((a, b) => planRank(a) - planRank(b) || (a < b ? -1 : a > b ? 1 : 0))
+    .map((key) => {
+      const window = windows[key]!;
+      const resets = typeof window.resets_at === "string" ? Date.parse(window.resets_at) : NaN;
+      return { label: planLabel(key), usedPercent: Math.round((window.utilization as number) * 10) / 10, resetsAt: Number.isFinite(resets) ? resets : null };
+    });
 }
 
 export function modelsFromInfo(models: ModelInfo[]): ModelOption[] {
@@ -518,7 +541,7 @@ export class ClaudeAdapter implements ProviderAdapter {
       effort: session.effort,
       engineModel: null,
       engineEffort: null,
-      browser: Boolean(browser),
+      browser,
       input,
       query: undefined as unknown as Query,
       mapper: new ClaudeTranscriptMapper(),
@@ -821,7 +844,7 @@ export class ClaudeAdapter implements ProviderAdapter {
     let current = this.runtimes.get(session.id);
     // The browser was switched since this process started. Its instructions are part of the system
     // prompt, so a new process resumes the same session with the new ones.
-    if (current && !current.turnActive && !current.children.hasActive() && current.browser !== Boolean(this.browser?.instructions(session))) {
+    if (current && !current.turnActive && !current.children.hasActive() && current.browser !== (this.browser?.instructions(session) ?? null)) {
       this.closeRuntime(current);
       current = undefined;
     }

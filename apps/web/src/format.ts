@@ -1,37 +1,24 @@
 import { PROVIDER_LABEL, type Session, type UsageWindow } from "@workbench/contracts";
+import { rowState } from "./row-state.ts";
 
+/**
+ * A conversation's state in words — the ONE vocabulary (row-state.ts: 확인 필요 › 실패 › 진행 중 › 새 답 ›
+ * 예약 › 완료; "" for a conversation that never answered). While it works, the engine's own account of
+ * what it does (activity, e.g. "명령 실행 중") may stand in for 진행 중. Skin 2 fix 1: this used to say
+ * 대기 중 / 응답 중 / 승인 필요 / 오류, a second vocabulary beside rowState.
+ */
 export function statusText(session: Session): string {
-  switch (session.status) {
-    case "idle":
-      return "대기 중";
-    case "starting":
-      return session.activity ?? "응답 준비 중";
-    case "running":
-      return session.activity ?? "응답 중";
-    case "awaitingApproval":
-      return "승인 필요";
-    case "interrupting":
-      return "중단하는 중";
-    case "error":
-      return "오류";
-  }
+  const state = rowState(session);
+  if (state?.id === "running" && session.activity && session.status !== "interrupting") return session.activity;
+  return state?.word ?? "";
 }
 
 export type Tone = "idle" | "active" | "attention" | "error";
 
+/** The CSS tone of that same state (dot-*, tone-*). */
 export function statusTone(session: Session): Tone {
-  switch (session.status) {
-    case "starting":
-    case "running":
-    case "interrupting":
-      return "active";
-    case "awaitingApproval":
-      return "attention";
-    case "error":
-      return "error";
-    default:
-      return "idle";
-  }
+  const state = rowState(session);
+  return state?.id === "attention" ? "attention" : state?.id === "failed" ? "error" : state?.id === "running" ? "active" : "idle";
 }
 
 /** Session name; the engine is shown by its mark and color next to it. */
