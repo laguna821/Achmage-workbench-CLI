@@ -33,7 +33,7 @@ function standInPackage(dir: string, name: string, entry: string, fake: string) 
   writeFileSync(join(dir, "package.json"), JSON.stringify({ name, version: "0.0.0-fake", type: "module" }));
   copyFileSync(join(fixtures, fake), join(dir, entry));
   // The modules the stand-in engines import, next to them.
-  for (const helper of ["png.mjs", "sample-reply.mjs"]) copyFileSync(join(fixtures, helper), join(dirname(join(dir, entry)), helper));
+  for (const helper of ["png.mjs", "sample-reply.mjs", "fake-remote.mjs"]) copyFileSync(join(fixtures, helper), join(dirname(join(dir, entry)), helper));
   return join(dir, entry);
 }
 
