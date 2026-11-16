@@ -67,9 +67,43 @@ WORKBENCH_WEB_DIR=apps/web/dist node apps/host/src/main.ts   # WORKBENCH_READY �
 | `packages/provider-codex` | `codex app-server` JSON-RPC 클라이언트와 생성된 프로토콜 타입 |
 | `packages/provider-claude` | Claude Agent SDK 메시지 변환 |
 
+## 비밀 보관함이 지키는 것과 아직 못 지키는 것
+
+메신저 봇 토큰, 저장한 비밀번호, 이음오피스 AI 키가 비밀 보관함에 들어갑니다. 0.5.0부터 지키는 방식을 강화했지만 한계가 남아 있습니다.
+
+**지킵니다**
+
+- 보관함을 여는 열쇠는 Workbench 앱이 직접 띄운 자기 프로그램에게만 건넵니다.
+- AI가 실행한 프로그램이나 다른 프로그램이 열쇠를 달라고 하면 거절합니다. 예전 판의 실행 파일도 열쇠를 받지 못합니다.
+- macOS에서는 다른 프로그램이 열쇠를 읽으려 하면 키체인이 먼저 허락을 묻습니다.
+
+**아직 못 지킵니다**
+
+- Windows와 Linux에서는 같은 사용자 계정으로 실행되는 프로그램이 운영체제의 비밀번호 저장소에서 열쇠를 직접 읽을 수 있습니다.
+- 그런 프로그램은 Workbench가 시작되는 순간을 노려 앱을 거쳐 열쇠를 얻을 수도 있습니다.
+- Windows와 Linux에서는 전체 접근으로 일하는 AI도, 휴대폰에서 시킨 대화까지 포함해, 이 저장소를 읽을 수 있습니다.
+
+그래서 카드나 주거래 은행 로그인은 암호로 여는 보관함이 나올 다음 판까지 넣지 마세요. 출처를 모르는 프로그램은 설치하지 말고, AI에게 ‘전체 접근’을 줄 때에는 이 점을 염두에 두세요.
+
+## 알려진 한계 (0.5.1)
+
+전체 목록은 [릴리스 노트](https://github.com/laguna821/Achmage-workbench-CLI/releases/latest)에 있습니다. 먼저 알아야 할 것만 옮깁니다.
+
+- **설치본**: Windows와 macOS 설치본은 자동으로 만들고 설치하고 처음 실행까지 확인했지만, 사람이 실제 컴퓨터에서 써 보지는 않았습니다. macOS 판은 서명되지 않았습니다.
+- **쉬는 탭**: 쉬는 탭과 메모리 표시는 Linux에서 확인했습니다. 쉬었다 깬 오피스 문서는 처음 위치(첫 쪽, 첫 슬라이드, 첫 시트)에서 열리고, 편집기 안의 실행 취소 기록은 남지 않습니다. 메모리 표시는 macOS와 AppImage에서 아직 나오지 않습니다.
+- **즐겨찾기**: 사이트 아이콘이 아직 없고, 웹 페이지 안에 커서가 있을 때는 Ctrl+D, Ctrl+Shift+B가 듣지 않을 수 있습니다.
+- **휴대폰 메신저**: 슬랙에서는 앱이 내 메시지를 지울 수 없습니다. 비밀번호나 인증번호를 잘못 보냈다면 직접 지워 주세요. 입력 칸이 닫힌 뒤에 보낸 비밀번호나 키는 앱이 가려내지 못합니다.
+- **한글 문서**: 예전 한글로 저장한 일부 문서는 쪽 나눔이 한글과 한 줄쯤 다를 수 있습니다(내용이 사라지지는 않습니다). 암호가 걸린 한글 문서는 열어 볼 수 있지만 저장할 수는 없습니다.
+- **그 밖에**: 문서 이름은 문서 탭에서 바꿀 수 없습니다. 같은 문서를 두 칸에 나란히 열면 한쪽은 읽기만 됩니다. PDF 편집기의 메뉴와 단추 이름은 아직 영어입니다.
+
 ## 라이선스와 출처
 
 - 이 저장소의 코드: [MIT](LICENSE)
 - `vendor/doory`: [doory](https://github.com/shaongitbd/doory). Attribution Assurance License이며, 출처를 앱 시작 화면과 디자인 편집기에 표시합니다.
 - IeumOffice: [pblsketch/openoffice](https://github.com/pblsketch/openoffice), Apache-2.0. 빌드할 때 고정 커밋으로 받습니다(`scripts/fetch-ieum.sh`). 옮겨 온 코드의 출처는 `third_party/ieumoffice`에 있습니다.
 - `third_party/textfold`: [textfold](https://github.com/chenxiachan/textfold), Apache-2.0
+- [rhwp](https://github.com/edwardkim/rhwp): 한글 문서 편집기의 엔진, MIT.
+- [Icons8](https://icons8.com): 프로젝트, 폴더, 대화, 문서 종류의 항목 아이콘(Liquid Glass). Icons8 라이선스에 따라 출처를 표시합니다.
+- [Atlas File Manager](https://github.com/neondeex/atlas-filemanager): 색 조합의 색 값만 따랐습니다. Dracula, Nord, Rosé Pine은 각 프로젝트의 색입니다.
+- [Obsidian Fast Find 10k](https://github.com/ssp-data/obsidian-fast-find-10k): 대화와 문서 검색, MIT.
+- 전체 목록과 라이선스 원문은 앱의 설정 › 정보 › 오픈소스 라이선스에 있습니다.
