@@ -18,7 +18,7 @@
 <link rel="icon" type="image/png" href="assets/frames/app-icon-128.65b509c637.png">
 <script>(function(){var r=document.documentElement;r.classList.add('js');var t;try{t=localStorage.getItem('achmage-theme')}catch(e){}if(t!=='light'&&t!=='dark')t=matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';r.dataset.theme=t})()</script>
 <link rel="preload" as="image" type="image/avif" href="assets/frames/win-hwp-1440.9f4acc0b74.avif" imagesrcset="assets/frames/win-hwp-1440.9f4acc0b74.avif 1440w, assets/frames/win-hwp-2560.913523e7b1.avif 2560w" imagesizes="(max-width: 39.99rem) 172vw, min(92vw, 87.5rem)" fetchpriority="high">
-<link rel="stylesheet" href="styles.28cb032bfc.css">
+<link rel="stylesheet" href="styles.bf3c75b50b.css">
 </head>
 <body>
 <a class="skip-link" href="#main">본문으로 건너뛰기</a>
@@ -54,7 +54,7 @@
 
 <header class="site-header" data-component="header">
   <div class="container header-inner">
-    <a class="brand" href="https://achmage-slides.vercel.app/" aria-label="Achmage 스튜디오로 가기">
+    <a class="brand" href="https://achmage-slides.vercel.app/" aria-label="만든 사람 안창현, Achmage 스튜디오로 가기" title="만든 사람 안창현">
       <svg class="brand-logo" role="img" aria-label="Achmage"><use href="#logo-achmage"/></svg>
     </a>
     <a class="product-mark" href="#top" aria-label="Achmage Workbench, 맨 위로">
@@ -66,7 +66,7 @@
       <a href="#colors">색 조합</a>
       <a href="#memory">쉬는 탭</a>
       <a href="#phone">휴대폰</a>
-      <a href="#limits">한계</a>
+      <a href="#bookmarks">즐겨찾기</a>
     </nav>
     <details class="menu">
       <summary aria-label="구획 목록"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></summary>
@@ -77,10 +77,7 @@
         <a href="#phone">휴대폰</a>
         <a href="#memory">쉬는 탭과 메모리</a>
         <a href="#bookmarks">즐겨찾기</a>
-        <a href="#vault">비밀 보관함</a>
         <a href="#download">내려받기</a>
-        <a href="#limits">알려진 한계</a>
-        <a href="#open">오픈소스</a>
         <button class="theme-toggle theme-toggle--text" type="button">어두운 화면으로 바꾸기</button>
       </nav>
     </details>
@@ -176,8 +173,8 @@
 <section class="section" id="one-window" data-section="one-window" aria-labelledby="one-window-title">
   <div class="container">
     <header class="section-head">
-      <h2 id="one-window-title">따로 열던 것들이 탭이 됩니다</h2>
-      <p class="lead">일 하나를 하려고 창을 여러 개 띄우던 것을, 프로젝트 하나에 모읍니다.</p>
+      <h2 id="one-window-title" class="statement-line">앱을 하나 더 설치하는 일이 아니라, <span class="nb">창을 줄이는 일입니다.</span></h2>
+      <p class="lead">따로 열던 것들이 탭이 됩니다. 일 하나를 하려고 창을 여러 개 띄우던 것을, 프로젝트 하나에 모읍니다.</p>
     </header>
 
     <div class="split split--8-4" data-row-group="one-window-main">
@@ -620,33 +617,6 @@
   </div>
 </section>
 
-<section class="band band--navy" id="vault" data-section="vault" aria-labelledby="vault-title">
-  <div class="container">
-    <header class="section-head">
-      <h2 id="vault-title">비밀 보관함이 지키는 것과 아직 못 지키는 것</h2>
-      <p class="lead">메신저 봇 토큰, 저장한 비밀번호, 이음오피스 AI 키가 여기에 들어갑니다. 지키는 방식을 강화했지만 한계가 남아 있습니다.</p>
-    </header>
-    <div class="verdict" data-component="verdict-pair" data-row-group="vault-main">
-      <div class="verdict-col verdict-col--ok">
-        <h3><svg class="icon verdict-mark" aria-hidden="true"><use href="#i-shield-check"/></svg>지킵니다</h3>
-        <ul>
-          <li><svg class="icon" aria-hidden="true"><use href="#i-key"/></svg><p>보관함을 여는 열쇠는 Workbench 앱이 직접 띄운 자기 프로그램에게만 건넵니다.</p></li>
-          <li><svg class="icon" aria-hidden="true"><use href="#i-ban"/></svg><p>AI가 실행한 프로그램이나 다른 프로그램이 열쇠를 달라고 하면 거절합니다. 예전 판의 실행 파일도 열쇠를 받지 못합니다.</p></li>
-          <li><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg><p>macOS에서는 다른 프로그램이 열쇠를 읽으려 하면 키체인이 먼저 허락을 묻습니다.</p></li>
-        </ul>
-      </div>
-      <div class="verdict-col verdict-col--no">
-        <h3><svg class="icon verdict-mark" aria-hidden="true"><use href="#i-shield-alert"/></svg>아직 못 지킵니다</h3>
-        <ul>
-          <li><svg class="icon" aria-hidden="true"><use href="#i-monitor"/></svg><p>Windows와 Linux에서는 같은 사용자 계정으로 실행되는 프로그램이 운영체제의 비밀번호 저장소에서 열쇠를 직접 읽을 수 있습니다.</p></li>
-          <li><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg><p>그런 프로그램은 Workbench가 시작되는 순간을 노려 앱을 거쳐 열쇠를 얻을 수도 있습니다.</p></li>
-          <li><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg><p>Windows와 Linux에서는 전체 접근으로 일하는 AI도, 휴대폰에서 시킨 대화까지 포함해, 이 저장소를 읽을 수 있습니다.</p></li>
-        </ul>
-      </div>
-    </div>
-    <p class="verdict-say">그래서 카드나 주거래 은행 로그인은 암호로 여는 보관함이 나올 다음 판까지 넣지 마세요. 출처를 모르는 프로그램은 설치하지 말고, AI에게 ‘전체 접근’을 줄 때에는 이 점을 염두에 두세요.</p>
-  </div>
-</section>
 
 <section class="section section--soft" id="download" data-section="download" aria-labelledby="download-title">
   <div class="container">
@@ -723,164 +693,29 @@
   </div>
 </section>
 
-<section class="section" id="limits" data-section="limits" aria-labelledby="limits-title">
-  <div class="container split split--4-8">
-    <div class="limits-say">
-      <h2 id="limits-title">아직 안 되는 것을 그대로 적습니다</h2>
-      <p class="lead">0.5.1 릴리스 노트의 ‘알려진 한계’에서 먼저 알아야 할 것을 옮겼습니다.</p>
-      <p class="caption">비밀 보관함이 아직 지키지 못하는 것은 <a class="link link--quiet" href="#vault">보관함 이야기</a>에, Windows와 macOS 설치본을 어디까지 확인했는지는 <a class="link link--quiet" href="#download">내려받기</a>의 운영체제별 칸에 적었습니다.</p>
-      <p><a class="link" href="https://github.com/laguna821/Achmage-workbench-CLI/releases/latest">릴리스 노트 전체 읽기 <svg class="icon" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></a></p>
-    </div>
 
-    <div class="ledger-wrap">
-      <ul class="ledger" data-component="limit-ledger">
-        <li><span class="tag tag--warn">쉬는 탭</span><p>쉬는 탭과 메모리 표시는 Linux에서 확인했습니다. 실제 창에서 10분을 기다린 동작, 웹 페이지가 쉬었다 깨는 동작, Windows의 메모리 값은 사람이 아직 확인하지 않았습니다.</p></li>
-        <li><span class="tag tag--warn">쉬는 탭</span><p>쉬었다 깬 오피스 문서는 처음 위치(첫 쪽, 첫 슬라이드, 첫 시트)에서 열리고, 편집기 안의 실행 취소 기록은 남지 않습니다.</p></li>
-        <li><span class="tag tag--warn">즐겨찾기</span><p>웹 페이지 안에 커서가 있을 때는 Ctrl+D, Ctrl+Shift+B가 듣지 않을 수 있습니다.</p></li>
-        <li><span class="tag tag--warn">휴대폰</span><p>슬랙에서는 앱이 내 메시지를 지울 수 없습니다. 비밀번호나 인증번호를 잘못 보냈다면 직접 지워 주세요.</p></li>
-        <li><span class="tag tag--warn">휴대폰</span><p>입력 칸이 닫힌 뒤에 보낸 비밀번호나 키는 앱이 가려내지 못합니다. 그 뒤에는 대화에 적지 마세요.</p></li>
-        <li><span class="tag tag--warn">한글</span><p>예전 한글로 저장한 일부 문서는 쪽 나눔이 한글과 한 줄쯤 다를 수 있습니다. 내용이 사라지지는 않습니다.</p></li>
-        <li><span class="tag tag--warn">한글</span><p>암호가 걸린 한글 문서는 열어 볼 수 있지만 저장할 수는 없습니다. 고쳐야 한다면 한글에서 암호를 푼 뒤 여세요.</p></li>
-        <li><span class="tag tag--quiet">그 밖에</span><p>문서 이름은 문서 탭에서 바꿀 수 없습니다. 같은 문서를 두 칸에 나란히 열면 한쪽은 읽기만 됩니다. PDF 편집기의 메뉴와 단추 이름은 아직 영어입니다.</p></li>
-        <li><span class="tag tag--quiet">그 밖에</span><p>이 컴퓨터 안에서 하는 음성 받아쓰기는 이번 판에서 처음부터 끝까지 다시 시험하지 못했습니다.</p></li>
-      </ul>
 
-      <div class="more" data-gallery="smoothui:basic-accordion" data-component="accordion">
-        <details>
-          <summary>휴대폰 메신저의 나머지 한계<svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
-          <ul>
-            <li>인증번호나 링크를 넣는 단계가 끝나지 않고 멈추면, 30분 동안 숫자 하나나 링크 하나만 있는 짧은 메시지가 대화에서 빠지고 지워질 수 있습니다. 쓴 그대로 보내려면 5분 안에 [그대로 보내기]를 누르세요.</li>
-            <li>단계가 끝난 뒤에는 인증번호 메시지를 찍은 화면이나 글 없는 사진을 보내지 마세요. 그림은 확인할 수 없어서 그대로 AI에게 갑니다.</li>
-            <li>슬랙에서 PC 쪽 단계가 기다리는 동안에는, 그 단계를 마친 뒤 메시지를 “이어서”로 시작해 주세요.</li>
-            <li>긴 문장 속에 ‘인증번호’나 ‘코드’ 같은 말 없이 적은 번호, 두 메시지로 나눠 보낸 번호는 단계가 끝난 뒤에는 알아보지 못합니다.</li>
-            <li>자동으로 채운 값은 그 직후 페이지를 다루는 AI가 읽을 수 있습니다. 브라우저에 저장된 로그인 정보도 그렇습니다.</li>
-            <li>8글자보다 짧은 값은 밖으로 나가는 파일에서 찾아내지 못합니다.</li>
-            <li>큰 Word 문서를 보낼 때 잠깐 멈춘 듯 보일 수 있습니다.</li>
-          </ul>
-        </details>
-        <details>
-          <summary>한글 문서의 나머지 한계<svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
-          <ul>
-            <li>예전 한글로 저장한 일부 문서에서, 쪽 맨 위 제목 표 아래 내용이 한 줄(약 5.6 mm) 아래로 내려가 보이고 그 쪽에 한 줄이 덜 들어갈 수 있습니다.</li>
-            <li>자동 번호만 있는 줄이 한 줄 내려갈 수 있습니다.</li>
-            <li>드물게 쪽 끝 문단의 마지막 한 줄이 앞 쪽에 남거나, 내어쓰기한 줄 끝이 빈칸 하나만큼 어긋날 수 있습니다.</li>
-            <li>외톨이 줄 방지는 새로 입력한 문서에는 사실상 적용되지 않습니다.</li>
-            <li>한 구역에 쪽 번호 설정이 여러 개 있으면 하나로 합쳐 구역 첫 문단에 둡니다.</li>
-            <li>같은 문서라도 줄이 한두 군데 다르게 나뉘고, 몇몇 긴 문서는 쪽 수가 바뀔 수 있습니다. 한글 인쇄본에 더 가까워지는 쪽입니다.</li>
-          </ul>
-        </details>
-      </div>
 
-      <div class="next">
-        <h3>다음 판에 올 것</h3>
-        <ul class="next-list">
-          <li>암호로 여는 비밀 보관함</li>
-          <li>즐겨찾기의 사이트 아이콘과 폴더 안 항목 고치기</li>
-          <li>macOS와 AppImage의 메모리 표시</li>
-          <li>활동을 시간순 이력으로 보기</li>
-          <li>문서 이름 바꾸기</li>
-          <li>macOS 판 서명</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="section section--soft" id="open" data-section="open" aria-labelledby="open-title">
-  <div class="container">
-    <header class="section-head">
-      <h2 id="open-title">소스는 열려 있고, 빌려 온 것에는 이름을 적습니다</h2>
-      <p class="lead">Workbench의 코드는 MIT 라이선스로 GitHub에 있습니다. 아래는 그 위에 서 있는 다른 분들의 작업입니다.</p>
-    </header>
-    <table class="credits" data-component="credit-rows">
-      <thead><tr><th scope="col">이름</th><th scope="col">Workbench에서 하는 일</th><th scope="col">라이선스</th></tr></thead>
-      <tbody>
-        <tr><th scope="row"><a class="link link--quiet" href="https://github.com/shaongitbd/doory">Doory</a></th><td data-label="하는 일">디자인 편집기. Siam, creator and maintainer of Doory.</td><td data-label="라이선스">Attribution Assurance License</td></tr>
-        <tr><th scope="row"><a class="link link--quiet" href="https://github.com/pblsketch/ieumoffice">이음오피스 (IeumOffice)</a></th><td data-label="하는 일">워드, PPT, 엑셀, 한글, 마크다운, PDF의 편집 화면</td><td data-label="라이선스">Apache-2.0</td></tr>
-        <tr><th scope="row"><a class="link link--quiet" href="https://github.com/edwardkim/rhwp">rhwp</a></th><td data-label="하는 일">한글 문서 편집기의 엔진</td><td data-label="라이선스">MIT</td></tr>
-        <tr><th scope="row"><a class="link link--quiet" href="https://icons8.com">Icons8</a></th><td data-label="하는 일">프로젝트, 폴더, 대화, 문서 종류의 항목 아이콘 (Liquid Glass)</td><td data-label="라이선스">Icons8 라이선스, 출처 표시</td></tr>
-        <tr><th scope="row"><a class="link link--quiet" href="https://github.com/neondeex/atlas-filemanager">Atlas File Manager</a></th><td data-label="하는 일">색 조합의 색 값. Dracula, Nord, Rosé Pine은 각 프로젝트의 색입니다.</td><td data-label="라이선스">색 값만 따랐습니다</td></tr>
-        <tr><th scope="row"><a class="link link--quiet" href="https://github.com/chenxiachan/textfold">textfold</a></th><td data-label="하는 일">글 접어 읽기에 쓴 코드</td><td data-label="라이선스">Apache-2.0</td></tr>
-        <tr><th scope="row"><a class="link link--quiet" href="https://github.com/ssp-data/obsidian-fast-find-10k">Obsidian Fast Find 10k</a></th><td data-label="하는 일">대화와 문서 검색</td><td data-label="라이선스">MIT</td></tr>
-      </tbody>
-    </table>
-    <p class="caption">전체 목록과 라이선스 원문은 앱의 설정, 정보, 오픈소스 라이선스와 <a class="link link--quiet" href="https://github.com/laguna821/Achmage-workbench-CLI">저장소</a>에 있습니다.</p>
-  </div>
-</section>
-
-<section class="section section--seam" id="maker" data-section="maker" aria-labelledby="maker-title">
-  <div class="container split split--5-7 maker">
-    <div class="maker-mark" aria-hidden="true">
-      <svg class="maker-logo"><use href="#logo-achmage"/></svg>
-      <span class="maker-app"><img src="assets/frames/app-icon-128.8cfa858792.webp" width="64" height="64" alt="" loading="lazy">Workbench</span>
-    </div>
-    <div class="stack">
-      <h2 id="maker-title">안창현이 만들었습니다</h2>
-      <p class="lead">가르치는 사람. 계속 만드는 사람.</p>
-      <p>교육에서 시작한 질문을 발표와 디자인, 움직이는 이미지로 풀어갑니다. Workbench는 한글 문서를 쓰는 대학 교수자를 먼저 생각하고 만들었습니다.</p>
-      <p class="maker-links">
-        <a class="link" href="https://achmage-slides.vercel.app/">Achmage 스튜디오 <svg class="icon" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></a>
-        <a class="link" href="https://github.com/laguna821">GitHub <svg class="icon" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></a>
-      </p>
-    </div>
-  </div>
-</section>
-
-<section class="section section--seam close" id="close" data-section="close" aria-label="맺음">
-  <div class="container">
-    <div class="statement">
-      <p class="statement-line">앱을 하나 더 설치하는 일이 아니라, <span class="nb">창을 줄이는 일입니다.</span></p>
-      <div class="close-act">
-        <a class="btn btn--primary btn--hover close-get" href="https://github.com/laguna821/Achmage-workbench-CLI/releases/latest" data-component="button">
-          <span class="btn-dot" aria-hidden="true"></span>
-          <span class="btn-label close-get-label">GitHub 릴리스에서 내려받기</span>
-          <span class="btn-reveal" aria-hidden="true"><span class="close-get-label">GitHub 릴리스에서 내려받기</span> <svg class="icon"><use href="#i-arrow-up-right"/></svg></span>
-        </a>
-        <p class="close-file" hidden></p>
-        <a class="link link--quiet close-other" href="#download">다른 운영체제, 먼저 필요한 것</a>
-      </div>
-    </div>
-    <figure class="close-shot">
-      <div class="win win--still">
-        <div class="win-bar" aria-hidden="true"><span class="win-lights"><i></i><i></i><i></i></span><span class="win-title"><img src="assets/frames/app-icon-128.8cfa858792.webp" width="16" height="16" alt="">Achmage Workbench</span></div>
-        <div class="win-shot">
-          <picture class="win-img win-img--light">
-            <source type="image/avif" srcset="assets/frames/close-home-1440.2cc569ceeb.avif 1440w, assets/frames/close-home-2560.dab93cc3c8.avif 2560w" sizes="min(92vw, 82rem)">
-            <img src="assets/frames/close-home-1440.abc7d52ebf.webp" width="1440" height="865" alt="Workbench의 홈 ‘지금’. 세 프로젝트에서 진행 중인 대화 네 개가 프로젝트, 상태, 맡은 AI와 함께 표 하나에 있고, 확인이 필요한 작업 2개가 맨 위에 모여 있다." loading="lazy" decoding="async">
-          </picture>
-          <picture class="win-img win-img--dark" aria-hidden="true">
-            <source type="image/avif" srcset="assets/frames/close-home-dark-1440.422dc2b830.avif 1440w, assets/frames/close-home-dark-2560.5a37227e4a.avif 2560w" sizes="min(92vw, 82rem)">
-            <img src="assets/frames/close-home-dark-1440.03640cf559.webp" width="1440" height="865" alt="" loading="lazy" decoding="async">
-          </picture>
-        </div>
-      </div>
-      <figcaption>홈인 ‘지금’에서는 모든 프로젝트의 진행 중인 일과 확인할 일을 표 하나로 봅니다.</figcaption>
-    </figure>
-  </div>
-</section>
 
 </main>
 
 <footer class="site-footer" data-component="footer">
   <div class="container footer-grid">
     <div class="footer-brand">
-      <svg class="brand-logo" role="img" aria-label="Achmage"><use href="#logo-achmage"/></svg>
+      <a class="brand" href="https://achmage-slides.vercel.app/" aria-label="만든 사람 안창현, Achmage 스튜디오로 가기"><svg class="brand-logo" role="img" aria-label="Achmage"><use href="#logo-achmage"/></svg></a>
       <p>Achmage Workbench 0.5.1<br>MIT 라이선스</p>
     </div>
     <nav class="footer-nav" aria-label="바깥 링크와 구획">
       <a href="https://github.com/laguna821/Achmage-workbench-CLI">GitHub 저장소</a>
       <a href="https://github.com/laguna821/Achmage-workbench-CLI/releases/latest">릴리스와 설치 파일</a>
-      <a href="https://achmage-slides.vercel.app/">Achmage 스튜디오</a>
+      <a href="https://achmage-slides.vercel.app/">만든 사람 안창현</a>
       <a href="#one-window">따로 열던 것들</a>
       <a href="#tour">화면으로 보기</a>
       <a href="#colors">색 조합</a>
       <a href="#memory">쉬는 탭과 메모리</a>
       <a href="#bookmarks">즐겨찾기</a>
       <a href="#phone">휴대폰</a>
-      <a href="#vault">비밀 보관함</a>
       <a href="#download">내려받기</a>
-      <a href="#limits">알려진 한계</a>
-      <a href="#open">오픈소스</a>
     </nav>
     <div class="footer-notes">
       <p>글꼴은 Pretendard(길형진, SIL Open Font License 1.1)입니다. 이 페이지에 쓰는 글자만 추려 실었고, 라이선스에 따라 추린 파일 안의 이름은 바꿨습니다.</p>

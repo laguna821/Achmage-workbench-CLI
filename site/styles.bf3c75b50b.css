@@ -4,10 +4,10 @@
    An installed Pretendard is used first. Two slices; the build puts each character in the file
    whose range names it and fails if one is missing. ── */
 @font-face{font-family:"Workbench Sans";font-style:normal;font-weight:45 920;font-display:swap;
-  src:local("Pretendard Variable"),local("PretendardVariable"),url("assets/fonts/workbench-sans-latin.ab86934289.woff2") format("woff2");
+  src:local("Pretendard Variable"),local("PretendardVariable"),url("assets/fonts/workbench-sans-latin.d245326fe8.woff2") format("woff2");
   unicode-range:U+0020-007E,U+00A0-00FF}
 @font-face{font-family:"Workbench Sans";font-style:normal;font-weight:45 920;font-display:swap;
-  src:local("Pretendard Variable"),local("PretendardVariable"),url("assets/fonts/workbench-sans-ko.bdbd738528.woff2") format("woff2");
+  src:local("Pretendard Variable"),local("PretendardVariable"),url("assets/fonts/workbench-sans-ko.bd8ed625ba.woff2") format("woff2");
   unicode-range:U+1100-11FF,U+2000-206F,U+2190-21FF,U+3000-303F,U+3130-318F,U+AC00-D7A3}
 /* Fallbacks sized so Korean text keeps its line breaks when the web font arrives
    (Hangul advance: Pretendard 0.864 em, Malgun Gothic 1.0 em, Noto Sans CJK KR 0.92 em). */
@@ -367,6 +367,7 @@ html:not(.js) .copy{display:none}
 .footer-grid{display:grid;gap:2.5rem}
 .footer-brand{display:grid;gap:1rem;align-content:start;color:var(--band-ink)}
 .footer-brand .brand-logo{--brand-accent:var(--band-accent)}
+.footer-brand .brand{color:inherit;justify-self:start}
 .footer-brand p{font-size:var(--t-caption);line-height:1.7;color:var(--band-muted)}
 .footer-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 2rem;align-content:start}
 .footer-nav a{display:flex;align-items:center;min-height:2.75rem;font-size:var(--t-caption);border-bottom:1px solid var(--band-line)}
