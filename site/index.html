@@ -1,0 +1,895 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Achmage Workbench — 일하는 창은 하나면 됩니다</title>
+<meta name="description" content="AI 대화(Claude Code, Codex)와 워드·한글·PPT·엑셀·PDF 문서, 웹 페이지를 프로젝트 하나에 탭으로 모으는 무료 데스크톱 작업실. Windows, macOS, Linux.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Achmage Workbench — 일하는 창은 하나면 됩니다">
+<meta property="og:description" content="AI 대화와 한글·워드 문서, 웹 페이지를 프로젝트 하나에 탭으로 모으는 무료 데스크톱 작업실.">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:image" content="assets/og-image.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="일하는 창은 하나면 됩니다. Achmage Workbench 창 하나에 한글 문서와 그 문서의 AI가 열려 있다.">
+<!-- TODO(owner): the address is not decided yet. Add <link rel="canonical" href="https://…/"> and <meta property="og:url" content="https://…/">, and make og:image an absolute URL on that address. -->
+<link rel="icon" type="image/png" href="assets/frames/app-icon-128.65b509c637.png">
+<script>(function(){var r=document.documentElement;r.classList.add('js');var t;try{t=localStorage.getItem('achmage-theme')}catch(e){}if(t!=='light'&&t!=='dark')t=matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';r.dataset.theme=t})()</script>
+<link rel="preload" as="image" type="image/avif" href="assets/frames/win-hwp-1440.9f4acc0b74.avif" imagesrcset="assets/frames/win-hwp-1440.9f4acc0b74.avif 1440w, assets/frames/win-hwp-2560.913523e7b1.avif 2560w" imagesizes="(max-width: 39.99rem) 172vw, min(92vw, 87.5rem)" fetchpriority="high">
+<link rel="stylesheet" href="styles.28cb032bfc.css">
+</head>
+<body>
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<svg class="sprite" aria-hidden="true" focusable="false" width="0" height="0">
+  <symbol id="logo-achmage" viewBox="0 0 1574 547"><path d="M 257.542 51.749 C 230.170 99.293, 131.356 265.233, 103.163 311 C 101.978 312.925, 101.006 314.837, 101.004 315.250 C 100.997 316.552, 112.975 316.031, 128 314.075 C 142.588 312.176, 156.606 309.302, 175.977 304.239 L 186.455 301.500 198.326 280.500 C 235.068 215.504, 279.464 138.002, 279.944 138.017 C 280.250 138.026, 281.597 140.614, 282.937 143.767 C 284.277 146.920, 287.705 154.675, 290.555 161 C 296.386 173.942, 306.236 196.371, 317.015 221.250 C 321.006 230.463, 324.651 238, 325.114 238 C 325.860 238, 363.847 215.547, 374.695 208.694 L 378.890 206.044 371.881 191.272 C 355.870 157.532, 283.986 15.774, 281.606 13.249 C 280.686 12.273, 275.409 20.715, 257.542 51.749 M 452.721 43.750 C 450.175 50.213, 446.444 60, 444.430 65.500 C 442.416 71, 440.258 76.003, 439.634 76.618 C 439.010 77.233, 428.600 80.912, 416.500 84.794 C 404.400 88.675, 393.386 92.270, 392.023 92.781 C 389.922 93.571, 393.183 94.885, 413.523 101.446 C 426.711 105.700, 437.993 109.702, 438.596 110.340 C 439.570 111.372, 448.896 140.870, 452.162 153.250 C 453.538 158.469, 454.507 159.185, 455.545 155.750 C 455.918 154.512, 459.807 143.807, 464.186 131.961 L 472.147 110.421 497.324 102.048 L 522.500 93.674 498 85.520 L 473.500 77.365 466.055 54.683 C 461.960 42.207, 458.326 32, 457.980 32 C 457.634 32, 455.267 37.287, 452.721 43.750 M 387 289.593 C 375.725 296.420, 362.788 304.109, 358.250 306.681 C 353.712 309.253, 350 311.761, 350 312.254 C 350 313.964, 358.252 334.505, 359.373 335.587 C 361.131 337.282, 456.998 383.336, 457.572 382.761 C 458.180 382.153, 449.878 363.288, 436.555 335 C 431.244 323.725, 423.027 306.063, 418.294 295.750 C 413.560 285.438, 409.195 277.041, 408.594 277.091 C 407.992 277.141, 398.275 282.767, 387 289.593" fill="currentColor" fill-rule="evenodd"/><path d="M 722.754 47.047 C 713.558 49.306, 699.257 58.526, 686.856 70.191 C 651.167 103.761, 618.262 169.085, 592 258.500 L 586.713 276.500 576.431 286.653 C 538.709 323.903, 497.797 346.494, 485.533 336.848 C 482.926 334.796, 482.816 334.361, 483.203 327.598 C 483.888 315.604, 491.991 299.557, 505.183 284.065 C 516.752 270.480, 533.729 258, 540.641 258 C 545.587 258, 544.623 265.711, 538.376 276.131 C 534.467 282.651, 534.385 283.133, 536.816 285.333 C 543.681 291.546, 553.554 285.588, 560.307 271.157 C 567.060 256.727, 562.296 243.354, 547.722 235.833 C 541.855 232.806, 529.409 232.158, 521.468 234.466 C 508.258 238.306, 492.327 248.728, 479.917 261.647 C 439.930 303.272, 439.622 353.458, 479.298 362.503 C 501.602 367.588, 527.035 355.303, 562.797 322.169 C 573.179 312.550, 574.989 311.221, 574.415 313.637 C 574.042 315.212, 572.055 322.800, 570 330.500 C 561.605 361.960, 561.415 365.851, 567.978 372.094 C 574.537 378.333, 584.969 379.196, 590.541 373.962 C 591.832 372.749, 596.811 364.724, 601.605 356.128 C 629.697 305.764, 653.064 273.191, 669.533 261.439 C 672.954 258.998, 676.034 257, 676.377 257 C 677.720 257, 676.881 267.757, 674.445 281.786 C 668.895 313.747, 672.091 331.533, 685.624 344.008 C 693.131 350.927, 699.873 353.500, 710.500 353.500 C 720.758 353.500, 727.092 351.191, 736.670 343.960 C 745.546 337.258, 763.346 318.155, 770.930 307.192 C 772.189 305.373, 773.401 304.068, 773.625 304.292 C 773.849 304.516, 771.798 310.339, 769.067 317.233 C 760.472 338.930, 759.465 342.737, 761.099 347.357 C 763.260 353.466, 768.699 357.278, 776.008 357.807 C 780.313 358.118, 782.648 357.806, 784.350 356.690 C 785.651 355.838, 792.259 348.246, 799.034 339.820 C 828.218 303.526, 844.744 284.497, 855.159 275.193 C 859.042 271.724, 862.385 269.052, 862.588 269.254 C 863.287 269.954, 858.111 287.556, 851.065 308.443 C 847.179 319.961, 844 330.468, 844 331.792 C 844 341.314, 856.455 349.315, 866.247 346.083 C 869.977 344.852, 878.614 336.308, 895.643 317 C 910.937 299.659, 927.036 284.314, 928.044 286.115 C 928.493 286.917, 928.397 292.687, 927.831 298.938 C 926.088 318.181, 929.424 332.262, 937.862 341.284 C 944.916 348.825, 949.829 351.263, 959.047 351.797 C 972.303 352.564, 980.616 348.256, 996.471 332.401 L 1005.745 323.127 1006.216 330.313 C 1007.304 346.894, 1018.749 358.745, 1034.680 359.785 C 1041.126 360.206, 1042.506 359.947, 1048.180 357.248 C 1059.052 352.077, 1073.324 337.895, 1090.500 315.198 L 1097.500 305.948 1098.176 314.599 C 1099.313 329.161, 1103.536 338.631, 1112.630 347.013 C 1119.703 353.532, 1126.818 356.332, 1137.500 356.797 C 1144.965 357.123, 1147.490 356.817, 1152.304 355.003 C 1161.125 351.679, 1171.511 344.177, 1181.701 333.768 L 1190.902 324.369 1191.549 329.935 C 1192.897 341.523, 1200.213 351.977, 1210.526 357.052 C 1214.695 359.104, 1216.968 359.500, 1224.575 359.500 C 1233.244 359.500, 1234.028 359.311, 1242.075 355.281 C 1254.309 349.155, 1262.450 342.639, 1281.100 324.048 L 1297.700 307.500 1295.795 315 C 1294.747 319.125, 1292.358 327.451, 1290.487 333.503 L 1287.085 344.506 1275.293 349.431 C 1200.032 380.864, 1142.565 428.218, 1128.574 470.331 C 1120.365 495.040, 1129.930 518.969, 1152.234 529.521 C 1189.280 547.047, 1237.367 517.656, 1276.170 453.771 C 1290.947 429.441, 1309.279 389.415, 1318.129 362.155 C 1319.976 356.465, 1322.204 351.426, 1323.079 350.958 C 1325.484 349.671, 1368.257 333.914, 1368.496 334.227 C 1368.610 334.377, 1369.197 335.965, 1369.801 337.755 C 1371.548 342.932, 1377.808 351.680, 1382.855 355.997 C 1392.947 364.627, 1405.024 368.543, 1421 368.365 C 1443.499 368.114, 1468.033 356.825, 1499 332.473 C 1518.558 317.094, 1537.519 296.669, 1536.817 291.738 C 1536.303 288.126, 1534.018 289.170, 1521.119 298.910 C 1467.158 339.658, 1423.064 354.736, 1407.298 337.834 C 1404.344 334.667, 1402 328.830, 1402 324.641 C 1402 321.739, 1402.419 321.112, 1404.750 320.529 C 1410.282 319.144, 1426.078 310.877, 1436.651 303.833 C 1454.270 292.093, 1468.931 275.820, 1473.934 262.448 C 1483.403 237.138, 1459.900 217.875, 1431.209 227.431 C 1400.107 237.788, 1369.443 276.959, 1366.433 310.175 L 1365.763 317.575 1346.881 323.649 C 1336.497 326.990, 1328.009 329.448, 1328.021 329.112 C 1328.032 328.775, 1329.191 323.100, 1330.597 316.500 C 1332.395 308.058, 1333.313 300.052, 1333.693 289.500 C 1334.311 272.340, 1333.445 267.534, 1328.979 263.318 C 1326.400 260.884, 1326 259.793, 1326 255.190 C 1326 244.581, 1317.913 233.667, 1306 228.201 C 1298.681 224.842, 1285.382 224.067, 1276 226.451 C 1253.201 232.245, 1225.484 254.512, 1207.386 281.575 C 1201.451 290.448, 1196.579 296.068, 1185.143 307.227 C 1163.288 328.554, 1150.598 336.048, 1141.642 332.916 C 1138.882 331.950, 1136.943 330.387, 1135.547 328 C 1130.853 319.975, 1134.593 296.429, 1144.460 271.883 C 1149.681 258.894, 1150.162 254.044, 1146.742 248.898 C 1143.765 244.418, 1136.890 241, 1130.855 241 C 1127.049 241, 1126.015 240.621, 1125.514 239.045 C 1124.437 235.650, 1115.149 228.200, 1109.202 225.960 C 1100.985 222.865, 1087.292 223.524, 1077.661 227.477 C 1058.498 235.342, 1039.926 252.299, 1023.430 276.992 C 1009.004 298.584, 980.108 326.764, 970.553 328.556 C 961.953 330.169, 960.348 326.319, 961.588 307.054 C 963.169 282.483, 962.440 276.496, 956.876 268.350 C 953.267 263.066, 945.472 259, 938.953 259 C 930.655 259, 922.935 264.161, 904.634 281.943 C 898.658 287.749, 894.033 291.600, 894.356 290.500 C 900.765 268.693, 899.820 256.974, 890.934 248.088 C 883.747 240.901, 874.442 239.172, 865.500 243.363 C 857.969 246.893, 850.911 252.797, 835.714 268.283 L 821.927 282.331 825.562 273.915 C 832.941 256.828, 836.204 246.725, 835.666 242.629 C 834.996 237.525, 830.113 232.531, 823.716 230.406 C 813.007 226.849, 805.840 230.752, 799.674 243.499 C 793.067 257.158, 756.973 301.728, 739.848 317.372 C 723.486 332.319, 709.793 334.075, 707.439 321.526 C 706.256 315.223, 707.686 298.097, 710.529 284.500 C 713.799 268.864, 714.176 256.858, 711.632 249.318 C 706.284 233.463, 691.253 226.005, 676.275 231.776 C 664.978 236.128, 646.084 252.958, 631.849 271.348 C 628.082 276.215, 625 280.004, 625 279.769 C 625 279.534, 627.457 271.353, 630.459 261.588 L 635.918 243.833 646.260 232.167 C 712.482 157.459, 750.789 101.049, 752.730 75.382 C 753.415 66.333, 751.867 60.373, 747.511 55.283 C 741.696 48.490, 731.154 44.983, 722.754 47.047 M 727.888 72.856 C 711.297 83.378, 685.750 119.072, 667.824 156.779 C 661.290 170.522, 648.777 201.110, 649.423 201.757 C 649.641 201.975, 654.038 197.056, 659.193 190.827 C 707.021 133.027, 738.541 84.260, 735.612 72.591 C 734.783 69.286, 733.445 69.332, 727.888 72.856 M 1447.097 251.534 C 1436.873 256.294, 1422.564 269.894, 1414.394 282.617 C 1409.958 289.526, 1405.473 298.806, 1406.212 299.546 C 1407.631 300.964, 1426.493 288.710, 1437 279.544 C 1451.347 267.028, 1460.193 251.823, 1454.418 249.607 C 1452.453 248.853, 1453.386 248.607, 1447.097 251.534 M 1096.307 253.004 C 1073.812 264.245, 1040 309.638, 1040 328.598 C 1040 333.221, 1041.264 333.519, 1047.253 330.311 C 1057.162 325.003, 1077.350 303.112, 1100.342 272.744 C 1110.682 259.088, 1112.116 255.225, 1108.171 251.655 C 1105.576 249.306, 1103.158 249.581, 1096.307 253.004 M 1292 252.937 C 1270.975 259.372, 1237.095 294.390, 1226.922 320.197 C 1224.425 326.532, 1224.356 332.661, 1226.773 333.428 C 1234.819 335.982, 1258.559 319.556, 1284.692 293.354 C 1301.452 276.550, 1301.937 275.946, 1303.997 269.309 C 1306.496 261.256, 1306.025 256.952, 1302.328 254.043 C 1299.659 251.944, 1296.389 251.594, 1292 252.937 M 1531.929 321.750 C 1518.241 328.683, 1515.037 346.067, 1525.513 356.559 C 1535.503 366.564, 1551.832 364.197, 1558.996 351.704 C 1565.836 339.778, 1560.663 324.968, 1548.110 320.539 C 1541.874 318.339, 1538.108 318.621, 1531.929 321.750 M 1261.782 377.914 C 1209.816 405.845, 1171.682 442.416, 1159.600 475.910 C 1155.761 486.553, 1155.235 493.482, 1157.821 499.329 C 1160.312 504.960, 1163.282 506.407, 1170.810 505.660 C 1193.658 503.390, 1227.807 468.744, 1254.014 421.246 C 1262.946 405.056, 1278.795 369.998, 1277.180 370.001 C 1276.806 370.002, 1269.877 373.563, 1261.782 377.914" fill="currentColor" fill-rule="evenodd"/><path d="M 474.500 154.087 C 374.288 231.480, 249.403 299.206, 168.589 319.986 C 111.897 334.562, 68.450 333.160, 28.893 315.477 C 10.977 307.468, 12 307.846, 11.998 309.237 C 11.994 312.598, 24.383 370.683, 25.368 371.920 C 27.888 375.081, 50.902 385.114, 62.617 388.159 C 73.501 390.987, 76.224 391.288, 95 391.741 C 110.999 392.126, 118.025 391.867, 127 390.560 C 188.969 381.537, 259.360 350.400, 377 279.977 C 406.910 262.072, 456.899 230.060, 457.887 228.179 C 459.106 225.857, 472.746 189.509, 481.128 166.246 C 484.944 155.656, 488.324 146.318, 488.640 145.496 C 489.713 142.700, 487.514 144.036, 474.500 154.087 " fill="var(--brand-accent)" fill-rule="evenodd"/></symbol>
+  <symbol id="i-arrow-up-right" viewBox="0 0 24 24"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+  <symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="14" y="3" width="5" height="18" rx="1"/><rect x="5" y="3" width="5" height="18" rx="1"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></symbol>
+  <symbol id="i-shield-check" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-shield-alert" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5"/></symbol>
+  <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></symbol>
+  <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+</svg>
+
+<header class="site-header" data-component="header">
+  <div class="container header-inner">
+    <a class="brand" href="https://achmage-slides.vercel.app/" aria-label="Achmage 스튜디오로 가기">
+      <svg class="brand-logo" role="img" aria-label="Achmage"><use href="#logo-achmage"/></svg>
+    </a>
+    <a class="product-mark" href="#top" aria-label="Achmage Workbench, 맨 위로">
+      <img src="assets/frames/app-icon-128.8cfa858792.webp" width="28" height="28" alt="">
+      <span>Workbench</span>
+    </a>
+    <nav class="site-nav" aria-label="이 페이지의 구획">
+      <a href="#tour">화면</a>
+      <a href="#colors">색 조합</a>
+      <a href="#memory">쉬는 탭</a>
+      <a href="#phone">휴대폰</a>
+      <a href="#limits">한계</a>
+    </nav>
+    <details class="menu">
+      <summary aria-label="구획 목록"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></summary>
+      <nav class="menu-panel" aria-label="이 페이지의 구획 전체">
+        <a href="#one-window">따로 열던 것들</a>
+        <a href="#tour">화면으로 보기</a>
+        <a href="#colors">색 조합</a>
+        <a href="#phone">휴대폰</a>
+        <a href="#memory">쉬는 탭과 메모리</a>
+        <a href="#bookmarks">즐겨찾기</a>
+        <a href="#vault">비밀 보관함</a>
+        <a href="#download">내려받기</a>
+        <a href="#limits">알려진 한계</a>
+        <a href="#open">오픈소스</a>
+        <button class="theme-toggle theme-toggle--text" type="button">어두운 화면으로 바꾸기</button>
+      </nav>
+    </details>
+    <button class="theme-toggle theme-toggle--icon" type="button" data-gallery="magicui:animated-theme-toggler" data-component="theme-toggle" aria-label="어두운 화면으로 바꾸기">
+      <svg class="icon icon-moon" aria-hidden="true"><use href="#i-moon"/></svg>
+      <svg class="icon icon-sun" aria-hidden="true"><use href="#i-sun"/></svg>
+    </button>
+    <a class="btn btn--primary btn--compact" href="#download">내려받기</a>
+  </div>
+  <div class="read-progress" data-gallery="magicui:scroll-progress" data-component="progress-indicator" aria-hidden="true"><i></i></div>
+</header>
+
+<main id="main">
+
+<section class="hero" id="top" data-section="hero" aria-labelledby="hero-title">
+  <div class="container hero-head">
+    <h1 id="hero-title">일하는 창은 <span class="nb">하나면 됩니다.</span></h1>
+    <div class="hero-say">
+      <p class="lead">Achmage Workbench는 AI 대화와 한글·워드 문서, 웹 페이지를 프로젝트 하나에 탭으로 모으는 무료 데스크톱 작업실입니다.</p>
+      <div class="hero-act">
+        <a class="btn btn--primary btn--hover" href="#download" data-gallery="magicui:interactive-hover-button" data-component="button">
+          <span class="btn-dot" aria-hidden="true"></span>
+          <span class="btn-label">내려받기</span>
+          <span class="btn-reveal" aria-hidden="true">내려받기 <svg class="icon"><use href="#i-arrow-down"/></svg></span>
+        </a>
+        <p class="hero-terms">0.5.1, 무료, 소스 공개. <span class="nb">Windows, macOS, Linux.</span><br>먼저 Claude Code나 Codex 가운데 하나가 이 컴퓨터에 설치되어 로그인되어 있어야 합니다.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="opening" data-component="opening">
+    <div class="opening-stage">
+      <div class="win-tilt">
+        <figure class="win">
+          <div class="win-bar" aria-hidden="true">
+            <span class="win-lights"><i></i><i></i><i></i></span>
+            <span class="win-title"><img src="assets/frames/app-icon-128.8cfa858792.webp" width="16" height="16" alt="">Achmage Workbench</span>
+          </div>
+          <div class="win-shot">
+            <picture class="win-img win-img--light">
+              <source type="image/avif" srcset="assets/frames/win-hwp-1440.9f4acc0b74.avif 1440w, assets/frames/win-hwp-2560.913523e7b1.avif 2560w" sizes="(max-width: 39.99rem) 172vw, min(92vw, 87.5rem)">
+              <img src="assets/frames/win-hwp-1440.878d53f93c.webp" width="1440" height="900" alt="Workbench 창 하나. 왼쪽에 문서 목록, 위쪽 탭 줄에 워드, 한글, 엑셀, 마크다운, PDF 문서가 나란히 열려 있다. 창은 두 칸으로 나뉘어 있다. 왼쪽 칸의 AI 대화 ‘강의 준비’에는 요청 “이 강의계획서를 견본 삼아 3주차 슬라이드 구성을 다시 짜 줘.”와, 새 파일 ‘슬라이드-구성.md’를 만들고 바꾼 점을 정리한 답이 있다. 오른쪽 칸에는 한글 문서 ‘강의계획서.hwpx’가 한글과 같은 모양의 편집기에 열려 있다." fetchpriority="high" decoding="async">
+            </picture>
+            <picture class="win-img win-img--dark" aria-hidden="true">
+              <source type="image/avif" srcset="assets/frames/win-hwp-dark-1440.adcc4edd63.avif 1440w, assets/frames/win-hwp-dark-2560.1c04ccb1ef.avif 2560w" sizes="(max-width: 39.99rem) 172vw, min(92vw, 87.5rem)">
+              <img src="assets/frames/win-hwp-dark-1440.da68d74b7a.webp" width="1440" height="900" alt="" loading="lazy" decoding="async">
+            </picture>
+            <span class="win-ring win-ring--ai" aria-hidden="true"></span>
+            <span class="win-ring win-ring--docx" aria-hidden="true"></span>
+            <span class="win-ring win-ring--xlsx" aria-hidden="true"></span>
+            <span class="win-ring win-ring--md" aria-hidden="true"></span>
+            <span class="win-ring win-ring--hwpx" aria-hidden="true"></span>
+          </div>
+        </figure>
+      </div>
+
+      <div class="cards" aria-hidden="true">
+        <div class="card card--ai">
+          <div class="card-bar"><i></i>AI 대화</div>
+          <picture class="card-img card-img--light"><source type="image/avif" srcset="assets/frames/card-ai-720.2f0d32253d.avif"><img src="assets/frames/card-ai-720.6031efc446.webp" width="720" height="750" alt="" decoding="async"></picture>
+          <picture class="card-img card-img--dark"><source type="image/avif" srcset="assets/frames/card-ai-dark-720.ffd1b2eb90.avif"><img src="assets/frames/card-ai-dark-720.cb48602a89.webp" width="720" height="750" alt="" loading="lazy" decoding="async"></picture>
+        </div>
+        <div class="card card--word">
+          <div class="card-bar"><i></i>워드 문서</div>
+          <picture class="card-img card-img--light"><source type="image/avif" srcset="assets/frames/card-word-960.b2441e474b.avif"><img src="assets/frames/card-word-960.a7f87bfda4.webp" width="960" height="403" alt="" decoding="async"></picture>
+          <picture class="card-img card-img--dark"><source type="image/avif" srcset="assets/frames/card-word-dark-960.bfa4130db3.avif"><img src="assets/frames/card-word-dark-960.f027097e31.webp" width="960" height="403" alt="" loading="lazy" decoding="async"></picture>
+        </div>
+        <div class="card card--xlsx">
+          <div class="card-bar"><i></i>엑셀 문서</div>
+          <picture class="card-img card-img--light"><source type="image/avif" srcset="assets/frames/card-xlsx-960.4de57ae5fd.avif"><img src="assets/frames/card-xlsx-960.c4a4285f6c.webp" width="960" height="403" alt="" decoding="async"></picture>
+          <picture class="card-img card-img--dark"><source type="image/avif" srcset="assets/frames/card-xlsx-dark-960.652d26ddf3.avif"><img src="assets/frames/card-xlsx-dark-960.0da725ce56.webp" width="960" height="403" alt="" loading="lazy" decoding="async"></picture>
+        </div>
+        <div class="card card--md">
+          <div class="card-bar"><i></i>마크다운 문서</div>
+          <picture class="card-img card-img--light"><source type="image/avif" srcset="assets/frames/card-md-960.c49ba99c6e.avif"><img src="assets/frames/card-md-960.a8207f9c5e.webp" width="960" height="403" alt="" decoding="async"></picture>
+          <picture class="card-img card-img--dark"><source type="image/avif" srcset="assets/frames/card-md-dark-960.7d8a86879c.avif"><img src="assets/frames/card-md-dark-960.b5df776387.webp" width="960" height="403" alt="" loading="lazy" decoding="async"></picture>
+        </div>
+        <div class="card card--hwp">
+          <div class="card-bar"><i></i>한글 문서</div>
+          <picture class="card-img card-img--light"><source type="image/avif" srcset="assets/frames/card-hwp-800.a5acd12e21.avif"><img src="assets/frames/card-hwp-800.dee3f54711.webp" width="800" height="736" alt="" decoding="async"></picture>
+          <picture class="card-img card-img--dark"><source type="image/avif" srcset="assets/frames/card-hwp-dark-800.c5f78b3754.avif"><img src="assets/frames/card-hwp-dark-800.55b0e6889b.webp" width="800" height="736" alt="" loading="lazy" decoding="async"></picture>
+        </div>
+      </div>
+    </div>
+    <div class="container opening-foot">
+      <p class="opening-caption">따로 띄우던 워드, 엑셀, 마크다운, 한글 문서는 창 하나의 탭이 되고, AI 대화는 그 문서 옆에 붙습니다.</p>
+      <button class="opening-replay" type="button" hidden>다시 보기</button>
+    </div>
+    <p class="container source-note">Workbench의 실제 화면을 견본 자료로 찍은 것입니다. 처음에 떠 있는 창 다섯 개도 같은 앱 화면에서 잘라 낸 조각이고, 각각 창 안의 자기 탭과 AI 대화 칸으로 들어갑니다. AI 대화의 답은 모델 대신 시험용 대역 엔진이 낸 견본 답입니다. 그려 넣은 화면은 없습니다.</p>
+  </div>
+</section>
+
+<section class="section" id="one-window" data-section="one-window" aria-labelledby="one-window-title">
+  <div class="container">
+    <header class="section-head">
+      <h2 id="one-window-title">따로 열던 것들이 탭이 됩니다</h2>
+      <p class="lead">일 하나를 하려고 창을 여러 개 띄우던 것을, 프로젝트 하나에 모읍니다.</p>
+    </header>
+
+    <div class="split split--8-4" data-row-group="one-window-main">
+      <div class="compare-wrap">
+        <table class="compare" data-gallery="tailark:mist/comparator/one" data-component="comparator">
+          <thead>
+            <tr>
+              <th scope="col">하려는 일</th>
+              <th scope="col">따로 열던 것</th>
+              <th scope="col" class="compare-pick">Workbench에서는</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">AI에게 일 시키기</th>
+              <td data-label="따로 열던 것">AI마다 따로 뜨는 창</td>
+              <td data-label="Workbench에서는" class="compare-pick">대화 탭. Claude Code와 Codex를 나란히 씁니다.</td>
+            </tr>
+            <tr>
+              <th scope="row">보고서와 강의안 고치기</th>
+              <td data-label="따로 열던 것">워드, PPT, 엑셀, PDF 프로그램</td>
+              <td data-label="Workbench에서는" class="compare-pick">문서 탭에서 바로 고칩니다. 마크다운과 디자인 문서도 같은 자리입니다.</td>
+            </tr>
+            <tr>
+              <th scope="row">한글 문서 다루기</th>
+              <td data-label="따로 열던 것">한글</td>
+              <td data-label="Workbench에서는" class="compare-pick">HWP와 HWPX를 내장 편집기에서 엽니다. 중요한 문서는 마지막에 한글에서 인쇄 모양을 확인하세요.</td>
+            </tr>
+            <tr>
+              <th scope="row">자료 찾아보기</th>
+              <td data-label="따로 열던 것">브라우저 창과 그 안의 탭들</td>
+              <td data-label="Workbench에서는" class="compare-pick">프로젝트에 딸린 웹 탭</td>
+            </tr>
+            <tr>
+              <th scope="row">어디 뒀는지 찾기</th>
+              <td data-label="따로 열던 것">폴더를 하나씩 열어 보기</td>
+              <td data-label="Workbench에서는" class="compare-pick">프로젝트 목록과 위쪽 검색 칸. 대화와 문서를 함께 찾습니다.</td>
+            </tr>
+            <tr>
+              <th scope="row">자리를 비웠을 때</th>
+              <td data-label="따로 열던 것">돌아올 때까지 기다리기</td>
+              <td data-label="Workbench에서는" class="compare-pick">휴대폰의 텔레그램이나 슬랙으로 이 PC의 AI에게 적어 보냅니다.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <aside class="tree-card" aria-labelledby="tree-title">
+        <h3 id="tree-title">프로젝트 하나에 든 것</h3>
+        <ul class="tree" data-gallery="magicui:file-tree" data-component="tree-view">
+          <li>
+            <details open>
+              <summary><span class="tree-kind">프로젝트</span> 3주차 강의 슬라이드</summary>
+              <ul>
+                <li class="tree-leaf"><span class="tree-kind">노트</span> 프로젝트 노트 한 장</li>
+                <li>
+                  <details open>
+                    <summary><span class="tree-kind">대화</span> 둘</summary>
+                    <ul>
+                      <li class="tree-leaf">슬라이드 정리 <span class="tree-meta">Codex</span></li>
+                      <li class="tree-leaf">자료 조사 <span class="tree-meta">Claude</span></li>
+                    </ul>
+                  </details>
+                </li>
+                <li>
+                  <details open>
+                    <summary><span class="tree-kind">문서</span> 둘</summary>
+                    <ul>
+                      <li class="tree-leaf">슬라이드-구성.md</li>
+                      <li class="tree-leaf">강의안.md</li>
+                    </ul>
+                  </details>
+                </li>
+                <li class="tree-leaf"><span class="tree-kind">웹</span> 아직 없음</li>
+              </ul>
+            </details>
+          </li>
+        </ul>
+        <p class="caption">위 화면의 견본 프로젝트 그대로입니다. 프로젝트 하나가 노트 하나이고, 대화와 문서와 웹 페이지가 그 아래에 달립니다.</p>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<section class="band band--navy tour" id="tour" data-section="tour" aria-labelledby="tour-title">
+  <div class="band-field" aria-hidden="true"></div>
+  <div class="container">
+    <header class="section-head">
+      <h2 id="tour-title">프로젝트 하나에 일이 통째로 들어갑니다</h2>
+      <p class="lead">같은 창이 여섯 번 바뀝니다. 전부 견본 자료로 찍은 실제 화면입니다.</p>
+    </header>
+
+    <div class="tour-run" data-component="pinned-run">
+      <div class="tour-stage">
+      <ol class="tour-nav" aria-label="이 장의 단계">
+        <li><button type="button" data-go="0" aria-current="step"><span class="tour-nav-n">1</span><span class="tour-nav-l">프로젝트</span></button></li>
+        <li><button type="button" data-go="1"><span class="tour-nav-n">2</span><span class="tour-nav-l">다른 프로젝트</span></button></li>
+        <li><button type="button" data-go="2"><span class="tour-nav-n">3</span><span class="tour-nav-l">수정안</span></button></li>
+        <li><button type="button" data-go="3"><span class="tour-nav-n">4</span><span class="tour-nav-l">문서의 AI</span></button></li>
+        <li><button type="button" data-go="4"><span class="tour-nav-n">5</span><span class="tour-nav-l">한글</span></button></li>
+        <li><button type="button" data-go="5"><span class="tour-nav-n">6</span><span class="tour-nav-l">두 AI</span></button></li>
+      </ol>
+      <div class="tour-rail" aria-hidden="true"><i></i></div>
+      <article class="tour-step is-active" data-step="1">
+        <div class="tour-text">
+          <h3>프로젝트를 고르면 <span class="nb">그 일의</span> 탭만 남습니다</h3>
+          <p>왼쪽 목록에서 프로젝트를 고르면 그 프로젝트에서 열어 둔 대화와 문서가 탭 줄로 돌아옵니다. 프로젝트 하나는 노트 하나이고, 속성과 결정, 열린 질문, 이번 주 기록이 그 노트에 모입니다.</p>
+        </div>
+        <figure class="tour-fig">
+          <div class="shot tour-win">
+            <div class="win-bar" aria-hidden="true"><span class="win-lights"><i></i><i></i><i></i></span></div>
+            <div class="tour-shot">
+              <picture>
+                <source type="image/avif" srcset="assets/frames/t-proj1-1440.f20582a44b.avif 1440w, assets/frames/t-proj1-2560.a7f47f06a6.avif 2560w" sizes="(min-width: 72rem) 1312px, (min-width: 40rem) 150vw, 250vw">
+                <img src="assets/frames/t-proj1-1440.c1366e3015.webp" width="1440" height="900" alt="프로젝트 ‘3주차 강의 슬라이드’를 고른 창. 왼쪽 목록에 이 프로젝트의 대화 둘과 문서 둘, 가운데에 프로젝트 노트, 오른쪽에 Claude가 세운 계획이 승인을 기다린다." loading="lazy" decoding="async">
+              </picture>
+              <span class="tour-rings" aria-hidden="true"><span class="tour-ring"></span><span class="tour-ring"></span></span>
+            </div>
+          </div>
+          <figcaption><span class="tour-count">1 / 6</span> <a class="link link--quiet" href="assets/frames/t-proj1-1440.c1366e3015.webp" target="_blank" rel="noopener">이 화면 전체 보기</a></figcaption>
+        </figure>
+      </article>
+
+      <article class="tour-step" data-step="2">
+        <div class="tour-text">
+          <h3>다른 프로젝트로 가면 탭 줄이 통째로 바뀝니다</h3>
+          <p>‘학과 회의록 정리’를 고르면 목록과 탭이 그 프로젝트의 것으로 바뀝니다. 보이지 않는 프로젝트의 AI 작업은 그동안에도 계속됩니다.</p>
+        </div>
+        <figure class="tour-fig">
+          <div class="shot tour-win">
+            <div class="win-bar" aria-hidden="true"><span class="win-lights"><i></i><i></i><i></i></span></div>
+            <div class="tour-shot">
+              <picture>
+                <source type="image/avif" srcset="assets/frames/t-proj2-1440.afd8254034.avif 1440w, assets/frames/t-proj2-2560.a60c8bbd63.avif 2560w" sizes="(min-width: 72rem) 1312px, (min-width: 40rem) 150vw, 250vw">
+                <img src="assets/frames/t-proj2-1440.2b42bef4df.webp" width="1440" height="900" alt="프로젝트 ‘학과 회의록 정리’를 고른 창. 목록에 회의록 대화 하나와 발표 자료 등 문서 다섯 개가 있고, 탭 줄에는 ‘회의록’ 대화 하나만 열려 있다. 가운데에 Codex가 회의 내용을 발표 자료로 만든 답이 있다." loading="lazy" decoding="async">
+              </picture>
+              <span class="tour-rings" aria-hidden="true"><span class="tour-ring"></span><span class="tour-ring"></span></span>
+            </div>
+          </div>
+          <figcaption><span class="tour-count">2 / 6</span> <a class="link link--quiet" href="assets/frames/t-proj2-1440.2b42bef4df.webp" target="_blank" rel="noopener">이 화면 전체 보기</a></figcaption>
+        </figure>
+      </article>
+
+      <article class="tour-step" data-step="3">
+        <div class="tour-text">
+          <h3>AI가 고친 것은 수정안으로 옵니다</h3>
+          <p>AI가 문서를 고쳐도 바로 덮어쓰지 않습니다. 몇 줄이 달라졌는지 먼저 보이고, 비교한 뒤 적용하거나 취소합니다. 명령을 실행하기 전에도 먼저 묻습니다.</p>
+        </div>
+        <figure class="tour-fig">
+          <div class="shot tour-win">
+            <div class="win-bar" aria-hidden="true"><span class="win-lights"><i></i><i></i><i></i></span></div>
+            <div class="tour-shot">
+              <picture>
+                <source type="image/avif" srcset="assets/frames/t-proposal-1440.25a56c1843.avif 1440w, assets/frames/t-proposal-2560.943abb755c.avif 2560w" sizes="(min-width: 72rem) 1312px, (min-width: 40rem) 150vw, 250vw">
+                <img src="assets/frames/t-proposal-1440.7185ab8e97.webp" width="1440" height="900" alt="문서 ‘강의안.md’ 위에 ‘Codex의 수정안, 1판 기준, 3줄 더함’과 비교, 취소, 적용 단추가 떠 있는 창. 탭 줄에는 워드, 한글, 엑셀, 마크다운, PDF 문서가 나란히 열려 있다." loading="lazy" decoding="async">
+              </picture>
+              <span class="tour-rings" aria-hidden="true"><span class="tour-ring"></span></span>
+            </div>
+          </div>
+          <figcaption><span class="tour-count">3 / 6</span> <a class="link link--quiet" href="assets/frames/t-proposal-1440.7185ab8e97.webp" target="_blank" rel="noopener">이 화면 전체 보기</a></figcaption>
+        </figure>
+      </article>
+
+      <article class="tour-step" data-step="4">
+        <div class="tour-text">
+          <h3>문서마다 그 문서의 AI가 붙습니다</h3>
+          <p>워드 문서를 열면 편집기 옆에 ‘이 문서의 AI’가 붙습니다. 여기에 적은 요청은 그 문서만 맡는 별도 대화가 되고, 원래 대화에는 진행 상황과 결과만 알려 줍니다.</p>
+        </div>
+        <figure class="tour-fig">
+          <div class="shot tour-win">
+            <div class="win-bar" aria-hidden="true"><span class="win-lights"><i></i><i></i><i></i></span></div>
+            <div class="tour-shot">
+              <picture>
+                <source type="image/avif" srcset="assets/frames/t-docai-1440.892e2a4699.avif 1440w, assets/frames/t-docai-2560.42b6a66ebe.avif 2560w" sizes="(min-width: 72rem) 1312px, (min-width: 40rem) 150vw, 250vw">
+                <img src="assets/frames/t-docai-1440.893278cbb9.webp" width="1440" height="900" alt="워드 문서 ‘가을 특강 계획.docx’를 편집기로 연 창. 오른쪽에 리본 메뉴와 본문, 왼쪽에 요청을 기다리는 ‘이 문서의 AI’ 칸이 있다." loading="lazy" decoding="async">
+              </picture>
+              <span class="tour-rings" aria-hidden="true"><span class="tour-ring"></span></span>
+            </div>
+          </div>
+          <figcaption><span class="tour-count">4 / 6</span> <a class="link link--quiet" href="assets/frames/t-docai-1440.893278cbb9.webp" target="_blank" rel="noopener">이 화면 전체 보기</a></figcaption>
+        </figure>
+      </article>
+
+      <article class="tour-step" data-step="5">
+        <div class="tour-text">
+          <h3>한글 문서를 한글 모양으로 엽니다</h3>
+          <p>HWP와 HWPX를 Workbench 안에서 열고 고칩니다. 공개된 한글 문서 엔진(rhwp)으로 그리고, 줄 나눔과 쪽 수가 한글 인쇄본에 가까워지도록 맞췄습니다. 중요한 문서는 마지막에 한글에서 한 번 열어 인쇄 모양을 확인하세요.</p>
+        </div>
+        <figure class="tour-fig">
+          <div class="shot tour-win">
+            <div class="win-bar" aria-hidden="true"><span class="win-lights"><i></i><i></i><i></i></span></div>
+            <div class="tour-shot">
+              <picture>
+                <source type="image/avif" srcset="assets/frames/t-hwp-1440.c687d22402.avif 1440w, assets/frames/t-hwp-2560.92da4927e8.avif 2560w" sizes="(min-width: 72rem) 1312px, (min-width: 40rem) 150vw, 250vw">
+                <img src="assets/frames/t-hwp-1440.d7ef867d5e.webp" width="1440" height="900" alt="한글 문서 ‘강의계획서.hwpx’를 내장 편집기로 연 창. 글꼴과 문단 도구 상자, 눈금자 아래로 표가 든 강의계획서 한 쪽이 보인다. 탭 줄에는 워드, 엑셀, PDF, 마크다운 문서와 대화 하나가 함께 열려 있다." loading="lazy" decoding="async">
+              </picture>
+              <span class="tour-rings" aria-hidden="true"><span class="tour-ring"></span><span class="tour-ring"></span></span>
+            </div>
+          </div>
+          <figcaption><span class="tour-count">5 / 6</span> <a class="link link--quiet" href="assets/frames/t-hwp-1440.d7ef867d5e.webp" target="_blank" rel="noopener">이 화면 전체 보기</a></figcaption>
+        </figure>
+      </article>
+
+      <article class="tour-step" data-step="6">
+        <div class="tour-text">
+          <h3>AI는 둘, 구독은 쓰던 그대로</h3>
+          <p>Claude Code와 Codex를 한 창에서 씁니다. 이 컴퓨터에 설치해 로그인해 둔 것을 그대로 쓰므로 쓰던 구독으로 연결되고, 쓴 만큼 따로 돈을 내는 개발자용 열쇠(API 키)는 받지 않습니다. 남은 사용량도 함께 나옵니다.</p>
+        </div>
+        <figure class="tour-fig">
+          <div class="shot tour-win">
+            <div class="win-bar" aria-hidden="true"><span class="win-lights"><i></i><i></i><i></i></span></div>
+            <div class="tour-shot">
+              <picture>
+                <source type="image/avif" srcset="assets/frames/t-engines-1440.1b28a74e34.avif 1440w, assets/frames/t-engines-2560.7a4d4d1f1d.avif 2560w" sizes="(min-width: 72rem) 1312px, (min-width: 40rem) 150vw, 250vw">
+                <img src="assets/frames/t-engines-1440.fbf0d1150e.webp" width="1440" height="900" alt="설정의 ‘AI 엔진’ 화면. Claude와 Codex가 각각 ‘구독으로 연결됨’으로 표시되고, 5시간과 주간 사용량이 적혀 있다. 계정은 견본 주소다." loading="lazy" decoding="async">
+              </picture>
+              <span class="tour-rings" aria-hidden="true"><span class="tour-ring"></span></span>
+            </div>
+          </div>
+          <figcaption><span class="tour-count">6 / 6</span> <a class="link link--quiet" href="assets/frames/t-engines-1440.fbf0d1150e.webp" target="_blank" rel="noopener">이 화면 전체 보기</a></figcaption>
+        </figure>
+      </article>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section section--seam" id="colors" data-section="colors" aria-labelledby="colors-title">
+  <div class="container sets" data-component="swatch-switcher">
+    <div class="sets-side">
+      <header class="stack">
+        <h2 id="colors-title">색 조합 열세 가지</h2>
+        <p class="lead">밝을 때 쓸 색과 어두울 때 쓸 색을 하나씩 고릅니다. 눌러 보면 같은 화면이 그 색으로 바뀝니다.</p>
+      </header>
+      <div class="sets-groups" role="radiogroup" aria-label="색 조합 고르기">
+        <p class="sets-group-name" id="sets-light">밝은 색</p>
+        <div class="sets-row" role="presentation">
+          <button class="set" type="button" role="radio" aria-checked="true" data-set="atlas" data-avif="assets/frames/set-atlas-1368.1d8e99edd6.avif" data-webp="assets/frames/set-atlas-1368.7aae6b2d39.webp"><span class="set-dots" aria-hidden="true"><i></i><i></i></span>Atlas Light</button>
+          <button class="set" type="button" role="radio" aria-checked="false" tabindex="-1" data-set="windows" data-avif="assets/frames/set-windows-1368.a54c32231e.avif" data-webp="assets/frames/set-windows-1368.6f49f9933a.webp"><span class="set-dots" aria-hidden="true"><i></i><i></i></span>Windows</button>
+          <button class="set" type="button" role="radio" aria-checked="false" tabindex="-1" data-set="rose" data-avif="assets/frames/set-rose-1368.6bab0d2dff.avif" data-webp="assets/frames/set-rose-1368.1d310d5c6d.webp"><span class="set-dots" aria-hidden="true"><i></i><i></i></span>Rosé</button>
+          <button class="set" type="button" role="radio" aria-checked="false" tabindex="-1" data-set="workbench-light" data-avif="assets/frames/set-workbench-light-1368.e72f479937.avif" data-webp="assets/frames/set-workbench-light-1368.68ba837284.webp"><span class="set-dots" aria-hidden="true"><i></i><i></i></span>Workbench</button>
+        </div>
+        <p class="sets-group-name" id="sets-dark">어두운 색</p>
+        <div class="sets-row" role="presentation">
+          <button class="set" type="button" role="radio" aria-checked="false" tabindex="-1" data-set="graphite" data-avif="assets/frames/set-graphite-1368.c827fd017d.avif" data-webp="assets/frames/set-graphite-1368.93017ac9b2.webp"><span class="set-dots" aria-hidden="true"><i></i><i></i></span>Graphite</button>
+          <button class="set" type="button" role="radio" aria-checked="false" tabindex="-1" data-set="midnight" data-avif="assets/frames/set-midnight-1368.851f346a87.avif" data-webp="assets/frames/set-midnight-1368.d445d20f64.webp"><span class="set-dots" aria-hidden="true"><i></i><i></i></span>Midnight</button>
+          <button class="set" type="button" role="radio" aria-checked="false" tabindex="-1" data-set="noir" data-avif="assets/frames/set-noir-1368.56f664915c.avif" data-webp="assets/frames/set-noir-1368.264814066f.webp"><span class="set-dots" aria-hidden="true"><i></i><i></i></span>Noir</button>
+          <button class="set" type="button" role="radio" aria-checked="false" tabindex="-1" data-set="ember" data-avif="assets/frames/set-ember-1368.9cfcb6d1da.avif" data-webp="assets/frames/set-ember-1368.8289a80f60.webp"><span class="set-dots" aria-hidden="true"><i></i><i></i></span>Ember</button>
+          <button class="set" type="button" role="radio" aria-checked="false" tabindex="-1" data-set="dracula" data-avif="assets/frames/set-dracula-1368.d87401c709.avif" data-webp="assets/frames/set-dracula-1368.e4b04045ac.webp"><span class="set-dots" aria-hidden="true"><i></i><i></i></span>Dracula</button>
+          <button class="set" type="button" role="radio" aria-checked="false" tabindex="-1" data-set="nord" data-avif="assets/frames/set-nord-1368.7ddf27bdab.avif" data-webp="assets/frames/set-nord-1368.18ba7e0c3c.webp"><span class="set-dots" aria-hidden="true"><i></i><i></i></span>Nord</button>
+          <button class="set" type="button" role="radio" aria-checked="false" tabindex="-1" data-set="rose-pine" data-avif="assets/frames/set-rose-pine-1368.b2b1311246.avif" data-webp="assets/frames/set-rose-pine-1368.2b19e47e2a.webp"><span class="set-dots" aria-hidden="true"><i></i><i></i></span>Rosé Pine</button>
+          <button class="set" type="button" role="radio" aria-checked="false" tabindex="-1" data-set="windows-dark" data-avif="assets/frames/set-windows-dark-1368.c4c879f70f.avif" data-webp="assets/frames/set-windows-dark-1368.c5069b4de3.webp"><span class="set-dots" aria-hidden="true"><i></i><i></i></span>Windows 어둡게</button>
+          <button class="set" type="button" role="radio" aria-checked="false" tabindex="-1" data-set="workbench-dark" data-avif="assets/frames/set-workbench-dark-1368.607b50bc34.avif" data-webp="assets/frames/set-workbench-dark-1368.4a63d65bd6.webp"><span class="set-dots" aria-hidden="true"><i></i><i></i></span>Workbench 어둡게</button>
+        </div>
+      </div>
+    </div>
+
+    <figure class="sets-stage">
+      <div class="win-bar" aria-hidden="true"><span class="win-lights"><i></i><i></i><i></i></span><span class="win-title"><img src="assets/frames/app-icon-128.8cfa858792.webp" width="16" height="16" alt="">Achmage Workbench</span></div>
+      <div class="shot shot--swap">
+        <picture>
+          <source type="image/avif" srcset="assets/frames/set-atlas-800.255bbf0fd9.avif 800w, assets/frames/set-atlas-1368.1d8e99edd6.avif 1368w" sizes="(max-width: 39.99rem) 221vw, min(92vw, 82rem)">
+          <img class="sets-img" src="assets/frames/set-atlas-1368.7aae6b2d39.webp" width="1368" height="800" alt="프로젝트 화면을 Atlas Light 색 조합으로 본 모습. 왼쪽에 대화, 오른쪽에 문서가 있다." loading="lazy" decoding="async">
+        </picture>
+        <img class="sets-img sets-img--over" width="1368" height="800" alt="" hidden>
+        <img class="sets-img sets-img--over" width="1368" height="800" alt="" hidden>
+      </div>
+      <figcaption>
+        <span class="sets-now" aria-live="polite">지금 보이는 색: Atlas Light</span>
+        <span>색 조합은 Atlas File Manager의 것을 따랐습니다. Dracula, Nord, Rosé Pine은 각 프로젝트의 색입니다.</span>
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="section section--seam" id="memory" data-section="memory" aria-labelledby="memory-title">
+  <div class="container">
+    <header class="section-head">
+      <h2 id="memory-title">안 보는 탭은 쉬게 합니다</h2>
+      <p class="lead">화면에 보이지 않은 지 10분이 지난 탭은 메모리에서 내려 두었다가, 다시 누르면 다시 엽니다. 탭은 탭 줄에 그대로 있습니다.</p>
+    </header>
+    <div class="mem-stage" data-component="memory-stage">
+      <figure class="mem-window">
+        <div class="win win--still">
+          <div class="win-bar" aria-hidden="true"><span class="win-lights"><i></i><i></i><i></i></span><span class="win-title"><img src="assets/frames/app-icon-128.8cfa858792.webp" width="16" height="16" alt="">Achmage Workbench</span></div>
+          <div class="mem-shot">
+            <picture class="tw-light">
+              <source type="image/avif" srcset="assets/frames/mem-win-1368.beeb475dee.avif">
+              <img src="assets/frames/mem-win-1368.99cc5a4430.webp" width="1368" height="295" alt="시험에 쓴 견본 프로젝트 ‘견본 1주차 강의안 정리’의 윗부분. 탭 줄에 워드, 파워포인트, 엑셀, 마크다운 문서와 대화 하나, 모두 다섯 탭이 있고, 쉬었다 깬 워드 문서의 편집 도구가 보인다." loading="lazy" decoding="async">
+            </picture>
+            <picture class="tw-dark" aria-hidden="true">
+              <source type="image/avif" srcset="assets/frames/mem-win-dark-1368.d5a2b0f68e.avif">
+              <img src="assets/frames/mem-win-dark-1368.ffe7d84cd5.webp" width="1368" height="295" alt="" loading="lazy" decoding="async">
+            </picture>
+            <span class="mem-tabs" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+          </div>
+        </div>
+        <figcaption>시험에 쓴 프로젝트입니다. 탭 다섯 개가 쉬었다가 다시 깬 뒤에도 탭 줄에 그대로 있습니다. 표시된 테두리는 이 페이지가 덧붙인 것입니다.</figcaption>
+      </figure>
+      <figure class="sleep-chart" aria-labelledby="sleep-cap">
+        <div class="sleep-head">
+          <p class="sleep-total"><span class="sleep-num" data-awake="1.3" data-asleep="0.7">1.3</span> GB</p>
+          <div class="seg seg--pill sleep-switch" role="tablist" aria-label="탭 상태 고르기">
+            <span class="seg-indicator" aria-hidden="true"></span>
+            <button class="seg-item" type="button" role="tab" aria-selected="true" aria-controls="sleep-rows" data-state="awake">깨어 있을 때</button>
+            <button class="seg-item" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="sleep-rows" data-state="asleep">쉬게 한 뒤</button>
+          </div>
+        </div>
+        <ol class="sleep-rows" id="sleep-rows" role="tabpanel">
+          <li><span class="sleep-l">프로젝트를 열기 전</span><span class="sleep-bar"><i></i></span><span class="sleep-v">544 MB</span></li>
+          <li><span class="sleep-l">+ 워드 탭</span><span class="sleep-bar"><i></i></span><span class="sleep-v">652 MB</span></li>
+          <li><span class="sleep-l">+ 파워포인트 탭</span><span class="sleep-bar"><i></i></span><span class="sleep-v">1,269 MB</span></li>
+          <li><span class="sleep-l">+ 엑셀 탭</span><span class="sleep-bar"><i></i></span><span class="sleep-v">1,454 MB</span></li>
+          <li><span class="sleep-l">+ 마크다운 탭</span><span class="sleep-bar"><i></i></span><span class="sleep-v">1,470 MB</span></li>
+          <li><span class="sleep-l">+ AI 대화 탭</span><span class="sleep-bar"><i></i></span><span class="sleep-v">1,490 MB</span></li>
+          <li class="sleep-row--settle"><span class="sleep-l">18초 뒤, 다섯 탭이 깨어 있는 채로</span><span class="sleep-bar"><i></i></span><span class="sleep-v">1,339 MB</span></li>
+          <li class="sleep-row--asleep"><span class="sleep-l">다른 프로젝트로 옮겨 다섯 탭이 쉰 뒤</span><span class="sleep-bar"><i></i></span><span class="sleep-v">744 MB</span></li>
+        </ol>
+        <figcaption id="sleep-cap"><span class="tag tag--quiet">시험 환경 측정값</span> 위 프로젝트의 다섯 탭을 하나씩 깨운 뒤 다른 프로젝트로 옮겨 쉬게 했습니다.
+          <details class="sleep-more"><summary>잰 조건<svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+            <p>브라우저(헤드리스 Chromium)에서 앱을 띄우고, 쉬기까지의 시간을 12초로 줄여 세 번 잰 것 가운데 마지막 회입니다. 세 번의 범위는 깨어 있을 때 1,201–1,339 MB, 쉰 뒤 492–744 MB입니다. 설치한 앱은 다른 엔진(WebKitGTK)으로 그리므로 크기는 참고값이고, 줄어드는 방향은 같습니다. 다른 앱과 견준 값은 없습니다.</p>
+          </details>
+        </figcaption>
+      </figure>
+      <ul class="facts facts--icons facts--row">
+        <li><svg class="icon" aria-hidden="true"><use href="#i-save"/></svg><p><strong>저장한 다음에 쉽니다.</strong> 저장하지 않은 문서는 먼저 저장하고, 저장할 수 없으면 쉬게 하지 않습니다.</p></li>
+        <li><svg class="icon" aria-hidden="true"><use href="#i-zap"/></svg><p><strong>일하는 탭은 깨어 있습니다.</strong> AI가 일하는 중인 탭과 최근에 본 탭 여섯 개는 쉬지 않습니다.</p></li>
+        <li><svg class="icon" aria-hidden="true"><use href="#i-globe"/></svg><p><strong>웹 페이지 탭도 쉽니다.</strong> 다시 볼 때 같은 주소, 같은 로그인으로 엽니다. 쓰다 만 입력은 사라집니다.</p></li>
+      </ul>
+    </div>
+    <div class="mem-facts">
+      <figure class="memline">
+        <div class="shot shot--memline">
+          <picture class="memline-light">
+            <source type="image/avif" srcset="assets/frames/mem-corner-480.4f8b050c68.avif">
+            <img src="assets/frames/mem-corner-480.231439215e.webp" width="480" height="260" alt="창 오른쪽 아래의 ‘메모리 0.7 GB’ 표시에 마우스를 올린 모습. 창 288 MB, AI 엔진과 도구 25 MB, 게이트웨이 363 MB로 나뉘어 나온다." loading="lazy" decoding="async">
+          </picture>
+          <picture class="memline-dark" aria-hidden="true">
+            <source type="image/avif" srcset="assets/frames/mem-corner-dark-480.b422c2a78e.avif">
+            <img src="assets/frames/mem-corner-dark-480.00a29816fc.webp" width="480" height="260" alt="" loading="lazy" decoding="async">
+          </picture>
+        </div>
+        <figcaption><strong>메모리 표시.</strong> 창 오른쪽 아래에 지금 쓰는 메모리가 나오고, 마우스를 올리면 창, AI 엔진, 그리고 뒤에서 일을 맡는 본체(게이트웨이)로 나눠 보여 줍니다. 그림 속 값은 시험 환경에서 잰 것이라, 끝에 적은 만든 사람의 PC 값과 다릅니다. Linux의 deb·Arch 설치본과 Windows에서 나오고, macOS와 AppImage에서는 아직 나오지 않습니다. 만든 사람의 Linux PC에서는 창을 띄워 두고 쉴 때 약 0.5 GB, 본체만 60–85 MB였습니다.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="section section--seam" id="bookmarks" data-section="bookmarks" aria-labelledby="bookmarks-title">
+  <div class="container">
+    <header class="section-head">
+      <h2 id="bookmarks-title">쓰던 즐겨찾기를 그대로 가져옵니다</h2>
+      <p class="lead">Chrome, Edge, Firefox의 즐겨찾기를 가져오면, 모든 프로젝트의 웹 탭에서 주소 줄 바로 아래에 한 줄로 나옵니다.</p>
+    </header>
+    <figure class="bm-bar">
+      <div class="shot shot--bar">
+        <picture class="tw-light">
+          <source type="image/avif" srcset="assets/frames/bm-bar-1103.f2902081af.avif">
+          <img src="assets/frames/bm-bar-1103.36eb1f0284.webp" width="1103" height="118" alt="웹 탭의 주소 줄과 그 아래 즐겨찾기 줄. 한림대학교, 스마트캠퍼스, 수업 자료 폴더, 국립국어원 표준국어대사전 검색, 학과 행정 폴더, 한국연구재단, 교수학습센터, 도서관, 학술정보원 전자저널이 한 줄로 있다." loading="lazy" decoding="async">
+        </picture>
+        <picture class="tw-dark" aria-hidden="true">
+          <source type="image/avif" srcset="assets/frames/bm-bar-dark-1103.fe32491e90.avif">
+          <img src="assets/frames/bm-bar-dark-1103.919c51720c.webp" width="1103" height="118" alt="" loading="lazy" decoding="async">
+        </picture>
+      </div>
+    </figure>
+    <div class="split split--5-7 bm-row">
+      <ul class="facts facts--icons">
+        <li><svg class="icon" aria-hidden="true"><use href="#i-bookmark"/></svg><p><strong>가져오는 곳</strong>처음 설정의 네 번째 단계와 설정의 일반입니다. 처음에 건너뛰어도 나중에 가져올 수 있습니다.</p></li>
+        <li><svg class="icon" aria-hidden="true"><use href="#i-eye-off"/></svg><p><strong>즐겨찾기만 읽습니다.</strong> 암호나 방문 기록, 로그인 정보는 읽지 않습니다.</p></li>
+        <li><svg class="icon" aria-hidden="true"><use href="#i-star"/></svg><p><strong>더하고 옮기기</strong>주소 칸의 별이나 줄의 오른쪽 클릭으로 더하고, 끌어서 순서를 바꿉니다.</p></li>
+        <li class="facts-limit"><span class="tag tag--warn">아직</span><p>사이트 아이콘은 없고, 폴더 안의 항목은 그 메뉴에서 바로 고칠 수 없습니다. 가져오기는 견본 파일로 확인했고, Windows와 macOS의 브라우저에서는 사람이 아직 눌러 보지 않았습니다.</p></li>
+      </ul>
+      <figure class="bm-import">
+        <div class="shot shot--dialog">
+          <picture class="tw-light">
+            <source type="image/avif" srcset="assets/frames/bm-import-760.0eabcb2ded.avif">
+            <img src="assets/frames/bm-import-760.3b6c43ff43.webp" width="760" height="484" alt="처음 설정 창의 ‘쓰던 즐겨찾기 가져오기’ 단계. Chrome, Edge, Firefox 줄마다 가져오기 단추가 있고, 즐겨찾기 23개와 폴더 4개를 가져왔다는 안내가 보인다." loading="lazy" decoding="async">
+          </picture>
+          <picture class="tw-dark" aria-hidden="true">
+            <source type="image/avif" srcset="assets/frames/bm-import-dark-760.b916d96acc.avif">
+            <img src="assets/frames/bm-import-dark-760.5d21c76dc4.webp" width="760" height="484" alt="" loading="lazy" decoding="async">
+          </picture>
+        </div>
+        <figcaption>처음 설정의 즐겨찾기 단계. 견본 즐겨찾기 파일을 가져온 뒤의 모습입니다.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="section section--seam" id="phone" data-section="phone" aria-labelledby="phone-title">
+  <div class="container">
+    <header class="section-head">
+      <h2 id="phone-title">휴대폰은 리모컨입니다</h2>
+      <p class="lead">자리를 비워도 일은 이 PC에서 계속됩니다. 휴대폰의 텔레그램이나 슬랙에 적어 보내면 Workbench의 AI가 받아서 하고, 그 대화는 PC에서 자기 자리에 모입니다.</p>
+    </header>
+    <div class="phone-stage" data-component="phone-stage">
+      <div class="phone-pc">
+        <figure>
+          <div class="win win--still">
+            <div class="win-bar" aria-hidden="true"><span class="win-lights"><i></i><i></i><i></i></span><span class="win-title"><img src="assets/frames/app-icon-128.8cfa858792.webp" width="16" height="16" alt="">Achmage Workbench</span></div>
+            <div class="shot--msgtop">
+              <picture class="tw-light">
+                <source type="image/avif" srcset="assets/frames/msg-list-928.b5b6b26c87.avif">
+                <img src="assets/frames/msg-list-928.d0da564dfa.webp" width="928" height="297" alt="PC의 Workbench. 프로젝트 목록의 ‘메신저’ 아래에 ‘텔레그램 대화’와 ‘Slack 대화’가 따로 있고, ‘지금’ 표에 휴대폰에서 온 대화 두 개가 각각 그 자리에서 ‘새 답’ 상태로 Claude와 함께 보인다." loading="lazy" decoding="async">
+              </picture>
+              <picture class="tw-dark" aria-hidden="true">
+                <source type="image/avif" srcset="assets/frames/msg-list-dark-928.b399cb730b.avif">
+                <img src="assets/frames/msg-list-dark-928.894fe2184b.webp" width="928" height="297" alt="" loading="lazy" decoding="async">
+              </picture>
+            </div>
+          </div>
+          <figcaption><strong>메신저의 자리.</strong> 휴대폰에서 시작한 대화는 마지막에 쓴 프로젝트에 섞이지 않고 ‘텔레그램 대화’와 ‘Slack 대화’에 모입니다. 직접 고른 프로젝트에서는 전처럼 일합니다.</figcaption>
+        </figure>
+        <figure>
+          <div class="shot shot--msgdef">
+            <picture class="tw-light">
+              <source type="image/avif" srcset="assets/frames/msg-def-690.d6327e8109.avif">
+              <img src="assets/frames/msg-def-690.9d3548c717.webp" width="690" height="140" alt="설정의 메신저. 텔레그램 ‘연결됨, 기본 엔진 Codex’, Slack ‘연결됨, 기본 엔진 Claude’ 두 줄이 있다. 봇 이름과 사람 이름은 견본이다." loading="lazy" decoding="async">
+            </picture>
+            <picture class="tw-dark" aria-hidden="true">
+              <source type="image/avif" srcset="assets/frames/msg-def-dark-690.49572ac967.avif">
+              <img src="assets/frames/msg-def-dark-690.418c0b64db.webp" width="690" height="140" alt="" loading="lazy" decoding="async">
+            </picture>
+          </div>
+          <figcaption><strong>메신저마다 기본 엔진.</strong> 텔레그램은 Codex, 슬랙은 Claude처럼 새 대화의 AI를 따로 정해 둡니다.</figcaption>
+        </figure>
+      </div>
+      <div class="phone-col" data-component="typeset-exchange">
+        <p class="phone-col-head">휴대폰의 텔레그램</p>
+        <div class="chat-thread">
+          <p class="chat-bubble chat-bubble--me">어제 받은 학생 명단 정리해 줘</p>
+          <p class="chat-time">01:42</p>
+          <p class="chat-bubble">받았습니다. PC의 ‘텔레그램 대화’에서 이어서 합니다.</p>
+        </div>
+        <p class="chat-foot">휴대폰 화면 대신 글로 옮겼습니다. 요청 글은 PC에 남은 견본 기록 그대로이고, 답 글은 그 과정을 말로 풀어 적은 것입니다.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band band--navy" id="vault" data-section="vault" aria-labelledby="vault-title">
+  <div class="container">
+    <header class="section-head">
+      <h2 id="vault-title">비밀 보관함이 지키는 것과 아직 못 지키는 것</h2>
+      <p class="lead">메신저 봇 토큰, 저장한 비밀번호, 이음오피스 AI 키가 여기에 들어갑니다. 지키는 방식을 강화했지만 한계가 남아 있습니다.</p>
+    </header>
+    <div class="verdict" data-component="verdict-pair" data-row-group="vault-main">
+      <div class="verdict-col verdict-col--ok">
+        <h3><svg class="icon verdict-mark" aria-hidden="true"><use href="#i-shield-check"/></svg>지킵니다</h3>
+        <ul>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-key"/></svg><p>보관함을 여는 열쇠는 Workbench 앱이 직접 띄운 자기 프로그램에게만 건넵니다.</p></li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-ban"/></svg><p>AI가 실행한 프로그램이나 다른 프로그램이 열쇠를 달라고 하면 거절합니다. 예전 판의 실행 파일도 열쇠를 받지 못합니다.</p></li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg><p>macOS에서는 다른 프로그램이 열쇠를 읽으려 하면 키체인이 먼저 허락을 묻습니다.</p></li>
+        </ul>
+      </div>
+      <div class="verdict-col verdict-col--no">
+        <h3><svg class="icon verdict-mark" aria-hidden="true"><use href="#i-shield-alert"/></svg>아직 못 지킵니다</h3>
+        <ul>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-monitor"/></svg><p>Windows와 Linux에서는 같은 사용자 계정으로 실행되는 프로그램이 운영체제의 비밀번호 저장소에서 열쇠를 직접 읽을 수 있습니다.</p></li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg><p>그런 프로그램은 Workbench가 시작되는 순간을 노려 앱을 거쳐 열쇠를 얻을 수도 있습니다.</p></li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg><p>Windows와 Linux에서는 전체 접근으로 일하는 AI도, 휴대폰에서 시킨 대화까지 포함해, 이 저장소를 읽을 수 있습니다.</p></li>
+        </ul>
+      </div>
+    </div>
+    <p class="verdict-say">그래서 카드나 주거래 은행 로그인은 암호로 여는 보관함이 나올 다음 판까지 넣지 마세요. 출처를 모르는 프로그램은 설치하지 말고, AI에게 ‘전체 접근’을 줄 때에는 이 점을 염두에 두세요.</p>
+  </div>
+</section>
+
+<section class="section section--soft" id="download" data-section="download" aria-labelledby="download-title">
+  <div class="container">
+    <header class="section-head">
+      <h2 id="download-title">내 컴퓨터에 맞는 파일 하나</h2>
+      <p class="lead">GitHub 릴리스에서 운영체제에 맞는 설치 파일 하나를 받습니다. 무료입니다. 아래 이름은 2026년 11월 16일에 나온 0.5.1의 파일입니다.</p>
+    </header>
+
+    <div class="os" data-component="os-chooser">
+      <p class="need"><span class="tag tag--warn">먼저 필요한 것</span> Claude Code나 Codex 가운데 쓰려는 것이 이 컴퓨터에 설치되어 로그인되어 있어야 합니다. Claude Code는 Anthropic의, Codex는 OpenAI의 AI 작업 도구입니다. Workbench는 그 로그인을 그대로 쓰고 API 키를 따로 받지 않습니다.</p>
+      <p class="need need--phone">설치 파일은 컴퓨터용입니다. 휴대폰으로 보고 있다면 이 페이지를 컴퓨터에서 열어 받으세요.</p>
+
+      <div class="seg seg--pill" role="tablist" aria-label="운영체제 고르기" data-gallery="smoothui:social-selector" data-component="select">
+        <span class="seg-indicator" aria-hidden="true"></span>
+        <button class="seg-item" type="button" role="tab" id="os-tab-win" aria-controls="os-win" aria-selected="true">Windows</button>
+        <button class="seg-item" type="button" role="tab" id="os-tab-mac" aria-controls="os-mac" aria-selected="false" tabindex="-1">macOS</button>
+        <button class="seg-item" type="button" role="tab" id="os-tab-linux" aria-controls="os-linux" aria-selected="false" tabindex="-1">Linux</button>
+        <button class="seg-item" type="button" role="tab" id="os-tab-arch" aria-controls="os-arch" aria-selected="false" tabindex="-1">Arch, CachyOS</button>
+      </div>
+
+      <div class="os-panels">
+        <article class="os-panel" id="os-win" role="tabpanel" aria-labelledby="os-tab-win">
+          <h3>Windows</h3>
+          <dl>
+            <div><dt>받을 파일</dt><dd><span class="file"><code>Achmage.Workbench_0.5.1_x64-setup.exe</code><span class="file-size">129 MB</span></span><span class="file file--alt"><code>Achmage.Workbench_0.5.1_x64_ko-KR.msi</code><span class="file-size">188 MB</span></span></dd></div>
+            <div><dt>설치</dt><dd>받은 파일을 실행합니다. 서명이 없어 SmartScreen 경고가 뜰 수 있습니다. 설치 프로그램은 뒤에서 돌던 Workbench가 안전하게 멈춘 뒤에 설치를 이어 갑니다.</dd></div>
+            <div><dt>확인된 범위</dt><dd><span class="tag tag--warn">자동 확인까지</span> 자동으로 만들고 설치하고 처음 실행까지 확인했습니다. 아직 사람이 실제 컴퓨터에서 써 보지는 않았으니, 이상한 점이 보이면 <a class="link link--quiet" href="https://github.com/laguna821/Achmage-workbench-CLI/issues">알려 주세요</a>.</dd></div>
+          </dl>
+        </article>
+        <article class="os-panel" id="os-mac" role="tabpanel" aria-labelledby="os-tab-mac">
+          <h3>macOS (Apple silicon)</h3>
+          <dl>
+            <div><dt>받을 파일</dt><dd><span class="file"><code>Achmage.Workbench_0.5.1_aarch64.dmg</code><span class="file-size">167 MB</span></span></dd></div>
+            <div><dt>설치</dt><dd>파일을 열고 앱을 응용 프로그램 폴더로 옮깁니다. 서명이 없어 처음에는 Finder에서 오른쪽 클릭 뒤 열기로 엽니다. 키체인이 허락을 물으면 ‘항상 허용’을 누르세요.</dd></div>
+            <div><dt>확인된 범위</dt><dd><span class="tag tag--warn">자동 확인까지</span> 자동으로 만들고 설치하고 처음 실행까지 확인했습니다. 아직 사람이 실제 컴퓨터에서 써 보지는 않았고, 개발자 인증서 서명은 다음 판의 일입니다. 이상한 점이 보이면 <a class="link link--quiet" href="https://github.com/laguna821/Achmage-workbench-CLI/issues">알려 주세요</a>.</dd></div>
+          </dl>
+        </article>
+        <article class="os-panel" id="os-linux" role="tabpanel" aria-labelledby="os-tab-linux">
+          <h3>Linux</h3>
+          <dl>
+            <div><dt>받을 파일</dt><dd><span class="file"><code>Achmage.Workbench_0.5.1_amd64.AppImage</code><span class="file-size">231 MB</span></span><span class="file file--alt"><code>Achmage.Workbench_0.5.1_amd64.deb</code><span class="file-size">174 MB</span></span></dd></div>
+            <div><dt>설치</dt><dd>AppImage는 실행 권한을 주고 바로 실행합니다. deb는 배포판의 방식대로 설치합니다.</dd></div>
+          </dl>
+        </article>
+        <article class="os-panel" id="os-arch" role="tabpanel" aria-labelledby="os-tab-arch">
+          <h3>Arch Linux, CachyOS</h3>
+          <dl>
+            <div><dt>받을 파일</dt><dd><span class="file"><code>achmage-workbench-0.5.1-1-x86_64.pkg.tar.zst</code><span class="file-size">114 MB</span></span></dd></div>
+            <div><dt>설치</dt><dd>
+              <span class="cmd"><code id="arch-cmd">sudo pacman -U achmage-workbench-*.pkg.tar.zst</code>
+                <button class="copy" type="button" data-copy="#arch-cmd" data-gallery="smoothui:button-copy" data-component="button-copy" aria-label="설치 명령 복사">
+                  <svg class="icon icon-copy" aria-hidden="true"><use href="#i-copy"/></svg>
+                  <svg class="icon icon-check" aria-hidden="true"><use href="#i-check"/></svg>
+                </button>
+              </span>
+              <span class="sr-only" role="status" id="copy-status"></span>
+              시스템의 Node.js 24 이상을 씁니다.</dd></div>
+          </dl>
+        </article>
+      </div>
+
+      <div class="os-actions">
+        <a class="btn btn--primary btn--hover" href="https://github.com/laguna821/Achmage-workbench-CLI/releases/latest" data-component="button">
+          <span class="btn-dot" aria-hidden="true"></span>
+          <span class="btn-label">GitHub 릴리스에서 내려받기</span>
+          <span class="btn-reveal" aria-hidden="true">GitHub 릴리스에서 내려받기 <svg class="icon"><use href="#i-arrow-up-right"/></svg></span>
+        </a>
+        <ul class="assure">
+          <li>이미 쓰고 있다면 앱을 지우지 말고 새 판을 그대로 설치하세요. 프로젝트, 대화, 문서, 설정, 메신저 연결은 그대로 남고, 저장 형식을 바꿔야 할 때는 바꾸기 전에 복구본을 먼저 만듭니다.</li>
+          <li>AI는 명령을 실행하기 전에 먼저 묻고, 문서를 고친 것은 수정안으로 보여 줍니다.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="limits" data-section="limits" aria-labelledby="limits-title">
+  <div class="container split split--4-8">
+    <div class="limits-say">
+      <h2 id="limits-title">아직 안 되는 것을 그대로 적습니다</h2>
+      <p class="lead">0.5.1 릴리스 노트의 ‘알려진 한계’에서 먼저 알아야 할 것을 옮겼습니다.</p>
+      <p class="caption">비밀 보관함이 아직 지키지 못하는 것은 <a class="link link--quiet" href="#vault">보관함 이야기</a>에, Windows와 macOS 설치본을 어디까지 확인했는지는 <a class="link link--quiet" href="#download">내려받기</a>의 운영체제별 칸에 적었습니다.</p>
+      <p><a class="link" href="https://github.com/laguna821/Achmage-workbench-CLI/releases/latest">릴리스 노트 전체 읽기 <svg class="icon" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></a></p>
+    </div>
+
+    <div class="ledger-wrap">
+      <ul class="ledger" data-component="limit-ledger">
+        <li><span class="tag tag--warn">쉬는 탭</span><p>쉬는 탭과 메모리 표시는 Linux에서 확인했습니다. 실제 창에서 10분을 기다린 동작, 웹 페이지가 쉬었다 깨는 동작, Windows의 메모리 값은 사람이 아직 확인하지 않았습니다.</p></li>
+        <li><span class="tag tag--warn">쉬는 탭</span><p>쉬었다 깬 오피스 문서는 처음 위치(첫 쪽, 첫 슬라이드, 첫 시트)에서 열리고, 편집기 안의 실행 취소 기록은 남지 않습니다.</p></li>
+        <li><span class="tag tag--warn">즐겨찾기</span><p>웹 페이지 안에 커서가 있을 때는 Ctrl+D, Ctrl+Shift+B가 듣지 않을 수 있습니다.</p></li>
+        <li><span class="tag tag--warn">휴대폰</span><p>슬랙에서는 앱이 내 메시지를 지울 수 없습니다. 비밀번호나 인증번호를 잘못 보냈다면 직접 지워 주세요.</p></li>
+        <li><span class="tag tag--warn">휴대폰</span><p>입력 칸이 닫힌 뒤에 보낸 비밀번호나 키는 앱이 가려내지 못합니다. 그 뒤에는 대화에 적지 마세요.</p></li>
+        <li><span class="tag tag--warn">한글</span><p>예전 한글로 저장한 일부 문서는 쪽 나눔이 한글과 한 줄쯤 다를 수 있습니다. 내용이 사라지지는 않습니다.</p></li>
+        <li><span class="tag tag--warn">한글</span><p>암호가 걸린 한글 문서는 열어 볼 수 있지만 저장할 수는 없습니다. 고쳐야 한다면 한글에서 암호를 푼 뒤 여세요.</p></li>
+        <li><span class="tag tag--quiet">그 밖에</span><p>문서 이름은 문서 탭에서 바꿀 수 없습니다. 같은 문서를 두 칸에 나란히 열면 한쪽은 읽기만 됩니다. PDF 편집기의 메뉴와 단추 이름은 아직 영어입니다.</p></li>
+        <li><span class="tag tag--quiet">그 밖에</span><p>이 컴퓨터 안에서 하는 음성 받아쓰기는 이번 판에서 처음부터 끝까지 다시 시험하지 못했습니다.</p></li>
+      </ul>
+
+      <div class="more" data-gallery="smoothui:basic-accordion" data-component="accordion">
+        <details>
+          <summary>휴대폰 메신저의 나머지 한계<svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+          <ul>
+            <li>인증번호나 링크를 넣는 단계가 끝나지 않고 멈추면, 30분 동안 숫자 하나나 링크 하나만 있는 짧은 메시지가 대화에서 빠지고 지워질 수 있습니다. 쓴 그대로 보내려면 5분 안에 [그대로 보내기]를 누르세요.</li>
+            <li>단계가 끝난 뒤에는 인증번호 메시지를 찍은 화면이나 글 없는 사진을 보내지 마세요. 그림은 확인할 수 없어서 그대로 AI에게 갑니다.</li>
+            <li>슬랙에서 PC 쪽 단계가 기다리는 동안에는, 그 단계를 마친 뒤 메시지를 “이어서”로 시작해 주세요.</li>
+            <li>긴 문장 속에 ‘인증번호’나 ‘코드’ 같은 말 없이 적은 번호, 두 메시지로 나눠 보낸 번호는 단계가 끝난 뒤에는 알아보지 못합니다.</li>
+            <li>자동으로 채운 값은 그 직후 페이지를 다루는 AI가 읽을 수 있습니다. 브라우저에 저장된 로그인 정보도 그렇습니다.</li>
+            <li>8글자보다 짧은 값은 밖으로 나가는 파일에서 찾아내지 못합니다.</li>
+            <li>큰 Word 문서를 보낼 때 잠깐 멈춘 듯 보일 수 있습니다.</li>
+          </ul>
+        </details>
+        <details>
+          <summary>한글 문서의 나머지 한계<svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+          <ul>
+            <li>예전 한글로 저장한 일부 문서에서, 쪽 맨 위 제목 표 아래 내용이 한 줄(약 5.6 mm) 아래로 내려가 보이고 그 쪽에 한 줄이 덜 들어갈 수 있습니다.</li>
+            <li>자동 번호만 있는 줄이 한 줄 내려갈 수 있습니다.</li>
+            <li>드물게 쪽 끝 문단의 마지막 한 줄이 앞 쪽에 남거나, 내어쓰기한 줄 끝이 빈칸 하나만큼 어긋날 수 있습니다.</li>
+            <li>외톨이 줄 방지는 새로 입력한 문서에는 사실상 적용되지 않습니다.</li>
+            <li>한 구역에 쪽 번호 설정이 여러 개 있으면 하나로 합쳐 구역 첫 문단에 둡니다.</li>
+            <li>같은 문서라도 줄이 한두 군데 다르게 나뉘고, 몇몇 긴 문서는 쪽 수가 바뀔 수 있습니다. 한글 인쇄본에 더 가까워지는 쪽입니다.</li>
+          </ul>
+        </details>
+      </div>
+
+      <div class="next">
+        <h3>다음 판에 올 것</h3>
+        <ul class="next-list">
+          <li>암호로 여는 비밀 보관함</li>
+          <li>즐겨찾기의 사이트 아이콘과 폴더 안 항목 고치기</li>
+          <li>macOS와 AppImage의 메모리 표시</li>
+          <li>활동을 시간순 이력으로 보기</li>
+          <li>문서 이름 바꾸기</li>
+          <li>macOS 판 서명</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section section--soft" id="open" data-section="open" aria-labelledby="open-title">
+  <div class="container">
+    <header class="section-head">
+      <h2 id="open-title">소스는 열려 있고, 빌려 온 것에는 이름을 적습니다</h2>
+      <p class="lead">Workbench의 코드는 MIT 라이선스로 GitHub에 있습니다. 아래는 그 위에 서 있는 다른 분들의 작업입니다.</p>
+    </header>
+    <table class="credits" data-component="credit-rows">
+      <thead><tr><th scope="col">이름</th><th scope="col">Workbench에서 하는 일</th><th scope="col">라이선스</th></tr></thead>
+      <tbody>
+        <tr><th scope="row"><a class="link link--quiet" href="https://github.com/shaongitbd/doory">Doory</a></th><td data-label="하는 일">디자인 편집기. Siam, creator and maintainer of Doory.</td><td data-label="라이선스">Attribution Assurance License</td></tr>
+        <tr><th scope="row"><a class="link link--quiet" href="https://github.com/pblsketch/ieumoffice">이음오피스 (IeumOffice)</a></th><td data-label="하는 일">워드, PPT, 엑셀, 한글, 마크다운, PDF의 편집 화면</td><td data-label="라이선스">Apache-2.0</td></tr>
+        <tr><th scope="row"><a class="link link--quiet" href="https://github.com/edwardkim/rhwp">rhwp</a></th><td data-label="하는 일">한글 문서 편집기의 엔진</td><td data-label="라이선스">MIT</td></tr>
+        <tr><th scope="row"><a class="link link--quiet" href="https://icons8.com">Icons8</a></th><td data-label="하는 일">프로젝트, 폴더, 대화, 문서 종류의 항목 아이콘 (Liquid Glass)</td><td data-label="라이선스">Icons8 라이선스, 출처 표시</td></tr>
+        <tr><th scope="row"><a class="link link--quiet" href="https://github.com/neondeex/atlas-filemanager">Atlas File Manager</a></th><td data-label="하는 일">색 조합의 색 값. Dracula, Nord, Rosé Pine은 각 프로젝트의 색입니다.</td><td data-label="라이선스">색 값만 따랐습니다</td></tr>
+        <tr><th scope="row"><a class="link link--quiet" href="https://github.com/chenxiachan/textfold">textfold</a></th><td data-label="하는 일">글 접어 읽기에 쓴 코드</td><td data-label="라이선스">Apache-2.0</td></tr>
+        <tr><th scope="row"><a class="link link--quiet" href="https://github.com/ssp-data/obsidian-fast-find-10k">Obsidian Fast Find 10k</a></th><td data-label="하는 일">대화와 문서 검색</td><td data-label="라이선스">MIT</td></tr>
+      </tbody>
+    </table>
+    <p class="caption">전체 목록과 라이선스 원문은 앱의 설정, 정보, 오픈소스 라이선스와 <a class="link link--quiet" href="https://github.com/laguna821/Achmage-workbench-CLI">저장소</a>에 있습니다.</p>
+  </div>
+</section>
+
+<section class="section section--seam" id="maker" data-section="maker" aria-labelledby="maker-title">
+  <div class="container split split--5-7 maker">
+    <div class="maker-mark" aria-hidden="true">
+      <svg class="maker-logo"><use href="#logo-achmage"/></svg>
+      <span class="maker-app"><img src="assets/frames/app-icon-128.8cfa858792.webp" width="64" height="64" alt="" loading="lazy">Workbench</span>
+    </div>
+    <div class="stack">
+      <h2 id="maker-title">안창현이 만들었습니다</h2>
+      <p class="lead">가르치는 사람. 계속 만드는 사람.</p>
+      <p>교육에서 시작한 질문을 발표와 디자인, 움직이는 이미지로 풀어갑니다. Workbench는 한글 문서를 쓰는 대학 교수자를 먼저 생각하고 만들었습니다.</p>
+      <p class="maker-links">
+        <a class="link" href="https://achmage-slides.vercel.app/">Achmage 스튜디오 <svg class="icon" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></a>
+        <a class="link" href="https://github.com/laguna821">GitHub <svg class="icon" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></a>
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="section section--seam close" id="close" data-section="close" aria-label="맺음">
+  <div class="container">
+    <div class="statement">
+      <p class="statement-line">앱을 하나 더 설치하는 일이 아니라, <span class="nb">창을 줄이는 일입니다.</span></p>
+      <div class="close-act">
+        <a class="btn btn--primary btn--hover close-get" href="https://github.com/laguna821/Achmage-workbench-CLI/releases/latest" data-component="button">
+          <span class="btn-dot" aria-hidden="true"></span>
+          <span class="btn-label close-get-label">GitHub 릴리스에서 내려받기</span>
+          <span class="btn-reveal" aria-hidden="true"><span class="close-get-label">GitHub 릴리스에서 내려받기</span> <svg class="icon"><use href="#i-arrow-up-right"/></svg></span>
+        </a>
+        <p class="close-file" hidden></p>
+        <a class="link link--quiet close-other" href="#download">다른 운영체제, 먼저 필요한 것</a>
+      </div>
+    </div>
+    <figure class="close-shot">
+      <div class="win win--still">
+        <div class="win-bar" aria-hidden="true"><span class="win-lights"><i></i><i></i><i></i></span><span class="win-title"><img src="assets/frames/app-icon-128.8cfa858792.webp" width="16" height="16" alt="">Achmage Workbench</span></div>
+        <div class="win-shot">
+          <picture class="win-img win-img--light">
+            <source type="image/avif" srcset="assets/frames/close-home-1440.2cc569ceeb.avif 1440w, assets/frames/close-home-2560.dab93cc3c8.avif 2560w" sizes="min(92vw, 82rem)">
+            <img src="assets/frames/close-home-1440.abc7d52ebf.webp" width="1440" height="865" alt="Workbench의 홈 ‘지금’. 세 프로젝트에서 진행 중인 대화 네 개가 프로젝트, 상태, 맡은 AI와 함께 표 하나에 있고, 확인이 필요한 작업 2개가 맨 위에 모여 있다." loading="lazy" decoding="async">
+          </picture>
+          <picture class="win-img win-img--dark" aria-hidden="true">
+            <source type="image/avif" srcset="assets/frames/close-home-dark-1440.422dc2b830.avif 1440w, assets/frames/close-home-dark-2560.5a37227e4a.avif 2560w" sizes="min(92vw, 82rem)">
+            <img src="assets/frames/close-home-dark-1440.03640cf559.webp" width="1440" height="865" alt="" loading="lazy" decoding="async">
+          </picture>
+        </div>
+      </div>
+      <figcaption>홈인 ‘지금’에서는 모든 프로젝트의 진행 중인 일과 확인할 일을 표 하나로 봅니다.</figcaption>
+    </figure>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer" data-component="footer">
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <svg class="brand-logo" role="img" aria-label="Achmage"><use href="#logo-achmage"/></svg>
+      <p>Achmage Workbench 0.5.1<br>MIT 라이선스</p>
+    </div>
+    <nav class="footer-nav" aria-label="바깥 링크와 구획">
+      <a href="https://github.com/laguna821/Achmage-workbench-CLI">GitHub 저장소</a>
+      <a href="https://github.com/laguna821/Achmage-workbench-CLI/releases/latest">릴리스와 설치 파일</a>
+      <a href="https://achmage-slides.vercel.app/">Achmage 스튜디오</a>
+      <a href="#one-window">따로 열던 것들</a>
+      <a href="#tour">화면으로 보기</a>
+      <a href="#colors">색 조합</a>
+      <a href="#memory">쉬는 탭과 메모리</a>
+      <a href="#bookmarks">즐겨찾기</a>
+      <a href="#phone">휴대폰</a>
+      <a href="#vault">비밀 보관함</a>
+      <a href="#download">내려받기</a>
+      <a href="#limits">알려진 한계</a>
+      <a href="#open">오픈소스</a>
+    </nav>
+    <div class="footer-notes">
+      <p>글꼴은 Pretendard(길형진, SIL Open Font License 1.1)입니다. 이 페이지에 쓰는 글자만 추려 실었고, 라이선스에 따라 추린 파일 안의 이름은 바꿨습니다.</p>
+      <p>아이콘은 Lucide(ISC)입니다. 고르기 단추, 복사 단추, 표 같은 부품의 짜임은 smoothui(Eduardo Calvo), Magic UI, Tailark(Méschac Irung)의 MIT 코드를 보고 다시 지었습니다.</p>
+      <p>화면은 모두 견본 자료로 찍은 실제 앱 화면입니다. © 2026 Achmage, 안창현</p>
+    </div>
+  </div>
+</footer>
+
+<script src="app.297b4e7385.js" defer></script>
+</body>
+</html>
