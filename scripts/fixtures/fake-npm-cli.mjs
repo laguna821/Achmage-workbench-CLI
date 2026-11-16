@@ -46,7 +46,7 @@ for (let step = 0; step < 8; step += 1) {
   await sleep(250);
 }
 // The modules the stand-in engines import, copied next to them.
-const HELPERS = ["png.mjs", "sample-reply.mjs"];
+const HELPERS = ["png.mjs", "sample-reply.mjs", "fake-remote.mjs"];
 if (name === "@openai/codex") {
   mkdirSync(join(root, "bin"), { recursive: true });
   writeFileSync(join(root, "package.json"), JSON.stringify({ name, version: "0.0.0-fake", type: "module", bin: { codex: "bin/codex.js" } }));
