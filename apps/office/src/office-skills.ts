@@ -78,6 +78,8 @@ export function createOfficeSkills(init: Init, gateway: Gateway, events: Events,
       takeHandoff: (target: string) => call("take-handoff", { target }),
       previewLinks: () => call("preview-links", {}),
       focusTab: (tabId: string) => parent("focus-tab", { tabId }),
+      /** A document "한글 문서 만들기" made from this one: the Workbench opens it in its own tab. */
+      openMade: (artifactId: string | null) => parent("open-made", artifactId ? { artifactId } : {}),
       openSettings,
       onChanged: (listener: () => void) => events.on("userSkillsChanged")(listener),
     },

@@ -1,0 +1,8 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "resources": {
+      "../../../packaging/install-kind/deb.json": "install-kind.json"
+    }
+  }
+}

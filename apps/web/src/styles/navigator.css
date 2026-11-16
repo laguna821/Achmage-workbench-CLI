@@ -1112,3 +1112,6 @@ html.nav-dragging * {
    without it these literals stand. */
 :root[data-theme="dark"] .nav-column:not(:focus-within),
 .look-scope[data-theme="dark"] .nav-column:not(:focus-within) { --color-current-soft: color-mix(in oklab, var(--color-teal) var(--palette-wash-idle-share, 10%), var(--color-paper-2)); }
+
+/* 설정's "something new here" mark on the rail (a newer version is published; app-update). */
+.rail-icon .rail-new { position: absolute; top: 0; right: 0; box-shadow: 0 0 0 2px var(--color-rail); }

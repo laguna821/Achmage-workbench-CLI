@@ -17,6 +17,8 @@ type Dock = { open: boolean; draft: string; sets: Array<boolean | [boolean, stri
   /** As the real frame (hangul-studio.css, hwp-ai-dock.ts): at a narrow pane an open dock is hidden while a studio dialog is open, unless asked to open since (brought over). */
   narrow?: boolean; dialog?: boolean; over?: boolean };
 const editor = vi.hoisted(() => ({ flushed: 0, mounts: 0, unmounts: 0, sidebar: null as boolean | null,
+  /** The person turned the editors' own panel off (one-doc-ai): the editor says so at once; 문서 AI is the column then. */
+  off: false,
   // The Hangul editor's own AI dock: its state, what is typed in it, the tab's requests to it, and
   // whether it is drawn yet. As the real editor: nothing is said before the dock is drawn (shortly
   // after the frame mounts), a request then is answered "not ready", answers arrive later (a
@@ -29,7 +31,7 @@ const editor = vi.hoisted(() => ({ flushed: 0, mounts: 0, unmounts: 0, sidebar: 
   studio: null as null | ((dialog: boolean) => void), layout: null as null | ((narrow: boolean) => void) }));
 vi.mock("./OfficeEditor.tsx", async () => {
   const React = await import("react");
-  type Props = { onAiPanel?: (open: boolean, draft?: string, dock?: { ready: boolean; person: boolean; shown?: boolean }) => void; onReload?: () => void };
+  type Props = { onAiPanel?: (open: boolean, draft?: string, dock?: { ready: boolean; person: boolean; shown?: boolean; off?: boolean }) => void; onReload?: () => void };
   return {
     OfficeEditor: React.forwardRef((props: Props, ref) => {
       const said = React.useRef(props);
@@ -64,7 +66,8 @@ vi.mock("./OfficeEditor.tsx", async () => {
       // Word says whether its own AI sidebar is open at once; the Hangul dock only once it is drawn; the others say nothing.
       React.useEffect(() => {
         editor.mounts += 1;
-        if (editor.sidebar !== null) props.onAiPanel?.(editor.sidebar);
+        if (editor.off) props.onAiPanel?.(editor.sidebar ?? false, "", { ready: true, person: false, shown: false, off: true });
+        else if (editor.sidebar !== null) props.onAiPanel?.(editor.sidebar);
         let timer: ReturnType<typeof setTimeout> | undefined;
         editor.draw = () => { const dock = editor.dock; if (dock && !dock.drawn) { dock.drawn = true; if (dock.pending !== null) { dock.draft = dock.pending; dock.pending = null; } if (!dock.dead) tell(); } };
         if (editor.dock?.drawAfter != null) timer = setTimeout(() => editor.draw?.(), editor.dock.drawAfter);
@@ -88,7 +91,7 @@ vi.mock("./MarkdownEditor.tsx", async () => {
 const pane = { doc: 1100, host: 1100, resize: [] as (() => void)[] };
 beforeEach(() => {
   pane.doc = 1100; pane.host = 1100; pane.resize = [];
-  editor.flushed = 0; editor.mounts = 0; editor.unmounts = 0; editor.sidebar = null; editor.dock = null; editor.report = null; editor.draw = null;
+  editor.flushed = 0; editor.mounts = 0; editor.unmounts = 0; editor.sidebar = null; editor.off = false; editor.dock = null; editor.report = null; editor.draw = null;
   vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
   Element.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal("ResizeObserver", class { constructor(changed: () => void) { pane.resize.push(changed); } observe() {} disconnect() {} });
@@ -257,7 +260,10 @@ describe("the document's AI was archived", () => {
 });
 
 describe("the column and an embedded editor", () => {
-  it.each(["markdown", "pptx"] as const)("%s (says nothing of its own AI panel): a row click opens the app's own column — no notice pointing at another panel", async (format) => {
+  // The app's column beside an editor that has its own panel: that panel is turned off by the person (one-doc-ai) —
+  // otherwise the panel IS 문서 AI and the column is not beside it (see "one 문서 AI per document" below).
+  beforeEach(() => { editor.off = true; });
+  it.each(["markdown", "pptx"] as const)("%s (its own panel off): a row click opens the app's own column — no notice pointing at another panel", async (format) => {
     const at = setup({ format, name: format === "markdown" ? "강의안.md" : `문서.${format}` });
     await screen.findByTestId("office-editor");
     at.shown.rerender(at.view({ sessionId: "a" }));
@@ -292,10 +298,10 @@ describe("the column and an embedded editor", () => {
   // column it needs its 680 and that panel; with less the column lies over, never squeezing it.
   // Release unit A: on a desktop the AI narrows to its 300 before the pane shows one at a time (a visible
   // two-way key, never a sheet over the editor).
-  it("never squeezes the editor: at 1136 the pane shows one at a time; with room for the editor, its own panel and the AI's 300 it is beside", async () => {
+  it("never squeezes the editor: narrower than the editor's 680 and the AI's 300 the pane shows one at a time; with room it is beside", async () => {
     setup();
     await screen.findByTestId("office-editor");
-    await resize(1136, 1136);
+    await resize(900, 900);
     fireEvent.click(toggle());
     await waitFor(() => expect(column()).not.toBeNull());
     const host = () => document.querySelector<HTMLElement>(".beside")!;
@@ -304,14 +310,9 @@ describe("the column and an embedded editor", () => {
     expect(screen.getByRole("group", { name: "한 번에 하나씩 보기" })).toBeTruthy();
     expect(host().querySelector(".beside-chat")!.hasAttribute("data-covers-web")).toBe(true);
     expect(host().querySelector(".beside-content")!.hasAttribute("inert")).toBe(true);
-    // 300 + 7 + 680 + 360 = 1347 (and a little more to come back beside): a 1440 window in focus mode fits.
-    await resize(1100, 1430);
+    // 300 + 7 + 680 = 987 (its own panel is off, so it takes no width): beside from a little above that.
+    await resize(1100, 1100);
     expect(host().dataset.fit).toBe("beside");
-    expect(host().querySelector<HTMLElement>(".beside-chat")!.style.flex).toBe("0 0 383px");
-    await resize(1000, 1380);
-    expect(host().dataset.fit).toBe("beside");
-    await resize(1000, 1340);
-    expect(host().dataset.fit).toBe("over");
     expect(editor.mounts).toBe(1);
     expect(editor.unmounts).toBe(0);
     expect(editor.flushed).toBe(0);
@@ -847,6 +848,81 @@ describe("a Hangul document's one AI entry", () => {
     mode("글 보기");
     await waitFor(() => expect(column()).not.toBeNull());
     expect(columnInput().value).toBe("마지막에 쓴 요청");
+  });
+});
+
+// one-doc-ai (the owner, 2026-11-16: "둘중 하나만"): every editor with its own AI panel follows the Hangul rule —
+// the tab's 문서 AI opens and closes THAT panel, never the column beside it; the editor's own key is the same door.
+describe("one 문서 AI per document: the editor's own panel", () => {
+  const formats = [["docx", "계획.docx"], ["pptx", "발표.pptx"], ["xlsx", "성적.xlsx"], ["pdf", "논문.pdf"], ["markdown", "강의안.md"], ["html", "안내.html"]] as const;
+  const toggle = () => document.querySelector<HTMLButtonElement>(".doc-header-right .doc-agent-toggle")!;
+  const pressed = () => toggle().getAttribute("aria-expanded");
+  const panelOpen = () => editor.dock!.drawn && editor.dock!.open;
+  it.each(formats)("%s: 문서 AI opens and closes the editor's panel, never the column; the button follows the panel's own key; nothing remounts", async (format, name) => {
+    persistDraft("doc:doc", "");
+    editor.dock = { open: false, draft: "", sets: [], puts: [], pending: null, drawn: false, drawAfter: 30, dead: false };
+    setup({ format, name });
+    await screen.findByTestId("office-editor");
+    await waitFor(() => expect(editor.dock!.drawn).toBe(true));
+    await resize(1440, 1440);
+    expect(pressed()).toBe("false");
+    expect(toggle().title).toBe("이 문서의 AI를 편집기 안에서 엽니다. 열린 문서를 그 자리에서 고칩니다");
+    fireEvent.click(toggle());
+    await waitFor(() => expect(panelOpen()).toBe(true));
+    await waitFor(() => expect(pressed()).toBe("true"));
+    expect(column()).toBeNull();
+    // The panel's own close key: the tab's button follows, and the panel is not opened again.
+    act(() => editor.report!(false));
+    await waitFor(() => expect(pressed()).toBe("false"));
+    await new Promise((done) => setTimeout(done, 300));
+    expect(panelOpen()).toBe(false);
+    expect(column()).toBeNull();
+    // Its own key opens it: the head shows it pressed (one door, one state).
+    act(() => editor.report!(true));
+    await waitFor(() => expect(pressed()).toBe("true"));
+    expect(column()).toBeNull();
+    expect(editor.dock!.sets).toEqual([true]);
+    expect(editor.mounts).toBe(1);
+    expect(editor.unmounts).toBe(0);
+  });
+  it.each([["pptx", "발표.pptx"], ["pdf", "논문.pdf"]] as const)("%s: an approval waiting while editing (panel open) is opened from the notice in the column beside the editor, the panel closes; never two inputs", async (format, name) => {
+    persistDraft("doc:doc", "");
+    editor.dock = { open: false, draft: "", sets: [], puts: [], pending: null, drawn: false, drawAfter: 30, dead: false };
+    const at = setup({ format, name, agent: ai({ status: "awaitingApproval" }), items: [user("u1", "슬라이드를 고쳐 줘"), approval("ap1")] });
+    await screen.findByTestId("office-editor");
+    await waitFor(() => expect(editor.dock!.drawn).toBe(true));
+    fireEvent.click(toggle());
+    await waitFor(() => expect(panelOpen()).toBe(true));
+    fireEvent.click(await waitFor(() => within(document.querySelector<HTMLElement>(".doc-notice .doc-agent-wait")!).getByRole("button", { name: "열기" })));
+    await waitFor(() => expect(column()).not.toBeNull());
+    await waitFor(() => expect(panelOpen()).toBe(false));
+    fireEvent.click(within(column()!).getByRole("button", { name: /허용/ }));
+    expect(at.onAnswer).toHaveBeenCalled();
+    expect(pressed()).toBe("true");
+  });
+  it("Word in 글 보기 (no editor on screen): 문서 AI is the conversation column with its 수정안, as before; back in 편집 it is the panel", async () => {
+    persistDraft("doc:doc", "");
+    editor.dock = { open: false, draft: "", sets: [], puts: [], pending: null, drawn: false, drawAfter: 30, dead: false };
+    setup({ format: "docx", name: "계획.docx" });
+    await screen.findByTestId("office-editor");
+    await waitFor(() => expect(editor.dock!.drawn).toBe(true));
+    fireEvent.click(screen.getByRole("radio", { name: "글 보기" }));
+    await waitFor(() => expect(screen.queryByTestId("office-editor")).toBeNull());
+    fireEvent.click(toggle());
+    await waitFor(() => expect(column()).not.toBeNull());
+    // The new editor's panel: drawn closed a moment after the frame mounts.
+    editor.dock = { open: false, draft: "", sets: [], puts: [], pending: null, drawn: false, drawAfter: 30, dead: false };
+    fireEvent.click(screen.getByRole("radio", { name: "편집" }));
+    await screen.findByTestId("office-editor");
+    await waitFor(() => expect(column()).toBeNull());
+    await waitFor(() => expect(panelOpen()).toBe(true));
+  });
+  it.each(formats)("%s with the panel turned off by the person: 문서 AI opens the conversation column, as before", async (format, name) => {
+    editor.off = true;
+    setup({ format, name });
+    await screen.findByTestId("office-editor");
+    fireEvent.click(toggle());
+    await waitFor(() => expect(column()).not.toBeNull());
   });
 });
 

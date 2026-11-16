@@ -25,7 +25,7 @@ export const SETTINGS_SECTIONS: { id: SettingsSection; label: string; icon: Icon
 export const readSettingsSection = (value: unknown): SettingsSection =>
   SETTINGS_SECTIONS.some((entry) => entry.id === value) ? (value as SettingsSection) : "general";
 
-export function SettingsSheet({ section, onSection, onClose, sections = SETTINGS_SECTIONS, listFirst = false, children }: {
+export function SettingsSheet({ section, onSection, onClose, sections = SETTINGS_SECTIONS, listFirst = false, marks, children }: {
   section: SettingsSection;
   onSection(next: SettingsSection): void;
   onClose(): void;
@@ -33,6 +33,8 @@ export function SettingsSheet({ section, onSection, onClose, sections = SETTINGS
   sections?: typeof SETTINGS_SECTIONS;
   /** Opened as "설정" (not on a named section): on a phone the section list is the first screen. */
   listFirst?: boolean;
+  /** The app's "something new here" mark on a section, with what is new (정보: a newer version is published). */
+  marks?: Partial<Record<SettingsSection, string>>;
   /** The chosen section's rows. */
   children: ReactNode;
 }) {
@@ -75,6 +77,7 @@ export function SettingsSheet({ section, onSection, onClose, sections = SETTINGS
               else if (event.key === "End") { event.preventDefault(); move(0, sections.length - 1); }
             }}>
             <Icon name={entry.icon} size={16} /><span>{entry.label}</span>
+            {marks?.[entry.id] ? <span className="new-dot settings-new" title={marks[entry.id]} aria-label={marks[entry.id]} role="img" /> : null}
           </button>
         </li>)}
       </ul>

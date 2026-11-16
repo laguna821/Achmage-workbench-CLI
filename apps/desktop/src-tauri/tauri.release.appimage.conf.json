@@ -7,6 +7,9 @@
           "/usr/share/achmage-workbench/ieumoffice": "bundled/ieumoffice"
         }
       }
+    },
+    "resources": {
+      "../../../packaging/install-kind/appimage.json": "install-kind.json"
     }
   }
 }

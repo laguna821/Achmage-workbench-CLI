@@ -147,19 +147,19 @@ it("finds HWP studio controls after its inner frame loads and restores its selec
   expect(document.querySelector(".wb-office-ui")).toBeNull();
 });
 
-it("opens the editor's own AI 도우미 when the document's head asks (⋯ 편집기 안 AI 도우미, I7), through its own rail key", async () => {
-  document.body.innerHTML = '<div class="app-main"><div class="ai-dock collapsed"></div></div>';
+it("the head's 문서 AI opens the editor's own panel (the document's one 문서 AI) through its own rail key", async () => {
+  document.body.innerHTML = '<div class="app-main"><div class="ai-dock collapsed"><button class="ai-rail">AI</button></div></div>';
   const init = { type: "office:init", artifact: { id: "panel" }, theme: "light" } as Init;
   connectOfficeUi(init, "pdf", vi.fn(), vi.fn());
   try {
     const message = (data: unknown) => window.dispatchEvent(new MessageEvent("message", { origin: location.origin, source: window.parent, data }));
-    const click = vi.fn();
-    message({ type: "office:ai-panel-set", open: true });
-    // The rail appears once the preference to show it is back on (the editor reads it every few seconds).
-    await new Promise((done) => setTimeout(done, 300));
-    document.querySelector(".ai-dock")!.insertAdjacentHTML("afterbegin", '<button class="ai-rail">AI</button>');
+    const click = vi.fn(() => document.querySelector(".ai-dock")!.classList.remove("collapsed"));
     document.querySelector(".ai-rail")!.addEventListener("click", click);
-    await new Promise((done) => setTimeout(done, 400));
+    message({ type: "office:ai-panel-set", open: true });
+    await new Promise((done) => setTimeout(done, 50));
+    expect(click).toHaveBeenCalledOnce();
+    message({ type: "office:ai-panel-set", open: true });
+    await new Promise((done) => setTimeout(done, 50));
     expect(click).toHaveBeenCalledOnce();
   } finally { window.dispatchEvent(new Event("pagehide")); }
 });

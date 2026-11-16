@@ -7,8 +7,10 @@
  */
 export type KoreanCopy = { file: string; from: string; to: string; why: string };
 
-const RAIL = "열린 문서를 바로 고치는 AI 도우미";
-const rail = (file: string, from: string): KoreanCopy => ({ file, from: `aiOpenAssistant: '${from}',`, to: `aiOpenAssistant: '${RAIL}',`, why: "the rail key beside the page is the editor's own AI; it says how it differs from 문서 AI (I7)" });
+/** The editor's own AI panel IS the document's 문서 AI (unit one-doc-ai): one name everywhere a person reads it. */
+const NAME = "문서 AI";
+const RAIL = `${NAME} 열기`;
+const rail = (file: string, from: string): KoreanCopy => ({ file, from: `aiOpenAssistant: '${from}',`, to: `aiOpenAssistant: '${RAIL}',`, why: "the rail key beside the page opens the document's one 문서 AI (one-doc-ai)" });
 
 /** PDF 양식 채우기 / 양식 만들기 and 글 넣기 had no Korean (Ieum shows English). */
 const PDF_FORM_KO = {
@@ -82,6 +84,10 @@ export const KOREAN_COPY: KoreanCopy[] = [
   rail("apps/pdf/src/renderer/i18n/strings.ts", "AI 어시스턴트 열기"),
   rail("apps/html/src/renderer/i18n/ai/ko.ts", "AI 어시스턴트 열기"),
   { file: "apps/docs/src/renderer/i18n/ribbon/ko.ts", from: "ribbonAiAssistantTip: 'AI 도우미 열기',", to: `ribbonAiAssistantTip: '${RAIL}',`, why: "the ribbon's key to the same panel (I7)" },
+  { file: "apps/pdf/src/renderer/i18n/strings.ts", from: "ribbonAiAssistantTip: 'AI 도우미 열기',", to: `ribbonAiAssistantTip: '${RAIL}',`, why: "the ribbon's key to the same panel (one-doc-ai)" },
+  { file: "apps/slides/src/renderer/i18n/ribbon/ko.ts", from: "ribbonAiAssistantTip: 'AI 도우미 패널 표시/숨기기',", to: `ribbonAiAssistantTip: '${NAME} 열고 닫기',`, why: "the ribbon's key to the same panel (one-doc-ai)" },
+  { file: "apps/slides/src/renderer/i18n/app/ko.ts", from: "appAiRailExpand: 'AI 도우미 펼치기',", to: `appAiRailExpand: '${RAIL}',`, why: "PowerPoint's rail key (one-doc-ai)" },
+  { file: "packages/ui/src/strings-ai-subscription/ko.ts", from: "aiAssistant: 'AI 도우미',", to: `aiAssistant: '${NAME}',`, why: "every editor panel's title: the document's 문서 AI, not a second AI (one-doc-ai)" },
   { file: "apps/pdf/src/renderer/i18n/strings.ts", from: "const localizedFillFormStrings = {\n", to: `const localizedFillFormStrings = {\n  ko: ${JSON.stringify(PDF_FORM_KO)},\n`, why: "PDF ribbon read Fill Form, Form Design, Insert text" },
   { file: "apps/pdf/src/renderer/i18n/strings.ts", from: "aiToolInsertText: '{page}페이지에 텍스트 삽입',", to: "aiToolInsertText: '{page}쪽에 글 넣기',", why: "the AI's step, in the ribbon's words" },
   { file: "apps/sheets/src/renderer/i18n/app/ko.ts", from: "'통합 문서를 모두 로드했습니다 — 수식이 실시간으로 다시 계산되고 행/열을 편집할 수 있습니다.',", to: "'다 열었습니다.',", why: "a developer's sentence shown in two places" },

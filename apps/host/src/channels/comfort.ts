@@ -95,8 +95,12 @@ export function footerWords(manager: SessionManager, session: Session, endId: st
 /** Whether a chat wants the footer (on unless turned off). */
 export const footerOn = (binding: Binding, otherwise = true) => (typeof binding.prefs.footer === "boolean" ? binding.prefs.footer : otherwise);
 
+/** "리모콘" (ux/briefs/phone-remote-brief.md): the one line in the help and in the pairing welcome. */
+export const REMOTE_LINE = "프로젝트 이름을 대고 시키면 그 프로젝트에서 일합니다. 예: 「강의계획서 프로젝트에서 서론 다시 써 줘」";
+
 const HELP_WORDS = [
   "그냥 적어 보내면 지금 대화의 AI에게 갑니다. 사진·파일도 그대로 보내면 됩니다. 일하는 중에 보내면 그 일에 덧붙입니다.",
+  REMOTE_LINE,
   "",
   "한 줄로 보내면 바로 되는 말",
   "· 메뉴 — 모든 기능",

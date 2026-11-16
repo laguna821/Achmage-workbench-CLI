@@ -28,6 +28,6 @@ export type OfficeTemplatePreview = {
   draft?: { name: string; title: string; description: string; body: string; invoke: "auto" | "manual" };
 };
 export type OfficeSkillRequest = {
-  type: "office:skills"; requestId: string; action: "open-template" | "take-handoff" | "focus-tab" | "save-card" | "open-preview" | "finish-preview";
+  type: "office:skills"; requestId: string; action: "open-template" | "take-handoff" | "focus-tab" | "save-card" | "open-preview" | "finish-preview" | "open-made";
   input: Record<string, unknown>;
 };

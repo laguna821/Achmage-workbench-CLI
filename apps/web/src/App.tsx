@@ -23,6 +23,7 @@ import { WorkspaceLayoutTools, PaneStart, WorkLinkDialog } from "./components/Wo
 import { newRequestId, titleFrom, statusText } from "./format.ts";
 import { folderChoices, readOpenState, sessionHidden, workSessions, type Move, type Row, type SortMode, type TreeOpenState } from "./tree.ts";
 import { AboutSection, AdvancedSection, DevicesSection, DocumentsSection, EditorAiRow, EnginesSection, GeneralSection } from "./components/Connections.tsx";
+import { AppUpdateRows, updateMarked, useAppUpdate } from "./components/AppUpdate.tsx";
 import { SettingsSheet, SETTINGS_SECTIONS, readSettingsSection, type SettingsSection } from "./components/SettingsSheet.tsx";
 import { OnboardingModelCache } from "./components/onboarding/ModelCache.tsx";
 import type { BrowserActions } from "./components/BrowserPill.tsx";
@@ -210,6 +211,12 @@ async function pickSavePath(defaultPath: string): Promise<string | null> {
   return save({ title: "마크다운으로 내보내기", defaultPath, filters: [{ name: "Markdown", extensions: ["md"] }] });
 }
 
+/** The window closes itself for an update: the gateway has stopped and the helper waits for this (app-update). */
+async function quitForUpdate() {
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("quit_for_update").catch(() => undefined);
+}
+
 async function openExternal(url: string) {
   if (desktopRuntime) {
     const { openUrl } = await import("@tauri-apps/plugin-opener");
@@ -295,6 +302,8 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
     return token ? new Api(token) : null;
   }, [apiOverride]);
   const inDesktop = desktopRuntime && !api?.isRemote;
+  // 설정 › 정보 › 업데이트: this PC's own window only (a phone or another PC never asks).
+  const appUpdate = useAppUpdate(api, !!api && !api.isRemote);
   const storagePrefix = api?.remoteHostId ? "host:" + api.remoteHostId + ":" : "";
   const LAST_WORK_KEY = storagePrefix + "workbench.lastWork", PREFS_CACHE_KEY = storagePrefix + "workbench.prefsCache",
     PANE_LAYOUT_KEY = storagePrefix + "workbench.paneLayout.v1", OPEN_DOCS_KEY = storagePrefix + "workbench.openDocs", MRU_KEY = storagePrefix + "workbench.recentSessions";
@@ -3030,7 +3039,8 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
         vault={<VaultSettingsRow onOpen={closeSettings} />} editorAi={api.isRemote ? undefined : <EditorAiRow api={api} />} />;
       case "advanced": return <AdvancedSection onDesktop={api.isRemote ? undefined : fromSettings(() => setDesktopOpen(true))}
         onExtensions={api.isRemote ? undefined : fromSettings(() => setExtensionsOpen(true))} onEventHub={api.isRemote ? undefined : fromSettings(() => setEventHubOpen(true))} />;
-      case "about": return <AboutSection hostLabel={state.hostLabel} licences={<LicenceList />} />;
+      case "about": return <AboutSection hostLabel={state.hostLabel} licences={<LicenceList />} update={appUpdate.status && !api.isRemote ? <AppUpdateRows status={appUpdate.status} act={(action) => void appUpdate.act(action)}
+        onOpenUrl={(url) => void openExternal(url)} onReveal={inDesktop ? (path) => void openPath(path, true) : undefined} onQuit={inDesktop ? quitForUpdate : undefined} /> : undefined} />;
     }
   };
 
@@ -3070,8 +3080,8 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   };
   const railSettings = (
     <div className="anchor rail-settings">
-      <button type="button" className={`rail-key${settingsAt ? " pressed" : ""}`} data-rail="settings" tabIndex={-1} aria-label="설정" title="설정 (Ctrl+,)" aria-haspopup="dialog" onClick={() => openSettings()}>
-        <span className="rail-icon" aria-hidden><Icon name="settings" size={20} /></span>
+      <button type="button" className={`rail-key${settingsAt ? " pressed" : ""}`} data-rail="settings" tabIndex={-1} aria-label={updateMarked(appUpdate.status) ? "설정, 새 버전이 나왔습니다" : "설정"} title="설정 (Ctrl+,)" aria-haspopup="dialog" onClick={() => openSettings()}>
+        <span className="rail-icon" aria-hidden><Icon name="settings" size={20} />{updateMarked(appUpdate.status) ? <span className="new-dot rail-new" /> : null}</span>
         <span className="rail-label">설정</span>
       </button>
     </div>
@@ -3314,7 +3324,8 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
       {desktopOpen && !api.isRemote ? <DesktopTargetPicker api={api} sessions={Object.values(state.sessions).filter(session => !session.archivedAt).map(session => ({ id: session.id, label: `${state.works[session.workId]?.title ?? "프로젝트"} · ${session.purpose}` }))} onClose={() => setDesktopOpen(false)} /> : null}
       {extensionsOpen && !api.isRemote ? <ExtensionLibrary api={api} workspaces={Object.values(state.workspaces).filter(space => !space.archivedAt && !space.removedAt).map(space => ({ id: space.id, label: `${state.works[space.workId]?.title ?? "프로젝트"} · ${space.label}` }))} onClose={() => setExtensionsOpen(false)} /> : null}
       {eventHubOpen && !api.isRemote ? <EventHub api={api} onClose={() => setEventHubOpen(false)} /> : null}
-      {settingsAt && api ? <SettingsSheet section={settingsSections.some((entry) => entry.id === settingsAt) ? settingsAt : "general"} sections={settingsSections} onSection={showSettingsSection} onClose={closeSettings} listFirst={settingsListFirst}>
+      {settingsAt && api ? <SettingsSheet section={settingsSections.some((entry) => entry.id === settingsAt) ? settingsAt : "general"} sections={settingsSections} onSection={showSettingsSection} onClose={closeSettings} listFirst={settingsListFirst}
+        marks={updateMarked(appUpdate.status) ? { about: "새 버전이 나왔습니다" } : undefined}>
         {settingsSection(settingsSections.some((entry) => entry.id === settingsAt) ? settingsAt : "general")}
       </SettingsSheet> : null}
       {dropboxOpen && api ? <DropboxDialog api={api} pickFolder={inDesktop ? (start) => pickFolderNative("Dropbox 폴더 선택", start) : null} openExternal={openExternal} onClose={() => setDropboxOpen(false)} onOpened={({ work, artifact }) => { setDropboxOpen(false); navigateTo({ workId: work.id, sessionId: null, view: artifact ? { kind: "document", artifactId: artifact.id, proposalId: null } : { kind: "project", workId: work.id } }); }} /> : null}

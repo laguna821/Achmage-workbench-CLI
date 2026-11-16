@@ -33,3 +33,15 @@ it("restores the actual CodeMirror selection and captures a last change before t
   await act(async () => { await vi.advanceTimersByTimeAsync(130); });
   expect(changed).toHaveBeenLastCalledWith({ cursor: { anchor: 13, head: 17 }, scroll: { top: 0, left: 0 } });
 });
+it("plain look: a document's extracted text is not coloured as Markdown (a numbered line is not a blue list)", () => {
+  vi.stubGlobal("requestAnimationFrame", () => 1); vi.stubGlobal("cancelAnimationFrame", () => {});
+  const text = "2026학년도 2학기 강의계획서\n1. 강의 개요\n- 출석 10%";
+  const marked = (look?: "plain") => {
+    const screen = render(<MarkdownEditor value={text} readOnly look={look} onChange={() => {}} onSelection={() => {}} />);
+    const count = screen.container.querySelectorAll(".cm-line span[class]").length;
+    screen.unmount();
+    return count;
+  };
+  expect(marked()).toBeGreaterThan(0);
+  expect(marked("plain")).toBe(0);
+});

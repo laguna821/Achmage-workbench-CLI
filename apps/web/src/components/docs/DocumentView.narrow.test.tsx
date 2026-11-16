@@ -15,9 +15,10 @@ const editor = vi.hoisted(() => ({ report: null as ((status: { dirty: boolean; r
 vi.mock("./OfficeEditor.tsx", async () => {
   const React = await import("react");
   return {
-    OfficeEditor: React.forwardRef((props: { onStatus: (status: unknown) => void }, ref) => {
+    // The editor's own panel turned off by the person (one-doc-ai): 문서 AI is the app's column beside the editor, whose widths these tests measure.
+    OfficeEditor: React.forwardRef((props: { onStatus: (status: unknown) => void; onAiPanel?: (open: boolean, draft?: string, dock?: object) => void }, ref) => {
       React.useImperativeHandle(ref, () => ({ flush: async () => { editor.flushed += 1; return editor.flushResult; }, leave: async () => { editor.flushed += 1; } }));
-      React.useEffect(() => { editor.mounts += 1; editor.report = props.onStatus; return () => { editor.unmounts += 1; editor.report = null; }; }, []);
+      React.useEffect(() => { editor.mounts += 1; editor.report = props.onStatus; props.onAiPanel?.(false, "", { ready: true, person: false, shown: false, off: true }); return () => { editor.unmounts += 1; editor.report = null; }; }, []);
       return React.createElement("div", { "data-testid": "office-editor" });
     }),
   };

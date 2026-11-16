@@ -1,4 +1,7 @@
 import { UpdatePolicy } from "./update-policy.ts";
+import { AppUpdates, installedVersion } from "./app-update/service.ts";
+import { detectInstall } from "./app-update/kind.ts";
+import { fileURLToPath } from "node:url";
 import { ServicePreviews } from "./service-previews.ts";
 import { randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -50,6 +53,7 @@ import { VoiceService } from "./voice.ts";
 import { ExtensionService } from "./extensions/service.ts";
 import { EventHub } from "./event-hub.ts";
 import { gatewayChannels } from "./channels/gateway.ts";
+import { RemoteTool } from "./channels/remote-tool.ts";
 import { OfficeVault, vaultStatus } from "./office-vault.ts";
 import { CredentialService } from "./credentials/service.ts";
 import { CredentialTool } from "./credentials/tool.ts";
@@ -177,7 +181,14 @@ const find = new FindTool({ dataDir, finder: manager.finder, sessions: () => man
 const desktop = new DesktopService(dataDir, store, { session: id => manager.view.sessions.get(id), item: (id, item) => manager.sink.upsertItem(id, item), image: (data, name, mime) => { const attachment = manager.attachments.save(data, name, mime); return { attachment, path: manager.attachments.path(attachment.id) }; } });
 const desktopTool = new DesktopTool(dataDir, desktop, manager.view.sessions, bus);
 const credentialTool = new CredentialTool({ dataDir, sessions: manager.view.sessions, bus, run: (sessionId, args) => credentials.run(sessionId, args), instructions: loginInstructions });
-const engineHooks = credentialTool.hooks(desktopTool.hooks(withFindTool(browse.engineHooks(), find.engineHooks())));
+// "리모콘" (channels/remote-tool.ts): workbench-remote, only for the conversations of a messenger's place; it answers through the channel (made below).
+let channelCore: import("./channels/core.ts").ChannelCore | null = null;
+const remoteTool = new RemoteTool({
+  dataDir, sessions: () => manager.view.sessions, works: () => manager.view.works, bus,
+  run: (sessionId, args, input) => channelCore ? channelCore.remote(sessionId, args, input) : Promise.resolve({ code: 1, stdout: `${JSON.stringify({ ok: false, error: "channel_off", message: "휴대폰 채널이 없습니다." })}\n`, stderr: "workbench-remote: 휴대폰 채널이 없습니다.\n" }),
+  hide: (id, name, value) => (value ? credentials.scrubber.set(id, name, [value]) : credentials.scrubber.remove(id)),
+});
+const engineHooks = remoteTool.hooks(credentialTool.hooks(desktopTool.hooks(withFindTool(browse.engineHooks(), find.engineHooks()))));
 pkm.findInstructions = findToolInstructions;
 
 const claudeIdleMs = env.WORKBENCH_CLAUDE_IDLE_MS ? Number(env.WORKBENCH_CLAUDE_IDLE_MS) : undefined;
@@ -225,6 +236,7 @@ const extensions = new ExtensionService({ dataDir, manager, authorizeWrite: (wor
 const hub: EventHub = new EventHub({ dataDir, store, manager, bus, ingress: () => devices?.hubIngressState() ?? { enabled: false, url: null } });
 // "휴대폰 메신저": in the window's gateway and in the background service alike (channels/gateway.ts).
 const channels = gatewayChannels(env, { dataDir, store, manager, bus, vault, projects, credentials, logins, vaultProblem: () => vaultStatus().state === "refused" ? vaultStatus().message : null });
+channelCore = channels?.core ?? null;
 const servicePreviews = new ServicePreviews({ store, services: manager.services, localOrigin: () => applicationOrigin, remote: () => devices?.previewEndpointState() ?? { enabled: false, appOrigin: null } });
 const devices: DeviceService | undefined = env.WORKBENCH_CLI_INPUT ? undefined : new DeviceService({ dataDir, manager, bus, localOrigin: () => applicationOrigin, localToken: token, webDir,
   voice, servicePreviews, push: () => push, eventIngress: (req, res) => hub.handleIngress(req, res) });
@@ -234,8 +246,21 @@ const autostart = new HostAutostart(dataDir);
 const updatePolicy = new UpdatePolicy(manager, store, () => manager.schedules.start(Number(env.WORKBENCH_SCHEDULE_TICK_MS) || 30_000));
 // "Stop all work" (SIGTERM, /api/host/stop): the channel closes before turns are interrupted.
 updatePolicy.beforeInterrupt = async () => { await channels?.close(); };
+// 설정 › 정보 › 업데이트 (app-update): check, download and verification here; the install by the detached helper.
+// The login unit is restarted with the system's systemctl by absolute path (never a PATH lookup in the helper);
+// WORKBENCH_UPDATE_SYSTEMCTL is for the rig's stand-in (scripts/update-rig.ts) and runs as the person anyway.
+const systemctl = env.WORKBENCH_UPDATE_SYSTEMCTL || ["/usr/bin/systemctl", "/bin/systemctl"].find(file => existsSync(file)) || null;
+const appUpdates = env.WORKBENCH_CLI_INPUT ? undefined : new AppUpdates({ dataDir, installed: installedVersion(),
+  install: detectInstall({ hostEntry: fileURLToPath(import.meta.url), platform: process.platform, appBin: env.WORKBENCH_APP_BIN, appImage: env.WORKBENCH_APPIMAGE_SOURCE }),
+  systemctl,
+  policy: updatePolicy,
+  loginUnit: async () => process.platform === "linux" && (await autostart.status()).enabled ? autostart.unitName() : null,
+  // The existing drain stop: nothing is running (the drain said so) and no new work is admitted.
+  stopForInstall: () => { void updatePolicy.stop("drain").then(() => stop()).catch(error => { console.error("Update stop:", error instanceof Error ? error.message : String(error)); try { updatePolicy.cancel(); } catch { /* stopping */ } }); },
+});
 const server = createHttpServer(manager, bus, {
   updatePolicy,
+  appUpdates,
   devices, voice, extensions, hub, channels, desktop, browserOutputs, push, servicePreviews,
   autostart,
   host: { instance: lease.instance, stopping: () => stopping, stop: () => { void stop(); } },
@@ -318,6 +343,8 @@ listen(editors, env.WORKBENCH_EDITORS_PORT, editorsPortFile, (editorsPort) => {
       if (env.WORKBENCH_IEUM_BOOTSTRAP === "1") void manager.ieumDesktop.bootstrap().catch(() => {});
       // "예약 작업": sends what is due every half minute (checks use a shorter tick).
       manager.schedules.start(Number(env.WORKBENCH_SCHEDULE_TICK_MS) || 30_000);
+      // The quiet check: one request for the signed manifest at most once a day, while the switch is on.
+      appUpdates?.startDailyCheck();
     });
   });
 });
@@ -326,6 +353,7 @@ let stopping = false;
 async function stop() {
   if (stopping) return;
   stopping = true;
+  appUpdates?.close();
   if (updatePolicy.status().state !== "stopping") await updatePolicy.stop("interrupt");
   dropbox.close();
   servicePreviews.close();
@@ -349,6 +377,7 @@ async function stop() {
   officeSettingsServer.close();
   desktopTool.close();
   credentialTool.close();
+  remoteTool.close();
   credentials.close();
   desktop.close();
   find.close();

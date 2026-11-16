@@ -100,8 +100,12 @@ export function MarkdownEditor({
   images?: ImageHandling | null;
   position?: TabUiState;
   onPosition?: (position: TabUiState) => void;
-  /** "note": the project note's source look (reading size, dimmed marks) instead of the document editor's. */
-  look?: "document" | "note";
+  /**
+   * "note": the project note's source look (reading size, dimmed marks) instead of the document editor's.
+   * "plain": text taken out of another kind of document (a Hangul document's 글 보기): it is not Markdown, so
+   * nothing is read or coloured as Markdown (a numbered line was drawn as a blue list item).
+   */
+  look?: "document" | "note" | "plain";
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
@@ -135,8 +139,7 @@ export function MarkdownEditor({
         extensions: [
           history(),
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-          markdown(),
-          syntaxHighlighting(look === "note" ? noteHighlight : highlight),
+          ...(look === "plain" ? [] : [markdown(), syntaxHighlighting(look === "note" ? noteHighlight : highlight)]),
           EditorView.lineWrapping,
           look === "note" ? noteTheme : theme,
           placeholderExtension(look === "note" ? "노트에 적을 것을 씁니다" : "내용을 입력하세요"),

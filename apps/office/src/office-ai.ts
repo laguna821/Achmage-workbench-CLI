@@ -16,6 +16,7 @@ import { maintainOfficeTurn } from "./execution-heartbeat.ts";
 import { captureOfficeExecution, installOfficeExecutor, installExecutionLifecycle, lockOfficeExecution } from "./execution-adapter.ts";
 import { createExecutionLifecycle } from "./execution-lifecycle.ts";
 import { observeOfficeExecution, remoteOfficeRun } from "./execution-client.ts";
+import { reportTurnActivity } from "./turn-activity.ts";
 
 type Prepared = NonNullable<Extract<OfficeHostMessage, { type: "office:ai-result" }>["value"]>;
 type History = { workId: string; sessionId: string; items: TranscriptItem[]; attachments?: OfficeAttachment[]; before: string | null; hasMore: boolean };
@@ -254,6 +255,7 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
       if (chunk.requestId !== request.requestId) throw new Error("AI 응답의 요청 번호가 다릅니다.");
       terminal ||= chunk.type === "done" || chunk.type === "error";
       events.emit("aiStream", chunk);
+      reportTurnActivity({ kind: "alive" });
     }, controller.signal).then(() => {
       if (!terminal) throw new Error("AI 응답이 완료 기록 없이 끝났습니다.");
     }).catch((error) => {
@@ -320,6 +322,18 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
       install: openSettings, update: openSettings, login: openSettings, cancelLogin: openSettings, setMeteredAccepted: openSettings, openInstallHelp: openSettings, openConnectHelp: openSettings },
     subscribe: (listener: () => void) => { subscribers.add(listener); return () => { subscribers.delete(listener); }; },
     snapshot: () => sessionKey,
+    /** "한글 문서 만들기" for the running turn (gateway: apps/host/src/hangul-document.ts). */
+    hangulDocument: async (input: Record<string, unknown>, signal?: AbortSignal) => {
+      const current = run;
+      if (!current) throw new Error("진행 중인 문서 AI 요청에서만 한글 문서를 만들 수 있습니다.");
+      return current.api.json<{ made: boolean; status?: string; artifactId?: string; name?: string; draft?: boolean; reason?: string }>("hangul-document", { turnId: current.turnId, input }, signal);
+    },
+    openMade: (artifactId: string | null) => skills.bridge.openMade(artifactId) as Promise<{ ok?: boolean } | undefined>,
+    /** Stop this view's running turn (the dock's own stop), or the executor turn it observes. */
+    stop: async (observedTurnId: string | null) => {
+      if (active) { active.cancel(); return; }
+      if (observedTurnId && sessionId) await gateway.aiSession(init.artifact.id).json("executor-stop", { turnId: observedTurnId });
+    },
     newSession: async () => { if (active) { active.cancel(); await active.settled; } await parent("new-session"); },
     refresh: async () => { skills.refresh(); events.emit("aiSettingsChanged", await getSettings()); },
   };

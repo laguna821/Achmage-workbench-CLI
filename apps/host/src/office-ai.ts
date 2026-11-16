@@ -174,7 +174,7 @@ export class OfficeAi {
   }
   async handle(req: IncomingMessage, res: ServerResponse, url: URL, bearer: string | null, documents: Documents, grants: EditorGrants): Promise<boolean> {
     if (await this.skills?.handle(req, res, url, bearer, grants)) return true;
-    const match = /^\/api\/artifacts\/([^/]+)\/ai\/(preferences|preferences-panel|markdown-upload|markdown-read-image|drive-state|settings|selection|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish|turn-heartbeat|turn-question|executor-start|executor-observe|executor-current|executor-answer|executor-reference|executor-stop|executor-output|executor-output-commit|tool-capabilities|tool)$/.exec(url.pathname);
+    const match = /^\/api\/artifacts\/([^/]+)\/ai\/(preferences|preferences-panel|markdown-upload|markdown-read-image|drive-state|settings|selection|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish|turn-heartbeat|turn-question|executor-start|executor-observe|executor-current|executor-answer|executor-reference|executor-stop|executor-output|executor-output-commit|tool-capabilities|tool|hangul-document)$/.exec(url.pathname);
     if (!match) return false;
     const [, artifactId, operation] = match;
     const authorize = () => {
@@ -271,6 +271,16 @@ export class OfficeAi {
         : raw.action === "read-image" ? grants.references.readImage(context, raw.snapshot, raw.path)
         : raw.action === "list" ? grants.references.attachments(context, raw.snapshot) : invalid();
       sendJson(res, 200, value); return true;
+    }
+    if (operation === "hangul-document") {
+      // "한글 문서 만들기" belongs to the dock's running turn of a Hangul document (hangul-document.ts).
+      const bound = binding();
+      let raw: unknown;
+      try { raw = JSON.parse((await readBody(req, 4_000_000)).toString("utf8")); } catch (error) { if (error instanceof HttpError) throw error; return invalid(); }
+      authorize();
+      if (!record(raw) || !this.skills) return invalid();
+      const run = this.sessions!.requireRun(bound, raw.turnId);
+      sendJson(res, 200, await this.skills.makeHangul({ artifactId: artifactId!, token: bearer!, grants }, raw.input, run.controller.signal)); return true;
     }
     if (operation === "history" || operation!.startsWith("turn-")) {
       const bound = binding();

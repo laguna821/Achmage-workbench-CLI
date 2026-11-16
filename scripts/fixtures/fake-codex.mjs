@@ -612,7 +612,7 @@ async function handle(message) {
     case "initialize":
       return reply({ userAgent: "fake-codex/0.0.0", codexHome: "/tmp", platformFamily: "unix", platformOs: "linux" });
     case "account/read":
-      return reply(signedIn() ? { account: { type: "chatgpt", email: "fake@example.com", planType: "pro" }, requiresOpenaiAuth: true } : { account: null, requiresOpenaiAuth: true });
+      return reply(signedIn() ? { account: { type: "chatgpt", email: process.env.WORKBENCH_FIXTURE_EMAIL || "fake@example.com", planType: "pro" }, requiresOpenaiAuth: true } : { account: null, requiresOpenaiAuth: true });
     case "account/login/start": {
       loginServer?.close();
       const loginId = `login_${++counter}`;

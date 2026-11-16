@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Artifact, Session, Work } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
@@ -9,16 +9,22 @@ import { AppearanceContext, DEFAULT_APPEARANCE } from "../../appearance.ts";
 import { DocContext } from "../DocCards.tsx";
 import DocumentView from "./DocumentView.tsx";
 
-// The embedded Office editor stands in here. `open` is what it says about its own AI sidebar when it
-// starts (Word does; null = an editor that says nothing, like every other one); `report` says it later.
-const sidebar = vi.hoisted(() => ({ open: true as boolean | null, report: null as ((open: boolean) => void) | null }));
+// The embedded Office editor stands in here, as every editor with its own AI panel reports it since one-doc-ai
+// (apps/office/src/ui-adapters/editor-ai-dock.ts): `open` is the panel's state when the editor has drawn it (null:
+// not said yet); `off`: the person turned the editors' panel off (설정 › 연결); `report` says a new state later;
+// `sets` are the tab's requests to open or close it (the editor follows each).
+const sidebar = vi.hoisted(() => ({ open: true as boolean | null, off: false, report: null as ((open: boolean) => void) | null, sets: [] as boolean[] }));
 vi.mock("./OfficeEditor.tsx", async () => {
   const React = await import("react");
+  type Report = (open: boolean, draft?: string, dock?: { ready: boolean; person: boolean; shown?: boolean; off?: boolean }) => void;
   return {
-    OfficeEditor: React.forwardRef((props: { onAiPanel: (open: boolean) => void }, _ref) => {
+    OfficeEditor: React.forwardRef((props: { onAiPanel: Report }, ref) => {
+      const said = React.useRef(props); said.current = props;
+      const tell = (open: boolean, person = false) => said.current.onAiPanel(open, "", { ready: true, person, shown: open, ...(sidebar.off ? { off: true } : {}) });
+      React.useImperativeHandle(ref, () => ({ setAiPanel: (open: boolean) => setTimeout(() => { sidebar.sets.push(open); if (!sidebar.off) { sidebar.open = open; tell(open); } }, 0), setAiDraft: () => undefined }));
       React.useEffect(() => {
-        sidebar.report = props.onAiPanel;
-        if (sidebar.open !== null) props.onAiPanel(sidebar.open);
+        sidebar.report = (open) => { sidebar.open = open; tell(open, true); };
+        if (sidebar.open !== null) tell(sidebar.open);
         return () => { sidebar.report = null; };
       }, []);
       return React.createElement("div", { "data-testid": "office-editor" });
@@ -30,7 +36,7 @@ vi.mock("./OfficeEditor.tsx", async () => {
 // keeps the document's writer lease, reports B as drawn, and opens the AI's conversation — the
 // app's own column beside the document, whatever the document is shown in.
 
-beforeEach(() => { sidebar.open = true; vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} })); });
+beforeEach(() => { sidebar.open = true; sidebar.off = false; sidebar.sets = []; vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} })); });
 afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllGlobals(); vi.useRealTimers(); })
 
 const work = { id: "w", title: "강의", cwd: "/w", folderId: null, archivedAt: null } as unknown as Work;
@@ -134,13 +140,24 @@ const slides = { format: "pptx" as const, name: "발표.pptx" };
 // The app owns the conversation's place: a row click opens its column beside the document. One
 // editor says whether its own AI sidebar is open (Word); while it is, the conversation is already
 // on screen there and the column is not put beside it too.
-describe("a row click while the document is in an embedded editor", () => {
-  it.each([
-    ["the app's rich editor (says nothing of its own sidebar)", null, rich],
-    ["PowerPoint (says nothing of its own sidebar)", null, slides],
-    ["Word, its own sidebar closed", false, word],
-  ] as const)("%s: the AI's conversation opens in the app's column, and only then counts as looked at", async (_name, open, doc) => {
-    sidebar.open = open;
+describe("a row click while the document is in an embedded editor (its own panel is 문서 AI, one-doc-ai)", () => {
+  it.each([["the app's rich editor", rich], ["PowerPoint", slides], ["Word", word]] as const)("%s: the editor's own panel opens on the AI's conversation — no column beside it, no notice; it counts as looked at once open", async (_name, doc) => {
+    sidebar.open = false;
+    const { panels, view, onToast, onRevealDone, b } = setup({ ...doc, b: waiting() });
+    const { rerender } = render(view(A));
+    await screen.findByTestId("office-editor");
+    const request = click(b);
+    rerender(view(b, request));
+    await waitFor(() => expect(sidebar.sets).toContain(true));
+    await waitFor(() => expect(panels.ids()).toEqual(["b"]));
+    expect(column()).toBeNull();
+    expect(onToast).not.toHaveBeenCalled();
+    expect(onRevealDone.mock.calls).toEqual([["doc", request]]);
+    expect(screen.getByTestId("office-editor")).toBeTruthy();
+  });
+
+  it.each([["the app's rich editor", rich], ["PowerPoint", slides], ["Word", word]] as const)("%s, its panel turned off by the person: the AI's conversation opens in the app's column, and only then counts as looked at", async (_name, doc) => {
+    sidebar.open = false; sidebar.off = true;
     const { panels, view, onToast, onRevealDone, b } = setup({ ...doc, b: waiting() });
     const { rerender } = render(view(A));
     await screen.findByTestId("office-editor");
@@ -150,25 +167,10 @@ describe("a row click while the document is in an embedded editor", () => {
     await waitFor(() => expect(panels.ids()).toEqual(["b"]));
     expect(onToast).not.toHaveBeenCalled();
     expect(onRevealDone.mock.calls).toEqual([["doc", request]]);
-    // The editor is the same one.
-    expect(screen.getByTestId("office-editor")).toBeTruthy();
+    expect(sidebar.sets).toEqual([]);
   });
 
-  it("Word, its own sidebar open: the sidebar already shows the conversation — no column beside it, no notice, and it counts as looked at", async () => {
-    sidebar.open = true;
-    const { panels, view, onToast, onRevealDone, b } = setup({ ...word, b: waiting() });
-    const { rerender } = render(view(A));
-    await screen.findByTestId("office-editor");
-    const request = click(b);
-    rerender(view(b, request));
-    await waitFor(() => expect(onRevealDone.mock.calls).toEqual([["doc", request]]));
-    await waitFor(() => expect(panels.ids()).toEqual(["b"]));
-    await new Promise((done) => setTimeout(done, 30));
-    expect(column()).toBeNull();
-    expect(onToast).not.toHaveBeenCalled();
-  });
-
-  it("an editor that says nothing about its own sidebar is not taken to show the conversation", async () => {
+  it("an editor that has not said anything about its panel yet is not taken to show the conversation", async () => {
     sidebar.open = null;
     const { view, onAgentDrawn, everShown } = setup({ ...slides });
     render(view(A));
@@ -178,7 +180,7 @@ describe("a row click while the document is in an embedded editor", () => {
     expect([...everShown]).toEqual([]);
   });
 
-  it("Word that says its own sidebar is open counts as showing it, without the column", async () => {
+  it("an editor that says its panel is open counts as showing it, without the column", async () => {
     const { view, panels } = setup({ ...word });
     render(view(A));
     await waitFor(() => expect(panels.ids()).toEqual(["a"]));
@@ -186,71 +188,27 @@ describe("a row click while the document is in an embedded editor", () => {
   });
 });
 
-// The click that opens the document: the view mounts with the request already there. It is never
-// dropped. Only Word is waited for (it says shortly whether its sidebar is open), and not for ever.
+// The click that opens the document: the view mounts with the request already there. It is never dropped.
 describe("a row click on a document that is not open yet", () => {
-  it.each([["the app's rich editor", rich], ["PowerPoint", slides]] as const)("%s: the column is there from the start", async (_name, doc) => {
-    sidebar.open = null;
+  it.each([["the app's rich editor", rich], ["PowerPoint", slides], ["Word", word]] as const)("%s: the editor's panel opens once the editor has drawn it, never the column", async (_name, doc) => {
+    sidebar.open = false;
     const { view, onToast, onRevealDone, panels, b } = setup({ ...doc, b: waiting() });
     const request = click(b);
     render(view(b, request));
-    await waitFor(() => expect(column()).not.toBeNull());
     await waitFor(() => expect(panels.ids()).toEqual(["b"]));
+    expect(sidebar.sets).toEqual([true]);
+    expect(column()).toBeNull();
     expect(onToast).not.toHaveBeenCalled();
     expect(onRevealDone.mock.calls).toEqual([["doc", request]]);
   });
 
-  it("Word with its sidebar open: the editor shows the conversation, so no column", async () => {
-    const { view, onToast, onRevealDone, panels, b } = setup({ ...word });
-    const request = click(b);
-    render(view(b, request));
-    await waitFor(() => expect(panels.ids()).toEqual(["b"]));
-    await waitFor(() => expect(onRevealDone.mock.calls).toEqual([["doc", request]]));
-    expect(column()).toBeNull();
-    expect(onToast).not.toHaveBeenCalled();
-  });
-
-  it("Word with its sidebar closed: the column comes once the editor says so", async () => {
-    sidebar.open = false;
+  it("Word with its panel turned off: the column comes once the editor says so", async () => {
+    sidebar.open = false; sidebar.off = true;
     const { view, onRevealDone, panels, b } = setup({ ...word, b: waiting() });
     const request = click(b);
     render(view(b, request));
     await waitFor(() => expect(column()).not.toBeNull());
     await waitFor(() => expect(panels.ids()).toEqual(["b"]));
-    expect(onRevealDone.mock.calls).toEqual([["doc", request]]);
-  });
-
-  it("Word that says nothing about its sidebar: the column comes after a short wait, not silence", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    sidebar.open = null;
-    const { view, onRevealDone, b } = setup({ ...word, b: waiting() });
-    const request = click(b);
-    render(view(b, request));
-    await screen.findByTestId("office-editor");
-    expect(column()).toBeNull();
-    expect(onRevealDone).not.toHaveBeenCalled();
-    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
-    expect(column()).not.toBeNull();
-    expect(onRevealDone.mock.calls).toEqual([["doc", request]]);
-    // A late answer from the editor changes nothing: the request was acted on once.
-    act(() => sidebar.report?.(true));
-    expect(column()).not.toBeNull();
-    expect(onRevealDone).toHaveBeenCalledTimes(1);
-  });
-
-  it("the view closing while the request waits: nothing happens afterwards, and the request is still there for the next opening", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    sidebar.open = null;
-    const { view, onRevealDone, b } = setup({ ...word, b: waiting() });
-    const request = click(b);
-    const first = render(view(b, request));
-    await screen.findByTestId("office-editor");
-    first.unmount();
-    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
-    expect(onRevealDone).not.toHaveBeenCalled();
-    sidebar.open = false;
-    render(view(b, request));
-    await waitFor(() => expect(column()).not.toBeNull());
     expect(onRevealDone.mock.calls).toEqual([["doc", request]]);
   });
 
@@ -264,7 +222,7 @@ describe("a row click on a document that is not open yet", () => {
   });
 
   it("two clicks in a row: each is acted on once, and the newer AI is the one shown", async () => {
-    sidebar.open = null;
+    sidebar.open = false;
     const { view, onRevealDone, onAgentDrawn, panels, b } = setup({ ...slides, b: waiting() });
     const first = click(A), second = click(b);
     const { rerender } = render(view(A, first));

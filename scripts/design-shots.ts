@@ -2415,9 +2415,13 @@ async function chromiumPass() {
     for (const { tag: theme, prefs: passPrefs } of passes) {
       await setPrefs(passPrefs);
       // The phone floor: a touch screen (coarse pointer, mobile viewport), as the remote client runs on a phone.
-      const page = await browser.newPage({ viewport: VIEWPORT, ...(phone ? { hasTouch: true, isMobile: true } : {}) });
+      // --scale=2: frames at twice the pixel density (for print and the product page); the layout is the same.
+      const page = await browser.newPage({ viewport: VIEWPORT, ...(Number(option("scale")) > 1 ? { deviceScaleFactor: Number(option("scale")) } : {}), ...(phone ? { hasTouch: true, isMobile: true } : {}) });
       // Skin 2 · B: Chromium gets the same stand-in for the desktop's web-page bridge as WebKitGTK (--native-stub).
       if (args.includes("--native-stub")) await page.addInitScript(CHROMIUM_NATIVE_STUB);
+      // --no-test-vault-notice: a test gateway is not started by the app, so its vault stays refused and says so in
+      // a standing row no person sees in the installed app; frames made for print leave that row out.
+      if (args.includes("--no-test-vault-notice")) await page.addInitScript(() => { const add = () => { const style = document.createElement("style"); style.textContent = ".top-notice.vault-problem{display:none!important}"; document.head.append(style); }; if (document.head) add(); else document.addEventListener("DOMContentLoaded", add); });
       page.on("console", (message) => message.type() === "error" && logs.push(`[${theme} ${shown}] ${message.text().slice(0, 200)} ${message.location().url.replace(/[?#].*$/, "").slice(0, 120)}`));
       page.on("pageerror", (error) => logs.push(`[${theme} pageerror] ${(error.stack ?? error.message).slice(0, 6000)}`));
       const run = (script: string) => page.evaluate(`(() => { ${PRELUDE}; ${script}; return true; })()`);

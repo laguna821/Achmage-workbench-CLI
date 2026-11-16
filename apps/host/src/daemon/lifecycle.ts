@@ -44,6 +44,10 @@ export async function startHost(options: { dataDir: string; entry: string; env?:
   let launchError: Error | null = null;
   try {
     const env: NodeJS.ProcessEnv = { ...process.env, ...options.env, WORKBENCH_DATA_DIR: options.dataDir, WORKBENCH_HOST_MODE: "service", WORKBENCH_EXIT_ON_STDIN_CLOSE: "0" };
+    // The in-app update replaces the AppImage the person opened, not the gateway's persistent copy of it
+    // (whose own $APPIMAGE is that copy): the original's place is handed on (app-update/kind.ts).
+    const image = env.APPIMAGE;
+    if (image && !env.WORKBENCH_APPIMAGE_SOURCE && !image.replace(/\\/g, "/").includes("/runtimes/appimage/")) env.WORKBENCH_APPIMAGE_SOURCE = image;
     // The gateway is always started by the app's own binary (`--host-runtime`, host_runtime.rs): it
     // registers the gateway with the vault and hands it its per-run ticket (sec-vault round 2). A
     // durable AppImage is that binary (it also keeps its own mount). Without the binary (a source

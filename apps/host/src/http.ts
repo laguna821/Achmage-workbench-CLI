@@ -124,6 +124,8 @@ export type HttpOptions = {
   devices?: import("./devices/service.ts").DeviceService;
   autostart?: import("./daemon/autostart.ts").HostAutostart;
   updatePolicy?: import("./update-policy.ts").UpdatePolicy;
+  /** 설정 › 정보 › 업데이트: the window's own token only; never in a remote device's route list (devices/scope.ts). */
+  appUpdates?: import("./app-update/service.ts").AppUpdates;
   host?: { instance: import("@workbench/contracts").HostInstance; stopping: () => boolean; stop: () => void };
   /** The gateway's vault (sec-vault round 2): its state in /api/host, 다시 시도 and the way back. */
   vault?: import("./office-vault.ts").OfficeVault;
@@ -367,6 +369,15 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           const body = await readJson(req, 1024);
           if (typeof body.enabled !== "boolean") throw new HttpError(400, "autostart_input", "자동 시작 여부를 선택해 주세요.");
           return sendJson(res, 200, await options.autostart.setEnabled(body.enabled));
+        }
+      }
+      if (path === "/api/host/app-update" && options.appUpdates) {
+        if (method === "GET") return sendJson(res, 200, options.appUpdates.status());
+        if (method === "POST") {
+          // An action only: the address, the file and the version come from the verified manifest.
+          const action = (await readJson(req, 256)).action;
+          if (typeof action !== "string" || !["check", "install", "wait", "cancel", "dismiss", "auto-on", "auto-off"].includes(action)) throw new HttpError(400, "update_action", "알 수 없는 업데이트 요청입니다.");
+          return sendJson(res, 200, await options.appUpdates.act(action as import("@workbench/contracts").AppUpdateAction));
         }
       }
       if (method === "GET" && path === "/api/host" && options.host) return sendJson(res, 200, {

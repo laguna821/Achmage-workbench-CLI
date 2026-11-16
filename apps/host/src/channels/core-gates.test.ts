@@ -33,7 +33,7 @@ describe("pairing", () => {
 
     const binding = await kit.core.approvePairing("telegram", BOT, request.id);
     expect(binding).toMatchObject({ kind: "telegram", botId: BOT, chatId: "555", userId: "555", displayName: "홍길동", revokedAt: null });
-    expect(kit.adapter.texts().at(-1)).toBe("연결되었습니다. 이제 하고 싶은 일을 그냥 적어 보내세요. 다른 기능은 '메뉴'라고 보내면 나옵니다.");
+    expect(kit.adapter.texts().at(-1)).toBe("연결되었습니다. 이제 하고 싶은 일을 그냥 적어 보내세요. 다른 기능은 '메뉴'라고 보내면 나옵니다.\n프로젝트 이름을 대고 시키면 그 프로젝트에서 일합니다. 예: 「강의계획서 프로젝트에서 서론 다시 써 줘」");
     expect(kit.core.pairing("telegram", BOT)).toMatchObject({ expiresAt: null, request: null });
     await say(kit, "명단 정리해 줘");
     expect(kit.engine.sent.map((turn) => turn.requestId)).toHaveLength(1);

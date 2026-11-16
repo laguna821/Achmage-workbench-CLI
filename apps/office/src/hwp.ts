@@ -11,6 +11,8 @@ import { prepareOutput, commitOutput, cancelOutput, printOutput } from "./output
 import { installHwpEnhancements, pinStudioSkin } from "./hwp-enhancements.ts";
 import { closeAiDockByDefault, installHwpAiDock, stepAsideForStudioDialogs } from "./hwp-ai-dock.ts";
 import { showStudioToolboxByDefault } from "./ui-adapters/studio-bands.ts";
+import { installHwpHold } from "./hwp-hold.ts";
+import { onTurnActivity } from "./turn-activity.ts";
 
 // Ieum's HWP screen owns editing, tables, memos, selection and serialization. This bridge owns
 // the Workbench revision, writer grant and recovery copy. No Electron main process is involved.
@@ -19,6 +21,33 @@ const gateway = new Gateway(init.token), events = new Events();
 const ai = mountOfficeAi(init, gateway, events);
 // The editor's own AI dock is the document's 문서 AI: the tab opens and closes it and hears its state.
 const dock = installHwpAiDock(document, { post });
+// While the AI works: only what must wait is held, it says so, and the hold always ends (hwp-hold.ts).
+const hold = installHwpHold(document, { stop: (turnId) => ai.stop(turnId) });
+Object.assign(window, { workbenchHwpHold: hold });
+// "한글 문서 만들기": the dock's tool asks the gateway; what it made opens in its own tab when the
+// turn ends (the executor's hidden page has no tab: the visible view opens what the turn reports).
+const made = new Set<string>();
+Object.assign(window, {
+  workbenchHangulDocument: { make: (input: Record<string, unknown>, signal?: AbortSignal) => ai.hangulDocument(input, signal) },
+  workbenchHangulMade: (artifactId: string) => { made.add(artifactId); },
+});
+if (!init.execution) {
+  // A turn of this view's own loop: opened when it ends. An executor turn's end reloads this view
+  // (office:execution-refresh) — an answer to a request sent now would come to a page that is gone,
+  // so the reloaded view opens what it made (below).
+  let remote = false;
+  onTurnActivity((event) => {
+    if (event.kind === "start") remote = false;
+    if (event.kind === "remote") remote = true;
+    if (event.kind !== "end") return;
+    if (!remote) for (const artifactId of made) void ai.openMade(artifactId).catch(() => {});
+    made.clear();
+  });
+}
+// What a turn made while this view was being reloaded (an executor turn's end): opened now, once.
+if (!init.execution && !init.readOnly) void (async () => {
+  for (let n = 0; n < 5; n++) { const opened = await ai.openMade(null).catch(() => null); if (!opened?.ok) break; }
+})();
 const id = init.artifact.id, path = init.artifact.path;
 const format: HwpFormat = /\.hwpx$/i.test(path) ? "hwpx" : "hwp";
 const state = { revision: init.artifact.revision, theme: init.theme, dirty: false, kept: false, recovered: false, trackingDropped: false, saveBlocked: false, password: false, memoOpen: false, epoch: 0 };
@@ -227,6 +256,8 @@ function keys(event: KeyboardEvent) {
   const key = event.key.toLowerCase();
   if (key !== "s" && key !== "p") return;
   event.preventDefault(); event.stopImmediatePropagation();
+  // Saving over the AI's half-made edit waits for the turn (printing only looks).
+  if (key === "s" && hold.held()) { hold.flash(); return; }
   hwpApi.requestFileCommand(key === "s" ? event.shiftKey ? "saveAs" : "save" : "print");
 }
 window.addEventListener("keydown", keys, true);
@@ -241,7 +272,8 @@ new MutationObserver(() => {
       stop();
       const stopEnhancements = installHwpEnhancements(frame, init.token);
       const stopAside = frame.contentDocument ? stepAsideForStudioDialogs(document, frame.contentDocument) : () => {};
-      stop = () => { stopEnhancements(); stopAside(); };
+      const stopGuard = hold.guard(frame.contentWindow);
+      stop = () => { stopEnhancements(); stopAside(); stopGuard(); };
     };
     window.addEventListener("pagehide", () => stop(), { once: true });
     frame.addEventListener("load", bind); bind();

@@ -13,14 +13,19 @@ export const isOfficeEditing = (format: Format | undefined, mode: string) => (is
  */
 export const editorKeepsAiPanel = (format: Format | undefined, editorAi: boolean | null) =>
   format !== "hwp" && format !== "hwpx" && editorAi !== false;
-/** Editors that tell the app whether their own AI sidebar is open, when they start and on every change: Word, and the Hangul editor's dock. */
-export const reportsAiSidebar = (format: Format | undefined) => format === "docx" || format === "hwp" || format === "hwpx";
+/** Editors whose own AI panel is the document's 문서 AI unless the person turned the panel off (설정 › 연결). */
+const PANEL_ENTRY = new Set<Format>(["docx", "pptx", "xlsx", "pdf", "markdown", "html"]);
+/** Editors that tell the app whether their own AI panel is open, when they start and on every change: all with a panel (Word, PowerPoint, Excel, PDF, Markdown, HTML, the Hangul dock). */
+export const reportsAiSidebar = (format: Format | undefined) => format === "hwp" || format === "hwpx" || (format !== undefined && PANEL_ENTRY.has(format));
 /**
- * The Hangul editor's own AI dock is the document's one AI entry while the editor is open: the tab's
- * 문서 AI button opens and closes it (selection scope, live edits as one undo, attachments, skills,
- * images and the office executor live there), and the app's column is not shown beside it.
+ * The editor's own AI panel is the document's one AI entry while the editor is open (the Hangul dock
+ * first; every editor with a panel since one-doc-ai): the tab's 문서 AI button opens and closes it
+ * (selection scope, live edits, attachments, skills and the office executor live there), and the app's
+ * column is not shown beside it. `off`: the person turned the editors' panel off (설정 › 연결 "편집기 안에
+ * 문서 AI 보이기", reported by the editor) — then 문서 AI is the conversation column, as without an editor.
+ * The Hangul dock has no such switch.
  */
-export const editorAiIsEntry = (format: Format | undefined) => format === "hwp" || format === "hwpx";
+export const editorAiIsEntry = (format: Format | undefined, off = false) => format === "hwp" || format === "hwpx" || (!off && format !== undefined && PANEL_ENTRY.has(format));
 
 /** A click on a document AI's row: the request to show that AI's conversation, held by the app until a view acts on it. */
 export type AgentReveal = { sessionId: string };

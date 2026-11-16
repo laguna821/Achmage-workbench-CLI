@@ -50,6 +50,8 @@ export type Out = {
   marks?: Mark[];
   /** The core's own plain lines under a markdown text (added after formatting, never read as markdown); adapters never see it. */
   tail?: string;
+  /** The core's own plain line before the text (where a handed-over answer is from); adapters never see it. */
+  head?: string;
 };
 /** `continues`: the stretch goes on in the next part of a text cut into several messages. */
 export type Mark = { type: "bold" | "italic" | "strike" | "code" | "pre" | "link" | "quote"; offset: number; length: number; url?: string; language?: string; continues?: boolean };

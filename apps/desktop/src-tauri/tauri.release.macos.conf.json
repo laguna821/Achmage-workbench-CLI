@@ -5,6 +5,9 @@
       "files": {
         "Resources/ieumoffice": "bundled/ieumoffice"
       }
+    },
+    "resources": {
+      "../../../packaging/install-kind/dmg.json": "install-kind.json"
     }
   }
 }

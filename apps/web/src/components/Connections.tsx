@@ -147,7 +147,7 @@ export function DevicesSection({ panel, onConnections, onPush, onMessenger, loca
 
 // ── 문서 도구 ────────────────────────────────────────────────────────────────────────────────
 
-/** The editors' own AI 도우미, shown or hidden (I7); what it is beside 문서 AI in one line. */
+/** The editors' own AI panel (the document's 문서 AI), shown or hidden (I7, one-doc-ai); what off means in one line. */
 export function EditorAiRow({ api }: { api: Api }) {
   const [shown, setShown] = useState<boolean | null>(null), [problem, setProblem] = useState("");
   useEffect(() => {
@@ -155,8 +155,8 @@ export function EditorAiRow({ api }: { api: Api }) {
     void editorAiShown(api).then((value) => { if (live) setShown(value); }).catch(() => { if (live) setProblem("지금은 이 설정을 읽지 못했습니다. 잠시 뒤 다시 열어 보세요."); });
     return () => { live = false; };
   }, [api]);
-  return <SettingsRow label="편집기 안 AI 도우미 보이기" hint={EDITOR_AI_DIFFERENCE}
-    control={<SettingsSwitch label="편집기 안 AI 도우미 보이기" checked={shown ?? true} disabled={shown === null}
+  return <SettingsRow label="편집기 안에 문서 AI 보이기" hint={EDITOR_AI_DIFFERENCE}
+    control={<SettingsSwitch label="편집기 안에 문서 AI 보이기" checked={shown ?? true} disabled={shown === null}
       onChange={(next) => { setProblem(""); void setEditorAiShown(api, next).then(setShown).catch(() => setProblem("바꾸지 못했습니다. 잠시 뒤 다시 해 보세요.")); }} />}
     detail={problem ? <p className="settings-note" role="alert">{problem}</p> : undefined} />;
 }
@@ -173,7 +173,7 @@ export function DocumentsSection({ tools, onInstallIeum, onRefreshTools, onOffic
   imageUpload?: ReactNode;
   /** 볼트 (VaultSettingsRow). */
   vault?: ReactNode;
-  /** 편집기 안 AI 도우미 보이기 (EditorAiRow). */
+  /** 편집기 안에 문서 AI 보이기 (EditorAiRow). */
   editorAi?: ReactNode;
 }) {
   const rows = tools ? [
@@ -221,10 +221,11 @@ export function AdvancedSection({ onDesktop, onExtensions, onEventHub }: { onDes
 
 // ── 정보 ─────────────────────────────────────────────────────────────────────────────────────
 
-export function AboutSection({ hostLabel, licences }: { hostLabel: string; licences?: ReactNode }) {
+export function AboutSection({ hostLabel, licences, update }: { hostLabel: string; licences?: ReactNode; update?: ReactNode }) {
   return <>
     <SettingsGroup title="이 앱">
-      <SettingsRow label="Achmage Workbench" hint={`판 ${APP_VERSION}`} />
+      {/* 업데이트 (AppUpdateRows): the version, whether a newer one is published, and the one key; this PC's window only. */}
+      {update ?? <SettingsRow label="Achmage Workbench" hint={`판 ${APP_VERSION}`} />}
       <SettingsRow label="이 앱이 일하는 컴퓨터" hint={hostLabel} />
       {/* Icons8's free licence asks for this link (vendor/icons8-liquid-glass/NOTICE.md): the item icons are theirs. */}
       <SettingsRow label="아이콘: Icons8" hint={<>프로젝트, 폴더, 대화, 문서의 아이콘은 <a href="https://icons8.com" target="_blank" rel="noreferrer">Icons8</a>의 Liquid Glass 아이콘입니다.</>} />

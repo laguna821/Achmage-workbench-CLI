@@ -121,6 +121,40 @@ function hwp(code: string, module: string): string {
   code = replaceOnce(code,
     "      memoGateRef.current?.cancel()\n      loopRef.current?.cancel()",
     "      memoGateRef.current?.cancel()\n      loopRef.current?.detach()", "HWP");
+  // hallym-kordoc in every Hangul document without being named: its chip is on by default (the
+  // person can remove it for one request), and while a request carries it the dock's turn has
+  // "한글 문서 만들기" (src/hwp-document-tool.ts → the gateway runs the skill's runner).
+  code = replaceOnce(code,
+    "  const skillsRef = useRef(skills)\n  skillsRef.current = skills\n",
+    `  const skillsRef = useRef(skills)
+  skillsRef.current = skills
+  const wbHallymItem = skills.composer?.items.find((item) => item.name === WB_HALLYM_NAME)
+  const wbHallymIdRef = useRef<string | null>(null)
+  wbHallymIdRef.current = wbHallymItem?.id ?? null
+  const wbHallymOffRef = useRef(false)
+  if (skills.composer && wbHallymItem) {
+    const remove = skills.composer.onRemove
+    skills.composer = { ...skills.composer, onRemove: (id: string) => { if (id === wbHallymItem.id) wbHallymOffRef.current = true; remove(id) } }
+  }
+  useEffect(() => { if (busy) wbHallymOffRef.current = false }, [busy])
+  useEffect(() => {
+    if (!wbHallymItem || busy || wbHallymOffRef.current || isOfficeExecutor()) return
+    // Its runner DOES run here (through 한글 문서 만들기): not the picker's "scripts are not run" note.
+    if (!skills.chips.some((chip) => chip.id === wbHallymItem.id)) skills.composer?.onPick({ ...wbHallymItem, hasScripts: false })
+  }, [wbHallymItem?.id, skills.chips, busy])
+`, "HWP");
+  code = replaceOnce(code,
+    "        createFilesSkill(() => availableAttachmentsRef.current()),\n",
+    `        createFilesSkill(() => availableAttachmentsRef.current()),
+        wbCreateHangulDocumentSkill(
+          () => (window as { workbenchHangulDocument?: WbHangulPort }).workbenchHangulDocument ?? null,
+          () => {
+            const id = wbHallymIdRef.current
+            return Boolean(id && (runSkillUseRef.current.chips.some((chip) => chip.id === id) || runInstructionRef.current.includes('<skill id="' + id + '"')))
+          },
+          (artifactId) => (window as { workbenchHangulMade?: (id: string) => void }).workbenchHangulMade?.(artifactId),
+        ),
+`, "HWP");
   const marker = "  const stop = (): void => {";
   code = replaceOnce(code, marker, `  const workbenchSendRef = useRef(send);
   workbenchSendRef.current = send;
@@ -145,11 +179,17 @@ function hwp(code: string, module: string): string {
       // skill, refreshes its context and keeps the original stale-range checks.
       return workbenchSendRef.current(instruction, data.attachments, data.scope);
     },
-    lock: (locked) => workbenchLockDocument('.hwp-stage, .hwp-topbar, .memo-panel', locked),
+    // Not the whole editor any more (0.5.1 made studio, menus and top bar inert for the whole
+    // turn): the page's hold (apps/office/src/hwp-hold.ts) holds only typing and the commands that
+    // change or save the document, says so, and always ends.
+    lock: (locked) => { (window as { workbenchHwpHold?: { lock(locked: boolean): void } }).workbenchHwpHold?.lock(locked) },
   }), []);
 
 ${marker}`, "HWP");
-  return `import { registerOriginalExecutor, isOfficeExecutor, askOfficeExecutionQuestion } from ${JSON.stringify(module)};\n${lockDocument}\n${code}`;
+  const tool = module.replace(/execution-adapter\.ts$/, "hwp-document-tool.ts");
+  return `import { registerOriginalExecutor, isOfficeExecutor, askOfficeExecutionQuestion } from ${JSON.stringify(module)};
+import { createHangulDocumentSkill as wbCreateHangulDocumentSkill, HALLYM_NAME as WB_HALLYM_NAME, type HangulPort as WbHangulPort } from ${JSON.stringify(tool)};
+${code}`;
 }
 
 function mindmap(code: string, module: string): string {

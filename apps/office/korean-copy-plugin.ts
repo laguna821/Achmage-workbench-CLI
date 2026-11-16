@@ -1,5 +1,9 @@
 import type { Plugin } from "vite";
-import { KOREAN_COPY } from "./src/korean-copy.ts";
+import { KOREAN_COPY as COPY } from "./src/korean-copy.ts";
+import { VENDOR_FIXES } from "./src/vendor-fixes.ts";
+
+/** The Korean copy and the behaviour fixes (vendor-fixes.ts): one list of exact, once-only replacements. */
+const KOREAN_COPY = [...COPY, ...VENDOR_FIXES];
 
 const norm = (path: string) => path.split("?")[0]!.replaceAll("\\", "/");
 

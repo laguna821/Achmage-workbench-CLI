@@ -44,7 +44,7 @@ on:
       upgrade_from:
         description: 'Published release to install before the upgrade check'
         type: string
-        default: 'v0.5.0'
+        default: 'v0.5.1'
       upgrade_to:
         description: 'Published release to install over the old version (empty: normal build/publish)'
         type: string
@@ -146,6 +146,21 @@ jobs:
           npx vitest run
       - name: Multi-tab document AI and urgent UI checks
         run: node scripts/urgent-parallel-check.ts urgent-ui
+      # The in-app update proofs (job update-proof) need an OLDER gateway of this same commit that trusts a key
+      # made here for this run only (version 0.0.1, WORKBENCH_UPDATE_TEST_KEYS at BUILD time). The release
+      # gateway above is built without it and trusts only the keys in apps/host/src/app-update/manifest.ts.
+      - name: Older test gateway and throwaway key for the in-app update proofs
+        run: |
+          mkdir -p update-proof-kit
+          node --input-type=module -e "import { generateKeyPairSync } from 'node:crypto'; import { writeFileSync } from 'node:fs'; const { privateKey, publicKey } = generateKeyPairSync('ed25519'); writeFileSync('update-proof-kit/proof-key.pem', privateKey.export({ format: 'pem', type: 'pkcs8' })); writeFileSync('update-proof-kit/proof-key.spki', publicKey.export({ format: 'der', type: 'spki' }).toString('base64'));"
+          cd apps/host
+          WORKBENCH_HOST_BUILD_DIR="$GITHUB_WORKSPACE/update-proof-kit/host" WORKBENCH_BUILD_VERSION=0.0.1 WORKBENCH_UPDATE_TEST_KEYS="$(cat ../../update-proof-kit/proof-key.spki)" node ../../scripts/build-host.mjs
+          test -f "$GITHUB_WORKSPACE/update-proof-kit/host/update-helper.mjs"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: update-proof-kit
+          path: update-proof-kit
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -200,7 +215,7 @@ jobs:
         run: npx tauri build --verbose --config src-tauri/tauri.release.conf.json --config src-tauri/tauri.release.appimage.conf.json --bundles appimage
       - name: Build (deb)
         working-directory: apps/desktop
-        run: npx tauri build --config src-tauri/tauri.release.conf.json --config src-tauri/tauri.release.apps.conf.json --bundles deb
+        run: npx tauri build --config src-tauri/tauri.release.conf.json --config src-tauri/tauri.release.apps.conf.json --config src-tauri/tauri.release.deb.conf.json --bundles deb
       - uses: actions/upload-artifact@v4
         with:
           name: linux
@@ -429,7 +444,7 @@ jobs:
     timeout-minutes: 15
     env:
       GH_TOKEN: ${{ github.token }}
-      UPGRADE_FROM: ${{ inputs.upgrade_from || 'v0.5.0' }}
+      UPGRADE_FROM: ${{ inputs.upgrade_from || 'v0.5.1' }}
       UPGRADE_TO: ${{ inputs.upgrade_to }}
     steps:
       - uses: actions/checkout@v4
@@ -525,10 +540,90 @@ jobs:
           path: upgrade-out
           if-no-files-found: ignore
 
+  update-proof:
+    name: In-app update (${{ matrix.kind }})
+    # Each OS's default kind: the candidate of this commit installed, its gateway replaced by the 0.0.1 test build,
+    # then 업데이트 through that gateway's own route against a stand-in GitHub on 127.0.0.1 (scripts/release/update-proof.ts).
+    needs: [validate, web, linux, windows, macos]
+    if: always() && needs.web.result == 'success' && !inputs.publish_run && !inputs.upgrade_to && !inputs.smoke_run && !inputs.upgrade_run
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, kind: nsis, artifact: windows }
+          - { os: macos-15, kind: dmg, artifact: macos }
+          - { os: ubuntu-22.04, kind: appimage, artifact: linux }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: installer
+      - uses: actions/download-artifact@v4
+        with:
+          name: update-proof-kit
+          path: update-proof-kit
+      - name: Version of this candidate
+        shell: bash
+        run: |
+          echo "NEW_VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
+      - name: Install the candidate (NSIS, silent), then put the 0.0.1 test gateway in its place
+        if: matrix.kind == 'nsis'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem installer -Recurse -Filter '*-setup.exe' | Select-Object -First 1
+          $p = Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "install failed: $($p.ExitCode)" }
+          $app = Join-Path $env:LOCALAPPDATA 'Achmage Workbench'
+          Copy-Item -Recurse -Force update-proof-kit/host/* (Join-Path $app 'host')
+          "PROOF_HOST=$(Join-Path $app 'host')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "PROOF_APP=$(Join-Path $app 'achmage-workbench.exe')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "PROOF_INSTALLER=$($setup.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Install the candidate from its disk image, then put the 0.0.1 test gateway in its place
+        if: matrix.kind == 'dmg'
+        run: |
+          dmg=$(find installer -name '*.dmg' | head -1)
+          hdiutil attach "$dmg" -nobrowse -mountpoint /tmp/wb-dmg
+          mkdir -p "$HOME/Applications"
+          ditto "/tmp/wb-dmg/Achmage Workbench.app" "$HOME/Applications/Achmage Workbench.app"
+          hdiutil detach /tmp/wb-dmg
+          res="$HOME/Applications/Achmage Workbench.app/Contents/Resources"
+          test -f "$res/install-kind.json"
+          cp -R update-proof-kit/host/. "$res/host/"
+          { echo "PROOF_HOST=$res/host"; echo "PROOF_APP=$HOME/Applications/Achmage Workbench.app/Contents/MacOS/achmage-workbench"; echo "PROOF_INSTALLER=$PWD/$dmg"; } >> "$GITHUB_ENV"
+      - name: Place the candidate AppImage; the 0.0.1 test gateway runs beside it with the AppImage marker
+        if: matrix.kind == 'appimage'
+        run: |
+          sudo apt-get update && sudo apt-get install -y libfuse2 xvfb libwebkit2gtk-4.1-0 libayatana-appindicator3-1
+          image=$(find installer -name '*.AppImage' | head -1)
+          mkdir -p "$HOME/Applications" proof-root
+          cp "$image" "$HOME/Applications/Achmage.Workbench.AppImage" && chmod 755 "$HOME/Applications/Achmage.Workbench.AppImage"
+          cp -R update-proof-kit/host proof-root/host
+          printf '{"kind":"appimage"}\n' > proof-root/install-kind.json
+          { echo "PROOF_HOST=$PWD/proof-root/host"; echo "PROOF_APP=$HOME/Applications/Achmage.Workbench.AppImage"; echo "PROOF_INSTALLER=$PWD/$image"; echo "PROOF_APPIMAGE=$HOME/Applications/Achmage.Workbench.AppImage"; } >> "$GITHUB_ENV"
+      - name: 업데이트 through the old gateway (stand-in GitHub on 127.0.0.1)
+        shell: bash
+        run: |
+          run=(node scripts/release/update-proof.ts --kind "${{ matrix.kind }}" --host "$PROOF_HOST" --installer "$PROOF_INSTALLER" --version "$NEW_VERSION" --key update-proof-kit/proof-key.pem --app-bin "$PROOF_APP" --out update-proof-out)
+          if [ -n "${PROOF_APPIMAGE:-}" ]; then run+=(--appimage "$PROOF_APPIMAGE"); fi
+          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a "${run[@]}"; else "${run[@]}"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: update-proof-${{ matrix.kind }}
+          path: update-proof-out
+          if-no-files-found: ignore
+
   candidate:
     name: Candidate files and installation receipts
-    needs: [browser, web, linux, arch, windows, macos, smoke, upgrade]
-    if: always() && needs.linux.result == 'success' && needs.arch.result == 'success' && needs.windows.result == 'success' && needs.macos.result == 'success'
+    needs: [browser, web, linux, arch, windows, macos, smoke, upgrade, update-proof]
+    if: always() && needs.linux.result == 'success' && needs.arch.result == 'success' && needs.windows.result == 'success' && needs.macos.result == 'success' && needs.update-proof.result == 'success'
     runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ github.token }}
@@ -585,6 +680,115 @@ jobs:
             -n windows -n macos -n linux -n arch \
             -n smoke-windows -n smoke-macos -n upgrade-windows -n candidate-provenance
           gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" -D out -p 'lightpanda-*'
-      - name: Verify installed candidate bytes and upload to prepared draft
+      # The in-app update proofs are part of acceptance: a run where an OS's proof failed is not published.
+      - name: The source run's in-app update proofs passed
         run: |
-          node scripts/release/promote.ts out out/candidate-provenance/installer-provenance.json release-files
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/jobs?per_page=100" > jobs.json
+          python3 - <<'PY'
+          import json
+          jobs = {j['name']: j['conclusion'] for j in json.load(open('jobs.json'))['jobs']}
+          for kind in ('nsis', 'dmg', 'appimage'):
+              assert jobs.get(f'In-app update ({kind})') == 'success', f'In-app update proof did not pass: {kind}'
+          PY
+      # Repository code (from source_sha) writes update.json from the real files. No key is in reach of this job;
+      # signing is the separate sign-update job below, which runs no repository code (security review H1).
+      - name: Verify installed candidate bytes and write update.json (no key here)
+        run: |
+          node scripts/release/promote.ts prepare out out/candidate-provenance/installer-provenance.json release-files
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-files
+          path: release-files
+          if-no-files-found: error
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        if: startsWith(inputs.preview_tag, 'v')
+        with:
+          name: update-json
+          path: release-files/update.json
+          if-no-files-found: error
+          retention-days: 3
+
+  # Signs update.json with the release key. No checkout, no repository script, no npm/npx, no third-party action:
+  # only the pinned download/upload actions and the runner's own node, inline. It refuses unless the release tag
+  # points at exactly source_sha and this run's ref (whose workflow file this is) is a release/v* branch or that tag.
+  # What this stops: repository code (promote.ts, a test, a build step) reading the key. What it does NOT stop:
+  # someone who can push code to a release/v* branch or a v* tag and run this workflow can still get THAT code's
+  # update.json signed (protect those refs and keep the key in a protected Environment for that).
+  sign-update:
+    needs: [validate, publish-tested]
+    name: Sign update.json (release key; no repository code)
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_run != '' && startsWith(inputs.preview_tag, 'v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      PREVIEW_TAG: ${{ inputs.preview_tag }}
+    steps:
+      - name: Refuse unless the tag is source_sha and this run's ref is a release branch or that tag
+        run: |
+          [[ "$PREVIEW_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Only a vMAJOR.MINOR.PATCH release is signed"; exit 1; }
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::An exact source commit is required"; exit 1; }
+          case "$GITHUB_REF" in
+            "refs/tags/$PREVIEW_TAG"|refs/heads/release/v*) ;;
+            *) echo "::error::Signing runs only from a release/v* branch or the release tag (this run: $GITHUB_REF)"; exit 1 ;;
+          esac
+          obj=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$PREVIEW_TAG" --jq '.object.type + " " + .object.sha')
+          for depth in 1 2 3 4 5; do
+            set -- $obj
+            [ "$1" = tag ] || break
+            obj=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$2" --jq '.object.type + " " + .object.sha')
+          done
+          set -- $obj
+          { [ "$1" = commit ] && [ "$2" = "$SOURCE_SHA" ]; } || { echo "::error::The release tag does not point to source_sha"; exit 1; }
+      - uses: actions/download-artifact@v4
+        with:
+          name: update-json
+          path: update
+      - name: Sign update.json (ed25519 over its exact bytes)
+        env:
+          WORKBENCH_UPDATE_SIGNING_KEY: ${{ secrets.WORKBENCH_UPDATE_SIGNING_KEY }}
+        run: |
+          set +x
+          if [ -z "${WORKBENCH_UPDATE_SIGNING_KEY:-}" ]; then echo "::error::WORKBENCH_UPDATE_SIGNING_KEY is missing: the release is not published without a signed update.json"; exit 1; fi
+          node -e 'const c = require("node:crypto"), f = require("node:fs"); const k = c.createPrivateKey(process.env.WORKBENCH_UPDATE_SIGNING_KEY); if (k.asymmetricKeyType !== "ed25519") { console.error("not an ed25519 key"); process.exit(1); } const b = f.readFileSync("update/update.json"); if (JSON.parse(b.toString("utf8")).version !== process.env.PREVIEW_TAG.slice(1)) { console.error("update.json is not for this tag"); process.exit(1); } f.writeFileSync("update/update.json.sig", c.sign(null, b, k).toString("base64") + "\n", { flag: "wx" });' > /dev/null
+          test -s update/update.json.sig
+      - uses: actions/upload-artifact@v4
+        with:
+          name: update-json-sig
+          path: update/update.json.sig
+          if-no-files-found: error
+          retention-days: 3
+
+  publish-upload:
+    needs: [validate, publish-tested, sign-update]
+    name: Check the signature and upload to the prepared draft
+    if: always() && needs.publish-tested.result == 'success' && (needs.sign-update.result == 'success' || (needs.sign-update.result == 'skipped' && startsWith(inputs.preview_tag, 'preview-')))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: ${{ inputs.publish_run }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      PREVIEW_TAG: ${{ inputs.preview_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-files
+          path: release-files
+      - uses: actions/download-artifact@v4
+        if: startsWith(inputs.preview_tag, 'v')
+        with:
+          name: update-json-sig
+          path: release-files
+      # No key here: the signature is checked against the app's own key list and the files, then uploaded.
+      - name: Verify update.json.sig and upload to the prepared draft
+        run: |
+          node scripts/release/promote.ts upload release-files

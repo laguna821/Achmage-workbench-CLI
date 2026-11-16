@@ -33,6 +33,8 @@
 //   "고쳐"  appends to the working copy the request names
 //   "실패해"  the turn fails without an answer, as Claude Code reports an API error (is_error result)
 // Vault notes attached to a request are named back ("받은 노트 사본: …").
+//   In a messenger's own conversation (the remote's rules in the request): "<이름> 프로젝트에서 <일>" and the
+//          rest of fake-remote.mjs — workbench-remote through Bash, then one line (or [[선택: …]])
 //   "[[crash]]"  the process dies in the middle of the turn: it adds part of an edit to the working
 //          copy the request names, streams a few lines (about 2.5 s), then exits without a result.
 //          "[[crash-once]]", or "충돌:N" in a linked-session goal at hand-over N: the same, once per
@@ -59,6 +61,7 @@ import { dirname, join, resolve } from "node:path";
 import { createServer } from "node:http";
 import { createInterface } from "node:readline";
 import { pagePng } from "./png.mjs";
+import { remoteTurn } from "./fake-remote.mjs";
 import { SAMPLE_COMMAND, SAMPLE_FILE, SAMPLE_FILE_TEXT, SAMPLE_OUTPUT, SAMPLE_PLAN, SAMPLE_REPLY, SAMPLE_THINKING } from "./sample-reply.mjs";
 
 const args = process.argv.slice(2);
@@ -72,7 +75,7 @@ if (args[0] === "auth" && args[1] === "status") {
     console.log(JSON.stringify({ loggedIn: false, authMethod: "none", apiProvider: "firstParty" }));
     process.exit(1);
   }
-  console.log(JSON.stringify({ loggedIn: true, authMethod: "claude.ai", apiProvider: "firstParty", email: "fake@example.com", subscriptionType: "max" }));
+  console.log(JSON.stringify({ loggedIn: true, authMethod: "claude.ai", apiProvider: "firstParty", email: process.env.WORKBENCH_FIXTURE_EMAIL || "fake@example.com", subscriptionType: "max" }));
   process.exit(0);
 }
 const loginMode = args[0] === "auth" && args[1] === "login";
@@ -457,6 +460,20 @@ async function runTurn(text) {
     writeFileSync(join(process.cwd(), SAMPLE_FILE), SAMPLE_FILE_TEXT);
     tool("Write", { file_path: join(process.cwd(), SAMPLE_FILE), content: SAMPLE_FILE_TEXT }, `File created successfully at: ${join(process.cwd(), SAMPLE_FILE)}`);
   }
+  // The remote (fake-remote.mjs): in a messenger's own conversation, work named for a project is handed over with workbench-remote.
+  const remoteAnswer = await remoteTurn(text, async (line) => {
+    const toolId = `toolu_${randomUUID().slice(0, 8)}`;
+    const input = { command: line, description: "Workbench 리모콘" };
+    send({ type: "assistant", message: { id: `msg_${randomUUID().slice(0, 8)}`, type: "message", role: "assistant", model: MODEL, content: [{ type: "tool_use", id: toolId, name: "Bash", input }], stop_reason: "tool_use", stop_sequence: null, usage: { input_tokens: 10, output_tokens: 20, cache_creation_input_tokens: 0, cache_read_input_tokens: used } }, parent_tool_use_id: null, ...base() });
+    let allowed = permissionMode === "bypassPermissions" || permissionMode === "dontAsk";
+    if (!allowed) {
+      const answerToTool = await ask({ subtype: "can_use_tool", tool_name: "Bash", input, tool_use_id: toolId, decision_reason: "명령 실행은 확인이 필요합니다" });
+      allowed = answerToTool?.behavior === "allow";
+    }
+    const result = allowed ? await runCommand(line) : { code: 1, output: "The user declined this action." };
+    send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: result.output, is_error: result.code !== 0 }] }, parent_tool_use_id: null, ...base() });
+    return result;
+  }, process.env.WORKBENCH_REMOTE_SESSION ?? "claude");
   if (!(text.trim() === "/compact")) {
     const steer = text.startsWith("[steer]") ? `이어서 받은 요청을 반영합니다: ${text.slice(7)}\n\n` : "";
     const skill = text.match(/^\/정리(?:\s+(.*))?$/s);
@@ -483,7 +500,9 @@ async function runTurn(text) {
     if (skill) chunks.push({ text: `스킬 /정리를 실행했습니다: ${skill[1] ?? ""}\n\n`, wait: 30 });
     if (seen) chunks.push({ text: `요청을 받았습니다 (${seen[1]}).\n\n`, wait: 30 });
     const linked = linkReply(text, "Claude");
-    if (linked) {
+    if (remoteAnswer !== null) {
+      chunks.push({ text: remoteAnswer, wait: 30 });
+    } else if (linked) {
       for (const line of linked) chunks.push({ text: `${line}\n`, wait: 40 });
       // "천천히" / "길게": the same reply, then a tail (about 2 s / 8 s) to have time to act meanwhile.
       const tail = long ? 150 : text.includes("천천히") ? 30 : 0;
@@ -586,7 +605,7 @@ if (!loginMode) createInterface({ input: process.stdin }).on("line", (line) => {
         if (typeof request.appendSystemPrompt === "string" && request.appendSystemPrompt.includes("[Achmage Workbench · 브라우저]")) {
           browser = { name: /-s=(wb-[a-z0-9]+)/.exec(request.appendSystemPrompt)?.[1] ?? "wb-unknown" };
         }
-        return reply({ commands: [{ name: "compact", description: "대화 압축", argumentHint: "", builtin: true }, { name: "정리", description: "글을 짧게 정리하는 스킬(가짜)", argumentHint: "[주제]" }], models: [{ value: "default", displayName: "Fake (기본)", description: "가짜 모델", supportedEffortLevels: ["low", "medium", "high"] }], account: { email: "fake@example.com", subscriptionType: "max" }, output_style: "default", available_output_styles: ["default"] });
+        return reply({ commands: [{ name: "compact", description: "대화 압축", argumentHint: "", builtin: true }, { name: "정리", description: "글을 짧게 정리하는 스킬(가짜)", argumentHint: "[주제]" }], models: [{ value: "default", displayName: "Fake (기본)", description: "가짜 모델", supportedEffortLevels: ["low", "medium", "high"] }], account: { email: process.env.WORKBENCH_FIXTURE_EMAIL || "fake@example.com", subscriptionType: "max" }, output_style: "default", available_output_styles: ["default"] });
       case "interrupt": {
         if (turn) turn.interrupted = true;
         // Like Claude Code: queued requests survive a plain interrupt (still_queued) and are

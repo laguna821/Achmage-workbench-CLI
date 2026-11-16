@@ -945,7 +945,7 @@ export type OfficePageMessage =
    * `ready` (drawn: false before the editor draws it, and then `open` means nothing), `draft` (what
    * is typed in it) and `person` (changed by its own button, not by the tab's request).
    */
-  | { type: "office:ai-panel"; open: boolean; draft?: string; ready?: boolean; person?: boolean; /** Open AND on screen (the Hangul dock steps aside for a studio dialog at a narrow pane); absent: as `open`. */ shown?: boolean }
+  | { type: "office:ai-panel"; open: boolean; draft?: string; ready?: boolean; person?: boolean; /** Open AND on screen (the Hangul dock steps aside for a studio dialog at a narrow pane); absent: as `open`. */ shown?: boolean; /** The person turned the editor's own panel off (설정 › 연결): 문서 AI is the conversation column then. */ off?: boolean }
   /** The editor shows this revision; `recovered` when it reopened unsaved edits made on it. */
   | { type: "office:opened"; revision: number; recovered: boolean }
   /** A save of this page is on its way: the next revision the window hears of is this one (its "office:saved" follows). */

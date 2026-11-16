@@ -57,6 +57,7 @@
     "allow-office-cli-done",
     "allow-office-cli-trace",
     "allow-office-browser",
-    "allow-host-credential"
+    "allow-host-credential",
+    "allow-quit-for-update"
   ]
 }

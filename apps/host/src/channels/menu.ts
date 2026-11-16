@@ -59,7 +59,8 @@ export type MenuAct =
   | { a: "cancel" }
   | { a: "footer" }
   | { a: "rename" }
-  | { a: "compact" };
+  | { a: "compact" }
+  | { a: "remote" };
 
 type Hit = { kind: string; title: string; snippet: string; sessionId: string | null; artifactId: string | null };
 
@@ -225,6 +226,10 @@ export type MenuCore = {
   footerOn(binding: Binding): boolean;
   compact(binding: Binding): Promise<string>;
   rename(sessionId: string, name: string): { ok: true; name: string } | { ok: false; text: string };
+  /** The remote conversation the chat came from while it is inside another one (리모콘으로 돌아가기), else null. */
+  remoteAway(binding: Binding): Session | null;
+  /** 리모콘으로 돌아가기: the chat goes back there; what is said. */
+  backToRemote(binding: Binding): string;
   /** "비밀 보관함" (units 7-8): the list as the sentence gives it, as a message of its own; null without the credential module. */
   vault: ((binding: Binding, eventId: string) => Promise<void>) | null;
 };
@@ -300,10 +305,16 @@ export class ChannelMenu {
     return cutAt(this.core.scrub(text), limit);
   }
 
+  /** While the chat is inside a conversation the remote handed work to: one press back to the remote. */
+  private backRow(binding: Binding): MenuButton[][] {
+    return this.core.remoteAway(this.fresh(binding)) ? [[{ label: "리모콘으로 돌아가기", act: { a: "remote" } }]] : [];
+  }
+
   mainScreen(binding: Binding, note?: string): Screen {
     return {
       text: `${note ? `${note}\n\n` : ""}메뉴 · 지금: ${this.core.where(binding)}`,
       buttons: [
+        ...this.backRow(binding),
         [{ label: "새 대화", act: { a: "new" } }, { label: "대화 바꾸기", act: { a: "sessions" } }, { label: "프로젝트 바꾸기", act: { a: "works" } }],
         [{ label: "엔진·모델", act: { a: "engine" } }, { label: "최근 파일", act: { a: "files" } }, { label: "프로젝트 노트", act: { a: "note" } }],
         [{ label: "찾기", act: { a: "search" } }, { label: "예약", act: { a: "schedule" } }, { label: "사용량", act: { a: "usage" } }],
@@ -442,6 +453,7 @@ export class ChannelMenu {
         this.core.setFooter(binding, !this.core.footerOn(this.fresh(binding)));
         return show(this.notifyScreen(binding));
       case "compact": return show(this.statusScreen(binding, await this.core.compact(binding)));
+      case "remote": return show({ text: this.core.backToRemote(binding), buttons: [[BACK]] });
       case "rename": {
         const session = this.pointer(binding);
         if (!session || session.archivedAt) return show(this.statusScreen(binding, "보관한 대화라 이름을 바꿀 수 없습니다."));
@@ -478,6 +490,7 @@ export class ChannelMenu {
     // A messenger's place is not a project to go to (the other messenger's neither).
     const works = [...this.manager.view.works.values()].filter((work) => !this.core.hidden(work) && !work.messengerHome).sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt).slice(0, 6);
     const rows: MenuButton[][] = [
+      ...(move ? [] : this.backRow(binding)),
       [{ label: `${atHome ? "✓ " : ""}${home}`, act: { a: "home", ...(move ? { move } : {}) } }],
       ...works.map((work): MenuButton[] => [{ label: `${work.id === here?.id ? "✓ " : ""}${this.clip(work.title, 24)}`, act: { a: "sessions", workId: work.id, ...(move ? { move } : {}) } }]),
     ];

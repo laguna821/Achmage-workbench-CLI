@@ -14,10 +14,10 @@ it("shows the stored choice, changes it on a click, and says how it differs from
     return { showAiSidebar: shown };
   });
   await act(async () => { render(<EditorAiRow api={{ request } as unknown as Api} />); });
-  const toggle = screen.getByRole("switch", { name: "편집기 안 AI 도우미 보이기" }) as HTMLInputElement;
+  const toggle = screen.getByRole("switch", { name: "편집기 안에 문서 AI 보이기" }) as HTMLInputElement;
   expect(toggle.checked).toBe(true);
-  expect(document.body.textContent).toContain("문서 AI는 사본에서 고친 뒤 수정안으로 돌려줍니다");
+  expect(document.body.textContent).toContain("끄면 문서 AI는 문서 옆 대화로 열리고, 사본에서 고친 뒤 수정안으로 돌려줍니다");
   await act(async () => { fireEvent.click(toggle); });
   expect(request).toHaveBeenLastCalledWith("POST", "/api/office-preferences", { channel: "home:set-ai-panel-prefs", args: [{ showAiSidebar: false }] });
-  expect((screen.getByRole("switch", { name: "편집기 안 AI 도우미 보이기" }) as HTMLInputElement).checked).toBe(false);
+  expect((screen.getByRole("switch", { name: "편집기 안에 문서 AI 보이기" }) as HTMLInputElement).checked).toBe(false);
 });

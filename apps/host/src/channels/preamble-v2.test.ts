@@ -29,13 +29,15 @@ describe("the phone preamble, version 3 (unit 14)", () => {
 describe("the phone preamble, version 4 (unit 9, fix round 1 I8)", () => {
   const ENGINE = "이 대화는 Workbench에서 Codex로 실행됩니다. 모델: gpt-x · 엔진 기본값. 노력: 보통.";
   it("asks for a one-time code, an approval in another app and a mail link with step, never need (nothing of them is stored)", () => {
-    expect(PREAMBLE_VERSION).toBe(4);
+    // Version 5 (the remote, phone-remote-brief) says what version 4 says outside a messenger's place.
+    expect(PREAMBLE_VERSION).toBe(5);
     const text = phonePreamble(4, ENGINE);
     expect(text).toContain("2단계 인증번호, 다른 앱에서의 승인, 메일로 온 로그인 링크는 need가 아니라 workbench-credential step 으로 요청하세요");
     expect(text).toContain("workbench-credential need");
     expect(text).not.toMatch(/2단계 인증, API 키/);
     expect(text.endsWith(`- ${ENGINE} 어떤 엔진·모델이냐고 물으면 이대로 답하세요(추측하거나 "확인되지 않았다"고 하지 마세요).`)).toBe(true);
     expect(phonePreamble(4)).toContain("workbench-credential step");
+    expect(phonePreamble(5, ENGINE)).toBe(text);
   });
 
   it("a request kept under version 3 is told version 3's words", () => {

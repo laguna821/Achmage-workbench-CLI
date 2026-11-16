@@ -27,6 +27,9 @@ package() {
   cp -r "$release/host" "$release/web" "$release/skills" "$pkgdir/usr/lib/achmage-workbench/"
   # Original CLI resources; no separate Electron application.
   cp -a "$repo/apps/desktop/src-tauri/bundled/ieumoffice" "$pkgdir/usr/lib/achmage-workbench/"
+  # How this copy was installed (the in-app update reads it: apps/host/src/app-update/kind.ts). Honoured only
+  # at /usr/lib/achmage-workbench; the same payload laid out in a person's own folder is a user-folder install.
+  printf '{"kind":"pacman"}\n' > "$pkgdir/usr/lib/achmage-workbench/install-kind.json"
   install -dm755 "$pkgdir/usr/bin"
   printf '#!/bin/sh\nexec /usr/lib/achmage-workbench/achmage-workbench "$@"\n' > "$pkgdir/usr/bin/achmage-workbench"
   chmod 755 "$pkgdir/usr/bin/achmage-workbench"

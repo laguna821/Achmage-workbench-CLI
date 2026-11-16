@@ -9,7 +9,7 @@ import { MAX_ATTACHMENT, attachmentsDir } from "../attachments.ts";
 import type { Projects } from "../project.ts";
 import type { SessionManager } from "../sessions.ts";
 import type { Store } from "../store.ts";
-import { ChannelComfort, engineFacts, engineSentence, footerOn, footerWords, renameConversation, statusWords } from "./comfort.ts";
+import { ChannelComfort, REMOTE_LINE, engineFacts, engineSentence, footerOn, footerWords, renameConversation, statusWords } from "./comfort.ts";
 import { needlesOf, withheld, type HoldReason } from "./file-scan.ts";
 import { blockedReason, mimeOf, previewed, turnFiles, type BlockRules, type OutFile } from "./files.ts";
 import { answerFile, closeFence, formatted } from "./format.ts";
@@ -17,9 +17,10 @@ import { hangulPicture, pictureCode, pictureSvg, type PictureResult } from "./ha
 import type { ChannelLog } from "./log.ts";
 import { ChannelMenu, MODE_LABEL, noteSentence, planSentence, type MenuAct, type MenuButton, type Screen } from "./menu.ts";
 import { PREAMBLE_VERSION, phonePreamble } from "./preamble.ts";
+import { RemoteDesk, type ToolAnswer } from "./remote.ts";
 import { choiceLabel, clock, cutAt, parseCommand, shapeAnswer, takeChoices } from "./shape.ts";
 import type { Binding, ButtonRow, ChannelStore, OutboxRow } from "./store.ts";
-import { ChannelSendError, type Button, type ChannelAdapter, type ChannelStatus, type ChatRef, type InFile, type Inbound, type Out } from "./types.ts";
+import { ChannelSendError, type Button, type ChannelAdapter, type ChannelStatus, type ChatRef, type InFile, type Inbound, type Mark, type Out } from "./types.ts";
 import { everyday } from "./words.ts";
 
 // The part of the channel that is the same for every messenger: who is paired, who is refused,
@@ -91,7 +92,7 @@ const TEXT = {
   private: "이 봇은 개인용입니다.",
   paused: "지금은 PC에서 채널을 멈춰 두었습니다.",
   locked: "채널이 잠겨 있습니다. PC에서만 풀 수 있습니다.",
-  paired: "연결되었습니다. 이제 하고 싶은 일을 그냥 적어 보내세요. 다른 기능은 '메뉴'라고 보내면 나옵니다.",
+  paired: `연결되었습니다. 이제 하고 싶은 일을 그냥 적어 보내세요. 다른 기능은 '메뉴'라고 보내면 나옵니다.\n${REMOTE_LINE}`,
   archived: "이 대화는 보관되어 더 보낼 수 없습니다.",
   documentRemoved: "이 문서 AI의 문서를 지워 더 보낼 수 없습니다.",
   deadButton: "쓸 수 없는 버튼입니다",
@@ -128,7 +129,7 @@ type PairingState = {
 type ButtonSpec = { label: string; kind: string; data?: unknown; set?: string; itemId?: string; ttl?: number };
 /** `group.itemId`: all buttons belong to this one question (an approval: 허용 and 거절 end together). */
 /** `markdown`: the text is an engine's markdown (shown formatted); `tail`: the channel's own words under it, always plain. */
-type Message = { text: string; buttons?: ButtonSpec[][]; group?: { sessionId: string; itemId?: string }; silent?: boolean; webApp?: Out["webApp"]; files?: OutFile[]; markdown?: boolean; tail?: string };
+type Message = { text: string; buttons?: ButtonSpec[][]; group?: { sessionId: string; itemId?: string }; silent?: boolean; webApp?: Out["webApp"]; files?: OutFile[]; markdown?: boolean; tail?: string; head?: string };
 export type ChannelMessage = Message;
 
 /**
@@ -200,6 +201,10 @@ const delay = (ms: number) => new Promise((done) => setTimeout(done, ms));
 const adapterKey = (kind: ChannelKind, botId: string) => `${kind}:${botId}`;
 const finalKey = (sessionId: string, requestId: string) => `final:${sessionId}:${requestId}`;
 const busy = (session: Session | undefined) => Boolean(session && session.status !== "idle" && session.status !== "error");
+/** A request the remote (workbench-remote) handed to a project's conversation: its id carries this mark. */
+const REMOTE_REQUEST = ":rm:";
+const ENTER_LABEL = "이 대화로 들어가기";
+const BACK_LABEL = "리모콘으로 돌아가기";
 
 export class ChannelCore {
   private readonly store: Store;
@@ -242,6 +247,8 @@ export class ChannelCore {
   /** Files that did not go with a message that did (by its outbox key), for the line that names them. */
   private readonly unsent = new Map<string, { name: string; delivered: "no" | "unknown" }[]>();
   private scratch: string | null = null;
+  /** `workbench-remote` (remote.ts): what the messenger's own conversation may do in the person's projects. */
+  private readonly desk: RemoteDesk;
   /**
    * A picture of a document's first page (a file path), or null when it has none; throws when it
    * cannot be drawn on this PC. Word, PowerPoint and Excel through IeumOffice, HWPX through kordoc.
@@ -340,6 +347,8 @@ export class ChannelCore {
       footerOn: (binding) => footerOn(binding, this.footer),
       compact: (binding) => this.comfort.compact(binding),
       rename: (sessionId, name) => renameConversation(this.manager, (work) => this.hidden(work), sessionId, name),
+      remoteAway: (binding) => this.remoteAway(binding),
+      backToRemote: (binding) => this.backToRemote(binding),
     });
     this.comfort = new ChannelComfort({
       manager: this.manager, channels: this.channels, menu: this.menu,
@@ -348,6 +357,27 @@ export class ChannelCore {
       audit: (binding, action, extra = {}) => this.audit(binding, binding.kind, action, extra),
       clean: (error) => this.log.clean(error),
     });
+    this.desk = new RemoteDesk({
+      manager: this.manager, channels: this.channels, now: () => this.now(),
+      hidden: (work) => this.hidden(work), scrub: (text) => this.log.scrub(text),
+      audit: (binding, action, extra = {}) => this.audit(binding, binding.kind, action, extra),
+      defaultEngine: (binding) => this.defaultEngine(binding.kind, binding.botId),
+      installed: (provider) => Boolean(this.manager.snapshot().providers.find((status) => status.provider === provider)?.installed),
+      create: (binding, work, provider, title) => { const session = this.createConversation(binding, work, null, provider, title ?? undefined); this.changed(); return session; },
+      send: (binding, session, requestId, text) => this.remoteSend(binding, session, requestId, text),
+      handed: (binding, remote, session, how, text, requestId) => this.handed(binding, remote, session, how, text, requestId),
+      stop: async (session) => { if (!busy(session)) return "idle"; await this.manager.interrupt(session.id); return "stopped"; },
+      requestId: (binding) => `ch:${binding.kind}:${binding.botId}${REMOTE_REQUEST}${randomBytes(9).toString("base64url")}`,
+    });
+  }
+
+  /**
+   * `workbench-remote` of a conversation (its key already checked by remote-tool.ts): answered only
+   * for a running turn of a messenger place's conversation that a paired chat of it asked for.
+   */
+  remote(sessionId: string, args: string[], input: string): Promise<ToolAnswer> {
+    if (this.closed) return Promise.resolve({ code: 1, stdout: `${JSON.stringify({ ok: false, error: "channel_off", message: "휴대폰 채널이 꺼져 있습니다." })}\n`, stderr: "workbench-remote: 휴대폰 채널이 꺼져 있습니다.\n" });
+    return this.desk.run(sessionId, args, input);
   }
 
   // Life cycle
@@ -373,7 +403,7 @@ export class ChannelCore {
   async start() {
     if (!this.closed) return;
     this.closed = false;
-    this.manager.channelHook = (origin: RequestOrigin, run) => phonePreamble(origin.context ?? PREAMBLE_VERSION, run ? engineSentence(engineFacts(this.manager, run.settings, run.session.engineModel)) : null);
+    this.manager.channelHook = (origin: RequestOrigin, run) => phonePreamble(origin.context ?? PREAMBLE_VERSION, run ? engineSentence(engineFacts(this.manager, run.settings, run.session.engineModel)) : null, { remote: Boolean(run && this.manager.view.works.get(run.session.workId)?.messengerHome) });
     // What the desktop's own work says when it ends, for the projects a chat asked to hear about.
     this.releaseDelivery = this.manager.notifications.subscribeDelivery((row) => {
       if (!this.closed) queueMicrotask(() => { if (!this.closed) this.track(this.onAttention(row)); });
@@ -1244,7 +1274,7 @@ export class ChannelCore {
    * the desktop shows. Its engine: the one named › the messenger's default (when this PC has it) ›
    * `like`'s › the project's. `like`'s model and effort go along only into the same engine.
    */
-  private createConversation(binding: Binding, work: Work, like: Session | null, named?: Provider): Session {
+  private createConversation(binding: Binding, work: Work, like: Session | null, named?: Provider, purpose?: string): Session {
     const date = new Date(this.now());
     const preferred = named ? null : this.preferredEngine(binding);
     const provider = named ?? (preferred?.installed ? preferred.provider : like?.provider ?? this.providerFor(work));
@@ -1253,7 +1283,7 @@ export class ChannelCore {
       provider,
       access: "full",
       browser: true,
-      purpose: `휴대폰 · ${date.getMonth() + 1}/${date.getDate()}`,
+      purpose: purpose ?? `휴대폰 · ${date.getMonth() + 1}/${date.getDate()}`,
       ...(like?.workspaceId && like.workId === work.id ? { workspaceId: like.workspaceId } : {}),
       ...(same?.model ? { model: same.model } : {}),
       ...(same?.effort ? { effort: same.effort } : {}),
@@ -1307,6 +1337,69 @@ export class ChannelCore {
     this.channels.updateBinding(binding.id, { pointerWorkId: work.id, pointerSessionId: session.id });
     this.changed();
     return session;
+  }
+
+  // The remote (workbench-remote): hand-overs and what comes back
+
+  /**
+   * The person's instruction, handed over by the remote, as a request of the chat into a project's
+   * conversation: the gates a line passes, the chat's ordinary origin (so its answer is owed to the
+   * chat), queued by the conversation's own queue while it works. The chat's pointer does not move.
+   */
+  private async remoteSend(binding: Binding, session: Session, requestId: string, text: string): Promise<{ delivery: string } | { refused: string; message: string }> {
+    const fresh = this.channels.binding(binding.id);
+    if (!fresh || fresh.revokedAt || fresh.lockedAt || fresh.pausedAt) return { refused: "closed", message: "휴대폰 채널이 멈춰 있거나 잠겨 있습니다." };
+    if (!this.admitted()) return { refused: "updating", message: "PC가 업데이트를 준비하고 있어 지금은 새 일을 시작하지 않습니다." };
+    const origin: RequestOrigin = { channel: fresh.kind, bindingId: fresh.id, context: PREAMBLE_VERSION };
+    try {
+      const result = await this.manager.send(session.id, requestId, text, [], null, null, "queue", { origin, activate: false });
+      this.audit(fresh, fresh.kind, "request", { sessionId: session.id, requestId, result: result.delivery });
+      return { delivery: result.delivery };
+    } catch (error) {
+      if (error instanceof HttpError && error.code === "archived") return { refused: "archived", message: TEXT.archived };
+      if (error instanceof HttpError && error.code === "document_removed") return { refused: "document_removed", message: TEXT.documentRemoved };
+      this.log.note("send_refused", error);
+      return { refused: "failed", message: `보내지 못했습니다: ${this.log.clean(error)}` };
+    }
+  }
+
+  /** Where a handed-over conversation's messages come from, in one line: "강의계획서 · 서론 다시 쓰기 · Claude". */
+  private headOf(session: Session): string {
+    const work = this.manager.view.works.get(session.workId);
+    return this.log.scrub(`${cutAt(work?.title ?? "?", 40)} · ${cutAt(session.purpose, 40)} · ${PROVIDER_LABEL[session.provider]}`);
+  }
+
+  /** The button under a handed-over conversation's message: in, or (already in) back to the remote. */
+  private enterButton(binding: Binding, sessionId: string): ButtonSpec {
+    const fresh = this.channels.binding(binding.id) ?? binding;
+    return fresh.pointerSessionId === sessionId && typeof fresh.prefs.remote === "string" && fresh.prefs.remote !== sessionId
+      ? { label: BACK_LABEL, kind: "remote-back", itemId: `remote-back:${randomBytes(6).toString("base64url")}` }
+      // Its own set: pressing it never retires the buttons it sits with (허용 / 거절 of a question).
+      : { label: ENTER_LABEL, kind: "enter", data: { sessionId }, itemId: `enter:${randomBytes(6).toString("base64url")}` };
+  }
+
+  /** Whether this chat waits for an answer the remote handed over in that conversation. */
+  private handedIn(bindingId: string, sessionId: string): boolean {
+    return this.channels.owed(bindingId).some((row) => row.sessionId === sessionId && row.key.startsWith("final:") && Boolean(row.requestId?.includes(REMOTE_REQUEST)));
+  }
+
+  /**
+   * The hand-over line in the chat, said by the gateway (not by the AI): where it went and the first
+   * 120 characters of what was sent, so a wrong or injected hand-over is seen at once.
+   */
+  private async handed(binding: Binding, remote: Session, session: Session, how: "start" | "tell", text: string, requestId: string) {
+    const work = this.manager.view.works.get(session.workId);
+    const where = how === "start" ? `새 ${PROVIDER_LABEL[session.provider]} 대화` : `「${cutAt(session.purpose, 40)}」 대화`;
+    const shown = cutAt(text.replace(/\s+/g, " ").trim(), 120);
+    const line = `→ 「${cutAt(work?.title ?? "?", 40)}」 · ${where}에 맡겼습니다\n보낸 말: ${shown}`;
+    // The same line in the remote's own transcript at the PC (a notice: never sent to the chat by itself).
+    this.manager.sink.upsertItem(remote.id, { kind: "notice", id: `remote:${requestId}`, level: "info", text: line, at: this.now() });
+    const adapter = this.adapters.get(adapterKey(binding.kind, binding.botId));
+    if (!adapter) return;
+    await this.say(adapter, this.channels.binding(binding.id) ?? binding, `remote:${requestId}`, {
+      text: line,
+      buttons: [[this.enterButton(binding, session.id)]], group: { sessionId: session.id },
+    });
   }
 
   /**
@@ -1725,7 +1818,7 @@ export class ChannelCore {
     if (this.gateOf(binding.id) !== "open") return null;
     if (!this.channels.owe(key, { bindingId: binding.id, ...owner }) && this.channels.outbox(key)?.state !== "pending") return null;
     const { rows, tokens } = this.buttons(binding, message, key);
-    const messageId = await this.attempt(adapter, this.chatOf(binding), key, { text: message.text, ...(rows.length ? { buttons: rows } : {}), ...(message.silent ? { silent: true } : {}), ...(message.webApp ? { webApp: message.webApp } : {}), ...(message.files?.length ? { files: message.files } : {}), ...(message.markdown ? { markdown: true } : {}), ...(message.tail ? { tail: message.tail } : {}) }, { bindingId: binding.id, kind: "work" });
+    const messageId = await this.attempt(adapter, this.chatOf(binding), key, { text: message.text, ...(rows.length ? { buttons: rows } : {}), ...(message.silent ? { silent: true } : {}), ...(message.webApp ? { webApp: message.webApp } : {}), ...(message.files?.length ? { files: message.files } : {}), ...(message.markdown ? { markdown: true } : {}), ...(message.tail ? { tail: message.tail } : {}), ...(message.head ? { head: message.head } : {}) }, { bindingId: binding.id, kind: "work" });
     if (messageId && tokens.length) this.channels.setButtonMessage(tokens, messageId);
     return messageId;
   }
@@ -1742,10 +1835,13 @@ export class ChannelCore {
 
   /** What leaves the PC: text and button labels with the secrets hidden. */
   private scrubbed(out: Out): Out {
-    const { markdown, tail = "", ...rest } = out;
+    const { markdown, tail = "", head, ...rest } = out;
     // Redacted first, then made readable; formatted() reads the readable text again (comfort of unit 14).
     // The channel's own lines go after it as plain text: never inside the answer's code block.
-    const body = markdown ? formatted(this.log.scrub(out.text), (value) => this.log.scrub(value)) : { text: this.log.scrub(`${out.text}${tail}`) };
+    const made = markdown ? formatted(this.log.scrub(out.text), (value) => this.log.scrub(value)) : { text: this.log.scrub(`${out.text}${tail}`) };
+    // The channel's own head line (where a handed-over answer is from) goes before it, plain; the marks move with the text.
+    const top = head ? `${this.log.scrub(head)}\n\n` : "";
+    const body: { text: string; marks?: Mark[] } = top ? { text: `${top}${made.text}`, ...("marks" in made && made.marks ? { marks: made.marks.map((mark) => ({ ...mark, offset: mark.offset + top.length })) } : {}) } : made;
     return {
       ...rest, ...body, ...(markdown && tail ? { text: `${body.text}${this.log.scrub(tail)}` } : {}),
       ...(out.buttons ? { buttons: out.buttons.map((row) => row.map((button) => ({ ...button, label: this.log.scrub(button.label) }))) } : {}),
@@ -1978,6 +2074,8 @@ export class ChannelCore {
       if (final === "gone") return void this.channels.dropOwed(row.key);
       if (!final) return;
       if (binding.lockedAt || binding.pausedAt) return;
+      // Handed over by the remote: one head line says where it is from, and one button goes in (or back).
+      if (row.requestId.includes(REMOTE_REQUEST)) final.message = { ...final.message, head: this.headOf(session), buttons: [...(final.message.buttons ?? []), [this.enterButton(binding, session.id)]] };
       const progress = this.progress.get(`${binding.id}:${session.id}`);
       this.progress.delete(`${binding.id}:${session.id}`);
       // Requests put into the same turn are answered by the same message.
@@ -2001,7 +2099,7 @@ export class ChannelCore {
         const footer = final.label === "끝남" && final.turn && footerOn(binding, this.footer) ? footerWords(this.manager, session, final.endId, final.turn.startedAt) : "";
         const lines = [...going.notes, ...(footer ? (going.notes.length ? ["", footer] : [footer]) : [])];
         const tail = `${final.message.tail ?? ""}${lines.length ? `\n\n${lines.join("\n")}` : ""}`;
-        messageId = await this.attempt(adapter, this.chatOf(binding), row.key, { text: final.message.text, ...(tail ? { tail } : {}), ...(rows.length ? { buttons: rows } : {}), ...(going.files.length ? { files: going.files } : {}), ...(final.message.markdown ? { markdown: true } : {}) }, { bindingId: binding.id, kind: "work" });
+        messageId = await this.attempt(adapter, this.chatOf(binding), row.key, { text: final.message.text, ...(final.message.head ? { head: final.message.head } : {}), ...(tail ? { tail } : {}), ...(rows.length ? { buttons: rows } : {}), ...(going.files.length ? { files: going.files } : {}), ...(final.message.markdown ? { markdown: true } : {}) }, { bindingId: binding.id, kind: "work" });
       } finally {
         for (const path of going.temp) rmSync(path, { recursive: true, force: true });
       }
@@ -2067,7 +2165,10 @@ export class ChannelCore {
         continue;
       }
       const buttons: ButtonSpec[][] = item.plan ? [[{ label: "진행", kind: "approve" }]] : [[{ label: "허용", kind: "approve" }, { label: "거절", kind: "decline" }]];
-      await this.say(adapter, binding, key, { ...this.questionText(session, item), buttons, group: { sessionId, itemId: item.id } });
+      // A conversation the remote handed work to: where the question is from, and the way in.
+      const handed = this.handedIn(binding.id, sessionId);
+      if (handed) buttons.push([this.enterButton(binding, sessionId)]);
+      await this.say(adapter, binding, key, { ...this.questionText(session, item), ...(handed ? { head: this.headOf(session) } : {}), buttons, group: { sessionId, itemId: item.id } });
     }
   }
 
@@ -2213,6 +2314,28 @@ export class ChannelCore {
         await this.menu.press(adapter, binding, chat, event.eventId, row.messageId, data as unknown as MenuAct);
         return null;
       }
+      case "enter": {
+        // "이 대화로 들어가기": the chat's pointer moves there (as 대화 바꾸기 moves it); the next lines go there.
+        const sessionId = typeof data.sessionId === "string" ? data.sessionId : "";
+        let next: Binding;
+        try {
+          next = this.setPointer(binding.id, sessionId);
+        } catch {
+          await this.ack(adapter, event.ackHandle, "보관한 대화라 들어갈 수 없습니다");
+          return null;
+        }
+        const session = this.manager.view.sessions.get(sessionId)!;
+        this.audit(next, chat.kind, "pointer", { sessionId });
+        await this.ack(adapter, event.ackHandle, "들어갔습니다");
+        const back: ButtonSpec[][] = typeof next.prefs.remote === "string" && next.prefs.remote !== sessionId ? [[{ label: BACK_LABEL, kind: "remote-back" }]] : [];
+        await this.say(adapter, next, `enter:${event.token}`, { text: `이제 ${this.label(session)}로 보냅니다.`, ...(back.length ? { buttons: back } : {}) });
+        return null;
+      }
+      case "remote-back": {
+        await this.ack(adapter, event.ackHandle);
+        await this.say(adapter, binding, `remote-back:${event.token}`, { text: this.backToRemote(binding) });
+        return null;
+      }
       case "move": {
         // The line that could not go to its archived conversation goes to a new one, under its own request id.
         const eventId = typeof data.eventId === "string" ? data.eventId : "";
@@ -2235,6 +2358,29 @@ export class ChannelCore {
         await this.ack(adapter, event.ackHandle, TEXT.deadButton);
         return null;
     }
+  }
+
+  /** The remote conversation of the chat while the chat is inside another conversation (and the remote is still live), else null. */
+  private remoteAway(binding: Binding): Session | null {
+    const id = typeof binding.prefs.remote === "string" ? binding.prefs.remote : null;
+    const session = id ? this.manager.view.sessions.get(id) : undefined;
+    if (!session || session.archivedAt || binding.pointerSessionId === id) return null;
+    const work = this.manager.view.works.get(session.workId);
+    return work && !this.hidden(work) ? session : null;
+  }
+
+  /** "리모콘으로 돌아가기": the chat's pointer goes back to the remote conversation; what is said. */
+  private backToRemote(binding: Binding): string {
+    const fresh = this.channels.binding(binding.id) ?? binding;
+    const id = typeof fresh.prefs.remote === "string" ? fresh.prefs.remote : null;
+    try {
+      if (!id) throw new Error("no remote");
+      this.setPointer(binding.id, id);
+    } catch {
+      return "돌아갈 리모콘 대화가 없습니다(보관했거나 지웠습니다). 메뉴의 [새 대화]로 새로 시작하세요.";
+    }
+    this.audit(fresh, fresh.kind, "pointer", { sessionId: id });
+    return `리모콘으로 돌아왔습니다: ${this.label(this.manager.view.sessions.get(id)!)}`;
   }
 
   private wholeAnswer(session: Session, requestId: string): string {

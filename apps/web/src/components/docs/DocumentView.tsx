@@ -300,6 +300,8 @@ export default function DocumentView({
   // The tab keeps the view the person has: the stand-in for a narrow pane is not remembered.
   useEffect(() => { onUiState?.({ mode: narrowAuto ? editorMode : mode }); }, [mode, narrowAuto, editorMode, onUiState]);
   const [editorAi, setEditorAi] = useState<boolean | null>(null);
+  /** The editor says the person turned its own AI panel off (설정 › 연결): 문서 AI is the column then (never for Hangul). */
+  const [editorAiOff, setEditorAiOff] = useState(false);
   // A click on this document's AI row, held by the app until this view acts on it: the AI's
   // conversation column opens, whatever the document is shown in. One exception: Word says
   // whether its own AI sidebar is open, and while it is, the conversation is already on screen
@@ -339,7 +341,7 @@ export default function DocumentView({
   // shown (not under an older revision or a comparison: then the column is the AI, as in 글 보기).
   // aiOpen is the tab's one wish for the document's AI: the dock is brought to it here, the column
   // shows it elsewhere. The head's button shows what is on screen (the dock's own report), never the wish.
-  const dockEntry = !hosted && officeEditing && editorAiIsEntry(format) && editorHere && !(compare || viewing);
+  const dockEntry = !hosted && officeEditing && editorAiIsEntry(format, editorAiOff) && editorHere && !(compare || viewing);
   dockEntryNow.current = dockEntry;
   const draftKey = `doc:${artifactId}`;
   /** What the drawn dock last said: drawn (`ready`), open, and on screen (`shown`: an open dock steps aside for a studio dialog at a narrow pane). Nothing is known before the editor draws it. */
@@ -402,9 +404,10 @@ export default function DocumentView({
   }, [dockEntry, dock.ready, columnHere, draftKey]);
   /** The person (or a flow acting for them) wants the document's AI open or closed. */
   const wishAi = (open: boolean) => { wishKnown.current = true; setDockStuck(false); setAiOpen(open); };
-  const onEditorAi = (open: boolean, draft?: string, report?: { ready: boolean; person: boolean; shown?: boolean }) => {
+  const onEditorAi = (open: boolean, draft?: string, report?: { ready: boolean; person: boolean; shown?: boolean; off?: boolean }) => {
     setEditorAi(report && !report.ready ? false : open);
-    if (!editorAiIsEntry(format) || !report) return;
+    if (report) setEditorAiOff(Boolean(report.off));
+    if (!editorAiIsEntry(format, report?.off) || !report) return;
     const shown = report.ready && open && (report.shown ?? true);
     setDock({ ready: report.ready, open: report.ready && open, shown });
     if (shown || !open) setDockShowAsked(false);
@@ -1092,7 +1095,7 @@ export default function DocumentView({
     if (hangul) {
       return (
         <div className="doc-hangul-text">
-          <MarkdownEditor value={text} readOnly onChange={setText} onSelection={setSelection} images={docImages.handling} position={uiState} onPosition={onUiState} />
+          <MarkdownEditor look="plain" value={text} readOnly onChange={setText} onSelection={setSelection} images={docImages.handling} position={uiState} onPosition={onUiState} />
         </div>
       );
     }
@@ -1149,7 +1152,7 @@ export default function DocumentView({
   // Its AI waits for an approval and its conversation is not on screen (the old drawer came up by
   // itself): a notice opens it. Word showing it in its own sidebar needs none.
   // The Hangul dock is not that conversation: its approval is answered in the column, shown beside the editor.
-  const agentWaits = !hosted && !columnShows && session?.status === "awaitingApproval" && !(officeEditing && editorAi === true && !editorAiIsEntry(format));
+  const agentWaits = !hosted && !columnShows && session?.status === "awaitingApproval" && !(officeEditing && editorAi === true && !editorAiIsEntry(format, editorAiOff));
 
   // The kind's views: one switch in the head (and the same choices in ⋯, where a narrow head folds it).
   const viewChoices: DocView[] = hosted
@@ -1161,7 +1164,11 @@ export default function DocumentView({
   // Beside a conversation and for the office page views a switch only changes the read view; elsewhere leaving the editor saves first.
   const pickView = (value: string) => (hosted || (office && !wordEditor) ? setMode(value as typeof mode) : void changeMode(value as typeof mode));
 
-  const openEditorAi = () => { void ensureEditorAiShown(api).then(() => officeRef.current?.setAiPanel(true)).catch((error: Error) => onToast(failure(error))); };
+  // The editor's own panel turned off by the person (설정 › 연결): asked for here, it is turned back on and opened —
+  // it is then the document's 문서 AI again (the editor reports it on within seconds; the tab's wish opens it).
+  const openEditorAi = () => {
+    void ensureEditorAiShown(api).then(() => { setFocusedConversationId(null); setColumnHere(false); wishAi(true); setDockPresses((presses) => presses + 1); }).catch((error: Error) => onToast(failure(error)));
+  };
   // ⋯: everything else the head held, each with its name and shortcut.
   const openExternal = () => {
     if (!state.tools?.ieumApp?.available) { onExternalSetup(); return; }
@@ -1177,8 +1184,8 @@ export default function DocumentView({
     ...(hosted ? [{ key: "wide", label: "탭으로 열어 고치기", icon: "openNew" as const, shortcut: "Alt+2", onSelect: () => afterSaving(hosted.onWide) }] : []),
     ...(!hosted && onBeside ? [{ key: "beside", label: "대화 옆에 놓기", icon: "columns" as const, shortcut: "Alt+4", onSelect: onBeside }] : []),
     ...(onRead ? [{ key: "read", label: "읽기", icon: "book" as const, shortcut: "Alt+5", onSelect: () => afterSaving(onRead) }] : []),
-    // The editor's own AI 도우미 stays one step from the head (I7): it turns a person's "hide" back on only when asked here.
-    ...(officeEditing && hasEditorAi(artifact.format) ? [{ key: "editor-ai", label: "편집기 안 AI 도우미", icon: "chat" as const, onSelect: openEditorAi }] : []),
+    // The editor's own panel IS 문서 AI (the head's key opens it). Only a person who turned it off gets it back here (one-doc-ai).
+    ...(officeEditing && hasEditorAi(artifact.format) && editorAiOff ? [{ key: "editor-ai", label: "편집기 안에 문서 AI 다시 켜기", icon: "chat" as const, onSelect: openEditorAi }] : []),
     ...(officeEditing ? [{ key: "commands", label: "편집 명령 찾기", icon: "search" as const, shortcut: "Alt+/", disabled: officeStatus.revision === null || Boolean(compare || viewing), reason: "편집기가 문서를 연 뒤에 쓸 수 있습니다.", onSelect: () => officeRef.current?.showCommands() }] : []),
     ...(markdownDoc && !hosted && (mode === "edit" || mode === "split") && !viewing && !compare && base ? [{ key: "draw", label: drawOpen ? "그림 닫기" : "여기에 그림 그리기", icon: "image" as const, shortcut: "Ctrl+Alt+G", onSelect: () => setDrawOpen(!drawOpen) }] : []),
     ...(!hosted && (wordEditor || richTextEditor) ? [{ key: "external", label: "앱으로 열기", icon: "external" as const, onSelect: openExternal }] : []),
@@ -1308,7 +1315,7 @@ export default function DocumentView({
             </button>
           ) : (
             <button type="button" className="ghost-button doc-agent-toggle" aria-label={agentState ? `문서 AI, ${agentSaid}` : "문서 AI"} aria-expanded={aiShown} aria-busy={dockEntry && dockWish === true && !dockAgrees && !dockFailed ? true : undefined}
-              title={dockEntry ? "이 문서의 AI를 편집기 안에서 엽니다. 고른 부분을 바로 고치고 한 번에 되돌릴 수 있습니다" : "이 문서의 AI와 나누는 대화를 문서 옆에 엽니다. 메인 대화와 따로 실행됩니다"}
+              title={dockEntry ? (hangul ? "이 문서의 AI를 편집기 안에서 엽니다. 고른 부분을 바로 고치고 한 번에 되돌릴 수 있습니다" : "이 문서의 AI를 편집기 안에서 엽니다. 열린 문서를 그 자리에서 고칩니다") : "이 문서의 AI와 나누는 대화를 문서 옆에 엽니다. 메인 대화와 따로 실행됩니다"}
               onClick={() => {
                 setFocusedConversationId(null);
                 if (!dockEntry) { setAiOpen(!aiOpen); return; }
@@ -1568,8 +1575,8 @@ export default function DocumentView({
       kind="document"
       name={artifact.name}
       inputClass="doc-composer"
-      // Only the editor's own AI 도우미 writes to a PDF (artifacts.ts refuses PDF edits for 문서 AI): its empty conversation says so (I7).
-      emptyNote={artifact.format === "pdf" && officeEditing ? <NoteBanner label="PDF에 직접 쓰기" action={{ label: "편집기 안 AI 도우미", run: openEditorAi }}>PDF에 직접 쓰려면 편집기 안 AI 도우미를 여세요. 문서 AI는 PDF를 읽고 요약하거나 번역해 새 파일로 만듭니다.</NoteBanner> : undefined}
+      // Only the editor's own panel writes to a PDF (artifacts.ts refuses PDF edits for the column's conversation): said where the column shows over the PDF editor (I7, one-doc-ai).
+      emptyNote={artifact.format === "pdf" && officeEditing ? <NoteBanner label="PDF에 직접 쓰기" action={{ label: "편집기 안 문서 AI", run: openEditorAi }}>PDF에 직접 쓰는 일은 편집기 안의 문서 AI가 합니다. 이 대화는 PDF를 읽고 요약하거나 번역해 새 파일로 만듭니다.</NoteBanner> : undefined}
       waiting={ended ? undefined : agentError ? undefined : "문서 AI를 준비하고 있습니다."}
       readOnly={Boolean(other ? other.archivedAt : !session && ended)}
       onClose={closeColumn}

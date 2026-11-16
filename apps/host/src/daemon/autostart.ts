@@ -28,6 +28,8 @@ export class HostAutostart {
     this.cli = main.endsWith(".ts") ? join(dirname(main), "daemon/cli.ts") : join(dirname(main), "workbench-service.mjs");
     this.runner = process.platform === "linux" ? process.env.WORKBENCH_HOST_RUNNER : undefined;
   }
+  /** The login unit's name (Linux): restarted after a user-folder update when it is enabled (app-update). */
+  unitName() { return `${this.id}.service`; }
   private file() {
     return process.platform === "darwin" ? join(homedir(), "Library/LaunchAgents", `${this.id}.plist`) : join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "systemd/user", `${this.id}.service`);
   }
@@ -50,7 +52,7 @@ export class HostAutostart {
     if (enabled) {
       mkdirSync(this.dir, { recursive: true, mode: 0o700 });
       const environment: Record<string, string> = { WORKBENCH_DATA_DIR: this.dir, WORKBENCH_IEUM_BOOTSTRAP: "0" };
-      for (const key of (this.runner ? ["PATH", "WORKBENCH_HOST_RUNNER", "WORKBENCH_HOST_ID", "WORKBENCH_HOST_LABEL"] : ["PATH", "WORKBENCH_WEB_DIR", "WORKBENCH_RESOURCES_DIR", "WORKBENCH_PTY_BIN", "WORKBENCH_SECRET_BIN", "WORKBENCH_APP_BIN", "WORKBENCH_HOST_ID", "WORKBENCH_HOST_LABEL"])) {
+      for (const key of (this.runner ? ["PATH", "WORKBENCH_HOST_RUNNER", "WORKBENCH_APPIMAGE_SOURCE", "WORKBENCH_HOST_ID", "WORKBENCH_HOST_LABEL"] : ["PATH", "WORKBENCH_WEB_DIR", "WORKBENCH_RESOURCES_DIR", "WORKBENCH_PTY_BIN", "WORKBENCH_SECRET_BIN", "WORKBENCH_APP_BIN", "WORKBENCH_HOST_ID", "WORKBENCH_HOST_LABEL"])) {
         // The helper paths are no longer in the gateway's environment (gateway-env.ts).
         const value = key === "WORKBENCH_PTY_BIN" || key === "WORKBENCH_SECRET_BIN" ? gatewayOnly(key) : process.env[key];
         if (value) environment[key] = value;

@@ -2,6 +2,7 @@ import { AgentLoop as OriginalAgentLoop, type AgentLoopOptions, type AgentRunRes
 import type { AgentImage, AgentMessage, AgentToolCall } from "../../../vendor/ieumoffice/packages/agent-core/src/types.ts";
 import type { OfficeTurnEvent, OfficeTurnFinish } from "../../../packages/contracts/src/office-ai.ts";
 import type { OfficeSkillContext } from "../../../packages/contracts/src/office-skills.ts";
+import { HWP_EDIT_TOOLS, reportTurnActivity } from "./turn-activity.ts";
 
 /** The renderer owns no conversation database. Every run borrows the selected Workbench session. */
 export type OfficeRun = {
@@ -77,12 +78,14 @@ export class WorkbenchAgentLoop<TSnapshot = unknown> {
         ...events,
         onText: (text) => {
           this.assistantText = text;
+          reportTurnActivity({ kind: "text", text });
           // Coalesce cumulative stream updates while a previous write is in flight.
           this.scheduleText();
           if (!this.detached) events?.onText?.(text);
         },
         onToolStart: (call) => {
           const id = crypto.randomUUID(); this.toolIds.set(call, id);
+          reportTurnActivity({ kind: "tool", id, name: call.name, status: "running", edit: HWP_EDIT_TOOLS.has(call.name) });
           const event: OfficeTurnEvent = { kind: "tool", id, name: call.name, summary: call.name, input: JSON.stringify(call.input), output: null, status: "running" };
           enqueue(() => this.runState!.append([event]));
           if (!this.detached) events?.onToolStart?.(call);
@@ -90,6 +93,7 @@ export class WorkbenchAgentLoop<TSnapshot = unknown> {
         onToolExecuted: (event) => {
           const { call, execution } = event;
           const record: OfficeTurnEvent = { kind: "tool", id: this.toolIds.get(call) ?? crypto.randomUUID(), name: call.name, summary: execution.summary, input: JSON.stringify(call.input), output: execution.output, status: execution.isError ? "failed" : "completed" };
+          reportTurnActivity({ kind: "tool", id: record.id, name: call.name, title: execution.summary, status: record.status as "completed" | "failed", edit: HWP_EDIT_TOOLS.has(call.name) || Boolean(execution.mutated) });
           enqueue(async () => {
             await this.runState!.append([record]);
             if (execution.mutated) await this.runState!.save();
@@ -119,6 +123,7 @@ export class WorkbenchAgentLoop<TSnapshot = unknown> {
     this.abort = new AbortController(); this.queue = Promise.resolve(); this.toolIds.clear();
     this.assistantId = crypto.randomUUID(); this.assistantText = ""; this.reasoningText = "";
     this.settled = new Promise((resolve) => { this.resolveSettled = resolve; });
+    reportTurnActivity({ kind: "start" });
     try { this.release = this.port.attach(this as WorkbenchAgentLoop<unknown>); }
     catch (error) { void this.finish(undefined, messageOf(error)); return; }
     void this.port.begin(instruction, this.abort.signal, images, skills).then((run) => {
@@ -186,6 +191,7 @@ export class WorkbenchAgentLoop<TSnapshot = unknown> {
     try { await this.runState?.finish(failed ? "failed" : result?.cancelled || this.abort.signal.aborted ? "interrupted" : "completed", failed ?? undefined); }
     catch (error) { failure = messageOf(error); }
     this.runState = null; this.pending = false; this.release(); this.resolveSettled();
+    reportTurnActivity({ kind: "end", status: failure ? "failed" : result?.cancelled || this.abort.signal.aborted ? "interrupted" : "completed", ...(failure ? { error: failure } : {}) });
     if (this.detached) { this.original.reset(); return; }
     if (failure) this.options.events?.onError?.(failure);
     else if (result) this.options.events?.onDone?.(result);

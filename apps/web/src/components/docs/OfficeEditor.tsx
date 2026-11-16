@@ -27,7 +27,7 @@ const BUSY = failure("문서를 여는 중이거나 다른 출력을 처리 중�
 export type OfficeHandle = {
   /** Find and execute the mounted renderer's original menu/ribbon commands. */
   showCommands(): void;
-  /** Open or close the editor's own AI dock (the Hangul editor's, which is the document's 문서 AI). */
+  /** Open or close the editor's own AI panel (the document's 문서 AI: the Hangul dock, and every editor's panel since one-doc-ai). */
   setAiPanel(open: boolean, draft?: string): void;
   /** The document's one unsent AI draft, put in the editor's own AI input in place of what it holds. */
   setAiDraft(draft: string): void;
@@ -77,7 +77,7 @@ const COMPARE_DELAY_MS = 400;
  */
 export const OfficeEditor = forwardRef<
   OfficeHandle,
-  { api: Api; artifact: Artifact; access?: DocumentAccess; sessionId: string | null; hidden?: boolean; onStatus(status: OfficeStatus): void; onAiPanel?(open: boolean, draft?: string, dock?: { ready: boolean; person: boolean; shown?: boolean }): void;
+  { api: Api; artifact: Artifact; access?: DocumentAccess; sessionId: string | null; hidden?: boolean; onStatus(status: OfficeStatus): void; onAiPanel?(open: boolean, draft?: string, dock?: { ready: boolean; person: boolean; shown?: boolean; off?: boolean }): void;
     /** The editor's page is opened again in place (a new frame: its own AI dock, if any, is drawn afresh). */
     onReload?(): void; onNotice: Notify;
     /** The Hangul safety net's warnings (a save that may have lost something, or went unchecked): the document's notice line keeps them. Without it they go to `onNotice`. */
@@ -755,7 +755,7 @@ export const OfficeEditor = forwardRef<
           reconcile();
           break;
         case "office:ai-panel":
-          handlers.current.onAiPanel?.(message.open, message.draft, message.ready === undefined ? undefined : { ready: message.ready, person: Boolean(message.person), shown: message.shown ?? message.open });
+          handlers.current.onAiPanel?.(message.open, message.draft, message.ready === undefined ? undefined : { ready: message.ready, person: Boolean(message.person), shown: message.shown ?? message.open, ...(message.off ? { off: true } : {}) });
           break;
         case "office:saving":
           savingSince.current = Date.now();

@@ -11,7 +11,8 @@ import DocumentView from "./DocumentView.tsx";
 
 vi.mock("./OfficeEditor.tsx", async () => {
   const React = await import("react");
-  return { OfficeEditor: React.forwardRef(() => React.createElement("div", { "data-testid": "office-editor" })) };
+  // The editor's own panel turned off by the person (one-doc-ai): 문서 AI is then the app's column beside the editor.
+  return { OfficeEditor: React.forwardRef((props: { onAiPanel?: (open: boolean, draft?: string, dock?: object) => void }) => { React.useEffect(() => { props.onAiPanel?.(false, "", { ready: true, person: false, shown: false, off: true }); }, []); return React.createElement("div", { "data-testid": "office-editor" }); }) };
 });
 
 beforeEach(() => { vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} })); });

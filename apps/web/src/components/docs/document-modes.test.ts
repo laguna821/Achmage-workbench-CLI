@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EDITOR_MIN_WIDTH, documentConversationShown, editorKeepsAiPanel, isOfficeEditing, narrowPaneStep, narrowView, readView, type NarrowInput, type ShownInput } from "./document-modes.ts";
+import { EDITOR_MIN_WIDTH, documentConversationShown, editorAiIsEntry, editorKeepsAiPanel, reportsAiSidebar, isOfficeEditing, narrowPaneStep, narrowView, readView, type NarrowInput, type ShownInput } from "./document-modes.ts";
 
 const base: ShownInput = { format: "markdown", mode: "rich", visible: true, sessionId: "agent", editorHere: true, editorHidden: false, editorAi: null, column: false };
 const shown = (patch: Partial<ShownInput>) => documentConversationShown({ ...base, ...patch });
@@ -20,7 +20,7 @@ it("counts an editor's own AI sidebar only once the editor has said it is open",
   expect(shown({ format: "docx", mode: "edit", editorAi: false })).toBeNull();
   // Until Word has said either, its conversation is not known to be on screen.
   expect(shown({ format: "docx", mode: "edit", editorAi: null })).toBeNull();
-  // Editors that say nothing are not taken to show it: the app's column is where it is known to be.
+  // Until an editor has said so, its panel is not taken to show it: the app's column is where it is known to be.
   expect(shown({ format: "markdown", mode: "rich" })).toBeNull();
   expect(shown({ format: "html", mode: "rich" })).toBeNull();
   expect(shown({ format: "hwpx", mode: "edit" })).toBeNull();
@@ -141,5 +141,30 @@ describe("the embedded editor's own AI panel", () => {
     expect(editorKeepsAiPanel("docx", null)).toBe(true);
     expect(editorKeepsAiPanel("docx", false)).toBe(false);
     expect(editorKeepsAiPanel("pptx", null)).toBe(true);
+  });
+});
+
+describe("one 문서 AI per document (one-doc-ai)", () => {
+  it("is the editor's own panel for every editor that has one, while the editor is here", () => {
+    for (const format of ["docx", "pptx", "xlsx", "pdf", "markdown", "html", "hwp", "hwpx"] as const) {
+      expect(editorAiIsEntry(format), format).toBe(true);
+      expect(reportsAiSidebar(format), format).toBe(true);
+    }
+    // E-books, mind maps, plain text and designs have no such panel here: 문서 AI is the column.
+    for (const format of ["epub", "xmind", "text", "design", undefined] as const) {
+      expect(editorAiIsEntry(format), String(format)).toBe(false);
+    }
+  });
+
+  it("is the conversation column for a person who turned the editors' panel off; the Hangul dock is not turned off by it", () => {
+    for (const format of ["docx", "pptx", "xlsx", "pdf", "markdown", "html"] as const) expect(editorAiIsEntry(format, true), format).toBe(false);
+    for (const format of ["hwp", "hwpx"] as const) expect(editorAiIsEntry(format, true), format).toBe(true);
+  });
+
+  it("counts the panel as the conversation on screen once each editor says it is open", () => {
+    for (const [format, mode] of [["pptx", "edit"], ["xlsx", "edit"], ["pdf", "edit"], ["markdown", "rich"], ["html", "rich"]] as const) {
+      expect(shown({ format, mode, editorAi: true }), format).toBe("agent");
+      expect(shown({ format, mode, editorAi: false }), format).toBeNull();
+    }
   });
 });

@@ -254,3 +254,12 @@
 .color-swatch input[type="color"] { width: 32px; height: 28px; padding: 0; border: 1px solid var(--field-line); border-radius: var(--radius-pill); background: none; cursor: pointer; }
 .color-more .color-list { margin-top: var(--space-xs); }
 .color-more .color-row { grid-template-columns: 32px minmax(0, 1fr) 6rem; }
+
+/* 설정 › 정보 › 업데이트 (app-update): the version beside the name, plain progress, the blockers' own labels. */
+.settings-nav li > button .settings-new { margin-left: auto; }
+.update-row .update-version { color: var(--muted); font-weight: 400; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.update-progress { display: block; width: 100%; max-width: 320px; height: 4px; margin-top: var(--space-2xs); accent-color: var(--color-teal-ink); }
+.update-result.ok { color: var(--color-done); }
+.update-result.warn { color: var(--color-attention-text); }
+.update-blockers { margin: 0; padding-left: var(--space-md); color: var(--text); }
+.update-blockers li + li { margin-top: var(--space-3xs); }

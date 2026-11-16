@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-quit-for-update"
+description = "Enables the quit_for_update command without any pre-configured scope."
+commands.allow = ["quit_for_update"]
+
+[[permission]]
+identifier = "deny-quit-for-update"
+description = "Denies the quit_for_update command without any pre-configured scope."
+commands.deny = ["quit_for_update"]

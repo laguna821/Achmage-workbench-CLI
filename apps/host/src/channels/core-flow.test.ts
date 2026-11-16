@@ -4,8 +4,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { HttpError } from "../errors.ts";
 import { PREAMBLE_VERSION, phonePreamble } from "./preamble.ts";
 
-/** The preamble a request gets now (version 3: it names the engine and model; the stand-in engine reports no model list). */
-const PREAMBLE = phonePreamble(PREAMBLE_VERSION, "이 대화는 Workbench에서 Claude로 실행됩니다. 모델: 엔진 기본값(엔진이 이름을 아직 알려 주지 않았습니다). 노력: 엔진 기본값.");
+/**
+ * The preamble a request gets now (version 3: it names the engine and model; the stand-in engine reports no model list).
+ * The chat's first conversation is in the messenger's own place: from version 5 that is the remote, with its rules.
+ */
+const PREAMBLE = phonePreamble(PREAMBLE_VERSION, "이 대화는 Workbench에서 Claude로 실행됩니다. 모델: 엔진 기본값(엔진이 이름을 아직 알려 주지 않았습니다). 노력: 엔진 기본값.", { remote: true });
 import { cleanKits, pair, press, restartKit, say, sessionOf, settle, startKit, tick, until, userItems } from "./test-kit.ts";
 import type { Inbound } from "./types.ts";
 

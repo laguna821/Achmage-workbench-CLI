@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Skin 2 · unit C: the document tab's one head row, its ONE notice line (every strip it had, in one
 // order, none dropped), the proposal as one entry band, and the states of opening.
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Artifact, Proposal, Session, Work } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
@@ -197,24 +197,38 @@ describe("one head row for every kind of document", () => {
   });
 });
 
-describe("the editor's own AI 도우미 stays one step from the head (I7)", () => {
-  it.each([["docx", "계획.docx"], ["pdf", "논문.pdf"], ["markdown", "강의안.md"]] as const)("%s: ⋯ 편집기 안 AI 도우미 turns its preference back on when it was off", async (format, name) => {
+describe("the editor's own panel is 문서 AI; a person who turned it off gets it back from ⋯ (I7, one-doc-ai)", () => {
+  /** The editor reports its panel as the vendored editors do through editor-ai-dock.ts. */
+  const report = (patch: { open?: boolean; off?: boolean } = {}) => act(() => { (office.props as { onAiPanel?: (open: boolean, draft?: string, dock?: object) => void }).onAiPanel?.(patch.open ?? false, "", { ready: true, person: false, shown: patch.open ?? false, ...(patch.off ? { off: true } : {}) }); });
+  it.each([["docx", "계획.docx"], ["pdf", "논문.pdf"], ["markdown", "강의안.md"]] as const)("%s: ⋯ 편집기 안에 문서 AI 다시 켜기, only while the panel is off, turns it back on", async (format, name) => {
     const { request } = open({ format, name });
+    await screen.findByTestId("office-editor");
+    report();
     fireEvent.click(await screen.findByRole("button", { name: "문서 메뉴" }));
-    const menu = await screen.findByRole("menu", { name: "문서 메뉴" });
-    fireEvent.click(within(menu).getByRole("menuitem", { name: /편집기 안 AI 도우미/ }));
+    let menu = await screen.findByRole("menu", { name: "문서 메뉴" });
+    expect(within(menu).queryByRole("menuitem", { name: /문서 AI 다시 켜기/ })).toBeNull();
+    expect(within(menu).queryByRole("menuitem", { name: /AI 도우미/ })).toBeNull();
+    fireEvent.keyDown(menu, { key: "Escape" });
+    report({ off: true });
+    fireEvent.click(await screen.findByRole("button", { name: "문서 메뉴" }));
+    menu = await screen.findByRole("menu", { name: "문서 메뉴" });
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "편집기 안에 문서 AI 다시 켜기" }));
     await waitFor(() => expect(request).toHaveBeenCalledWith("POST", "/api/office-preferences", { channel: "home:set-ai-panel-prefs", args: [{ showAiSidebar: true }] }));
   });
-  it("a PDF's 문서 AI says, empty, that only the editor's own AI 도우미 writes to the PDF — with the key that opens it", async () => {
+  it("a PDF whose panel is off: 문서 AI is the column, and its empty conversation says only the editor's 문서 AI writes to the PDF — with the key that turns it back on", async () => {
     const { request } = open({ format: "pdf", name: "논문.pdf" });
+    await screen.findByTestId("office-editor");
+    report({ off: true });
     fireEvent.click(await screen.findByRole("button", { name: "문서 AI" }));
     const line = await screen.findByRole("status", { name: "PDF에 직접 쓰기" });
-    expect(line.textContent).toContain("PDF에 직접 쓰려면 편집기 안 AI 도우미를 여세요.");
-    fireEvent.click(within(line).getByRole("button", { name: "편집기 안 AI 도우미" }));
+    expect(line.textContent).toContain("PDF에 직접 쓰는 일은 편집기 안의 문서 AI가 합니다.");
+    fireEvent.click(within(line).getByRole("button", { name: "편집기 안 문서 AI" }));
     await waitFor(() => expect(request).toHaveBeenCalledWith("POST", "/api/office-preferences", { channel: "home:set-ai-panel-prefs", args: [{ showAiSidebar: true }] }));
   });
   it("another document's 문서 AI does not say it", async () => {
     open({ format: "docx", name: "계획.docx" });
+    await screen.findByTestId("office-editor");
+    report({ off: true });
     fireEvent.click(await screen.findByRole("button", { name: "문서 AI" }));
     await screen.findByText("요청을 보내면 여기에 대화가 이어집니다.");
     expect(screen.queryByRole("status", { name: "PDF에 직접 쓰기" })).toBeNull();
@@ -223,7 +237,7 @@ describe("the editor's own AI 도우미 stays one step from the head (I7)", () =
     open({ format: "hwpx", name: "보고서.hwpx" });
     fireEvent.click(await screen.findByRole("button", { name: "문서 메뉴" }));
     const menu = await screen.findByRole("menu", { name: "문서 메뉴" });
-    expect(within(menu).queryByRole("menuitem", { name: /편집기 안 AI 도우미/ })).toBeNull();
+    expect(within(menu).queryByRole("menuitem", { name: /문서 AI 다시 켜기|AI 도우미/ })).toBeNull();
   });
 });
 

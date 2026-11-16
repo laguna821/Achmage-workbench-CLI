@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import { KOREAN_COPY } from "./korean-copy.ts";
+import { VENDOR_FIXES } from "./vendor-fixes.ts";
 import { applyKoreanCopy } from "../korean-copy-plugin.ts";
 
 // The editors' copy list (design review): each vendored string is replaced at build time, once,
@@ -19,8 +20,30 @@ it("what a teacher reads afterwards has no English ribbon words, no 스킬, 진�
 it("is applied by the build and fails loudly when the vendored text changed", () => {
   const file = `/x/vendor/ieumoffice/${KOREAN_COPY[0]!.file}`;
   const code = readFileSync(`vendor/ieumoffice/${KOREAN_COPY[0]!.file}`, "utf8");
-  expect(applyKoreanCopy(file, code)).toContain("열린 문서를 바로 고치는 AI 도우미");
+  expect(applyKoreanCopy(file, code)).toContain("문서 AI 열기");
   expect(() => applyKoreanCopy(file, "nothing")).toThrow(/vendored text changed/);
   expect(applyKoreanCopy("/x/other.ts", "x")).toBeNull();
   expect(readFileSync("apps/office/vite.config.ts", "utf8")).toContain("koreanCopy()");
+});
+
+it("the editors with their own AI panel never call it a second AI: no 'AI 도우미' or 'AI 어시스턴트' left in their Korean (one-doc-ai)", () => {
+  const files = ["apps/docs/src/renderer/i18n/ai/ko.ts", "apps/docs/src/renderer/i18n/ribbon/ko.ts", "apps/slides/src/renderer/i18n/ai/ko.ts", "apps/slides/src/renderer/i18n/app/ko.ts", "apps/slides/src/renderer/i18n/ribbon/ko.ts", "apps/sheets/src/renderer/i18n/ai/ko.ts", "apps/html/src/renderer/i18n/ai/ko.ts", "packages/ui/src/strings-ai-subscription/ko.ts"];
+  for (const file of files) {
+    const code = readFileSync(`vendor/ieumoffice/${file}`, "utf8");
+    const after = applyKoreanCopy(`/x/vendor/ieumoffice/${file}`, code) ?? code;
+    expect(after, file).not.toMatch(/AI 도우미|AI 어시스턴트/);
+  }
+  // PDF and Markdown keep every language in one file: the Korean block's keys are checked.
+  for (const file of ["apps/pdf/src/renderer/i18n/strings.ts", "apps/markdown/src/renderer/i18n/strings.ts"]) {
+    const after = applyKoreanCopy(`/x/vendor/ieumoffice/${file}`, readFileSync(`vendor/ieumoffice/${file}`, "utf8"))!;
+    expect(after, file).not.toMatch(/'AI 도우미|'AI 어시스턴트/);
+  }
+});
+
+it("the vendored-behaviour fixes find their text exactly once and are applied by the same plugin (one-doc-ai)", () => {
+  for (const entry of VENDOR_FIXES) {
+    const code = readFileSync(`vendor/ieumoffice/${entry.file}`, "utf8");
+    expect(code.split(entry.from).length - 1, entry.file).toBe(1);
+    expect(applyKoreanCopy(`/x/vendor/ieumoffice/${entry.file}`, code)).toContain("fittedSizeRef");
+  }
 });

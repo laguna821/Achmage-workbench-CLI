@@ -124,7 +124,7 @@ describe("the app answers what the app knows", () => {
     expect(kit.engine.sent.at(-1)!.text).toContain("이 대화는 Workbench에서 Claude로 실행됩니다. 모델: claude-opus-9 · 엔진 기본값. 노력: 높음 (high) · 기본값.");
     // The conversation keeps only the person's words.
     expect(userItems(kit, kit.engine.sent.at(-1)!.sessionId).at(-1)!.text).toBe("어떤 모델이야?");
-    expect(userItems(kit, kit.engine.sent.at(-1)!.sessionId).at(-1)!.origin?.context).toBe(4);
+    expect(userItems(kit, kit.engine.sent.at(-1)!.sessionId).at(-1)!.origin?.context).toBe(5);
   });
 });
 
