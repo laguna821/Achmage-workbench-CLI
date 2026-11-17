@@ -1,7 +1,10 @@
 import { connectOfficeUi } from "./ui-adapters/connect.ts";
 import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
 import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
-import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
+import { Gateway, GatewayError, handshake, listen, pageRest, post } from "./bridge.ts";
+import { installViewPosition, largestScroller } from "./view-position.ts";
+import { holdsPdfPages, pdfPlaceParts } from "./pdf-place.ts";
+import { installInPlaceReplace, keepScroll } from "./replace-in-place.ts";
 import { recovery } from "./recovery.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
 import type { PdfRequest } from "../../../packages/contracts/src/pdf.ts";
@@ -30,6 +33,8 @@ if (init.recover && !init.readOnly) {
   if (kept && kept.baseRevision <= revision) { source = kept.bytes; revision = contentRevision = kept.baseRevision; restored = true; }
 } else if (!init.readOnly) await recovery.drop(id);
 let historyBase: PdfHistoryBase = { revision: contentRevision, ...(restored ? { recovery: source } : {}) };
+// The PDF editor has no MCP handlers: its hidden page rests only while nothing is unsaved or being written (page-rest.ts).
+pageRest.restWhenClean(() => dirty || restored || writing > 0 || copying() || pdfHistory.busy());
 bindPdfHistory({
   writable: !init.readOnly,
   capture: () => historyBase,
@@ -302,3 +307,25 @@ useTransport({
 });
 await import("@ieum/apps/pdf/src/preload/index.ts");
 await import("@ieum/apps/pdf/src/renderer/main.tsx");
+// The tab keeps where the pages were scrolled; a woken tab opens there (office-leftovers point 3).
+const holdsPages = holdsPdfPages;
+const pdfPlace = pdfPlaceParts(document);
+const viewPlace = init.execution ? null : installViewPosition(pdfPlace, { initial: init.view, shown: () => pageRest.onScreen() && window.innerHeight > 0, post: (position) => post({ type: "office:view-position", position }) });
+// A new revision (a hidden tab's 문서 AI result) goes into this viewer in place (office-leftovers point 2): the page serves
+// the new bytes and the viewer runs its own load (pdf-history-patch.ts hands it out); unsaved work refuses it before.
+if (!init.readOnly && !init.execution) installInPlaceReplace({
+  dirty: async () => dirty || restored || writing > 0 || copying() || pdfHistory.busy() || revision !== contentRevision,
+  replace: async (next) => {
+    const reload = (window as unknown as { __workbenchPdfReload?: () => Promise<unknown> }).__workbenchPdfReload;
+    if (!reload || !opened) throw new Error("편집기가 아직 준비되지 않았습니다.");
+    const bytes = await gateway.raw(id, next);
+    const place = viewPlace?.last();
+    const before = { source, revision, contentRevision, historyBase };
+    source = bytes; revision = contentRevision = next; restored = false; epoch++; historyBase = { revision: next };
+    try { await keepScroll(() => largestScroller(document, holdsPages), async () => { await reload(); }); }
+    catch (error) { ({ source, revision, contentRevision, historyBase } = before); epoch++; throw error; }
+    // A hidden tab's page cannot set its scroll while it is not laid out: the place comes back when it is shown.
+    viewPlace?.again(place);
+    await queueRecovery(() => recovery.drop(id)).catch(report);
+  },
+});

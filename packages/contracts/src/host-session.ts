@@ -1,4 +1,5 @@
 export * from "./protocol.ts";
+import { withParticle } from "./korean.ts";
 import type { ProtocolDescriptor, ProtocolHandshake } from "./protocol.ts";
 /** A process incarnation, separate from the durable host and its sessions. */
 export type HostInstance = {
@@ -54,7 +55,6 @@ export type AppUpdateAction = "check" | "install" | "wait" | "cancel" | "dismiss
  * end in ㄹ (로, 이); 이/사/오/구 end in a vowel (로, 가). "0.5.3으로 업데이트했습니다", "0.5.2가 나왔습니다".
  */
 export function versionWith(version: string, particle: "으로" | "이"): string {
-  const last = /\d(?=\D*$)/.exec(version)?.[0] ?? "0";
-  if (particle === "으로") return version + ("036".includes(last) ? "으로" : "로");
-  return version + ("2459".includes(last) ? "가" : "이");
+  // Digits read in Korean, as the shared helper reads them (korean.ts).
+  return withParticle(version, particle === "으로" ? "으로/로" : "이/가");
 }

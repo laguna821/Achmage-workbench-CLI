@@ -112,7 +112,7 @@ describe("LinkBar", () => {
     const state = stateWith([session("검토", "claude"), session("초안", "codex", { status: "running" })], [link({ turn: 1 })]);
     const links = api(state);
     render(wrap(<LinkBar session={state.sessions["검토"]!} />, links));
-    const bar = screen.getByRole("group", { name: "세션 잇기" });
+    const bar = screen.getByRole("group", { name: "대화 잇기" });
     expect(bar.textContent?.replace(/\s+/g, " ")).toContain("⇄ 3/6");
     expect(bar.textContent).toContain("12분/30분");
     expect(bar.textContent).toContain("Codex · 초안 답하는 중");
@@ -128,7 +128,7 @@ describe("LinkBar", () => {
     const state = stateWith([session("검토", "claude"), session("초안", "codex"), session("혼자", "claude")], [link({ state: "paused", reason: "typed" })]);
     const links = api(state);
     const { unmount } = render(wrap(<LinkBar session={state.sessions["초안"]!} />, links));
-    expect(screen.getByRole("group", { name: "세션 잇기" }).textContent).toContain("직접 입력해서 멈춤");
+    expect(screen.getByRole("group", { name: "대화 잇기" }).textContent).toContain("직접 입력해서 멈춤");
     fireEvent.click(screen.getByRole("button", { name: "이어 가기" }));
     expect(links.resume).toHaveBeenCalled();
     unmount();

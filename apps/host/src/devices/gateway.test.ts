@@ -416,3 +416,47 @@ test("skin 2 · B: a phone keeps its own layout record (device:<id>); the deskto
   const stored = await f.local<{ record: { layout: unknown } }>("/api/layouts/device:" + phone.claim.grant.deviceId);
   expect(stored.record.layout).toEqual(mine);
 }, 20_000);
+
+test("L3: connections that have not signed in are capped; a tailnet peer filling the gateway cannot keep a paired phone out", async () => {
+  const { DeviceGateway, ANONYMOUS_SOCKET_LIMIT, DEVICE_SOCKET_LIMIT } = await import("./gateway.ts");
+  const { DeviceRegistry } = await import("../devices.ts");
+  const directory = mkdtempSync(join(tmpdir(), "workbench-device-anonymous-"));
+  const store = new Store(join(directory, "state.sqlite"));
+  const bus = new EventBus(8);
+  const manager = new SessionManager(store, bus, { hostId: "loopback-host", hostLabel: "연결 검사 호스트", dataDir: directory, managedWorksDir: join(directory, "works") });
+  const registry = new DeviceRegistry(directory, "loopback-host");
+  const gateway = new DeviceGateway({ registry, manager, bus, localOrigin: () => null, localToken: "test-local-owner", dataDir: directory });
+  cleanup.push(async () => { gateway.close(); registry.close(); await manager.shutdown(); store.close(); rmSync(directory, { recursive: true, force: true }); });
+  // A phone paired earlier: its credential, as the registry hands it out.
+  const work = manager.createWork({ title: "휴대폰 프로젝트", cwd: directory });
+  const offer = registry.createOffer({});
+  const ticket = registry.requestPairing({ offerId: offer.offerId, token: offer.token, name: "내 휴대폰", connectionId: "phone-connection" });
+  registry.approve(ticket.requestId, { permissions: ["read"], workIds: [work.id] });
+  const claimed = registry.claimCredential({ requestId: ticket.requestId, claimToken: ticket.claimToken, connectionId: "phone-connection" });
+  if (claimed.status !== "approved") throw Error("not approved");
+
+  type Fake = { closed: number | null; sent: string[]; listeners: Map<string, ((...args: unknown[]) => void)[]>; send(data: string): void; close(code?: number): void; on(event: string, listener: (...args: unknown[]) => void): void; emit(event: string, ...args: unknown[]): void };
+  const fake = (): Fake => {
+    const socket: Fake = { closed: null, sent: [], listeners: new Map(),
+      send(data) { socket.sent.push(String(data)); },
+      close(code) { if (socket.closed === null) { socket.closed = code ?? 1000; socket.emit("close"); } },
+      on(event, listener) { socket.listeners.set(event, [...(socket.listeners.get(event) ?? []), listener]); },
+      emit(event, ...args) { for (const listener of socket.listeners.get(event) ?? []) listener(...args); } };
+    return socket;
+  };
+  // A tailnet peer opens far more connections than the gateway holds and never signs in.
+  const peer = Array.from({ length: DEVICE_SOCKET_LIMIT + 8 }, fake);
+  for (const socket of peer) await gateway.attach(socket);
+  expect(peer.filter(socket => socket.closed === null)).toHaveLength(ANONYMOUS_SOCKET_LIMIT);
+  expect(peer.some(socket => socket.closed === 1008)).toBe(false);
+  // The phone still gets in and signs in.
+  const phone = fake();
+  await gateway.attach(phone);
+  expect(phone.closed).toBeNull();
+  phone.emit("message", JSON.stringify({ type: "workbench", op: "authenticate", id: "a1", credential: claimed.credential }));
+  await until(() => phone.sent.some(text => text.includes('"op":"result"') && text.includes('"id":"a1"')), "the phone did not sign in");
+  expect(phone.closed).toBeNull();
+  // Signed in, it keeps its room however many anonymous connections come after it.
+  for (const socket of Array.from({ length: DEVICE_SOCKET_LIMIT }, fake)) await gateway.attach(socket);
+  expect(phone.closed).toBeNull();
+});

@@ -83,7 +83,7 @@ export function linksOf(session: Session, items: TranscriptItem[], state: State,
   for (const entry of children) if (entry.documentAgent?.parentSessionId === session.id) relate(entry, `문서 AI · ${state.artifacts[entry.documentAgent.artifactId]?.name ?? "문서"}`);
   for (const link of Object.values(state.links)) {
     if (!link.participants.includes(session.id)) continue;
-    for (const id of link.participants) relate(state.sessions[id], `세션 잇기 · ${LINK_STATE[link.state]}`);
+    for (const id of link.participants) relate(state.sessions[id], `대화 잇기 · ${LINK_STATE[link.state]}`);
   }
   const handoffs = Object.values(state.handoffs);
   for (const handoff of handoffs) if (handoff.sourceSessionId === session.id) relate(state.sessions[handoff.targetSessionId], `보낸 요청 · ${HANDOFF_STATE[handoff.status]}`);

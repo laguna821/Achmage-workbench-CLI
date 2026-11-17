@@ -89,6 +89,12 @@ describe("query text", () => {
     expect(snippetOf("# 보고서\n\n- **예산** [집행](https://x) 계획\n> [!note] 메모", ["예산"]).snippet).toBe("보고서 예산 집행 계획 메모");
   });
 
+  it("audit #10: code stays as written, emphasis and wikilink marks go, the match lands on its word", () => {
+    const { snippet, ranges } = snippetOf("명령 `npm run __build__` 다음 [[3주차 노트|지난 노트]]의 _강조_ ~~취소~~", ["build"]);
+    expect(snippet).toBe("명령 npm run __build__ 다음 지난 노트의 강조 취소");
+    expect(ranges.map(([from, to]) => snippet.slice(from, to))).toEqual(["build"]);
+  });
+
   it("keeps a word whose ending only looks like a particle: searched by its stem, marked and ranked whole", () => {
     const parsed = parseQuery("형성평가");
     expect(parsed.parts[0]!.term).toBe("형성평");

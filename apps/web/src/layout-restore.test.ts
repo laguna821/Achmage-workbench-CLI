@@ -59,3 +59,14 @@ describe("restore skips the bad tab, not the layout", () => {
     expect(restoreLayout({ version: 9, panes: [] }, isView, fallback)).toBe(fallback);
   });
 });
+
+describe("an office editor's place is kept with its tab (office-leftovers point 3)", () => {
+  it("reads a stored place (slide, sheet + cell, first row/column, scroll) and drops what is not one", () => {
+    const office = { slide: 3, sheet: "비품", cell: "C5", firstRow: 10, firstColumn: 2, scroll: { top: 900, left: 0, fraction: 0.27 }, zoom: 1.25 };
+    const raw = stored([pane("a", [{ ...doc("one"), ui: { office } } as ReturnType<typeof tab>, { ...doc("two"), ui: { office: { slide: -1, cell: "x".repeat(400), scroll: { top: "a" }, sheet: 7 } } } as ReturnType<typeof tab>])]);
+    const read = readLayout(JSON.parse(JSON.stringify(raw)), isView, fallback);
+    const tabs = read.layout.panes[0]!.tabs!;
+    expect(tabs[0]!.ui?.office).toEqual(office);
+    expect(tabs[1]!.ui?.office).toBeUndefined();
+  });
+});

@@ -75,7 +75,7 @@ export function SessionCard({
 export function Switcher({ state, sessions, index, unseen }: { state: State; sessions: Session[]; index: number; unseen: Set<string> }) {
   return (
     <div className="switcher-backdrop">
-      <div className="switcher" role="listbox" aria-label="최근 세션">
+      <div className="switcher" role="listbox" aria-label="최근 대화">
         {sessions.map((session, position) => (
           <SessionCard key={session.id} state={state} session={session} unseen={unseen.has(session.id)} compact focused={position === index} onOpen={() => undefined} />
         ))}

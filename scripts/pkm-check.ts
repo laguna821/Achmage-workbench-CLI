@@ -303,7 +303,7 @@ async function flow(provider: Provider) {
       await page.locator(".views-section .side-tools button[title='새 보기']").click();
       await page.locator("#view-name").fill(name);
       await page.locator("#view-query").fill(query);
-      await page.locator("#view-group").selectOption(group);
+      await page.locator("#view-group").click(); await page.locator(`.ui-menu[data-state=open] .ui-menu-item[data-value="${group}"]`).click();
       await page.waitForFunction(() => /맞는 것 \d+개/.test(document.querySelector(".view-preview")?.textContent ?? ""), undefined, { timeout: 5000 });
       const counted = await page.locator(".view-preview").innerText();
       await page.locator(".view-dialog button[type=submit]").click();
@@ -336,7 +336,7 @@ async function flow(provider: Provider) {
     await page.locator(".context-menu [role=menuitem]", { hasText: "자동 정리 규칙" }).click();
     await page.waitForSelector(".rules-dialog");
     await page.locator("#rule-name").fill(`${label} 작업`);
-    await page.locator("#rule-engine").selectOption(provider);
+    await page.locator("#rule-engine").click(); await page.locator(`.ui-menu[data-state=open] .ui-menu-item[data-value="${provider}"]`).click();
     await page.locator("#rule-folder").fill(`엔진별/${label}`);
     await page.locator("#rule-tag").fill(label);
     await page.locator(".rule-form button", { hasText: "규칙 추가" }).click();

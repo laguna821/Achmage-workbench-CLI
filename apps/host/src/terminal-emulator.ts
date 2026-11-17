@@ -4,6 +4,9 @@ import { createTerminalSerializer } from "@workbench/paseo-terminal/serializer";
 import { attachTerminalQueryHandlers } from "@workbench/paseo-terminal/query-handlers";
 import { TerminalInputModeTracker } from "@getpaseo/protocol/terminal-input-mode";
 
+/** Lines of scrollback the gateway keeps per terminal (0.5.3, A6: was 10,000; see TERMINAL_SCROLLBACK in terminals.ts). */
+export const GATEWAY_SCROLLBACK = 2000;
+
 /** ANSI state is Paseo's model. Process ownership and the byte journal remain Terminals'. */
 export class TerminalEmulator {
   private readonly terminal;
@@ -16,7 +19,7 @@ export class TerminalEmulator {
   private pendingBytes = 0;
   constructor(rows: number, cols: number, respond: (data: string) => void) {
     this.respond = respond;
-    this.terminal = createHeadlessTerminal({ rows, cols, scrollback: 10_000 });
+    this.terminal = createHeadlessTerminal({ rows, cols, scrollback: GATEWAY_SCROLLBACK });
     this.serialize = createTerminalSerializer(this.terminal);
     attachTerminalQueryHandlers(this.terminal, { write: respond });
     this.terminal.onData(respond);

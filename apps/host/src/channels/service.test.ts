@@ -251,6 +251,20 @@ describe("the PC's switches", () => {
     expect((await r.g.api("PATCH", "/api/channels/bindings/nobody", { paused: true })).status).toBe(404);
   });
 
+  it("shows and changes 확인 받기 of a connected chat (off by default); the chat is told", async () => {
+    const r = await rig();
+    await register(r);
+    await pair(r);
+    const bindingId = (await r.state()).bots[0]!.bindings[0]!.id;
+    expect((await r.state()).bots[0]!.bindings[0]!.confirm).toBe(false);
+    const patch = (body: unknown) => r.g.api("PATCH", `/api/channels/bindings/${bindingId}`, body);
+    expect(((await patch({ confirm: true })).json as unknown as ChannelsState).bots[0]!.bindings[0]!.confirm).toBe(true);
+    await until(() => r.fake.texts().some((text) => text.startsWith("확인 받기를 켰습니다.")));
+    expect((await patch({ confirm: "yes" })).status).toBe(400);
+    expect(((await patch({ confirm: false })).json as unknown as ChannelsState).bots[0]!.bindings[0]!.confirm).toBe(false);
+    await until(() => r.fake.texts().some((text) => text.startsWith("확인 받기를 껐습니다.")));
+  });
+
   it("locks a chat from the PC too: what it runs stops, and only the PC unlocks it", async () => {
     const r = await rig();
     await register(r);

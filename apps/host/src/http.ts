@@ -6,7 +6,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { basename, dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { timingSafeEqual } from "node:crypto";
-import { isAccessMode, parseSearchScope, type AccessMode, type Attachment, type CreateSessionRequest, type DocRef, type DocumentViewInput, type Provider, type SequencedEvent, type Timeline } from "@workbench/contracts";
+import { isAccessMode, parseSearchScope, type AccessMode, type Attachment, type CreateSessionRequest, type DocRef, type DocumentViewInput, type Provider, type SequencedEvent, type Timeline, type HistoryFilter, type HistoryPage } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import { HttpError, type SessionManager } from "./sessions.ts";
 import { handleRuntimeHttp } from "./runtime-http.ts";
@@ -149,6 +149,8 @@ export type HttpOptions = {
   browse?: AgentBrowser | null;
   /** Turns and revisions in `[since, until)` (or since a time), for home "흐름" (timeline.ts). */
   timeline?: (since: number, until?: number) => Timeline;
+  /** 활동 › 기록: a page of what happened, newest first (history.ts). */
+  history?: (query: { before: string | null; limit: number; workId: string | null; filter: HistoryFilter }) => HistoryPage;
   /** Images pasted into Markdown documents (doc-images.ts). */
   docImages?: DocImages;
   /** Calendar feeds on home "흐름" (calendar-feeds.ts). */
@@ -161,6 +163,8 @@ export type HttpOptions = {
   entry?: (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<boolean>;
   /** `GET /api/memory` (app-memory.ts): what the app uses now; read only when asked, at most once in 30 s. */
   memory?: import("./app-memory.ts").AppMemoryReader;
+  /** The engine choices of 설정 › AI 엔진 the gateway applies (engine-prefs.ts). */
+  enginePrefs?: import("./engine-prefs.ts").EnginePrefs;
   /** `/api/bookmarks…` (bookmarks.ts): the app's own web bookmarks and bringing a browser's in; local only. */
   bookmarks?: (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<boolean>;
 };
@@ -198,7 +202,7 @@ async function readJson(req: IncomingMessage, limit = 1_000_000): Promise<Record
   }
 }
 
-export function serveStatic(res: ServerResponse, webDir: string, pathname: string, pageHeaders: Record<string, string> = {}) {
+export function serveStatic(res: ServerResponse, webDir: string, pathname: string, pageHeaders: Record<string, string> = {}, req?: IncomingMessage) {
   const safe = normalize(decodeURIComponent(pathname)).replace(/^(\.\.[/\\])+/, "");
   const rel = safe.replace(/^[/\\]+/, "");
   let file = join(webDir, safe);
@@ -213,38 +217,97 @@ export function serveStatic(res: ServerResponse, webDir: string, pathname: strin
   // Pages are fetched fresh after every update; only content-hashed build files (…/assets/…) are kept for good.
   const hashed = found && /(^|[/\\])assets[/\\]/.test(rel);
   const page = extname(file) === ".html";
+  // The other build files (pdfium.wasm 4.5 MB, fonts, template fonts) are checked, not re-read (B6): a
+  // validator from the file's size and time, and 304 when the browser already holds that version.
+  let validator: Record<string, string> = {};
+  if (!page && !hashed) {
+    const stat = statSync(file);
+    const tag = `"${stat.size.toString(36)}-${Math.floor(stat.mtimeMs).toString(36)}"`;
+    const modified = new Date(Math.floor(stat.mtimeMs / 1000) * 1000).toUTCString();
+    validator = { etag: tag, "last-modified": modified };
+    const match = req?.headers["if-none-match"];
+    const since = req?.headers["if-modified-since"];
+    const fresh = match !== undefined
+      ? match.split(",").some((entry) => entry.trim().replace(/^W\//, "") === tag)
+      : since !== undefined && Number.isFinite(Date.parse(since)) && Math.floor(stat.mtimeMs / 1000) * 1000 <= Date.parse(since);
+    if (fresh) {
+      res.writeHead(304, { "cache-control": "no-cache", ...validator });
+      res.end();
+      return;
+    }
+  }
   res.writeHead(200, {
     "content-type": MIME[extname(file)] ?? "application/octet-stream",
     "cache-control": page ? "no-store" : hashed ? "public, max-age=31536000, immutable" : "no-cache",
+    ...validator,
     ...(page ? pageHeaders : {}),
     ...(found && /^assets\/mobile-worker-[\w-]+\.js$/.test(rel) ? { "service-worker-allowed": "/" } : {}),
   });
   createReadStream(file).pipe(res);
 }
 
-function streamEvents(req: IncomingMessage, res: ServerResponse, bus: EventBus, since: number, epoch?: string) {
+/** An event as its SSE frame, made once for every client that gets it (B8: not once per client). */
+const frames = new WeakMap<SequencedEvent, string>();
+const frameOf = (event: SequencedEvent) => {
+  let frame = frames.get(event);
+  if (frame === undefined) { frame = `id: ${event.seq}\ndata: ${JSON.stringify(event)}\n\n`; frames.set(event, frame); }
+  return frame;
+};
+/** A client holding more than this unread is dropped (B8). */
+export const SSE_MAX_BUFFERED = 8 * 1024 * 1024;
+/** A client that has not drained its socket for this long is dropped (B8). */
+export const SSE_DRAIN_MS = 30_000;
+
+/**
+ * The event stream of one client. A client that does not read (a frozen window, a phone on a dead
+ * connection) is dropped instead of buffering without bound in the gateway: when it holds more than
+ * SSE_MAX_BUFFERED, or has not drained for SSE_DRAIN_MS. Its EventSource reconnects with the last id it
+ * read and gets the replay — or, when it is too far behind, `resync` (it then reloads the snapshot).
+ */
+export function streamEvents(req: IncomingMessage, res: ServerResponse, bus: EventBus, since: number, epoch?: string) {
   res.writeHead(200, {
     "content-type": "text/event-stream; charset=utf-8",
     "cache-control": "no-store",
     connection: "keep-alive",
   });
+  let unsubscribe = () => {};
+  let heartbeat: NodeJS.Timeout | null = null, stalled: NodeJS.Timeout | null = null, dropped = false;
+  const stop = () => {
+    if (heartbeat) clearInterval(heartbeat);
+    if (stalled) clearTimeout(stalled);
+    heartbeat = stalled = null;
+    unsubscribe();
+  };
+  const drop = () => {
+    if (dropped) return;
+    dropped = true;
+    stop();
+    res.destroy();
+  };
+  const send = (chunk: string) => {
+    if (dropped) return;
+    const flowing = res.write(chunk);
+    if (res.writableLength > SSE_MAX_BUFFERED) return drop();
+    if (!flowing && !stalled) {
+      stalled = setTimeout(drop, SSE_DRAIN_MS);
+      res.once("drain", () => { if (stalled) clearTimeout(stalled); stalled = null; });
+    }
+  };
   // Send the headers at once: the browser reports the stream as open only when they arrive.
-  res.write(": open\n\n");
-  res.write(`event: cursor\ndata: ${JSON.stringify({ epoch: bus.epoch, seq: bus.currentSeq })}\n\n`);
-  const write = (event: SequencedEvent) => res.write(`id: ${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
+  send(": open\n\n");
+  send(`event: cursor\ndata: ${JSON.stringify({ epoch: bus.epoch, seq: bus.currentSeq })}\n\n`);
+  const write = (event: SequencedEvent) => send(frameOf(event));
   const backlog = bus.replay(since, epoch);
   if (backlog === null) {
     // The client is too far behind; it must reload the snapshot.
-    res.write(`event: resync\ndata: {}\n\n`);
+    send(`event: resync\ndata: {}\n\n`);
   } else {
     backlog.forEach(write);
   }
-  const unsubscribe = bus.subscribe(write);
-  const heartbeat = setInterval(() => res.write(": ping\n\n"), 20_000);
-  req.on("close", () => {
-    clearInterval(heartbeat);
-    unsubscribe();
-  });
+  if (dropped) return;
+  unsubscribe = bus.subscribe(write);
+  heartbeat = setInterval(() => send(": ping\n\n"), 20_000);
+  req.on("close", stop);
 }
 
 export function createHttpServer(manager: SessionManager, bus: EventBus, options: HttpOptions): Server {
@@ -255,7 +318,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
   const pdfNotes = new PdfNotes(manager, bus);
   const imageOutputs = new OfficeImageOutputs(manager.documents);
   const pdfImages = pdfImageOutputs(manager.documents);
-  const memory = options.memory ?? new AppMemoryReader();
+  const memory = options.memory ?? new AppMemoryReader({ engines: () => manager.engineSources() });
   const server = createServer(async (req, res) => {
     if (options.servicePreviews?.handle(req, res, "local")) return;
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -284,7 +347,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         // The office editors are served only from their own origin (editors.ts).
         if (/^\/office(\/|$)/.test(path)) throw new HttpError(404, "not_here", "편집기는 따로 열립니다.");
         if (options.webDir) {
-          serveStatic(res, options.webDir, path);
+          serveStatic(res, options.webDir, path, {}, req);
         } else {
           sendJson(res, 404, { code: "no_web", message: "web UI is served by the dev server" });
         }
@@ -932,8 +995,40 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const from = Number.isFinite(since) ? since : 0;
         return sendJson(res, 200, options.timeline(from, Number.isFinite(until) && until > from ? until : undefined));
       }
+      if (method === "GET" && path === "/api/activity/history" && options.history) {
+        const filter = url.searchParams.get("filter") ?? "all";
+        if (filter !== "all" && filter !== "attention" && filter !== "done" && filter !== "problem") throw new HttpError(400, "invalid_filter", "알 수 없는 기록 거르기입니다.");
+        const limit = Number(url.searchParams.get("limit") ?? 100);
+        return sendJson(res, 200, options.history({ before: url.searchParams.get("before"), limit: Number.isFinite(limit) ? limit : 100, workId: url.searchParams.get("workId") || null, filter }));
+      }
       if (method === "GET" && path === "/api/fonts") return sendJson(res, 200, { fonts: systemFonts() });
       if (method === "GET" && path === "/api/memory") return sendJson(res, 200, await memory.read());
+      // "쉬는 엔진 지금 끄기" (B1): idle engines only; the readout reads again at once.
+      if (method === "POST" && path === "/api/engines/close-idle") {
+        const result = manager.closeIdleEngines();
+        memory.forget?.();
+        return sendJson(res, 200, result);
+      }
+      // The resource manager (0.5.3): what runs, what waits and why; its settings; "지금 바로 실행" (the window's key).
+      if (method === "GET" && path === "/api/resources") return sendJson(res, 200, manager.resources.state());
+      if (method === "PUT" && path === "/api/resources/settings") {
+        const body = await readJson(req, 4_000);
+        if ((body.mode !== undefined && body.mode !== "auto" && body.mode !== "manual") || (body.manual !== undefined && typeof body.manual !== "number") || (body.background !== undefined && typeof body.background !== "boolean"))
+          throw new HttpError(400, "resource_settings", "동시에 돌리는 작업 설정이 올바르지 않습니다.");
+        return sendJson(res, 200, manager.resources.updateSettings({ ...(body.mode !== undefined ? { mode: body.mode as "auto" | "manual" } : {}), ...(typeof body.manual === "number" ? { manual: body.manual } : {}), ...(typeof body.background === "boolean" ? { background: body.background } : {}) }));
+      }
+      if (method === "POST" && path === "/api/resources/run-now") {
+        const body = await readJson(req, 4_000);
+        if (typeof body.sessionId !== "string" || typeof body.requestId !== "string") throw new HttpError(400, "run_now", "바로 실행할 요청이 올바르지 않습니다.");
+        return sendJson(res, 200, await manager.runNow(body.sessionId, body.requestId));
+      }
+      // The conversations this window shows now (A11): an idle engine of one not on screen is closed sooner.
+      if (method === "POST" && path === "/api/sessions/on-screen") {
+        const body = await readJson(req, 64_000);
+        const client = typeof body.client === "string" ? body.client.slice(0, 80) : "";
+        if (!client || !Array.isArray(body.ids)) throw new HttpError(400, "invalid_on_screen", "화면에 보이는 대화 목록이 올바르지 않습니다.");
+        return sendJson(res, 200, manager.setShown(client, body.ids.filter((id): id is string => typeof id === "string").slice(0, 200)));
+      }
       if (options.officeMcp && method === "POST" && path === "/api/office-mcp/invoke") {
         const body = await readJson(req, 16_000);
         if (!Array.isArray(body.args) || body.args.length > 1) throw new HttpError(400, "mcp_request", "MCP 설정 요청이 올바르지 않습니다.");
@@ -997,6 +1092,11 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           return sendJson(res, 200, manager.removeDocument(artifactId, { action: body.action }));
         }
         if (method === "POST" && parts[2] === "restore" && parts.length === 3) return sendJson(res, 200, manager.restoreDocument(artifactId));
+        // 이름 바꾸기: the file renamed inside its folder (refused while its AI works; undo = renaming back).
+        if (method === "POST" && parts[2] === "rename" && parts.length === 3) {
+          const body = await readJson(req);
+          return sendJson(res, 200, manager.renameDocument(artifactId, typeof body.name === "string" ? body.name : ""));
+        }
         if (method === "POST" && parts[2] === "save-copy" && parts.length === 3) {
           const body = await readJson(req);
           return sendJson(res, 200, manager.saveDocumentCopy(artifactId, typeof body.to === "string" ? body.to : ""));
@@ -1154,6 +1254,20 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           const artifact = documents.get(artifactId);
           return sendPng(res, await documents.officePagePath(artifactId, revision ?? artifact.revision, Number(url.searchParams.get("page") ?? 1)));
         }
+        // The first-page picture of a revision, only when already made (a tab's placeholder while its editor opens).
+        if (method === "GET" && parts[2] === "cover") return sendJson(res, 200, documents.cover(artifactId, revision));
+        if (method === "GET" && parts[2] === "cover-image") {
+          const artifact = documents.get(artifactId);
+          const found = documents.coverPicture(artifact, revision ?? artifact.revision);
+          if (!found) throw new HttpError(404, "cover_missing", "이 판의 쪽 그림이 아직 없습니다.");
+          if (found.file.endsWith(".svg")) {
+            // A Hangul page as its engine drew it; shown only as an <img> (no script runs there), and nothing else is allowed.
+            res.writeHead(200, { "content-type": "image/svg+xml", "cache-control": "private, max-age=86400", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:" });
+            createReadStream(found.file).pipe(res);
+            return;
+          }
+          return sendPng(res, found.file);
+        }
         if (method === "POST" && parts[2] === "document-session") {
           const body = await readJson(req);
           if ((body.parentSessionId !== null && body.parentSessionId !== undefined && typeof body.parentSessionId !== "string") || (body.fresh !== undefined && typeof body.fresh !== "boolean")) throw new HttpError(400, "invalid_document_session", "문서 대화 요청 형식이 올바르지 않습니다.");
@@ -1272,6 +1386,14 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           const body = await readJson(req);
           return sendJson(res, 200, browse.setPaused(String(body.sessionId ?? ""), body.paused === true));
         }
+      }
+      // "내 MCP 서버와 훅 불러오기" (설정 › AI 엔진), per engine; off by default.
+      if (method === "POST" && path === "/api/providers/personal-tools") {
+        const body = await readJson(req);
+        if (body.provider !== "claude" && body.provider !== "codex") throw new HttpError(400, "invalid_provider", "지원하지 않는 엔진입니다.");
+        if (!options.enginePrefs) throw new HttpError(404, "not_found", "이 게이트웨이에서는 바꿀 수 없습니다.");
+        options.enginePrefs.setPersonalTools(body.provider, body.on === true);
+        return sendJson(res, 200, manager.personalToolsChanged(body.provider));
       }
       if (method === "POST" && path === "/api/providers/refresh") {
         const provider = url.searchParams.get("provider");

@@ -2,12 +2,14 @@ import { connectOfficeUi } from "./ui-adapters/connect.ts";
 import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
 import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
 import "./slides.css";
-import { Gateway, GatewayError, handshake, headlessExport, listen, post } from "./bridge.ts";
+import { Gateway, GatewayError, handshake, headlessExport, listen, pageRest, post } from "./bridge.ts";
+import { installInPlaceReplace } from "./replace-in-place.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
 import { recovery } from "./recovery.ts";
 import { carriesMark, convertForeignPictures, desktopPicture, markClipboard, pastedPicture, pngBytes, showsNothing } from "./pictures.ts";
-import type { WorkerCall, WorkerMessage, WorkerRequest } from "./slides/protocol.ts";
+import type { FontFaceBytes, WorkerCall, WorkerMessage, WorkerRequest } from "./slides/protocol.ts";
 import { createSlideStyles } from "./slides/styles.ts";
+import { templateFaces } from "./slides/template-fonts.ts";
 import { beginOfficeCopy, copyOfficeBytes, officeCopyBusy, type OfficeCopy } from "./copy.ts";
 import { installMcp } from "./mcp.ts";
 import { prepareOutput, commitOutput, cancelOutput, renderHtmlPdf, htmlOutput } from "./output.ts";
@@ -17,6 +19,8 @@ import { buildPrintDocumentHtml } from "../../../vendor/ieumoffice/apps/slides/s
 import type { ExportPdfOp, PrintSlidesOp } from "../../../third_party/ieumoffice/slides-print.ts";
 import type { OfficeOutputPlan } from "../../../packages/contracts/src/office-output.ts";
 import { stampPdfLinks } from "./pdf-output-links.ts";
+import { watchSlideDrawn } from "./slide-drawn.ts";
+import { installViewPosition, readScroll, restoreScroll } from "./view-position.ts";
 
 // IeumOffice's slides editor inside Workbench. Its screen (vendor/ieumoffice/apps/slides renderer)
 // and its window API (the preload) are used unchanged; its editing code — pptx parsing, layout,
@@ -57,8 +61,34 @@ document.documentElement.dataset.workbenchTheme = state.theme;
 const worker = new Worker(new URL("./slides/worker.ts", import.meta.url), { type: "module" });
 const waiting = new Map<number, { resolve(value: { value: unknown; unhandled?: boolean }): void; reject(error: Error): void }>();
 let nextCall = 1;
+// Template faces: the ones layout uses come from the worker as bytes with the message whose layout uses them, and are
+// registered and loaded before that message reaches the editor; the others stay URL faces (below) until a text uses them.
+const sentFaces = new Set<string>();
+const urlFaces = new Map<string, FontFace>();
+async function registerFaces(fonts: FontFaceBytes[]) {
+  await Promise.all(fonts.map(async (font) => {
+    const weight = font.weight ?? (font.bold ? "700" : "400"), style = font.italic ? "italic" : "normal";
+    sentFaces.add(font.id);
+    const url = urlFaces.get(`${font.family}|${weight}|${style}`);
+    if (url) { document.fonts.delete(url); urlFaces.delete(`${font.family}|${weight}|${style}`); }
+    try { const face = new FontFace(font.family, font.bytes, { weight, style }); document.fonts.add(face); await face.load(); } catch { /* the CSS fallback, as before */ }
+  }));
+  document.fonts.dispatchEvent(new Event("loadingdone"));
+}
+let delivering = Promise.resolve(), loading = 0;
 worker.onmessage = (event: MessageEvent<WorkerMessage>) => {
   const message = event.data;
+  const fonts = message.type !== "notice" ? message.fonts : undefined;
+  // Nothing loading: handled at once, as before. Otherwise in order behind the message whose faces are loading.
+  if (!fonts?.length && !loading) return handleWorker(message);
+  loading++;
+  delivering = delivering
+    .then(() => (fonts?.length ? registerFaces(fonts) : undefined))
+    .then(() => handleWorker(message))
+    .catch((error: unknown) => console.error(error))
+    .finally(() => { loading--; });
+};
+function handleWorker(message: WorkerMessage) {
   if (message.type === "send") return dispatch(message.channel, message.args);
   if (message.type === "notice") return post({ type: "office:error", message: message.message });
   const waiter = waiting.get(message.id);
@@ -66,7 +96,7 @@ worker.onmessage = (event: MessageEvent<WorkerMessage>) => {
   waiting.delete(message.id);
   if (message.ok) waiter.resolve({ value: message.value, unhandled: message.unhandled });
   else waiter.reject(new Error(message.error));
-};
+}
 worker.onerror = (event) => post({ type: "office:error", message: `편집기 엔진 오류: ${event.message}` });
 
 function call(request: WorkerRequest, transfer: Transferable[] = []) {
@@ -162,6 +192,10 @@ async function invoke(channel: string, args: unknown[]): Promise<unknown> {
       // Cut, copy and paste inside a text box are the page's own editing commands.
       document.execCommand(String(args[0]));
       return null;
+    case "slides:private-font-faces": {
+      const faces = await value<{ id: string }[]>({ type: "invoke", channel, args });
+      return Array.isArray(faces) ? faces.filter((face) => !sentFaces.has(face.id)) : faces;
+    }
     case "slides:consume-pending-open": {
       const opened = await value<unknown>({ type: "invoke", channel, args });
       // Unsaved edits reopened from a recovery copy count as unsaved.
@@ -361,5 +395,68 @@ await value({ type: "init", token: init.token });
 await value({ type: "open", name: init.artifact.name, bytes }, [bytes]);
 post({ type: "office:opened", revision: state.revision, recovered: Boolean(kept) });
 
+// The bundled template families stay known to the page (the font list shows each name in its face, the design gallery
+// draws them) as faces fetched only when some text on screen uses them. The faces layout measured with come as bytes
+// through the private-font list (slides/fonts.ts), as before; the others are no longer read and decoded up front
+// (all 17 were: 44 MB of font files in every PowerPoint tab).
+for (const face of templateFaces) {
+  const key = `${face.family}|${face.weight}|normal`;
+  if (urlFaces.has(key)) continue;
+  const url = new FontFace(face.family, `url(${face.url})`, { weight: face.weight, style: "normal" });
+  urlFaces.set(key, url); document.fonts.add(url);
+}
 await import("@ieum/apps/slides/src/preload/index.ts");
 await import("@ieum/apps/slides/src/renderer/main.tsx");
+// The window's page picture leaves when the slide is drawn at its fitted place (not on "opened" or the AI panel's ready,
+// which come before the slide: office-leftovers point 1).
+if (!init.execution && !init.headlessExport) watchSlideDrawn(document, window, () => post({ type: "office:page-drawn" }));
+
+/**
+ * A new revision taken by the running editor (replace-in-place.ts): the worker opens it as the deck (its own
+ * open path, as on opening), the renderer gets it through its own "opened" event (as an Electron open does),
+ * and the slide that was on screen is shown again. The editor's undo history starts again at the new revision.
+ */
+let openGeneration = 0;
+async function replaceInPlace(revision: number) {
+  if (init.readOnly || !document.querySelector(".slide-list .thumb")) throw new Error("편집기가 아직 준비되지 않았습니다.");
+  const release = pageRest.hold("replace");
+  try {
+    const thumbs = () => [...document.querySelectorAll<HTMLElement>(".slide-list .thumb")];
+    const shown = Math.max(0, thumbs().findIndex((thumb) => thumb.classList.contains("active")));
+    const list = document.querySelector<HTMLElement>(".slide-list"), listTop = list?.scrollTop ?? 0;
+    const bytes = await gateway.raw(artifactId, revision);
+    await value({ type: "open", name: init.artifact.name, bytes, generation: ++openGeneration }, [bytes]);
+    const opened = await value<{ slides: unknown[] } | null>({ type: "invoke", channel: "slides:consume-pending-open", args: [1280] });
+    if (!opened) throw new Error("새 판을 열지 못했습니다.");
+    dispatch("slides:opened", [opened]);
+    state.revision = revision; state.conflict = false;
+    if (state.kept) { state.kept = false; void recovery.drop(artifactId).catch(() => undefined); }
+    // The renderer starts at the first slide: the one that was on screen comes back (or the last one there is).
+    const end = Date.now() + 3000;
+    while (Date.now() < end && thumbs().length !== opened.slides.length) await new Promise((resolve) => setTimeout(resolve, 30));
+    const target = thumbs()[Math.min(shown, thumbs().length - 1)];
+    if (target && shown > 0) target.click();
+    if (list) list.scrollTop = listTop;
+  } finally { release(); }
+}
+if (!init.readOnly && !init.execution && !init.headlessExport) installInPlaceReplace({ dirty: isDirty, replace: replaceInPlace });
+// The tab keeps the slide on screen and the slide list's scroll; a woken tab opens there (office-leftovers point 3).
+// The slide is shown again the way a person does it (its thumbnail clicked), as replaceInPlace does.
+if (!init.execution && !init.headlessExport) {
+  const thumbs = () => [...document.querySelectorAll<HTMLElement>(".slide-list .thumb")];
+  const list = () => document.querySelector<HTMLElement>(".slide-list");
+  installViewPosition({
+    read: () => {
+      const all = thumbs();
+      if (!all.length || document.querySelector(".start-booting")) return null;
+      return { slide: Math.max(0, all.findIndex((thumb) => thumb.classList.contains("active"))), scroll: readScroll(list()) };
+    },
+    restore: (position) => {
+      const all = thumbs();
+      if (!all.length || document.querySelector(".start-booting")) return false;
+      const index = Math.min(position.slide ?? 0, all.length - 1);
+      if (index > 0 && !all[index]!.classList.contains("active")) { all[index]!.click(); return false; }
+      return restoreScroll(list(), position.scroll) || (list()?.scrollHeight ?? 0) <= (list()?.clientHeight ?? 0);
+    },
+  }, { initial: init.view, shown: () => pageRest.onScreen() && window.innerHeight > 0, post: (position) => post({ type: "office:view-position", position }) });
+}

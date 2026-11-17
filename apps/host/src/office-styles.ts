@@ -10,6 +10,7 @@ import type { EditorGrants } from "./editors.ts";
 import { HttpError } from "./errors.ts";
 import { readBody, sendJson } from "./http.ts";
 import { openerFor } from "./open-url.ts";
+import { guiEnvironment } from "./gui-env.ts";
 
 const hash = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -133,7 +134,7 @@ export class OfficeStyles {
       if (!this.fonts || !existsSync(join(this.fonts, "README.md"))) throw fail("템플릿 글꼴 폴더가 설치되지 않았습니다.", 404);
       const command = openerFor(pathToFileURL(this.fonts).href);
       await new Promise<void>((resolve, reject) => {
-        const child = spawn(command.command, command.args, { stdio: "ignore", windowsHide: true });
+        const child = spawn(command.command, command.args, { stdio: "ignore", windowsHide: true, env: guiEnvironment() });
         child.once("error", reject); child.once("exit", (code) => code === 0 ? resolve() : reject(fail("글꼴 폴더를 열지 못했습니다.", 500)));
       });
       sendJson(res, 200, true); return true;

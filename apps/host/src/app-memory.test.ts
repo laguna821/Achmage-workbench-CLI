@@ -210,3 +210,41 @@ describe("GET /api/memory", () => {
     }
   });
 });
+
+describe("engine processes per conversation (B1)", () => {
+  it("each engine's process tree (its MCP servers and hooks too), told by its pid or its session variable", async () => {
+    const { engineMemory } = await import("./app-memory.ts");
+    const KB = 1024;
+    // gateway 10 → claude 20 (session a) → mcp 21, 22; claude 30 (session b); codex 40 → mcp 41; search worker 50.
+    const rows: ProcessRow[] = [
+      { pid: 10, ppid: 1, exe: "/node", bytes: 100 * KB },
+      { pid: 20, ppid: 10, exe: "/claude", bytes: 300 * KB }, { pid: 21, ppid: 20, exe: "/python", bytes: 50 * KB }, { pid: 22, ppid: 20, exe: "/node", bytes: 40 * KB },
+      { pid: 30, ppid: 10, exe: "/claude", bytes: 280 * KB },
+      { pid: 40, ppid: 10, exe: "/codex", bytes: 90 * KB }, { pid: 41, ppid: 40, exe: "/mcp", bytes: 10 * KB },
+      { pid: 50, ppid: 10, exe: "/node", bytes: 60 * KB },
+    ];
+    const markers = new Map([[20, "a"], [30, "b"], [50, null]]);
+    const engines = engineMemory(rows, 10, [
+      { provider: "claude", sessions: [{ id: "a", title: "강의안" }], pid: null, marker: "a", idle: true },
+      { provider: "claude", sessions: [{ id: "b", title: "채점" }], pid: null, marker: "b", idle: false },
+      { provider: "claude", sessions: [{ id: "c", title: "없는 것" }], pid: null, marker: "c", idle: true },
+      { provider: "codex", sessions: [{ id: "x", title: "코덱스" }], pid: 40, marker: null, idle: true },
+    ], (pid) => markers.get(pid) ?? null);
+    expect(engines).toEqual([
+      { provider: "claude", sessions: [{ id: "a", title: "강의안" }], bytes: 390 * KB, idle: true },
+      { provider: "claude", sessions: [{ id: "b", title: "채점" }], bytes: 280 * KB, idle: false },
+      { provider: "claude", sessions: [{ id: "c", title: "없는 것" }], bytes: null, idle: true },
+      { provider: "codex", sessions: [{ id: "x", title: "코덱스" }], bytes: 100 * KB, idle: true },
+    ]);
+  });
+
+  it("the reader can be told to read again at once (after engines were closed)", async () => {
+    let reads = 0;
+    const reader = new AppMemoryReader({ read: async () => ({ known: true, totalBytes: ++reads, windowBytes: 0, toolsBytes: 0, gatewayBytes: 0, measure: "pss", at: 1 }) });
+    await reader.read(); await reader.read();
+    expect(reads).toBe(1);
+    reader.forget();
+    await reader.read();
+    expect(reads).toBe(2);
+  });
+});

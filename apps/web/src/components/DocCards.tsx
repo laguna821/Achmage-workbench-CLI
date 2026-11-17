@@ -26,6 +26,8 @@ export type DocActions = {
   openSession: (sessionId: string) => void;
   /** "다시 보내기": a request the other session did not answer, as a new one. */
   resendHandoff: (handoff: Handoff) => Promise<void>;
+  /** 이름 바꾸기 for a document (its head's name and ⋯, the list row's menu): opens the dialog. */
+  renameDocument?: (artifactId: string) => void;
 };
 
 export const DocContext = createContext<{ state: State; actions: DocActions } | null>(null);
@@ -279,11 +281,11 @@ export function HandoffCard({ handoff, viewer }: { handoff: Handoff; viewer: str
     <div className={`handoff-card entry status-${handoff.status}`} data-kind="handoff" data-state={entryState}>
       <div className="entry-head handoff-head">
         {target ? <EngineMark provider={target.provider} size={15} /> : <Icon name="send" size={14} />}
-        <span className="entry-who">{target?.purpose ?? "세션"}에 보냄</span>
+        <span className="entry-who">{target?.purpose ?? "대화"}에 보냄</span>
         <span className={`entry-when handoff-status tone-${handoff.status}${handoff.status === "answered" ? " done" : handoff.status === "failed" ? " problem" : ""}`}>
           {running ? (
             <>
-              <span className="spinner small" /> {target?.status === "awaitingApproval" ? "상대 세션이 승인을 기다림" : "확인 중"}
+              <span className="spinner small" /> {target?.status === "awaitingApproval" ? "상대 대화가 승인을 기다림" : "확인 중"}
             </>
           ) : handoff.status === "answered" ? (
             `답 도착 ${ago(handoff.answeredAt)}`
@@ -332,14 +334,14 @@ export function HandoffCard({ handoff, viewer }: { handoff: Handoff; viewer: str
           <button
             type="button"
             className="link"
-            title="이 답을 입력창에 인용으로 넣습니다. 다음 요청과 함께 이 세션의 엔진에 갑니다."
-            onClick={() => appendDraft(`work:${source.workId}:${source.id}`, quotedAnswer(target ? `${PROVIDER_LABEL[target.provider]} · ${target.purpose}` : "다른 세션", handoff.reply!))}
+            title="이 답을 입력창에 인용으로 넣습니다. 다음 요청과 함께 이 대화의 엔진에 갑니다."
+            onClick={() => appendDraft(`work:${source.workId}:${source.id}`, quotedAnswer(target ? `${PROVIDER_LABEL[target.provider]} · ${target.purpose}` : "다른 대화", handoff.reply!))}
           >
             대화에 넣기
           </button>
         ) : null}
         <button type="button" className="link" onClick={() => actions.openSession(handoff.targetSessionId)}>
-          {target ? `${PROVIDER_LABEL[target.provider]} 세션 열기` : "세션 열기"}
+          {target ? `${PROVIDER_LABEL[target.provider]} 대화 열기` : "대화 열기"}
         </button>
         <HandoffResend handoff={handoff} onResend={actions.resendHandoff} />
       </div>
@@ -348,12 +350,12 @@ export function HandoffCard({ handoff, viewer }: { handoff: Handoff; viewer: str
 }
 
 export function RefChips({ refs }: { refs: RefSummary[] }) {
-  const { actions } = useDocs();
+  const { actions, state } = useDocs();
   return (
     <div className="ref-chips">
       {refs.map((ref) => (
         <button key={`${ref.artifactId}:${ref.revision}`} type="button" className="ref-chip" title={ref.sha256 ? `참조한 판의 SHA-256: ${ref.sha256}` : undefined} onClick={() => actions.openArtifact(ref.artifactId)}>
-          <Icon name="file" size={12} /> {ref.name}
+          <Icon name="file" size={12} /> {state.artifacts[ref.artifactId]?.name ?? ref.name}
           <span className="ref-chip-fact">{ref.revision}판</span>
           <span className="ref-chip-fact">{ref.mode === "edit" ? "수정 요청" : "읽기"}</span>
           {ref.savedSnapshot ? <span className="ref-chip-fact">미저장 편집 제외</span> : null}

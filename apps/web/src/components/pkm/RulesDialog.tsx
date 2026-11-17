@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { failure } from "../../top-notice.ts";
 import { DISK_FOLDER, FORMAT_LABEL, PROVIDER_LABEL, type DocFormat, type PkmRule, type ProjectStage, type RuleChange } from "@workbench/contracts";
 import { Icon } from "../Icon.tsx";
+import { Select } from "../ui/Select.tsx";
 import { usePkm } from "./PkmContext.tsx";
 import "../../styles/pkm.css";
 
@@ -156,20 +157,11 @@ export function RulesDialog() {
             <label htmlFor="rule-cwd">작업 폴더가</label>
             <input id="rule-cwd" className="sheet-input mono" value={draft.when.cwdPrefix ?? ""} onChange={(event) => setWhen({ cwdPrefix: event.target.value || null })} placeholder="~/강의 (그 안의 작업)" spellCheck={false} />
             <label htmlFor="rule-engine">엔진</label>
-            <select id="rule-engine" className="sheet-select" value={draft.when.engine ?? ""} onChange={(event) => setWhen({ engine: (event.target.value || null) as PkmRule["when"]["engine"] })}>
-              <option value="">모두</option>
-              <option value="claude">Claude</option>
-              <option value="codex">Codex</option>
-            </select>
+            <Select id="rule-engine" label="엔진" value={draft.when.engine ?? ""} onChange={(value) => setWhen({ engine: (value || null) as PkmRule["when"]["engine"] })}
+              options={[{ value: "", label: "모두" }, { value: "claude", label: "Claude" }, { value: "codex", label: "Codex" }]} />
             <label htmlFor="rule-format">문서 형식</label>
-            <select id="rule-format" className="sheet-select" value={draft.when.format ?? ""} onChange={(event) => setWhen({ format: (event.target.value || null) as DocFormat | null })}>
-              <option value="">모두</option>
-              {FORMATS.map((format) => (
-                <option key={format} value={format}>
-                  {FORMAT_LABEL[format]}
-                </option>
-              ))}
-            </select>
+            <Select id="rule-format" label="문서 형식" value={draft.when.format ?? ""} onChange={(value) => setWhen({ format: (value || null) as DocFormat | null })}
+              options={[{ value: "", label: "모두" }, ...FORMATS.map((format) => ({ value: format, label: FORMAT_LABEL[format] }))]} />
             <label htmlFor="rule-folder">→ 앱 폴더</label>
             <span className="rule-folder">
               <input id="rule-folder" className="sheet-input" value={draft.then.folder === DISK_FOLDER ? "" : (draft.then.folder ?? "")} disabled={draft.then.folder === DISK_FOLDER} onChange={(event) => setThen({ folder: event.target.value || null })} placeholder="강의/2026 (없으면 만듭니다)" />
@@ -181,14 +173,8 @@ export function RulesDialog() {
             <label htmlFor="rule-tag">→ 태그</label>
             <input id="rule-tag" className="sheet-input" value={draft.then.tag ?? ""} onChange={(event) => setThen({ tag: event.target.value || null })} placeholder="수업" />
             <label htmlFor="rule-stage">→ 단계</label>
-            <select id="rule-stage" className="sheet-select" value={draft.then.stage ?? ""} onChange={(event) => setThen({ stage: event.target.value || null })} title="프로젝트에 단계가 없을 때만 채웁니다">
-              <option value="">그대로</option>
-              {stages.map((stage) => (
-                <option key={stage.name} value={stage.name}>
-                  {stage.name} (비어 있을 때)
-                </option>
-              ))}
-            </select>
+            <Select id="rule-stage" label="→ 단계" value={draft.then.stage ?? ""} onChange={(value) => setThen({ stage: value || null })} title="프로젝트에 단계가 없을 때만 채웁니다"
+              options={[{ value: "", label: "그대로" }, ...stages.map((stage) => ({ value: stage.name, label: `${stage.name} (비어 있을 때)` }))]} />
             <span />
             <label className="check-row">
               <input type="checkbox" checked={draft.then.pin} onChange={(event) => setThen({ pin: event.target.checked })} />

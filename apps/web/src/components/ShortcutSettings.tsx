@@ -1,3 +1,4 @@
+import { withParticle } from "@workbench/contracts";
 import { useEffect, useState } from "react";
 import { SHORTCUTS, comboLabel, comboOf, usableCombo, type ShortcutId } from "../shortcuts.ts";
 import "../styles/shortcuts.css";
@@ -27,7 +28,7 @@ export function ShortcutSettings({ shortcuts, onChange, onRecording }: { shortcu
       if (!combo) return;
       if (!usableCombo(combo)) return setProblem("Ctrl이나 Alt를 함께 누르거나 F1~F12를 쓰세요(글자만으로는 입력과 겹칩니다).");
       const taken = SHORTCUTS.find((entry) => entry.id !== recording && shortcuts[entry.id] === combo);
-      if (taken) return setProblem(`${comboLabel(combo)}은 「${taken.label}」에 쓰고 있습니다.`);
+      if (taken) return setProblem(`${withParticle(`${comboLabel(combo)}`, "은/는")} 「${taken.label}」에 쓰고 있습니다.`);
       onChange(recording, combo);
       setProblem(null);
       setRecording(null);

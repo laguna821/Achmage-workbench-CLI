@@ -19,7 +19,7 @@ export function TerminalDialog({ api, workspace, onOpen, onClose }: { api: Api; 
   }, [api, workspace.id, onClose]);
   const open = (entry: TerminalSession) => { onOpen(entry); onClose(); };
   return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section className="terminal-dialog" role="dialog" aria-modal="true" aria-label="작업공간 터미널">
+    <section className="terminal-dialog" role="dialog" aria-modal="true" aria-label="작업 폴더 터미널">
       <header><h2>{workspace.label} · 터미널</h2><button className="button small" onClick={onClose}>닫기</button></header>
       <p className="terminal-path">{workspace.cwd}</p>
       <form onSubmit={async (event) => {

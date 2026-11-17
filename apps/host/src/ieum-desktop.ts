@@ -11,6 +11,7 @@ import { HttpError } from "./errors.ts";
 import { findIeum, ieumFromCliDir, installIeumOffice, sandboxWrapper, type IeumInstall } from "./ieumoffice.ts";
 import { registerIeumDesktop, type DesktopRegistration } from "./ieum-registration.ts";
 import { installerName, isOfficialIeumAssetUrl, latestDesktopRelease, validSha512, type DesktopRelease } from "./ieum-release.ts";
+import { guiEnvironment } from "./gui-env.ts";
 export type { DesktopRelease } from "./ieum-release.ts";
 
 const run = promisify(execFile);
@@ -181,7 +182,7 @@ export class IeumDesktop {
     if (!app) throw new HttpError(409, "ieum_app_missing", "이음오피스 앱을 먼저 설치하거나 연결해 주세요.");
     const file = process.platform === "darwin" ? "/usr/bin/open" : process.platform === "linux" ? sandboxWrapper(app, this.dataDir) ?? app : app;
     const args = process.platform === "darwin" ? ["-a", join(dirname(app), "..", ".."), "--", path] : [path];
-    const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE; delete env.GENOFFICE_USER_DATA; delete env.GENOFFICE_AI_SETTINGS;
+    const env = guiEnvironment(process.env); delete env.ELECTRON_RUN_AS_NODE; delete env.GENOFFICE_USER_DATA; delete env.GENOFFICE_AI_SETTINGS;
     if (process.platform === "darwin") {
       await run(file, args, { env, timeout: 30_000, maxBuffer: 64_000 });
       return { app: "이음오피스", path };

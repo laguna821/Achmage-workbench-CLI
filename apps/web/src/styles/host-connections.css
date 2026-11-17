@@ -118,3 +118,16 @@
 .connect-first { display: grid; gap: var(--space-sm); justify-items: start; max-width: 560px; margin: 12vh auto 0; padding: var(--space-lg); color: var(--text); font: var(--text-md)/1.6 var(--font-ui); word-break: keep-all; }
 .connect-first h1 { margin: 0; font: 600 var(--text-xl)/1.3 var(--font-ui); }
 .connect-first p { margin: 0; color: var(--text-soft); }
+
+/* 테일스케일로 연결: one card, one state at a time (TailscalePanel.tsx). */
+.tailscale-card { display: grid; gap: var(--space-xs); padding: var(--space-md); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
+.tailscale-panel.tone-warn .tailscale-card { border-color: var(--warning); }
+.tailscale-panel.tone-ok .tailscale-card { border-color: var(--color-teal-ink); }
+.tailscale-command { display: block; padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-well); background: var(--surface-muted); font: var(--text-sm)/1.5 var(--font-mono); overflow-wrap: anywhere; user-select: all; }
+.tailscale-address { font-weight: 600; overflow-wrap: anywhere; }
+.tailscale-seen { color: var(--text-soft); font-size: var(--text-sm); }
+.tailscale-seen.seen { color: var(--color-done); }
+.tailscale-why { font-size: var(--text-sm); overflow-wrap: anywhere; }
+.tailscale-card h4 { font-size: var(--text-md); }
+.tailscale-phone-steps { margin: 0; padding-left: var(--space-lg); display: grid; gap: var(--space-2xs); }
+.tailscale-actions { justify-content: flex-start; }

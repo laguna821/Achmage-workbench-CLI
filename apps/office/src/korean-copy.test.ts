@@ -44,6 +44,26 @@ it("the vendored-behaviour fixes find their text exactly once and are applied by
   for (const entry of VENDOR_FIXES) {
     const code = readFileSync(`vendor/ieumoffice/${entry.file}`, "utf8");
     expect(code.split(entry.from).length - 1, entry.file).toBe(1);
-    expect(applyKoreanCopy(`/x/vendor/ieumoffice/${entry.file}`, code)).toContain("fittedSizeRef");
+    expect(applyKoreanCopy(`/x/vendor/ieumoffice/${entry.file}`, code)).toContain(entry.to);
   }
+});
+
+it("the PDF editor reads Korean: no English left in its Korean table once the copy is applied, except marks that hold no words (office-leftovers point 5)", async () => {
+  // A path in a variable: the vendored editor's sources stay out of the app's type check.
+  const vendored = "../../../vendor/ieumoffice/apps/pdf/src/renderer/i18n/strings.ts";
+  const { strings } = await import(/* @vite-ignore */ vendored) as { strings: { en: Record<string, string>; ko: Record<string, string> } };
+  const { PDF_FORM_KO, PDF_CERT_KO } = await import("./korean-copy.ts");
+  // What the copy entries put in (each is checked above to find its text once and to be applied by the build).
+  const ko: Record<string, string> = { ...(strings.ko as Record<string, string>), ...PDF_FORM_KO, ...PDF_CERT_KO };
+  for (const entry of KOREAN_COPY.filter((e) => e.file.startsWith("apps/pdf/src/renderer/i18n/"))) {
+    const one = /^(\w+): '(.*)',$/.exec(entry.to);
+    if (one) ko[one[1]!] = one[2]!;
+  }
+  const english = Object.keys(strings.en).filter((key) => {
+    const value = ko[key] ?? (strings.en as Record<string, string>)[key]!;
+    return !/[가-힣]/.test(value) && /[A-Za-z]{2,}/.test(value.replace(/\{\w+\}/g, ""));
+  });
+  expect(english).toEqual([]);
+  // The same words as the other editors: no 페이지 in what this unit added (쪽), no middle dots.
+  for (const value of [...Object.values(PDF_FORM_KO), ...Object.values(PDF_CERT_KO)]) expect(value).not.toMatch(/ · /);
 });

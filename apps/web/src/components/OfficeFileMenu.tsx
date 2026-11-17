@@ -1,3 +1,4 @@
+import { withParticle } from "@workbench/contracts";
 import { useRef, useState, type RefObject } from "react";
 import { failure, type Notify } from "../top-notice.ts";
 import { BLANK_OFFICE_DOCUMENTS, type Artifact, type BlankOfficeFormat } from "@workbench/contracts";
@@ -42,7 +43,7 @@ export function useOfficeFiles({ api, workId, workspaceId, sessionId, cwd, sourc
       if (!current()) return;
       const artifact = await action();
       if (current()) onOpenArtifact(artifact.id);
-      else onToast(`「${artifact.name}」을 프로젝트 문서에 추가했습니다.`);
+      else onToast(`${withParticle(`「${artifact.name}」`, "을/를")} 프로젝트 문서에 추가했습니다.`);
     } catch (error) { onToast(failure(error)); }
     finally { pending.current = false; setBusy(false); }
   };

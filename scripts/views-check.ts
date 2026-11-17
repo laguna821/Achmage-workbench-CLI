@@ -18,6 +18,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { chromium, type Page } from "playwright-core";
+import { editorFirst } from "./fixtures/editor-first.ts";
 import type { Artifact, Proposal, Provider, Session, TranscriptItem, UiPrefs, Work } from "@workbench/contracts";
 import { seedViews } from "./seed-views.ts";
 
@@ -162,6 +163,7 @@ async function flow(provider: Provider) {
   const idle = (id: string) => until(async () => (await session(id)).status === "idle", 25_000);
   try {
     await page.addInitScript((id) => localStorage.setItem("workbench.lastWork", id), work.id);
+    await editorFirst(page);
     await page.goto(`${ready.url}/?token=${ready.token}`);
     await page.waitForSelector(".work-view");
 

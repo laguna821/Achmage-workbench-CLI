@@ -51,7 +51,7 @@ export function VaultGuardPill({ provider, access, workId }: { provider: Provide
               ? "Codex는 볼트를 쓰기 가능 경로 밖에 둔 샌드박스에서 돕니다. 읽기는 됩니다."
               : "Claude가 볼트 안에 쓰거나 고치려 하면 Workbench가 막습니다(PreToolUse). 읽기는 됩니다."}
         </p>
-        <p className="vault-guard-text muted">새 세션은 작업 이름·볼트 위치·이 작업에 고정한 노트 경로를 맥락 카드(2KB 이하)로 받습니다.</p>
+        <p className="vault-guard-text muted">새 대화는 작업 이름·볼트 위치·이 작업에 고정한 노트 경로를 맥락 카드(2KB 이하)로 받습니다.</p>
       </Popover>
     </div>
   );

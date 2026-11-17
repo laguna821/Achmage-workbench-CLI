@@ -20,7 +20,8 @@ function presenceStore(api: Api) {
     get: () => value,
     subscribe(listener: () => void) {
       listeners.add(listener);
-      if (!timer) { void refresh(); timer = setInterval(() => void refresh(), 2000); }
+      // Which documents are open in the PC's editors is the PC's own view; a phone's channel refuses it.
+      if (!timer && api.isRemote !== true) { void refresh(); timer = setInterval(() => void refresh(), 2000); }
       return () => { listeners.delete(listener); if (!listeners.size && timer) { clearInterval(timer); timer = null; } };
     },
   };
@@ -40,6 +41,8 @@ export function useDocumentReferences(api: Api, scope: string, onError: (message
     } catch (error) { onError(error instanceof Error ? error.message : String(error)); }
   }, [api, pins, onError]);
   const resolve = async (inputs: DocRefInput[]): Promise<DocRef[] | null> => {
+    // Nothing to resolve, nothing to ask: a plain line goes out as it is (a phone's channel refused the empty question, and the send with it).
+    if (!inputs.length) return [];
     try {
       const refs: DocRefInput[] = [];
       for (const input of inputs) {

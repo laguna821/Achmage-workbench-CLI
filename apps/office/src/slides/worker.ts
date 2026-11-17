@@ -8,13 +8,21 @@ import { sessions } from "@ieum/apps/slides/src/main/session-state.ts";
 import { createSlidesView, registerSlidesIpc, slidesIsDirty } from "@ieum/apps/slides/src/main/slides-main.ts";
 import { clipboard, connect, emit, invoke } from "../platform/electron.ts";
 import { vfs } from "../platform/fs.ts";
-import { setFontToken } from "./fonts.ts";
+import { setFontToken, takeNewTemplateFaces } from "./fonts.ts";
 import { registerSlideImageIpc } from "./media-ipc.ts";
 import type { WorkerCall, WorkerMessage } from "./protocol.ts";
 import { createSlidesControl } from "@ieum/apps/shell/src/main/mcp/slides-bridge.ts";
 
 const scope = self as unknown as { postMessage(message: WorkerMessage, transfer?: Transferable[]): void; onmessage: ((event: MessageEvent<WorkerCall>) => void) | null };
-const post = (message: WorkerMessage, transfer: Transferable[] = []) => scope.postMessage(message, transfer);
+// Every message to the page carries the template faces layout has started to use since the last one, so the page
+// draws a text in a newly picked font with that font from its first frame (the same order as when all faces were
+// registered up front).
+const post = (message: WorkerMessage, transfer: Transferable[] = []) => {
+  if (message.type === "notice") return scope.postMessage(message, transfer);
+  const fonts = takeNewTemplateFaces();
+  if (!fonts.length) return scope.postMessage(message, transfer);
+  scope.postMessage({ ...message, fonts }, [...transfer, ...fonts.map((face) => face.bytes)]);
+};
 
 let viewId = 0;
 let path = "";
@@ -45,7 +53,7 @@ async function handle(call: WorkerCall): Promise<{ value: unknown; unhandled?: b
       registerSlideImageIpc();
       return { value: true };
     case "open": {
-      path = `/document/${call.name.replace(/[\\/]/g, "_")}`;
+      path = `/document/${call.generation ? `g${call.generation}/` : ""}${call.name.replace(/[\\/]/g, "_")}`;
       vfs.write(path, new Uint8Array(call.bytes));
       viewId = createSlidesView(path).webContents.id;
       return { value: viewId };

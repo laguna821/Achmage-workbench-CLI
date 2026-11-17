@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { chromium, type Frame, type Page } from "playwright-core";
+import { editorFirst } from "./fixtures/editor-first.ts";
 
 const outDir = process.argv[2] ?? join(tmpdir(), "wb-slides-editor");
 mkdirSync(outDir, { recursive: true });
@@ -134,6 +135,7 @@ async function editText(p: Page, word: string, typed: string) {
 
 try {
   await page.addInitScript((id) => localStorage.setItem("workbench.lastWork", id), work.id);
+  await editorFirst(page);
   await page.goto(`${ready.url}/?token=${ready.token}`);
   await page.waitForSelector(".note-head-more");
   await page.locator(".note-head-more").click();

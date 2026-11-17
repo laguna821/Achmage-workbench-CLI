@@ -115,7 +115,7 @@ export function LinkDialog({
       <div
         className="linked-dialog"
         role="dialog"
-        aria-label="세션 잇기"
+        aria-label="대화 잇기"
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.stopPropagation();
@@ -128,15 +128,15 @@ export function LinkDialog({
       >
         <header className="linked-dialog-head">
           <h2>
-            <span aria-hidden>⇄</span> 세션 잇기
+            <span aria-hidden>⇄</span> 대화 잇기
           </h2>
-          <p className="muted">고른 세션들이 정한 횟수와 시간 안에서 번갈아 답을 주고받습니다. 상대의 답은 지시나 승인이 아니라 참고로 전합니다. 어느 세션에든 직접 쓰면 멈춥니다.</p>
+          <p className="muted">고른 대화들이 정한 횟수와 시간 안에서 번갈아 답을 주고받습니다. 상대의 답은 지시나 승인이 아니라 참고로 전합니다. 어느 대화에든 직접 쓰면 멈춥니다.</p>
         </header>
 
         <div className="linked-dialog-body">
           <section className="linked-dialog-section">
             <div className="linked-dialog-label">
-              <span>참여 세션 · {chosen.length}개</span>
+              <span>참여 대화 · {chosen.length}개</span>
               <span className="muted">먼저 답하는 순서대로 고르세요 (2~6개)</span>
             </div>
             {chosen.length ? (
@@ -152,7 +152,7 @@ export function LinkDialog({
                   ) : null;
                 })}
                 {chosen.length > 1 ? (
-                  <button type="button" className="link" onClick={() => setChosen((current) => [...current.slice(1), current[0]!])} title="먼저 답할 세션을 바꿉니다">
+                  <button type="button" className="link" onClick={() => setChosen((current) => [...current.slice(1), current[0]!])} title="먼저 답할 대화를 바꿉니다">
                     순서 바꾸기
                   </button>
                 ) : null}
@@ -160,9 +160,9 @@ export function LinkDialog({
             ) : null}
             <label className="search-field linked-search">
               <Icon name="search" size={15} />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="세션 이름·작업·엔진으로 찾기" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="대화 이름·작업·엔진으로 찾기" />
             </label>
-            <div className="linked-candidates" role="listbox" aria-multiselectable aria-label="참여 세션">
+            <div className="linked-candidates" role="listbox" aria-multiselectable aria-label="참여 대화">
               {candidates.map((session) => {
                 const at = chosen.indexOf(session.id);
                 const other = linkOfSession(state, session.id);
@@ -189,7 +189,7 @@ export function LinkDialog({
                   </button>
                 );
               })}
-              {!candidates.length ? <div className="picker-empty">맞는 세션이 없습니다.</div> : null}
+              {!candidates.length ? <div className="picker-empty">맞는 대화가 없습니다.</div> : null}
             </div>
           </section>
 
@@ -240,7 +240,7 @@ export function LinkDialog({
             <p className="linked-summary">
               {enough
                 ? `모두 ${chosen.length * rounds}번 주고받고, 길어도 ${minutes}분이면 끝납니다. [[합의]]가 나오거나 같은 말이 되풀이되면 일찍 끝납니다.`
-                : "세션을 둘 이상 고르면 시작할 수 있습니다."}
+                : "대화를 둘 이상 고르면 시작할 수 있습니다."}
               {usage >= 75 ? ` 5시간 사용량이 ${Math.round(usage)}%입니다. 90%를 넘으면 멈춥니다.` : ""}
             </p>
             {busy.length ? <p className="linked-warning">진행 중인 대화가 끝나야 시작할 수 있습니다: {busy.map((session) => session.purpose).join(", ")}</p> : null}

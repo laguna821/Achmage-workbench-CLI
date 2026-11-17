@@ -80,7 +80,7 @@ it("rejects a late reference snapshot after the user selects another session", a
   try {
     await f.prepare(); await act(async () => { f.switchSession("other"); });
     await act(async () => { finish({ id: "old-snapshot", refs: [] }); });
-    expect(f.sent).toHaveBeenCalledWith(expect.objectContaining({ type: "office:ai-result", error: expect.stringContaining("세션이 바뀌") }), "http://office.test");
+    expect(f.sent).toHaveBeenCalledWith(expect.objectContaining({ type: "office:ai-result", error: expect.stringContaining("대화가 바뀌") }), "http://office.test");
     expect(f.sent.mock.calls.some(([value]) => value.type === "office:ai-result" && value.value?.referenceSnapshot)).toBe(false);
   } finally { f.unregister(); }
 });
@@ -106,7 +106,7 @@ it("rejects a late native picker result after session selection changes", async 
     await act(async () => { f.switchSession("different"); });
     await act(async () => { choose({ paths: ["/old-choice.csv"] }); });
     expect(f.officeReferences).not.toHaveBeenCalled();
-    expect(f.sent).toHaveBeenCalledWith(expect.objectContaining({ type: "office:references-result", error: expect.stringContaining("세션이 바뀌") }), "http://office.test");
+    expect(f.sent).toHaveBeenCalledWith(expect.objectContaining({ type: "office:references-result", error: expect.stringContaining("대화가 바뀌") }), "http://office.test");
   } finally { f.unregister(); }
 });
 

@@ -158,6 +158,9 @@ export function isToolApproval(params: McpServerElicitationRequestParams) {
   return !schema?.properties || Object.keys(schema.properties).length === 0;
 }
 
+/** How long the app-server stays idle when none of its conversations is on screen (A11). */
+const OFF_SCREEN_IDLE_MS = 150_000;
+
 export class CodexAdapter implements ProviderAdapter {
   readonly provider = "codex" as const;
   private rpc: CodexRpc | null = null;
@@ -198,6 +201,14 @@ export class CodexAdapter implements ProviderAdapter {
   private readonly approvals = new Map<string, PendingApproval>();
   private idleTimer: NodeJS.Timeout | null = null;
   private readonly idleMs: number;
+  /** The app-server stops after this when none of its conversations is on screen (A11). */
+  private readonly offScreenIdleMs: number;
+  /** "내 MCP 서버와 훅 불러오기" (설정 › AI 엔진): off by default in the public build (owner, 2026-11-16). */
+  private readonly personalTools: () => boolean;
+  /** The conversations some window shows now. */
+  private shown: ReadonlySet<string> = new Set();
+  /** The idle stop after use (not the short one after a status read): when it started counting. */
+  private idleSince: number | null = null;
   /** The engine as last found (how to start it). */
   private binary: ResolvedBinary | null = null;
   /** A login waiting for the browser: its id (to cancel it) and when it gives up. */
@@ -206,11 +217,14 @@ export class CodexAdapter implements ProviderAdapter {
 
   private readonly launch: CodexLaunch | null;
 
-  constructor(sink: AdapterSink, options?: { approvalPolicy?: string; sandbox?: string; idleMs?: number; browser?: BrowserEngineHooks | null; launch?: CodexLaunch }) {
+  constructor(sink: AdapterSink, options?: { approvalPolicy?: string; sandbox?: string; idleMs?: number; offScreenIdleMs?: number; browser?: BrowserEngineHooks | null; launch?: CodexLaunch; personalTools?: () => boolean }) {
     this.sink = sink;
+    this.personalTools = options?.personalTools ?? (() => false);
+    this.current = { ...this.current, personalTools: this.personalTools() };
     this.children = new CodexChildren({ rpc: () => this.rpc, root: id => this.threads.get(id), request: id => this.turnRequests.get(id) ?? null, publish: (id, tasks, source) => this.sink.nativeTasks?.(id, tasks, source) });
     this.forced = { approvalPolicy: options?.approvalPolicy, sandbox: options?.sandbox };
     this.idleMs = options?.idleMs ?? 10 * 60_000;
+    this.offScreenIdleMs = Math.min(this.idleMs, options?.offScreenIdleMs ?? OFF_SCREEN_IDLE_MS);
     this.browser = options?.browser ?? null;
     this.launch = options?.launch ?? null;
   }
@@ -219,7 +233,76 @@ export class CodexAdapter implements ProviderAdapter {
    * The app-server is only kept while Codex is in use. When nothing runs and no approval is
    * pending it is stopped; the next request starts it again and resumes the same threads.
    */
+  /**
+   * The idle stop after use: after `idleMs` (10 min) while one of its conversations is on screen, after
+   * `offScreenIdleMs` (2.5 min) when none is (A11), counted from when it went idle.
+   */
+  private scheduleIdle(since = Date.now()) {
+    const onScreen = [...this.threads.values()].some((sessionId) => this.shown.has(sessionId));
+    const limit = onScreen ? this.idleMs : this.offScreenIdleMs;
+    this.scheduleIdleStop(Math.max(0, since + limit - Date.now()));
+    this.idleSince = since;
+  }
+
+  private engineIdle() {
+    return this.activeTurns.size === 0 && !this.children.hasActive() && this.approvals.size === 0 && !this.pendingLogin;
+  }
+
+  /** The switch changed: the status says so; an idle app-server stops so threads are resumed with it. */
+  personalToolsChanged() {
+    this.publish({ personalTools: this.personalTools() });
+    this.closeIdleEngines();
+  }
+
+  /**
+   * A thread's config overrides: with the switch off, each MCP server the effective config names (the
+   * person's config.toml and the project's) is turned off for the thread, and hooks too. Null: nothing to pass.
+   */
+  private async threadConfig(cwd: string): Promise<Record<string, boolean> | null> {
+    if (this.personalTools()) return null;
+    const config = await this.rpc?.request<ConfigReadResponse>("config/read", { cwd }).catch(() => null);
+    const servers = (config?.config as { mcp_servers?: unknown } | undefined)?.mcp_servers;
+    const names = servers && typeof servers === "object" ? Object.keys(servers).filter((name) => /^[A-Za-z0-9_-]+$/.test(name)) : [];
+    return { ...Object.fromEntries(names.map((name) => [`mcp_servers.${name}.enabled`, false])), "features.codex_hooks": false };
+  }
+
+  /** thread/start or thread/resume with the overrides; a Codex that refuses the hooks key is asked again without it. */
+  private async threadRequest(method: "thread/start" | "thread/resume", params: Record<string, unknown>, config: Record<string, boolean> | null) {
+    const rpc = this.rpc!;
+    if (!config) return rpc.request<ThreadStartResponse>(method, params);
+    try {
+      return await rpc.request<ThreadStartResponse>(method, { ...params, config });
+    } catch (error) {
+      if (!("features.codex_hooks" in config) || !rpc.running) throw error;
+      const { ["features.codex_hooks"]: _hooks, ...servers } = config;
+      return rpc.request<ThreadStartResponse>(method, { ...params, ...(Object.keys(servers).length ? { config: servers } : {}) });
+    }
+  }
+
+  /** The one app-server, with the conversations whose threads it has loaded (B1). */
+  engineProcesses() {
+    const rpc = this.rpc;
+    if (!rpc?.running) return [];
+    const sessionIds = [...new Set([...this.loaded].map((threadId) => this.threads.get(threadId)).filter((id): id is string => Boolean(id)))];
+    return [{ provider: "codex" as const, sessionIds, pid: rpc.pid, marker: null, idle: this.engineIdle() }];
+  }
+
+  /** "쉬는 엔진 지금 끄기": the app-server stops when nothing runs or waits on it; the next request resumes the threads. */
+  closeIdleEngines() {
+    if (!this.rpc?.running || !this.engineIdle()) return 0;
+    this.cancelIdleStop();
+    this.rpc.stop();
+    return 1;
+  }
+
+  /** The window says which conversations are on screen: the idle stop gets the time that goes with it. */
+  shownChanged(shown: ReadonlySet<string>) {
+    this.shown = new Set(shown);
+    if (this.idleTimer && this.idleSince !== null) this.scheduleIdle(this.idleSince);
+  }
+
   private scheduleIdleStop(ms: number) {
+    this.idleSince = null;
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
@@ -231,6 +314,7 @@ export class CodexAdapter implements ProviderAdapter {
   }
 
   private cancelIdleStop() {
+    this.idleSince = null;
     if (this.idleTimer) {
       clearTimeout(this.idleTimer);
       this.idleTimer = null;
@@ -490,7 +574,6 @@ export class CodexAdapter implements ProviderAdapter {
 
   /** The session's thread, started or resumed in this app-server with the session's access. */
   private async threadFor(session: Session & { access: AccessMode }, work: Work) {
-    const rpc = this.rpc!;
     let threadId = session.nativeSessionId;
     const guard = this.guardOf(session, work);
     // The thread starts without the temporary-folder exclusion (a mode cannot say it): the first turn passes it.
@@ -500,7 +583,7 @@ export class CodexAdapter implements ProviderAdapter {
       const browsing = this.browser?.instructions(session) ?? null;
       const extraTools = this.browser?.extraInstructions?.(session) ?? null;
       const instructions = [guard.instructions, browsing, extraTools].filter(Boolean).join("\n\n") || null;
-      const started = await rpc.request<ThreadStartResponse>("thread/start", {
+      const started = await this.threadRequest("thread/start", {
         cwd: work.cwd,
         model: session.model,
         ...this.policyFor(session.access, guard.readOnly),
@@ -508,7 +591,7 @@ export class CodexAdapter implements ProviderAdapter {
         // A new session's context card (pkm.ts: its work, the vault rule, its pinned notes) and the agent
         // browser's instructions.
         ...(instructions ? { developerInstructions: instructions } : {}),
-      });
+      }, await this.threadConfig(work.cwd));
       threadId = started.thread.id;
       if (extraTools) this.extraToolInstructions.set(threadId, extraTools);
       if (browsing) {
@@ -519,7 +602,7 @@ export class CodexAdapter implements ProviderAdapter {
       this.loaded.add(threadId);
       this.threadAccess.set(threadId, `${startKey}|`);
     } else if (!this.loaded.has(threadId)) {
-      await rpc.request<ThreadStartResponse>("thread/resume", { threadId, cwd: work.cwd, ...this.policyFor(session.access, guard.readOnly), excludeTurns: true });
+      await this.threadRequest("thread/resume", { threadId, cwd: work.cwd, ...this.policyFor(session.access, guard.readOnly), excludeTurns: true }, await this.threadConfig(work.cwd));
       this.loaded.add(threadId);
       this.threadAccess.set(threadId, `${startKey}|`);
     }
@@ -734,7 +817,7 @@ export class CodexAdapter implements ProviderAdapter {
     // Register the existing parent for read-only child discovery; do not start a model turn.
     this.threads.set(session.nativeSessionId, session.id);
     try { return await this.children.refresh(session, work); }
-    finally { if (!this.children.hasActive() && this.activeTurns.size === 0) this.scheduleIdleStop(this.idleMs); }
+    finally { if (!this.children.hasActive() && this.activeTurns.size === 0) this.scheduleIdle(); }
   }
   async controlNativeTask(session: Session & { access: AccessMode }, work: Work, target: NativeTaskIdentity, command: NativeTaskControl) {
     this.sessionAccess.set(session.id, session.access);
@@ -924,7 +1007,7 @@ export class CodexAdapter implements ProviderAdapter {
           this.approvals.delete(id);
           this.sink.upsertItem(pending.sessionId, { ...this.approvalItem(id, pending), decision: "expired" });
         }
-        if (!this.children.hasActive() && this.activeTurns.size === 0) this.scheduleIdleStop(this.idleMs);
+        if (!this.children.hasActive() && this.activeTurns.size === 0) this.scheduleIdle();
       }
       return;
     }
@@ -1049,7 +1132,7 @@ export class CodexAdapter implements ProviderAdapter {
           lastError: status === "failed" ? turn.error?.message ?? "실패" : null,
         });
         void this.refreshStatus();
-        if (this.activeTurns.size === 0) this.scheduleIdleStop(this.idleMs);
+        if (this.activeTurns.size === 0) this.scheduleIdle();
         break;
       }
     }

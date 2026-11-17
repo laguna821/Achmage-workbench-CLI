@@ -63,15 +63,46 @@ pub fn valid_id(id: &str) -> bool {
     id.len() == 64 && id.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
 }
 
-pub fn argument(args: &[String]) -> Option<String> {
-    if args.len() == 2 && args[0] == "--attention" && valid_id(&args[1]) { Some(args[1].clone()) } else { None }
+/// A Wayland activation token as notification daemons hand it over (xdg-activation): printable ASCII, short.
+pub fn valid_token(token: &str) -> bool {
+    !token.is_empty() && token.len() <= 256 && token.bytes().all(|c| (0x21..=0x7e).contains(&c))
 }
 
-pub fn open(app: &tauri::AppHandle, id: String) {
+/// `--attention <id>`, optionally followed by `--activation-token <token>` (the gateway passes the daemon's token).
+pub fn argument(args: &[String]) -> Option<String> {
+    let with_token = args.len() == 4 && args[2] == "--activation-token" && valid_token(&args[3]);
+    if (args.len() == 2 || with_token) && args[0] == "--attention" && valid_id(&args[1]) { Some(args[1].clone()) } else { None }
+}
+
+/// The activation token of a `--attention` click, if one came with it.
+pub fn token(args: &[String]) -> Option<String> {
+    argument(args)?;
+    (args.len() == 4).then(|| args[3].clone())
+}
+
+pub fn open(app: &tauri::AppHandle, id: String, token: Option<String>) {
     if !valid_id(&id) { return; }
     *app.state::<OpenAttention>().0.lock().unwrap() = Some(id.clone());
-    super::show_main(app);
+    super::show_main_activated(app, token);
     let _ = app.emit_to("main", "workbench://open-attention", id);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn args(list: &[&str]) -> Vec<String> { list.iter().map(|value| value.to_string()).collect() }
+
+    #[test]
+    fn a_click_names_its_attention_and_may_carry_the_daemons_token() {
+        let id = "a".repeat(64);
+        assert_eq!(argument(&args(&["--attention", &id])), Some(id.clone()));
+        assert_eq!(token(&args(&["--attention", &id])), None);
+        assert_eq!(argument(&args(&["--attention", &id, "--activation-token", "qs-1234_x"])), Some(id.clone()));
+        assert_eq!(token(&args(&["--attention", &id, "--activation-token", "qs-1234_x"])), Some("qs-1234_x".to_string()));
+        assert_eq!(argument(&args(&["--attention", &id, "--activation-token", "bad token"])), None);
+        assert_eq!(argument(&args(&["--attention", &id, "--other", "x"])), None);
+        assert_eq!(argument(&args(&["--attention", "nope"])), None);
+    }
 }
 
 #[tauri::command]
@@ -87,6 +118,6 @@ pub fn notify_attention(app: tauri::AppHandle, webview: tauri::Webview, title: S
     let _ = title;
     if !["completed", "failed", "input_needed"].iter().any(|kind| body_for(kind) == Some(body.as_str())) { return Err("일반 알림 문구만 사용할 수 있습니다.".into()); }
     let handle = notification(&body)?;
-    std::thread::spawn(move || { let _ = handle.wait_for_response(|response: &notify_rust::NotificationResponse| { if activated(response) { open(&app, attention_id); } }); });
+    std::thread::spawn(move || { let _ = handle.wait_for_response(|response: &notify_rust::NotificationResponse| { if activated(response) { open(&app, attention_id, None); } }); });
     Ok(())
 }

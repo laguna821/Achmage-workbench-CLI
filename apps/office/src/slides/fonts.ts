@@ -87,7 +87,10 @@ function faceFrom(cacheKey: string, load: () => ArrayBuffer | null, carlito = fa
   const bytes = load();
   if (bytes) {
     try {
-      font = measured(parse(bytes), carlito);
+      // lowMemory: glyphs, advances and the cmap are read from the bytes when asked, not built up front as objects.
+      // Same widths and metrics (ux/perf/edmem: identical for Carlito, Malgun Gothic, Noto Serif KR, Gowun Batang,
+      // Black Han Sans); a parsed CJK face costs ~25-35 MB of heap instead of ~100-220 MB, per editor tab.
+      font = measured(parse(bytes, { lowMemory: true }), carlito);
     } catch {
       font = null;
     }
@@ -113,12 +116,33 @@ export function registerEmbeddedFonts(faces: EmbeddedFontFace[]): boolean {
   return added;
 }
 
-/** Faces the page must register to draw what was measured (a deck's embedded fonts). */
+/** The bundled template faces layout has measured with so far (IeumOffice lists only referenced faces, too). */
+const usedTemplates = new Set<string>();
+
+/** Faces the page must register to draw what was measured: the template faces layout used, and a deck's embedded fonts. */
 export function listPrivateFontFaces() {
   return [
-    ...templateFaces.map(({ id, family, bold, italic, weight }) => ({ id, family, bold, italic, weight })),
+    ...templateFaces.filter(({ family }) => templateFaces.some((face) => face.family === family && usedTemplates.has(face.id))).map(({ id, family, bold, italic, weight }) => ({ id, family, bold, italic, weight })),
     ...[...embedded.values()].map(({ id, family, bold, italic }) => ({ id, family, bold, italic })),
   ];
+}
+
+/**
+ * The faces of every template family layout has used that the page has not been sent yet, with their bytes (each face
+ * once per editor). The whole family: the page then holds the same faces for it as when all were registered up front
+ * (a run drawn in the other weight, e.g. a bold run measured with the bold face, matches the same face as before).
+ */
+const sentTemplates = new Set<string>();
+export function takeNewTemplateFaces() {
+  const out: { id: string; family: string; bold: boolean; italic: boolean; weight: string; bytes: ArrayBuffer }[] = [];
+  const families = new Set(templateFaces.filter((face) => usedTemplates.has(face.id)).map((face) => face.family));
+  for (const face of templateFaces) {
+    if (!families.has(face.family) || sentTemplates.has(face.id)) continue;
+    sentTemplates.add(face.id);
+    const bytes = get(face.url, true);
+    if (bytes) out.push({ id: face.id, family: face.family, bold: face.bold, italic: face.italic, weight: face.weight, bytes });
+  }
+  return out;
 }
 
 export function getPrivateFontData(id: string): ArrayBuffer | null {
@@ -163,7 +187,7 @@ function resolve(style: RunStyle, langOverride?: string): Face | undefined {
   } else if (bundled.length) {
     const selected = bundled.find((face) => face.bold === Boolean(style.bold)) ?? bundled[0]!;
     const font = faceFrom(selected.id, () => get(selected.url, true));
-    if (font) face = { font, family: selected.family, substituted: false };
+    if (font) { face = { font, family: selected.family, substituted: false }; usedTemplates.add(selected.id); }
   } else if (CARLITO.has(wanted)) {
     const file = CARLITO_FILES[(style.bold ? 1 : 0) + (style.italic ? 2 : 0)]!;
     const font = faceFrom(file, () => get(file, true), true);

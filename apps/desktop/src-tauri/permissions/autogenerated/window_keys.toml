@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-window-keys"
+description = "Enables the window_keys command without any pre-configured scope."
+commands.allow = ["window_keys"]
+
+[[permission]]
+identifier = "deny-window-keys"
+description = "Denies the window_keys command without any pre-configured scope."
+commands.deny = ["window_keys"]

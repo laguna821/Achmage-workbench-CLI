@@ -1,7 +1,7 @@
 import { connectOfficeUi } from "./ui-adapters/connect.ts";
 import { mountOfficeAi } from "./office-ai.ts";
 import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
-import { Events, Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
+import { Events, Gateway, GatewayError, handshake, listen, pageRest, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
 import { installMcp } from "./mcp.ts";
 import type { HwpFormat, HwpStructure, MeasuredTab, MemoSnapshot } from "../../../packages/contracts/src/hwp.ts";
@@ -12,6 +12,7 @@ import { installHwpEnhancements, pinStudioSkin } from "./hwp-enhancements.ts";
 import { closeAiDockByDefault, installHwpAiDock, stepAsideForStudioDialogs } from "./hwp-ai-dock.ts";
 import { showStudioToolboxByDefault } from "./ui-adapters/studio-bands.ts";
 import { installHwpHold } from "./hwp-hold.ts";
+import { installViewPosition, readScroll, restoreScroll } from "./view-position.ts";
 import { onTurnActivity } from "./turn-activity.ts";
 
 // Ieum's HWP screen owns editing, tables, memos, selection and serialization. This bridge owns
@@ -229,6 +230,7 @@ const hwpApi = {
   recoveryOpened: async (password: boolean) => {
     state.password = password;
     post({ type: "office:opened", revision: state.revision, recovered: state.recovered });
+    startViewPosition();
     return { restored: state.recovered, notice: password ? "암호 문서는 복구본을 만들지 않습니다." : null };
   },
   onRecoveryFlush: events.on("recoveryFlush"),
@@ -284,3 +286,15 @@ pinStudioSkin(localStorage);
 closeAiDockByDefault(localStorage);
 showStudioToolboxByDefault(localStorage);
 await import("@ieum/apps/hwp/src/renderer/main.tsx");
+
+// The tab keeps where the studio's pages were scrolled; a woken tab opens there (office-leftovers point 3). The studio
+// draws its pages as it scrolls, so the scroll is put back once its scroller has the document's height.
+let viewPosition: ReturnType<typeof installViewPosition> | null = null;
+function startViewPosition() {
+  if (viewPosition || init.execution) return;
+  const scroller = () => document.querySelector<HTMLIFrameElement>(".hwp-editor-host iframe")?.contentDocument?.getElementById("scroll-container") ?? null;
+  viewPosition = installViewPosition({
+    read: () => { const scroll = readScroll(scroller()); return scroll ? { scroll } : null; },
+    restore: (position) => restoreScroll(scroller(), position.scroll),
+  }, { initial: init.view, shown: () => pageRest.onScreen() && window.innerHeight > 0, post: (position) => post({ type: "office:view-position", position }) });
+}

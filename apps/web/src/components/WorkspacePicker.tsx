@@ -57,7 +57,7 @@ export function WorkspacePicker({ state, work, session, actions }: { state: Stat
         </div> : null}
       </div>)}
       {editing ? <form className="workspace-form" onSubmit={async (event) => { event.preventDefault(); setBusy(true); try { const target = state.workspaces[editing]; if (target && await actions.updateWorkspace(target, { label })) setEditing(null); } finally { setBusy(false); } }}>
-        <input aria-label="작업공간 이름" value={label} maxLength={80} onChange={(event) => setLabel(event.target.value)} /><button type="submit" className="button small" disabled={busy || !label.trim()}>이름 저장</button>
+        <input aria-label="작업 폴더 이름" value={label} maxLength={80} onChange={(event) => setLabel(event.target.value)} /><button type="submit" className="button small" disabled={busy || !label.trim()}>이름 저장</button>
       </form> : null}
       <form className="workspace-form" onSubmit={async (event) => {
         event.preventDefault(); setBusy(true);
@@ -65,10 +65,10 @@ export function WorkspacePicker({ state, work, session, actions }: { state: Stat
         finally { setBusy(false); }
       }}>
         <label htmlFor={`workspace-path-${work.id}`}>다른 폴더 연결</label>
-        <input id={`workspace-path-${work.id}`} aria-label="작업공간 폴더 경로" value={path} onChange={(event) => setPath(event.target.value)} placeholder="폴더의 전체 경로" />
-        <button type="submit" className="button small" disabled={busy || !path.trim()}>작업공간 추가</button>
+        <input id={`workspace-path-${work.id}`} aria-label="작업 폴더 경로" value={path} onChange={(event) => setPath(event.target.value)} placeholder="폴더의 전체 경로" />
+        <button type="submit" className="button small" disabled={busy || !path.trim()}>작업 폴더 추가</button>
       </form>
-      <div className="menu-label">보관하면 새 실행을 막습니다. 폴더와 세션 기록은 유지됩니다.</div>
+      <div className="menu-label">보관하면 새 실행을 막습니다. 폴더와 대화 기록은 유지됩니다.</div>
       {current && !current.archivedAt && !current.removedAt ? <button type="button" className="button small workspace-git-open" onClick={() => { close(); setGitOpen(true); }}>Git 워크트리 관리…</button> : null}
       {current ? <button type="button" className="button small workspace-terminals-open" onClick={() => { close(); actions.openTerminals(current); }}>터미널…</button> : null}
       {current ? <button type="button" className="button small workspace-services-open" onClick={() => { close(); actions.openServices(current); }}>서버·실행 관리…</button> : null}

@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { chromium } from "playwright-core";
+import { editorFirst } from "./fixtures/editor-first.ts";
 import { findIeumCli } from "../apps/host/src/ieumoffice.ts";
 
 const outDir = process.argv[2] ?? join(tmpdir(), "wb-office-ui");
@@ -59,6 +60,7 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 920 } });
 const errors: string[] = [];
 page.on("pageerror", (error) => errors.push(error.message));
 await page.addInitScript((id) => localStorage.setItem("workbench.lastWork", id), work.id);
+await editorFirst(page);
 await page.goto(`${ready.url}/?token=${ready.token}`);
 await page.waitForSelector(".note-head-more");
 

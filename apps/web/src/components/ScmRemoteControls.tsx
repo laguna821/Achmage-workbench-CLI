@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import type { ScmAction, ScmPushPreview, ScmRemoteInventory, ScmRemoteRequest, ScmStatus } from "@workbench/contracts";
 import type { Api } from "../api.ts";
+import { Select, type SelectOption } from "./ui/Select.tsx";
+
+const DIRECTIONS: SelectOption<"pull" | "push">[] = [{ value: "push", label: "보내기" }, { value: "pull", label: "받기" }];
+const STRATEGIES: SelectOption<"ff-only" | "merge" | "rebase">[] = [{ value: "ff-only", label: "단순 전진만" }, { value: "merge", label: "병합" }, { value: "rebase", label: "리베이스" }];
 
 export function ScmRemoteControls({ api, status, inventory, busy, act, onError, onTerminal }: {
   api: Api; status: ScmStatus; inventory: ScmRemoteInventory; busy: boolean;
@@ -17,10 +21,10 @@ export function ScmRemoteControls({ api, status, inventory, busy, act, onError, 
   const choose = (value: "pull" | "push") => { setDirection(value); const defaults = value === "push" ? inventory.pushTarget : inventory.pullTarget; if (defaults) { setRemote(defaults.remote); setBranch(defaults.branch); } setPreview(null); setConfirmForce(false); };
   return <details className="scm-remote-controls"><summary>원격 동기화{inventory.remotes.length ? ` · ${inventory.remotes.length}개` : " · 연결 없음"}</summary>
     {!inventory.remotes.length ? <p>이 저장소에 원격 주소가 없습니다. 터미널에서 연결하면 새로고침으로 확인할 수 있습니다.</p> : <>
-      <div className="scm-remote-fields"><label>작업<select aria-label="원격 작업" value={direction} onChange={(event) => choose(event.target.value as "pull" | "push")}><option value="push">보내기</option><option value="pull">받기</option></select></label>
-        <label>원격<select aria-label="Git 원격" value={remote} onChange={(event) => setRemote(event.target.value)}>{inventory.remotes.map((entry) => <option key={entry.name}>{entry.name}</option>)}</select></label>
+      <div className="scm-remote-fields"><label>작업<Select label="원격 작업" value={direction} options={DIRECTIONS} onChange={choose} /></label>
+        <label>원격<Select label="Git 원격" value={target ? remote : inventory.remotes[0]?.name ?? null} options={inventory.remotes.map((entry) => ({ value: entry.name, label: entry.name }))} onChange={setRemote} /></label>
         <label>대상 브랜치<input aria-label="원격 브랜치" value={branch} onChange={(event) => setBranch(event.target.value)} /></label>
-        {direction === "pull" ? <label>받는 방법<select aria-label="받는 방법" value={strategy} onChange={(event) => setStrategy(event.target.value as typeof strategy)}><option value="ff-only">단순 전진만</option><option value="merge">병합</option><option value="rebase">리베이스</option></select></label> : null}
+        {direction === "pull" ? <label>받는 방법<Select label="받는 방법" value={strategy} options={STRATEGIES} onChange={setStrategy} /></label> : null}
       </div>
       <div className="scm-remote-destinations">{(direction === "push" ? target?.pushUrls : target?.fetchUrls.slice(0, 1))?.map((url, index) => <code key={index}>{url}</code>)}</div>
       <p>{direction === "push" ? `${status.branch ?? "분리된 HEAD"}의 ${status.head?.slice(0, 8) ?? "커밋 없음"} → ${remote}/${branch}` : `${remote}/${branch} → ${status.branch ?? "분리된 HEAD"}`}</p>
@@ -30,6 +34,6 @@ export function ScmRemoteControls({ api, status, inventory, busy, act, onError, 
         {preview ? <div className="scm-force-preview">{preview.destinations.map((entry, index) => <p key={index}><code>{entry.url}</code><br />{entry.head?.slice(0, 12) ?? "새 브랜치"} → {preview.head.slice(0, 12)}</p>)}<label><input type="checkbox" checked={confirmForce} onChange={(event) => setConfirmForce(event.target.checked)} />위 원격 브랜치의 기록을 바꾸겠습니다.</label><button className="button danger small scm-force-push" disabled={busy || !confirmForce || preview.expiresAt <= Date.now()} onClick={() => { setConfirmForce(false); void act("push", { ...request(), forcePreviewId: preview.id }); }}>확인한 커밋일 때만 강제 보내기</button></div> : null}
       </details> : null}
     </>}
-    <small>이 컴퓨터의 Git 자격 증명을 사용합니다. 인증이 필요하면 터미널에서 연결한 뒤 다시 실행하세요.</small><button className="text-button scm-auth-terminal" onClick={onTerminal}>이 작업공간 터미널 열기</button>
+    <small>이 컴퓨터의 Git 자격 증명을 사용합니다. 인증이 필요하면 터미널에서 연결한 뒤 다시 실행하세요.</small><button className="text-button scm-auth-terminal" onClick={onTerminal}>이 작업 폴더 터미널 열기</button>
   </details>;
 }

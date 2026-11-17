@@ -21,7 +21,7 @@ const SYSTEM = `## 한글 문서 만들기 (hallym-kordoc)
 - 1) prompt(사람의 요청 그대로)만으로 먼저 호출해 양식(form.fields, form.sections)을 받습니다. needs-clarification이면 question을 사람에게 그대로 묻고 멈춥니다.
 - 2) 같은 prompt와 title, values(필드 ID별 값), sections(목차 이름별 Markdown 본문), 필요하면 tables로 다시 호출합니다. 열린 문서의 내용을 바탕으로 하라는 요청이면 read_document로 읽은 내용을 sections에 옮깁니다.
 - 사람이 알려 주지 않은 이름·날짜·금액·소속·서명은 지어내지 말고 비워 둡니다(결과에 미입력으로 표시됩니다). 일반 요청에 한림대학교 소속이나 한림대 양식을 붙이지 마세요.
-- 결과는 열린 문서 옆에 새 HWPX로 저장되어 이 요청이 끝나면 새 탭에 열립니다. 열린 문서는 바뀌지 않습니다. templateStatus가 common-draft이면 "공식 양식 미적용 초안"이라고 알리고, status가 partial이면 missingFields를 알려 줍니다. 완료라고 과장하지 마세요.
+- 열린 문서가 아무 내용 없이 손대지 않은 새 문서이면 결과(inPlace: true)가 이 요청이 끝날 때 그 문서의 내용이 됩니다(이전 판은 판 기록에서 되돌릴 수 있음). 그 밖에는 열린 문서 옆에 새 HWPX로 저장되어 이 요청이 끝나면 새 탭에 열리고, 열린 문서는 바뀌지 않습니다. 내용이 있는 문서를 덮어쓰지 않습니다. templateStatus가 common-draft이면 "공식 양식 미적용 초안"이라고 알리고, status가 partial이면 missingFields를 알려 줍니다. 완료라고 과장하지 마세요.
 - 문단 다듬기, 선택 영역 고치기, 표 한 칸 채우기 같은 작은 편집은 이 도구가 아니라 편집 도구로 합니다.`;
 
 const schema = {
@@ -38,7 +38,7 @@ const schema = {
   required: ["prompt"],
 } as const;
 
-type Made = { made: boolean; status?: string; artifactId?: string; name?: string; draft?: boolean; reason?: string; question?: string };
+type Made = { made: boolean; status?: string; artifactId?: string; name?: string; inPlace?: boolean; draft?: boolean; reason?: string; question?: string };
 export type HangulPort = { make(input: Record<string, unknown>, signal?: AbortSignal): Promise<Made> };
 
 /** `enabled`: whether this request carries the hallym-kordoc chip. `onMade`: a document to open when the turn ends. */
@@ -46,14 +46,14 @@ export function createHangulDocumentSkill(port: () => HangulPort | null, enabled
   return {
     id: "workbench-hangul-document",
     get systemPrompt() { return enabled() && port() ? SYSTEM : ""; },
-    get tools() { return enabled() && port() ? [{ name: HANGUL_TOOL, description: "hallym-kordoc 실행기로 한글(HWPX) 문서를 만듭니다. prompt만 주면 양식을 돌려주고, values/sections를 주면 문서를 만들어 새 탭에 엽니다.", inputSchema: schema as unknown as Record<string, unknown> }] : []; },
+    get tools() { return enabled() && port() ? [{ name: HANGUL_TOOL, description: "hallym-kordoc 실행기로 한글(HWPX) 문서를 만듭니다. prompt만 주면 양식을 돌려주고, values/sections를 주면 문서를 만들어 빈 새 문서면 그 자리에, 아니면 새 탭에 엽니다.", inputSchema: schema as unknown as Record<string, unknown> }] : []; },
     async executeTool(call: AgentToolCall, signal?: AbortSignal): Promise<ToolExecution> {
       const current = port();
       if (call.name !== HANGUL_TOOL || !current) return { output: `Unknown tool: ${call.name}`, isError: true, summary: call.name };
       try {
         const result = await current.make(call.input, signal);
         if (result.made && result.artifactId) onMade(result.artifactId);
-        const summary = result.made ? `한글 문서 만들기 · ${result.name}${result.draft ? " (초안)" : ""}`
+        const summary = result.made ? `한글 문서 만들기 · ${result.inPlace ? "이 빈 문서에 채움" : result.name}${result.draft ? " (초안)" : ""}`
           : result.status === "needs-clarification" ? "한글 문서 만들기 · 양식 확인 질문"
           : result.status === "form" ? "한글 문서 만들기 · 양식 읽음"
           : result.status === "unavailable" ? `한글 문서 만들기 · ${result.reason}` : "한글 문서 만들기 · 만들지 못함";

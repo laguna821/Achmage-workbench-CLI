@@ -78,7 +78,7 @@ describe("picture cards", () => {
   it("while drawing: who draws, and a way to stop", () => {
     renderCard(item({ status: "drawing", path: null, relPath: null, width: null, height: null }));
     expect(screen.getByText("그리는 중…")).toBeTruthy();
-    expect(screen.getByText(/「그림」 Codex 세션이 그림/)).toBeTruthy();
+    expect(screen.getByText(/「그림」 Codex 대화가 그림/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "멈춤" })).toBeTruthy();
   });
 
@@ -114,6 +114,6 @@ describe("the chip above the input", () => {
     const state: State = { ...initialState, sessions: {} };
     render(<DrawChip state={state} provider="claude" value={{ on: true, choice: { templateId: "diagram", aspect: "portrait", transparent: true }, via: null }} onClear={() => undefined} />);
     expect(await screen.findByText(/그림 · 개념도 · 세로 · 투명 배경/)).toBeTruthy();
-    expect(screen.getByText(/이 작업의 Codex 그림 세션이 그리고, 그림은 이 대화에 보입니다/)).toBeTruthy();
+    expect(screen.getByText(/이 작업의 Codex 그림 대화가 그리고, 그림은 이 대화에 보입니다/)).toBeTruthy();
   });
 });

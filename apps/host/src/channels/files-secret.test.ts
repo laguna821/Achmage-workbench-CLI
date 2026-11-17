@@ -229,7 +229,7 @@ describe("what a file holds, before it goes to the chat", () => {
     });
     expect(vault.adapter.uploads.map((file) => file.name)).toEqual(["mixed.tar"]);
     expect(answer.out.text).toContain("내용을 확인하지 못한 파일: 「mixed.tar › data/a.7z」");
-    expect(answer.out.text).toContain("「proj.tgz」은(는) 비밀 값이 들어 있어 보내지 않았습니다.");
+    expect(answer.out.text).toContain("「proj.tgz」는 비밀 값이 들어 있어 보내지 않았습니다.");
   });
 
   it("fails closed: a file that cannot be read, or whose scan throws (a broken gzip, a broken zip), is held as unreadable", async () => {
@@ -272,7 +272,7 @@ describe("a turn whose file holds a stored value", () => {
       writeFileSync(join(cwd, "설명.md"), "# 설명\n");
     });
     expect(kit.adapter.uploads.map((file) => file.name)).toEqual(["설명.md"]);
-    expect(answer.out.text).toContain("「notion.json」은(는) 비밀 값이 들어 있어 보내지 않았습니다.");
+    expect(answer.out.text).toContain("「notion.json」은 비밀 값이 들어 있어 보내지 않았습니다.");
     expect(kit.core.auditList().filter((row) => row.action === "file.blocked").map((row) => row.result)).toEqual(["secret-content:1"]);
     expect(leaked(kit)).toEqual([]);
   });
@@ -288,7 +288,7 @@ describe("a turn whose file holds a stored value", () => {
     (kit.adapter.limits as { uploadBytes: number }).uploadBytes = 1024 * 1024;
     const answer = await turn(kit, "기록을 만들었습니다.\n파일: big.log", (cwd) => writeFileSync(join(cwd, "big.log"), `${"a".repeat(2 * 1024 * 1024)}${PASSWORD}`));
     expect(kit.adapter.uploads).toEqual([]);
-    expect(answer.out.text).toContain("「big.log」은(는) 1MB가 넘어 보내지 못했습니다.");
+    expect(answer.out.text).toContain("「big.log」는 1MB가 넘어 보내지 못했습니다.");
     expect(answer.out.text).not.toContain("비밀 값이 들어 있어");
     expect(kit.core.auditList().filter((row) => row.action === "file.blocked")).toEqual([]);
   });
@@ -300,7 +300,7 @@ describe("a turn whose file holds a stored value", () => {
     const bytes = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
     const answer = await turn(kit, "압축했습니다.\n파일: project.zip", (cwd) => writeFileSync(join(cwd, "project.zip"), bytes));
     expect(kit.adapter.uploads).toEqual([]);
-    expect(answer.out.text).toContain("「project.zip」은(는) 비밀 값이 들어 있어 보내지 않았습니다.");
+    expect(answer.out.text).toContain("「project.zip」는 비밀 값이 들어 있어 보내지 않았습니다.");
     expect(answer.out.text).not.toContain("그림·PDF·데이터베이스 같은 파일은 내용을 확인하지 않습니다");
     expect(leaked(kit)).toEqual([]);
   });

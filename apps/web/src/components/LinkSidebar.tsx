@@ -13,7 +13,7 @@ export function LinkBadge({ sessionId }: { sessionId: string }) {
   return (
     <span
       className={`linked-badge${paused ? " paused" : ""}`}
-      title={`세션 잇기 ${hopsText(link)}${paused ? ` · ${link.reason ? LINK_REASON_LABEL[link.reason] : "멈춤"}` : ""} · 상대: ${others.join(", ")} · 목표: ${goalLine(link.goal, 80)}`}
+      title={`대화 잇기 ${hopsText(link)}${paused ? ` · ${link.reason ? LINK_REASON_LABEL[link.reason] : "멈춤"}` : ""} · 상대: ${others.join(", ")} · 목표: ${goalLine(link.goal, 80)}`}
     >
       ⇄ {hopsText(link)}
     </span>

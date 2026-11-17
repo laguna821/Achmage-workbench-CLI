@@ -436,7 +436,7 @@ describe("the same conversation as on Telegram", () => {
     const big = r.fake.file("녹화.mp4", Buffer.from("x"), { mimetype: "video/mp4", reported: 30 * 1024 * 1024 });
     r.fake.message("", { files: [big], subtype: "file_share" });
     await answered(r, (text) => text.startsWith("「녹화.mp4」"));
-    expect(r.fake.texts().find((text) => text.startsWith("「녹화.mp4」"))).toBe("「녹화.mp4」은(는) 25MB가 넘어 받지 못했습니다. 이 PC가 Slack에서 받을 수 있는 파일은 25MB까지입니다.");
+    expect(r.fake.texts().find((text) => text.startsWith("「녹화.mp4」"))).toBe("「녹화.mp4」는 25MB가 넘어 받지 못했습니다. 이 PC가 Slack에서 받을 수 있는 파일은 25MB까지입니다.");
   });
 
   it("what waited more than a day is not run; the chat is told once how many and since when, and the record says so", async () => {
@@ -495,22 +495,20 @@ describe("the same conversation as on Telegram", () => {
 });
 
 describe("answers on Slack after unit 14 (the formatting step, the everyday words)", () => {
-  it("an engine's markdown answer arrives whole and readable, with its link written out and no markup or Telegram entities; the footer under it", async () => {
+  it("an engine's markdown answer arrives as mrkdwn (audit #132): heading bold, emphasis, a link as <address|words>, code, bullets, a table as a monospace block; no markdown signs or Telegram entities; the footer plain under it", async () => {
     const r = await rig();
     await register(r);
     await pair(r);
     r.fake.message("자료 찾아 줘");
     await until(() => r.g.engine.sent.length === 1);
     const sessionId = r.g.engine.sent[0]!.sessionId;
-    r.g.engine.say(sessionId, "## 찾음\n\n**세 건**을 찾았습니다: [목록](https://lib.example.ac.kr/list) 그리고 `npm test`.\n\n- 하나\n- 둘");
+    r.g.engine.say(sessionId, "## 찾음\n\n**세 건**을 찾았습니다: [목록](https://lib.example.ac.kr/list) 그리고 `npm test`. <!channel>\n\n- 하나\n- 둘\n\n| 장 | 시간 |\n|---|---|\n| 1 | 5분 |");
     r.g.engine.finish(sessionId);
     await answered(r, (text) => text.includes("세 건"));
     const call = r.fake.of("chat.postMessage").find((entry) => String(entry.params.text).includes("세 건"))!;
     const text = String(call.params.text);
-    expect(text).toContain("목록 (https://lib.example.ac.kr/list)");
-    expect(text).toContain("npm test");
-    expect(text).toContain("둘");
-    expect(text).not.toMatch(/\*\*|\]\(|`|^## /m);
+    expect(text).toContain("*찾음*\n\n*세 건*\u200b을 찾았습니다: <https://lib.example.ac.kr/list|목록> 그리고 `npm test`. &lt;!channel&gt;\n\n• 하나\n• 둘\n\n```\n장 | 시간\n---+-----\n1  | 5분\n```");
+    expect(text).not.toMatch(/\*\*|\]\(|^## /m);
     expect(text).toMatch(/\n\nClaude · \d+:\d{2}$/);
     expect(Object.keys(call.params).filter((key) => /entit|parse/.test(key))).toEqual([]);
   });
@@ -531,35 +529,186 @@ describe("answers on Slack after unit 14 (the formatting step, the everyday word
   });
 });
 
-describe("secret input on Slack (merge with units 7–8): a value is never taken from a Slack chat", () => {
+describe("secret input on Slack (merge with units 7–8): a value is never taken from a Slack chat; it is given in a modal (audit #131)", () => {
   const VALUE = "zz-secret-pass-0012";
   const NEED = ["need", "--name", "학술정보원", "--kind", "login", "--site", "lib.example.ac.kr", "--fields", "아이디,비밀번호"];
   const PC_LINE = "이 값은 PC의 휴대폰 메신저 → 비밀 보관함에서 넣어 주세요. 넣으면 이어서 합니다.";
-  /** A paired Slack chat with a conversation, and the AI asking for a login through the tool. */
-  async function handOver() {
+  const FORM_ASK = "아래 [비밀 값 입력]을 누르면 열리는 창에 넣어 주세요. 채팅에는 적지 마세요.\n버튼이 반응하지 않으면 PC의 휴대폰 메신저 → 비밀 보관함에서 넣어 주세요.";
+  /** A paired Slack chat with a conversation, and the AI asking for a login through the tool. `pcOnly`: the app cannot have modals (views.open refused). */
+  async function handOver(need: string[] = NEED, name = "학술정보원") {
     const r = await rig({ credentials: true });
     await register(r);
     await pair(r);
     r.fake.message("도서관 대출 목록 정리해 줘");
     await until(() => r.g.engine.sent.length === 1);
     const sessionId = r.g.engine.sent[0]!.sessionId;
-    expect(await r.g.credentials!.run(sessionId, NEED)).toMatchObject({ stdout: "fail:handover_sent\n" });
+    expect(await r.g.credentials!.run(sessionId, need)).toMatchObject({ stdout: "fail:handover_sent\n" });
     r.g.engine.finish(sessionId);
-    await answered(r, (text) => text.includes("'학술정보원'"));
+    await answered(r, (text) => text.includes(`'${name}'`) && text.includes("필요합니다"));
     return { r, sessionId, handoff: r.g.credentials!.state().waiting[0]! };
+  }
+  /** [비밀 값 입력] pressed on the hand-over (or the newest such button); waits for the modal when one is expected. */
+  async function openModal(r: Rig, views = r.fake.views.length + 1) {
+    const button = r.fake.button("비밀 값 입력");
+    r.fake.press(button.value, { messageTs: button.ts, actionId: button.actionId });
+    if (views) await until(() => r.fake.views.length === views);
+    return button;
+  }
+  const heading = (r: Rig) => String((((r.fake.lastView()!.view.blocks as { text?: { text: string } }[])[0]!).text!.text));
+  /** Submit the open modal and wait for Slack's acknowledgement; what the modal was told. */
+  async function submit(r: Rig, value: string, options: { as?: string } = {}) {
+    const envelope = r.fake.submitForm(value, options);
+    await until(() => r.fake.acked(envelope));
+    return { envelope, answer: r.fake.answers.get(envelope) ?? null };
   }
   const leaked = (r: Rig) => formsOf(VALUE).filter((form) => everything(r.g.dataDir).includes(form) || JSON.stringify(r.fake.calls).includes(form));
 
-  it("a hand-over says in one line that the value is entered on the PC: no input opens, no button offers one, nothing asks for it in the chat", async () => {
+  it("a hand-over offers one button, [비밀 값 입력], with the PC as the way if it does not respond; no in-chat input opens, nothing asks for the value in the chat", async () => {
     const { r } = await handOver();
     // Unit 9: the login page's picture goes first as its own message (its caption names the login); then the hand-over.
     const asked = r.fake.messages.filter((message) => message.text.includes("'학술정보원'") && !message.text.endsWith("로그인 화면"));
     expect(asked).toHaveLength(1);
     expect(asked[0]!.text).toContain("로그인 정보가 필요합니다");
-    expect(asked[0]!.text).toContain(PC_LINE);
+    expect(asked[0]!.text).toContain(FORM_ASK);
     expect(asked[0]!.text).not.toContain("다음에 보내는 메시지");
-    expect(r.fake.labels(asked[0]!.ts)).toEqual([]);
-    expect(r.g.store.channels.auditList().some((row) => row.action === "secret.asked" && row.result === "pc")).toBe(true);
+    expect(r.fake.labels(asked[0]!.ts)).toEqual(["비밀 값 입력"]);
+    expect(r.g.store.channels.auditList().some((row) => row.action === "secret.asked" && row.result === "form")).toBe(true);
+  });
+
+  it("the modal: one field at a time (아이디, then 비밀번호 in the same modal), kept sealed, '받았습니다' in the chat, the conversation goes on; the values are in no file, no Slack call, no log, no audit or outbox row", async () => {
+    const USER = "zz-planted-user-0131", PASS = "zz-planted-pass-0131";
+    const { r, handoff } = await handOver();
+    await openModal(r);
+    expect(heading(r)).toMatch(/^「.+」에서 '학술정보원'의 아이디 \(1\/2\)$/);
+    expect(r.fake.lastView()!.view.private_metadata).toMatch(/^[A-Za-z0-9_-]{24}$/);
+    const token = String(r.fake.lastView()!.view.private_metadata);
+    const first = await submit(r, USER);
+    expect(first.answer).toMatchObject({ response_action: "update" });
+    expect(heading(r)).toMatch(/^「.+」에서 '학술정보원'의 비밀번호 \(2\/2\)$/);
+    expect(r.g.credentials!.store.filled(handoff.id)).toEqual(["아이디"]);
+    const second = await submit(r, PASS);
+    expect(second.answer).toBeNull();
+    await answered(r, (text) => text === "'학술정보원'의 아이디·비밀번호를 받았습니다. 보관함에 봉인해 두었습니다. 이어서 합니다.");
+    await until(() => r.g.engine.sent.some((entry) => entry.text.includes("가 준비되었습니다")));
+    expect(r.g.credentials!.store.summaries().map((entry) => [entry.name, entry.held])).toEqual([["학술정보원", "sealed"]]);
+    expect(r.g.store.channels.auditList().some((row) => row.action === "secret.received" && row.target === "학술정보원")).toBe(true);
+    // Neither value in the data folder (database, log, outbox, audit, sealed store), any Slack call, or what the AI got.
+    for (const value of [USER, PASS]) {
+      expect(formsOf(value).filter((form) => everything(r.g.dataDir).includes(form) || JSON.stringify(r.fake.calls).includes(form))).toEqual([]);
+      expect(r.g.engine.sent.some((entry) => entry.text.includes(value))).toBe(false);
+    }
+    // L1: neither form token is written anywhere (the store records the request, field and view instead).
+    const second_token = String(r.fake.lastView()!.view.private_metadata);
+    for (const written of [token, second_token]) expect(everything(r.g.dataDir)).not.toContain(written);
+    // Nothing of it was ever in the chat: nothing to delete.
+    expect(r.fake.of("chat.delete")).toEqual([]);
+  });
+
+  it("refusals: someone else in the modal, someone else's press in a shared channel, a value too long, a submit after the request ended; Slack's retry hands over once", async () => {
+    const PLANTED = "zz-planted-key-0131";
+    const { r, handoff } = await handOver(["need", "--name", "노션", "--kind", "api-key", "--site", "notion.so", "--fields", "키"], "노션");
+    // Another member presses the button in a shared channel: the core refuses it; nothing opens.
+    const button = r.fake.button("비밀 값 입력");
+    r.fake.press(button.value, { user: "U0KIM", channel: "C0ROOM", messageTs: button.ts, actionId: button.actionId });
+    await new Promise((done) => setTimeout(done, 400));
+    expect(r.fake.of("views.open")).toEqual([]);
+    await openModal(r);
+    // The modal submitted by another person (its token reached them somehow): refused, nothing kept.
+    expect((await submit(r, PLANTED, { as: "U0KIM" })).answer).toEqual({ response_action: "errors", errors: { "wb-value": "이 입력 창은 이 채팅에 연결된 사람만 쓸 수 있습니다." } });
+    expect((await submit(r, "k".repeat(3001))).answer).toEqual({ response_action: "errors", errors: { "wb-value": "값이 너무 깁니다(최대 3000자)." } });
+    expect(r.g.credentials!.store.filled(handoff.id)).toEqual([]);
+    const done = await submit(r, PLANTED);
+    expect(done.answer).toBeNull();
+    await answered(r, (text) => text.startsWith("'노션'의 키를 받았습니다."));
+    // The same view_submission again (Slack did not see the acknowledgement): the same answer, handed over once.
+    r.fake.redeliver(done.envelope);
+    await until(() => r.fake.trail.filter((entry) => entry === `ack ${done.envelope}`).length === 2);
+    await new Promise((done) => setTimeout(done, 300));
+    expect(r.fake.answers.get(done.envelope)).toBeNull();
+    expect(r.fake.texts().filter((text) => text.startsWith("'노션'의 키를 받았습니다."))).toHaveLength(1);
+    expect(r.g.credentials!.store.summaries()).toHaveLength(1);
+    expect(r.g.store.channels.auditList().filter((row) => row.action === "secret.received")).toHaveLength(1);
+    expect(r.g.store.channels.auditList().some((row) => row.action === "secret.refused" && row.result === "form-other")).toBe(true);
+    expect(formsOf(PLANTED).filter((form) => everything(r.g.dataDir).includes(form) || JSON.stringify(r.fake.calls).includes(form))).toEqual([]);
+  });
+
+  it("a modal still open when the value was given at the PC is refused with a plain line; a closed modal is said with a new button", async () => {
+    const { r, handoff } = await handOver(["need", "--name", "노션", "--kind", "api-key", "--site", "notion.so", "--fields", "키"], "노션");
+    await openModal(r);
+    const closed = r.fake.closeForm()!;
+    await until(() => r.fake.acked(closed));
+    await answered(r, (text) => text === "입력 창을 닫았습니다. 받은 값은 없습니다. 넣으려면 아래 [비밀 값 입력]을 누르세요.");
+    expect(r.g.store.channels.auditList().some((row) => row.action === "secret.cancelled" && row.result === "form-closed")).toBe(true);
+    await openModal(r, 2);
+    await r.g.credentials!.add({ name: "노션", kind: "api-key", site: "notion.so", values: { 키: "zz-pc-key-0131" } });
+    await answered(r, (text) => text.startsWith("PC에서 '노션'"));
+    expect(r.g.credentials!.handoff(handoff.id)?.state).not.toBe("waiting");
+    expect((await submit(r, "zz-late-key-0131")).answer).toEqual({ response_action: "errors", errors: { "wb-value": "이 입력 창은 더 이상 쓸 수 없습니다. 창을 닫아 주세요." } });
+    expect(everything(r.g.dataDir)).not.toContain("zz-late-key-0131");
+  });
+
+  it("L2: while another program is connected with this app's tokens, the hand-over offers no modal and says why", async () => {
+    const r = await rig({ credentials: true });
+    r.fake.others = 1;
+    await register(r);
+    await pair(r);
+    r.fake.message("노션 정리해 줘");
+    await until(() => r.g.engine.sent.length === 1);
+    const sessionId = r.g.engine.sent[0]!.sessionId;
+    await r.g.credentials!.run(sessionId, ["need", "--name", "노션", "--kind", "api-key", "--fields", "키"]);
+    r.g.engine.finish(sessionId);
+    await answered(r, (text) => text.includes("'노션'") && text.includes(PC_LINE));
+    const asked = r.fake.messages.findLast((message) => message.text.includes("'노션'"))!;
+    expect(asked.text).toContain("같은 Slack 앱에 다른 프로그램도 연결해 있어 입력 창의 값이 그쪽으로 갈 수 있으므로 입력 창을 열지 않았습니다.");
+    expect(r.fake.labels(asked.ts)).toEqual([]);
+  });
+
+  it("L4: the modal's acknowledgement does not wait for the chat line (a slow send); the line follows", async () => {
+    const { r } = await handOver(["need", "--name", "노션", "--kind", "api-key", "--site", "notion.so", "--fields", "키"], "노션");
+    await openModal(r);
+    r.fake.postDelayMs = 2_500;
+    const closed = r.fake.closeForm()!;
+    await until(() => r.fake.acked(closed), 1_500);
+    // Posted (the stand-in shows a message once its slow answer is given).
+    await until(() => r.fake.posted().some((text) => text.startsWith("입력 창을 닫았습니다.")), 10_000);
+    await openModal(r, 2);
+    const at = Date.now();
+    const done = r.fake.submitForm("zz-planted-key-0131");
+    await until(() => r.fake.acked(done), 1_500);
+    expect(Date.now() - at).toBeLessThan(1_500);
+    await answered(r, (text) => text.startsWith("'노션'의 키를 받았습니다."));
+  });
+
+  it("L5: the request ending while the value is being kept: Slack's retry still gets the first answer", async () => {
+    const { r, handoff } = await handOver(["need", "--name", "노션", "--kind", "api-key", "--site", "notion.so", "--fields", "키"], "노션");
+    await openModal(r);
+    const service = r.g.credentials!;
+    const receive = service.receive.bind(service);
+    service.receive = async (...args) => {
+      const kept = await receive(...args);
+      // As if the request were ended (another path) while this hand-over was still running.
+      service.chat!.ended(service.handoff(handoff.id)!);
+      return kept;
+    };
+    const done = await submit(r, "zz-planted-key-0131");
+    expect(done.answer).toBeNull();
+    r.fake.redeliver(done.envelope);
+    await until(() => r.fake.trail.filter((entry) => entry === `ack ${done.envelope}`).length === 2);
+    expect(r.fake.answers.get(done.envelope)).toBeNull();
+  });
+
+  it("an app that cannot have modals (views.open refused): the press gets today's PC line, and the next hand-over says the PC way with no button", async () => {
+    const { r, sessionId } = await handOver(["need", "--name", "노션", "--kind", "api-key", "--site", "notion.so", "--fields", "키"], "노션");
+    r.fake.viewsRefusal = "not_allowed_token_type";
+    await openModal(r, 0);
+    await answered(r, (text) => text === "'노션'은 PC의 '휴대폰 메신저 → 비밀 보관함'에서 넣어 주세요. 넣으면 이 대화가 이어집니다.");
+    r.fake.message("메일도 봐 줘");
+    await until(() => r.g.engine.sent.length === 2);
+    expect(await r.g.credentials!.run(sessionId, ["need", "--name", "메일", "--kind", "other", "--fields", "값"])).toMatchObject({ stdout: "fail:handover_sent\n" });
+    r.g.engine.finish(sessionId);
+    await answered(r, (text) => text.includes("'메일'") && text.includes(PC_LINE));
+    const asked = r.fake.messages.findLast((message) => message.text.includes("'메일'"))!;
+    expect(r.fake.labels(asked.ts)).toEqual([]);
   });
 
   it("a line typed right after it is an ordinary line to the AI, never stored as a value; adding it at the PC continues the conversation", async () => {

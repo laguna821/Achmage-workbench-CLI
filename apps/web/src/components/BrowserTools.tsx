@@ -33,14 +33,14 @@ export function BrowserTools({ browser, api, page, ready, onOpenArtifact, onClos
   };
   const save = async (kind: "page-text" | "download", downloadId?: string) => {
     const existing = downloadId ? outputs.find(output => output.downloadId === downloadId) : undefined;
-    if (existing) { setNotice("이미 이 작업공간에 보관한 파일입니다."); return; }
+    if (existing) { setNotice("이미 이 작업 폴더에 보관한 파일입니다."); return; }
     let request = pending.current;
     if (request && (request.kind !== kind || (request.kind === "download" && request.downloadId !== downloadId))) throw new Error("앞선 자료의 보관 결과를 먼저 다시 확인해 주세요.");
     if (!request) request = kind === "download" ? { requestId: crypto.randomUUID(), kind, downloadId: downloadId! } : { requestId: crypto.randomUUID(), kind };
     pending.current = request;
     const output = await api.request<BrowserOutput>("POST", endpoint, request);
     pending.current = null; setOutputs(current => [output, ...current.filter(entry => entry.id !== output.id)]);
-    setNotice(output.artifact ? "작업공간에 문서와 원본 첨부를 보관했습니다." : "작업공간에 파일과 원본 첨부를 보관했습니다. 이 형식은 문서 편집 대상이 아닙니다.");
+    setNotice(output.artifact ? "작업 폴더에 문서와 원본 첨부를 보관했습니다." : "작업 폴더에 파일과 원본 첨부를 보관했습니다. 이 형식은 문서 편집 대상이 아닙니다.");
   };
   const decide = async (request: BrowserPermissionRequest, allow: boolean) => {
     const saved = Boolean(remember[request.id] && request.requestingOrigin && request.topLevelOrigin && native?.capabilities.includes("permission_persistence"));
@@ -62,7 +62,7 @@ export function BrowserTools({ browser, api, page, ready, onOpenArtifact, onClos
           <small>{featureTime(download.requestedAt)}</small><p className="browser-file-path">{download.path ?? download.url}</p>
           {download.error ? <p className="browser-error">{download.error}</p> : null}
           {download.status === "downloading" ? native?.capabilities.includes("download_cancel") ? <button type="button" className="button small" disabled={busy || !ready} onClick={() => void run(async () => { await browser.cancelDownload(page.pageId, download.id); })}>다운로드 취소</button> : <p className="muted">이 플랫폼의 현재 API는 앱에서 진행 중 다운로드를 취소할 수 없습니다.</p> : null}
-          {download.status === "completed" ? download.sha256 && (download.size ?? Infinity) <= MAX_FILE ? <button type="button" className="button small" disabled={busy || !!pending.current || outputs.some(output => output.downloadId === download.id)} onClick={() => void run(() => save("download", download.id))}>{outputs.some(output => output.downloadId === download.id) ? "작업공간에 보관됨" : "작업공간에 보관"}</button> : <p className="muted">25MB가 넘는 파일은 다운로드 폴더에서 사용할 수 있습니다.</p> : null}
+          {download.status === "completed" ? download.sha256 && (download.size ?? Infinity) <= MAX_FILE ? <button type="button" className="button small" disabled={busy || !!pending.current || outputs.some(output => output.downloadId === download.id)} onClick={() => void run(() => save("download", download.id))}>{outputs.some(output => output.downloadId === download.id) ? "작업 폴더에 보관됨" : "작업 폴더에 보관"}</button> : <p className="muted">25MB가 넘는 파일은 다운로드 폴더에서 사용할 수 있습니다.</p> : null}
         </li>)}</ol>}
       </section>
       <section aria-labelledby="browser-permission-title">
@@ -83,13 +83,13 @@ export function BrowserTools({ browser, api, page, ready, onOpenArtifact, onClos
         {!native?.sitePermissions?.length ? <p className="muted">저장한 권한이 없습니다.</p> : <ol className="browser-tools-list">{native.sitePermissions.map(rule => <li key={rule.id}><div><strong>{kinds[rule.kind] ?? rule.kind}</strong><span>{rule.allow ? "허용" : "거절"}</span></div><p className="browser-file-path">상위 사이트 {rule.topLevelOrigin}</p><p className="browser-file-path">요청 출처 {rule.requestingOrigin}</p><small>{featureTime(rule.updatedAt)}</small><button className="button small" type="button" disabled={!ready || busy} onClick={() => void run(async () => { await browser.forgetSitePermission(page.pageId, rule.id); setNotice("저장된 결정을 삭제하고 같은 프로필의 해당 사이트 탭을 새로고쳤습니다."); })}>저장한 권한 삭제·사이트 탭 새로고침</button></li>)}</ol>}
       </section>
       <section aria-labelledby="browser-output-title">
-        <h3 id="browser-output-title">작업공간에 보관한 웹 자료</h3>
-        <p className="muted">페이지 본문과 완료한 다운로드를 이 탭의 작업공간에 복사합니다. 원본 주소·프로필·대화 연결과 고정된 첨부 내용을 함께 기록합니다. 다운로드 파일을 자동 실행하지 않습니다.</p>
+        <h3 id="browser-output-title">작업 폴더에 보관한 웹 자료</h3>
+        <p className="muted">페이지 본문과 완료한 다운로드를 이 탭의 작업 폴더에 복사합니다. 원본 주소·프로필·대화 연결과 고정된 첨부 내용을 함께 기록합니다. 다운로드 파일을 자동 실행하지 않습니다.</p>
         <div className="browser-tools-actions"><button type="button" className="button small" disabled={!ready || busy || !!pending.current} onClick={() => void run(() => save("page-text"))}>현재 페이지 본문 보관</button><button type="button" className="ghost-button small" disabled={busy} onClick={() => void run(refresh)}>목록 새로고침</button></div>
         {!outputs.length ? <p className="muted">보관한 자료가 없습니다.</p> : <ol className="browser-tools-list">{outputs.map(output => <li key={output.id}>
           <div><strong>{output.attachment.name}</strong><small>{featureTime(output.createdAt)}</small></div><p className="browser-file-path">{output.sourceUrl}</p>
           <AttachmentStrip attachments={[output.attachment]} /><p className="browser-file-path">{output.attachment.reference?.canonicalPath}</p>
-          {output.artifact ? <button type="button" className="button small" onClick={() => { onClose(); onOpenArtifact(output.artifact!.id); }}>문서 열기</button> : <p className="muted">이 파일은 작업공간의 Browser 폴더에 보관되어 있습니다.</p>}
+          {output.artifact ? <button type="button" className="button small" onClick={() => { onClose(); onOpenArtifact(output.artifact!.id); }}>문서 열기</button> : <p className="muted">이 파일은 작업 폴더의 Browser 폴더에 보관되어 있습니다.</p>}
         </li>)}</ol>}
       </section>
       <p className="muted">{native?.capabilities.includes("persistent_profile") ? "이 프로필은 브라우저의 로컬 저장소를 사용합니다." : "이 환경의 프로필은 임시 저장소입니다. 앱을 다시 시작하면 로그인 상태를 유지하지 않습니다."}</p>

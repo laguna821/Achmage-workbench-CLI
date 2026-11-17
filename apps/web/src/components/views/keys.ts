@@ -3,6 +3,7 @@ import {
   BASE_FILE_LABELS,
   PROVIDER_LABEL,
   isHexColor,
+  particle,
   isUnseen,
   type DocFormat,
   type Folder,
@@ -139,13 +140,9 @@ const valuesOf = (row: ProjectRow, key: string) => row.summary?.properties.find(
 
 const MANY = "태그처럼 값이 여럿인 속성은 끌어서 바꾸지 않습니다. 프로젝트 속성에서 고칩니다.";
 
-/** The topic particle after a word: "은" after a final consonant (마감일은), "는" after a vowel (날짜는), "은(는)" after anything else. */
-export function topicParticle(word: string) {
-  const code = word.trim().slice(-1).charCodeAt(0) - 0xac00;
-  if (Number.isNaN(code) || code < 0 || code > 11171) return "은(는)";
-  return code % 28 ? "은" : "는";
-}
-const ENGINE = "엔진은 세션이 정하므로 끌어서 바꿀 수 없습니다.";
+/** The topic particle after a word (the shared helper): 마감일은, 날짜는, "은(는)" where the reading is unknown. */
+export const topicParticle = (word: string) => particle(word, "은/는");
+const ENGINE = "엔진은 대화가 정하므로 끌어서 바꿀 수 없습니다.";
 
 /** A property as a key; a text or list field whose hint lists options ("높음 · 보통 · 낮음") knows them, in that order. */
 export function propertyKey(key: string, type: PropertyType, hint?: string, label = propLabel(key)): KeyDef<ProjectRow> {
@@ -200,7 +197,7 @@ export function projectKeys(context: ProjectContext): KeyDef<ProjectRow>[] {
         { id: "codex", label: PROVIDER_LABEL.codex, color: engineColor("codex") },
         { id: ENGINE_BOTH, label: "둘 다" },
       ],
-      none: "세션 없음",
+      none: "대화 없음",
       values: (row) => {
         const engines = new Set(row.sessions.map((session) => session.provider));
         return engines.size > 1 ? [ENGINE_BOTH] : [...engines];
@@ -229,7 +226,7 @@ export function projectSorts(context: Pick<ProjectContext, "stages" | "summaries
     { key: "created", label: "만든 날", value: (row) => row.work.createdAt },
     { key: "title", label: "이름", value: (row) => row.work.title },
     { key: "stage", label: "단계", value: (row) => (row.summary?.stage ? (order.get(row.summary.stage) ?? order.size) : null) },
-    { key: "sessions", label: "세션 수", value: (row) => row.sessions.length },
+    { key: "sessions", label: "대화 수", value: (row) => row.sessions.length },
     { key: "attention", label: "확인 필요", value: (row) => row.attention },
     { key: "proposals", label: "수정안", value: (row) => row.proposals },
     ...propertyKeys(context.summaries.values(), context.template).map((entry) => {
@@ -248,8 +245,8 @@ export function projectFields(context: Pick<ProjectContext, "summaries" | "templ
     { id: "folder", label: "폴더" },
     { id: "tags", label: "태그" },
     { id: "preview", label: "미리보기" },
-    { id: "chips", label: "세션·문서" },
-    { id: "sessions", label: "세션" },
+    { id: "chips", label: "대화·문서" },
+    { id: "sessions", label: "대화" },
     { id: "attention", label: "확인 필요" },
     { id: "proposals", label: "수정안" },
     { id: "activity", label: "마지막 활동" },
@@ -269,7 +266,7 @@ export const DEFAULT_PROJECT_FIELDS: Record<"table" | "board" | "cards" | "list"
 // ── 지금: sessions ──────────────────────────────────────────────────────────
 
 export function sessionKeys(state: State, engineColor: (provider: Provider) => string): KeyDef<Session>[] {
-  const fixed = "세션은 프로젝트에 딸려 있어 여기서 옮기지 않습니다.";
+  const fixed = "대화는 프로젝트에 딸려 있어 여기서 옮기지 않습니다.";
   return [
     {
       key: "status",

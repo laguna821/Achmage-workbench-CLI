@@ -86,3 +86,13 @@ describe("fix round 1 (Minor 12)", () => {
     expect(tool.watched).toEqual(["wf-sclaude"]);
   });
 });
+
+describe("the credential spool's slow look (A9)", () => {
+  it("drops an archived conversation's folder", () => {
+    const { tool, hooks, sessions } = setup();
+    hooks.sessionEnv(sessions.get("s-claude")!);
+    expect(tool.watched).toHaveLength(1);
+    (tool as unknown as { changed(session: Session): void }).changed(session("s-claude", { archivedAt: 5 }));
+    expect(tool.watched).toEqual([]);
+  });
+});

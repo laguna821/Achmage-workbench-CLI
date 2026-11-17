@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { linkSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -80,4 +80,19 @@ it("a writer with unsaved edits keeps its lease until it runs out, even when its
   expect(registry.open("a", input("here")).view.mode).toBe("read");
   wait(30_001);
   expect(registry.open("a", input("here")).view.mode).toBe("write");
+});
+
+it("a rename moves only that document's views, never another record's on the same file", () => {
+  const dir = mkdtempSync(join(tmpdir(), "wb-document-views-")); dirs.push(dir);
+  writeFileSync(join(dir, "a.md"), "A");
+  const paths: Record<string, string> = { a: join(dir, "a.md"), b: join(dir, "a.md") };
+  const registry = new DocumentRegistry((id) => ({ id, path: paths[id]!, name: id, revision: 1 } as Artifact), () => 1000);
+  registry.open("a", input("va"));
+  registry.open("b", { ...input("vb", false), dirty: true });
+  const from = registry.identity(paths.a!);
+  linkSync(paths.a!, join(dir, "b.md"));
+  paths.a = join(dir, "b.md");
+  registry.moved("a", from, paths.a);
+  expect(registry.open("a", { viewId: "va", windowId: "window-va" }).view.mode).toBe("write");
+  expect(registry.open("b", { viewId: "vb", windowId: "window-vb" }).view.mode).toBe("read");
 });

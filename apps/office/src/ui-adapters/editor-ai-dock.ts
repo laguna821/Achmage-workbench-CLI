@@ -51,6 +51,7 @@ export function installEditorAiDock(doc: Document, { post }: { post(message: Edi
     return true;
   };
   let frame = 0;
+  let retry = 0;
   const later = () => {
     if (frame) return;
     frame = view.requestAnimationFrame?.(() => { frame = 0; apply(); report(); }) ?? 0;
@@ -67,18 +68,31 @@ export function installEditorAiDock(doc: Document, { post }: { post(message: Edi
     /** Open or close the panel with its own buttons, as a person would; always answered with a report. */
     set(open: boolean, text?: string) {
       if (text !== undefined) pending = text;
+      view.clearTimeout(retry);
       if (!panel()) { report(true); return; }
       apply();
-      if (open === isOpen()) { report(true); return; }
+      if (open === isOpen()) { requested = null; report(true); return; }
       requested = open;
       const key = open ? openKey() : closeKey();
       if (key) key.click();
       else report(true);
       if (open) view.requestAnimationFrame?.(() => { apply(); input()?.focus(); });
+      // A rail drawn a moment ago can swallow its first click (Markdown after 보이기 off → on): while the wish
+      // still stands and the panel is still closed, press again, a few times at most (re-review 1, next round 1).
+      if (open && key) {
+        let left = 5;
+        const again = () => {
+          if (requested !== true || isOpen() || !panel() || left-- <= 0) return;
+          openKey()?.click();
+          retry = view.setTimeout(again, 80);
+        };
+        retry = view.setTimeout(again, 80);
+      }
     },
     put(text: string) { pending = text; apply(); report(true); },
     dispose() {
       observer.disconnect();
+      view.clearTimeout(retry);
       if (frame) view.cancelAnimationFrame?.(frame);
       doc.removeEventListener("input", typed, true);
     },

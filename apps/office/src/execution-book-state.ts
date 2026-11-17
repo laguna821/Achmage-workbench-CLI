@@ -117,6 +117,9 @@ export function createOriginalBookLock(selectors: string) {
     }
   };
   return (value: boolean) => {
+    // Excel and PDF: the visible editor's hold (editor-hold.ts) instead of an inert page (e-books keep this lock).
+    const hold = (globalThis as { workbenchEditorHold?: { lock(locked: boolean): void } }).workbenchEditorHold;
+    if (hold) { hold.lock(value); return; }
     if (locked === value) { if (locked) apply(); return; }
     locked = value;
     if (locked) {

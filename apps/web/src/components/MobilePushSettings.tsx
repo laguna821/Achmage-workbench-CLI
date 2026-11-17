@@ -48,7 +48,7 @@ export function MobilePushSettings({ api, hostId, remote = api.isRemote, onClose
           <p className="sheet-hint">기본은 꺼짐입니다. 발송 키는 운영체제 보안 저장소로 보호하며, 보안 저장소를 사용할 수 없으면 발송 설정을 완료하지 않습니다. 각 모바일 기기에서 연결·프로젝트 읽기 권한과 알림 허용을 따로 설정합니다.</p>
           <button className="button small primary" type="submit">발송 설정 저장</button>
         </fieldset></form>
-        <p className="sheet-hint">작업 알림 설정과 세션 음소거를 따릅니다. 호스트가 실행 중이고 인터넷에 연결되어 있어야 전달할 수 있습니다. 발송 서비스 접수는 실제 기기 도착 확인과 다릅니다.</p>
+        <p className="sheet-hint">작업 알림 설정과 대화 음소거를 따릅니다. 호스트가 실행 중이고 인터넷에 연결되어 있어야 전달할 수 있습니다. 발송 서비스 접수는 실제 기기 도착 확인과 다릅니다.</p>
       </section>
       <section className="feature-section"><h3>등록한 기기 알림</h3><div className="feature-cards">{settings?.devices.map(device => <article key={device.deviceId}>
         <strong>기기 {device.deviceId}</strong><p>{device.enabled ? "등록됨" : "해제·만료됨"} · 기한 {featureTime(device.expiresAt)}</p><p>최근 발송 요청 {featureTime(device.lastDeliveryAt)} · {device.lastDelivery === "sent" ? "서비스 접수" : device.lastDelivery === "rejected" ? "접수 거절" : device.lastDelivery === "unknown" ? "결과 미확인" : "없음"}</p>

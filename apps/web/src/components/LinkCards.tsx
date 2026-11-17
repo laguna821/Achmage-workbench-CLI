@@ -30,13 +30,13 @@ export function LinkHopBadge({ hop }: { hop: LinkHop }) {
         type="button"
         className="from-badge linked-hop-from"
         onClick={() => (from ? openSession(from.id) : openView(hop.linkId))}
-        title={from ? "그 세션 열기" : "주고받은 내용 보기"}
+        title={from ? "그 대화 열기" : "주고받은 내용 보기"}
       >
         <span aria-hidden>⇄</span>
         {from ? <EngineMark provider={from.provider} size={12} /> : null}
-        {speakers ? `${speakers}의 답` : from ? `${participantName(from)}의 답` : "세션 잇기 목표"}
+        {speakers ? `${speakers}의 답` : from ? `${participantName(from)}의 답` : "대화 잇기 목표"}
       </button>
-      <span className="linked-hop-count" title="세션 잇기에서 주고받은 순서">
+      <span className="linked-hop-count" title="대화 잇기에서 주고받은 순서">
         {hop.hop}/{hop.of}
       </span>
     </span>
@@ -59,7 +59,7 @@ export function LinkEndCard({ linkId }: { linkId: string }) {
     <div className={`linked-end${good ? "" : " cut"}`} role="note" data-link-id={link.id}>
       <div className="linked-end-head">
         <span aria-hidden>⇄</span>
-        <span>세션 잇기 끝 · {link.reason ? LINK_REASON_LABEL[link.reason] : "끝남"}</span>
+        <span>대화 잇기 끝 · {link.reason ? LINK_REASON_LABEL[link.reason] : "끝남"}</span>
       </div>
       <div className="linked-end-meta">
         {rounds}/{link.maxRounds}왕복 · {link.hops}번 주고받음 · {durationText(link, link.endedAt ?? link.updatedAt)} · {link.participants.map((id) => participantName(state.sessions[id])).join(" ⇄ ")}
@@ -185,7 +185,7 @@ export function LinkView({ api, linkId, inDesktop, onClose }: { api: Api; linkId
             <button type="button" className="text-button" onClick={() => links.exportLink(link, "text")}>
               <Icon name="copy" size={14} /> 마크다운 복사
             </button>
-            <button type="button" className="text-button" onClick={() => links.exportLink(link, "work")} title="첫 세션의 작업 폴더 '세션 기록/'에 저장">
+            <button type="button" className="text-button" onClick={() => links.exportLink(link, "work")} title="첫 대화의 작업 폴더 '세션 기록/'에 저장">
               <Icon name="download" size={14} /> 작업 폴더에 저장
             </button>
             {inDesktop ? (

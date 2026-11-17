@@ -42,9 +42,9 @@ export type RemoteCore = {
   /** A new conversation of the chat in a project (as 메뉴 › 이 프로젝트에 새 대화 makes it), the chat staying where it is. */
   create(binding: Binding, work: Work, provider: Provider | undefined, title: string | null): Session;
   /** The person's instruction as a request of the chat into a conversation (queued when it is working). */
-  send(binding: Binding, session: Session, requestId: string, text: string): Promise<{ delivery: string } | { refused: string; message: string }>;
+  send(binding: Binding, session: Session, requestId: string, text: string): Promise<{ delivery: string; waitingFor?: "slot" } | { refused: string; message: string }>;
   /** The hand-over line in the chat (what was sent, so a wrong hand-over is seen), with its button. */
-  handed(binding: Binding, remote: Session, session: Session, how: "start" | "tell", text: string, requestId: string): Promise<void>;
+  handed(binding: Binding, remote: Session, session: Session, how: "start" | "tell", text: string, requestId: string, waiting?: boolean): Promise<void>;
   stop(session: Session): Promise<"stopped" | "idle">;
   requestId(binding: Binding): string;
 };
@@ -240,8 +240,9 @@ export class RemoteDesk {
     // Kept with the chat: "리모콘으로 돌아가기" goes back to this conversation.
     const fresh = this.core.channels.binding(binding.id) ?? binding;
     if (fresh.prefs.remote !== remote.id) this.core.channels.updateBinding(binding.id, { prefs: { ...fresh.prefs, remote: remote.id } });
-    await this.core.handed(binding, remote, this.manager.view.sessions.get(session.id) ?? session, how, text, requestId);
-    return { conversation: session.id, project: this.core.scrub(work.title), title: this.core.scrub(session.purpose), engine: session.provider, delivery: sent.delivery, new: how === "start" };
+    const waiting = sent.waitingFor === "slot";
+    await this.core.handed(binding, remote, this.manager.view.sessions.get(session.id) ?? session, how, text, requestId, waiting);
+    return { conversation: session.id, project: this.core.scrub(work.title), title: this.core.scrub(session.purpose), engine: session.provider, delivery: sent.delivery, new: how === "start", ...(waiting ? { waiting: "차례를 기다리는 중 (PC의 동시 작업 수가 찼습니다). 차례가 되면 저절로 시작합니다." } : {}) };
   }
 }
 

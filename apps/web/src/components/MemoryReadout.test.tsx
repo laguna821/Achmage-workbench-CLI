@@ -192,3 +192,47 @@ describe("설정 › 화면 › 메모리 표시", () => {
     expect(onMemoryShown).toHaveBeenCalledWith(false);
   });
 });
+
+describe("the engines (0.5.3 B1)", () => {
+  const withEngines = { ...memory, engines: [
+    { provider: "claude" as const, sessions: [{ id: "a", title: "강의안 다듬기" }], bytes: 410 * MB, idle: true },
+    { provider: "claude" as const, sessions: [{ id: "b", title: "채점 기준" }], bytes: 380 * MB, idle: false },
+    { provider: "codex" as const, sessions: [{ id: "c", title: "보고서" }, { id: "d", title: "표 정리" }], bytes: 95 * MB, idle: true },
+    { provider: "claude" as const, sessions: [{ id: "e", title: "메모" }], bytes: null, idle: true },
+  ] };
+  const engineRows = () => [...document.querySelectorAll(".memory-pop .memory-engines > div")].map((row) => [row.querySelector("dt")!.textContent, row.querySelector("dd")!.textContent]);
+
+  it("lists each engine process with its conversation, engine, memory and whether it rests", () => {
+    render(<MemoryReadout memory={withEngines} onCloseIdle={async () => 0} />);
+    fireEvent.mouseEnter(document.querySelector(".memory-readout")!);
+    expect(engineRows()).toEqual([
+      ["강의안 다듬기 · Claude · 쉬는 중", "410 MB"],
+      ["채점 기준 · Claude · 일하는 중", "380 MB"],
+      ["Codex 대화 2개 · Codex · 쉬는 중", "95 MB"],
+      ["메모 · Claude · 쉬는 중", "—"],
+    ]);
+    expect(screen.getByRole("button", { name: "쉬는 엔진 지금 끄기" })).toBeTruthy();
+  });
+
+  it("'쉬는 엔진 지금 끄기' asks the gateway and says what it did; the popover stays open while the key has the focus", async () => {
+    const onCloseIdle = vi.fn(async () => 3);
+    render(<MemoryReadout memory={withEngines} onCloseIdle={onCloseIdle} />);
+    const text = document.querySelector<HTMLElement>(".memory-readout-text")!;
+    act(() => text.focus());
+    const key = screen.getByRole("button", { name: "쉬는 엔진 지금 끄기" });
+    act(() => key.focus());
+    expect(document.querySelector(".memory-pop")).toBeTruthy();
+    await act(async () => { fireEvent.click(key); });
+    expect(onCloseIdle).toHaveBeenCalledOnce();
+    expect(document.querySelector(".memory-pop")!.textContent).toContain("쉬는 엔진 3개를 껐습니다. 그 대화는 다음 메시지에서 이어집니다.");
+  });
+
+  it("no key when no engine rests, and no list when there are no engines", () => {
+    const view = render(<MemoryReadout memory={{ ...withEngines, engines: [withEngines.engines[1]!] }} onCloseIdle={async () => 0} />);
+    fireEvent.mouseEnter(document.querySelector(".memory-readout")!);
+    expect(screen.queryByRole("button", { name: "쉬는 엔진 지금 끄기" })).toBeNull();
+    view.rerender(<MemoryReadout memory={memory} onCloseIdle={async () => 0} />);
+    expect(document.querySelector(".memory-engines")).toBeNull();
+    expect(screen.getByRole("tooltip")).toBeTruthy();
+  });
+});

@@ -1,3 +1,4 @@
+import { Select } from "./ui/Select.tsx";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { VoiceModel, VoiceSettings, VoiceSpeech, VoiceStatus } from "../../../../packages/contracts/src/voice.ts";
 import { createAudioEngine } from "../../../../vendor/paseo/voice-web/audio-engine.web.ts";
@@ -83,8 +84,8 @@ function VoiceControls({ api, draftId, scope, disabled, onApply, reply, resetVer
           {api.isRemote ? <p>모델·계정 설정은 호스트 PC에서 변경합니다.</p> : null}
           <fieldset disabled={api.isRemote || running || saving || speaking}>
             <label className="feature-check"><input type="checkbox" checked={settings.enabled} onChange={event => setSettings({ ...settings, enabled: event.target.checked })} />음성 입력 사용</label>
-            <label>받아쓰기 모델<select value={settings.sttModelId} onChange={event => setSettings({ ...settings, sttModelId: event.target.value })}>{status.models.filter(model => model.kind === "stt").map(model => <option key={model.id} value={model.id} disabled={!model.supported}>{model.label}{!model.supported ? " · 이 환경 미지원" : ""}</option>)}</select></label>
-            <label>읽어 주기 모델<select value={settings.ttsModelId} onChange={event => setSettings({ ...settings, ttsModelId: event.target.value })}>{status.models.filter(model => model.kind === "tts").map(model => <option key={model.id} value={model.id} disabled={!model.supported}>{model.label}{!model.supported ? " · 이 환경 미지원" : ""}</option>)}</select></label>
+            <label>받아쓰기 모델<Select label="받아쓰기 모델" value={settings.sttModelId} onChange={value => setSettings({ ...settings, sttModelId: value })} options={status.models.filter(model => model.kind === "stt").map(model => ({ value: model.id, label: model.label, disabled: !model.supported, disabledReason: "이 환경 미지원" }))} /></label>
+            <label>읽어 주기 모델<Select label="읽어 주기 모델" value={settings.ttsModelId} onChange={value => setSettings({ ...settings, ttsModelId: value })} options={status.models.filter(model => model.kind === "tts").map(model => ({ value: model.id, label: model.label, disabled: !model.supported, disabledReason: "이 환경 미지원" }))} /></label>
             <label>받아쓰기 언어<input value={settings.language} placeholder="ko" onChange={event => setSettings({ ...settings, language: event.target.value })} /></label>
             <label className="feature-check"><input type="checkbox" checked={settings.onlineConsent} onChange={event => setSettings({ ...settings, onlineConsent: event.target.checked })} />선택한 온라인 모델에 음성·읽을 글 전송과 표시된 비용 동의</label>
             <label>온라인 서비스 API 키 {status.apiKeyConfigured ? "· 등록됨" : "· 미등록"}<input type="password" autoComplete="new-password" value={apiKey} onChange={event => setApiKey(event.target.value)} placeholder="변경할 때만 입력" /></label>

@@ -58,6 +58,7 @@
     "allow-office-cli-trace",
     "allow-office-browser",
     "allow-host-credential",
-    "allow-quit-for-update"
+    "allow-quit-for-update",
+    "allow-window-keys"
   ]
 }

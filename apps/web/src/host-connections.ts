@@ -73,7 +73,14 @@ export interface LocalDeviceApi {
   remove(deviceId: string): Promise<unknown>;
   /** Local rotation revokes this device and returns a new single-use pairing offer. */
   rotate(deviceId: string): Promise<HostPairingOffer>;
+  /** 테일스케일로 연결: the CLI's state as the gateway reads it (absent on a gateway without it). */
+  tailscale?(): Promise<TailscaleState>;
+  /** 켜기 with the exact argv the panel showed; the gateway refuses any other. */
+  tailscaleOn?(command: string[]): Promise<TailscaleState>;
+  /** 끄기: undoes what 켜기 did, nothing else. */
+  tailscaleOff?(): Promise<TailscaleState>;
 }
+export type TailscaleState = import("../../../packages/contracts/src/devices.ts").TailscaleView & { port: number; commandLine?: string };
 
 /** Reuse Paseo's parser. Single-use Workbench enrollment is validated by the controller. */
 export function pairingHostPreview(input: string) {

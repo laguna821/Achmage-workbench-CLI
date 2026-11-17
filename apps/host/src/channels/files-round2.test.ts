@@ -60,7 +60,7 @@ describe("the first page of a Hangul document (R4, option A)", () => {
     const answer = await hangulTurn(kit);
     expect(made).not.toHaveBeenCalled();
     expect(kit.adapter.uploads.map((file) => file.name)).toEqual(["강의계획서.hwpx"]);
-    expect(answer.out.text).toContain("「강의계획서.hwpx」은(는) 1MB가 넘어 1쪽 미리보기를 만들지 않았습니다. 원본은 함께 보냅니다.");
+    expect(answer.out.text).toContain("「강의계획서.hwpx」는 1MB가 넘어 1쪽 미리보기를 만들지 않았습니다. 원본은 함께 보냅니다.");
     void writeFileSync;
   }, 30_000);
 });

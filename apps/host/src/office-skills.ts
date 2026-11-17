@@ -16,7 +16,8 @@ import { OfficeTemplatePreviews } from "./office-template-previews.ts";
 import type { Store } from "./store.ts";
 import { OfficeHomeSkills } from "./office-home-skills.ts";
 import { bindTemplateSession, isTemplateSource } from "./office-template-session.ts";
-import { effectiveHallym, hangulInput, makeHangulDocument } from "./hangul-document.ts";
+import { readFile, writeFile } from "node:fs/promises";
+import { defaultNamed, effectiveHallym, emptyUntouched, hangulInput, madePath, makeHangulDocument } from "./hangul-document.ts";
 
 export type OfficeSkillContext = { artifactId: string; token: string; grants: EditorGrants };
 type Context = OfficeSkillContext;
@@ -33,8 +34,12 @@ const fail = (reason: string) => ({ ok: false as const, reason });
 export class OfficeSkills {
   private readonly manager: SessionManager;
   private readonly opening = new Set<string>();
-  /** Documents the Hangul dock made: made id → the document and session it was made from (open-made). */
-  private readonly made = new Map<string, { sourceArtifactId: string; sessionId: string; opened?: boolean }>();
+  /**
+   * Documents the Hangul dock made: made id → the document and session it was made from (open-made).
+   * `fill`: made for the open document itself (empty and untouched) — its bytes, written as that
+   * document's next revision when the turn ends (open-made), or beside it if it was touched meanwhile.
+   */
+  private readonly made = new Map<string, { sourceArtifactId: string; sessionId: string; opened?: boolean; fill?: { bytes: Buffer; title: string; revision: number } }>();
   private readonly cards: OfficeSkillCards;
   readonly previews: OfficeTemplatePreviews;
   readonly home: OfficeHomeSkills;
@@ -143,10 +148,11 @@ export class OfficeSkills {
       // A named one, or the next one made from this document in this session and not opened yet
       // (an executor turn's end reloads the view before it could ask: the reloaded view asks).
       const mine = (id: string) => { const entry = this.made.get(id); return entry && entry.sourceArtifactId === context.artifactId && entry.sessionId === before.sessionId ? entry : null; };
-      const id = typeof input.artifactId === "string" ? input.artifactId : [...this.made.keys()].find((key) => !mine(key)?.opened);
+      const id = typeof input.artifactId === "string" ? input.artifactId : [...this.made.keys()].find((key) => { const entry = mine(key); return entry && !entry.opened; });
       const entry = id ? mine(id) : null;
       if (!id || !entry) return fail("not-found");
       entry.opened = true;
+      if (entry.fill) return { ok: true, tabId: await this.fillMade(id, entry.sessionId, entry.fill) };
       this.manager.documents.get(id);
       return { ok: true, tabId: id };
     }
@@ -211,6 +217,37 @@ export class OfficeSkills {
    * effective hallym-kordoc copy's runner makes a new HWPX beside the document, tracked in this
    * session; the view opens it at the end of the turn (open-made).
    */
+  /** Empty and untouched now (hangul-document.ts `emptyUntouched`), from the gateway's own records. */
+  private async blank(artifactId: string) {
+    const documents = this.manager.documents, artifact = documents.get(artifactId);
+    return emptyUntouched({ format: artifact.format, revisions: documents.revisions(artifactId).map((entry) => entry.revision),
+      dirty: documents.registry.forArtifact(artifactId).some((view) => view.dirty), text: (revision) => documents.view(artifactId, revision) });
+  }
+  /**
+   * The turn has ended: the made HWPX becomes the open document's next revision when it is still empty
+   * and untouched at its decided revision (then its name follows the made title if it keeps 새 문서's
+   * name — 이름 바꾸기 with its refusals; refused → the name stays); touched meanwhile → a new HWPX
+   * beside it, as for any other document. Returns the document to show.
+   */
+  private async fillMade(artifactId: string, sessionId: string, fill: { bytes: Buffer; title: string; revision: number }) {
+    const documents = this.manager.documents, artifact = documents.check(artifactId);
+    const note = "문서 AI · hallym-kordoc로 만든 한글 문서";
+    if (artifact.revision === fill.revision && await this.blank(artifactId)) {
+      const filled = documents.fillEmpty(artifactId, fill.revision, fill.bytes, sessionId, note);
+      this.manager.sink.upsertItem(sessionId, { kind: "artifact", id: `artifact:hangul:${artifactId}:r${filled.revision}`, artifactId, revision: filled.revision, change: "modified", at: Date.now() });
+      if (defaultNamed(documents.revisions(artifactId)[0], filled)) {
+        try { this.manager.renameDocument(artifactId, fill.title); } catch { /* refused (busy, taken, …): the name stays */ }
+      }
+      return artifactId;
+    }
+    const path = madePath(dirname(artifact.path), fill.title);
+    await writeFile(path, fill.bytes, { flag: "wx" });
+    const tracked = documents.track(artifact.workId, dirname(artifact.path), path, "user", sessionId, note, [{ artifactId, revision: artifact.revision }]);
+    if (!tracked) throw new HttpError(500, "document_not_tracked", "만든 문서를 문서 목록에 등록하지 못했습니다.");
+    this.made.set(tracked.artifact.id, { sourceArtifactId: artifactId, sessionId, opened: true });
+    this.manager.sink.upsertItem(sessionId, { kind: "artifact", id: `artifact:hangul:${tracked.artifact.id}`, artifactId: tracked.artifact.id, revision: tracked.artifact.revision, change: "created", at: Date.now() });
+    return tracked.artifact.id;
+  }
   async makeHangul(context: Context, raw: unknown, signal?: AbortSignal) {
     const scope = this.scope(context), sessionId = context.grants.session(context.token);
     const artifact = this.manager.documents.get(context.artifactId);
@@ -219,7 +256,12 @@ export class OfficeSkills {
     const input = hangulInput(raw);
     const chosen = effectiveHallym(await this.manager.userSkills.list(scope));
     if ("refused" in chosen) return { made: false, status: "unavailable", reason: chosen.refused === "disabled" ? "hallym-kordoc 스킬이 설정 › 스킬에서 꺼져 있습니다." : chosen.refused === "no-runner" ? "사용 중인 hallym-kordoc 사본에 실행기(scripts/run.mjs)가 없습니다." : "hallym-kordoc 스킬을 찾지 못했습니다." };
-    const result = await makeHangulDocument(chosen.skill.dir, input, { documentPath: artifact.path, signal, track: (path) => {
+    const result = await makeHangulDocument(chosen.skill.dir, input, { documentPath: artifact.path, signal, fill: async (hwpx, title) => {
+      // The open document is empty and untouched: the made one becomes its content when the turn ends.
+      if (!(await this.blank(artifact.id))) return null;
+      this.made.set(artifact.id, { sourceArtifactId: artifact.id, sessionId, fill: { bytes: await readFile(hwpx), title, revision: this.manager.documents.get(artifact.id).revision } });
+      return { artifactId: artifact.id, name: artifact.name };
+    }, track: (path) => {
       const tracked = this.manager.documents.track(artifact.workId, dirname(artifact.path), path, "user", sessionId, "문서 AI · hallym-kordoc로 만든 한글 문서", [{ artifactId: artifact.id, revision: artifact.revision }]);
       if (!tracked) return null;
       this.made.set(tracked.artifact.id, { sourceArtifactId: artifact.id, sessionId });

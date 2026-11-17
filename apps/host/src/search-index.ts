@@ -67,6 +67,14 @@ const titleField = (entry: IndexEntry) => [entry.title, ...(entry.aliases ?? [])
 /** The tags field: tags, then `key value` per property. */
 const tagsField = (entry: IndexEntry) => [...(entry.tags ?? []), ...(entry.properties ?? []).map(([key, value]) => `${key} ${valueText(value)}`.trim())].filter(Boolean).join("\n");
 
+/**
+ * The raw cache's bound (0.5.3, G4). The cache keeps every entry's full body for Fast Find; past `totalChars` of body
+ * text in all, the bodies of the oldest entries (by their time) are cut to their first `headChars`, until the rest
+ * fits. Their title, aliases, tags and properties stay, so they are still found by those and by their opening.
+ * Run by the idle maintenance (store-maintenance.ts), never on a write.
+ */
+export const SEARCH_CACHE_LIMITS = { totalChars: 32 * 1024 * 1024, headChars: 4096 } as const;
+
 export class SearchIndex {
   private readonly db: DatabaseSync;
   private readonly statements = new Map<string, StatementSync>();
@@ -296,6 +304,22 @@ export class SearchIndex {
       }
     }
     return out;
+  }
+
+  /** Keep the cache within its bound (SEARCH_CACHE_LIMITS); returns how many bodies were cut. */
+  boundCache(limits: { totalChars: number; headChars: number } = SEARCH_CACHE_LIMITS) {
+    let total = Number((this.db.prepare("SELECT COALESCE(SUM(length(body)), 0) AS n FROM search_cache").get() as { n: number }).n);
+    if (total <= limits.totalChars) return { trimmed: 0, totalChars: total };
+    const oldest = this.db.prepare("SELECT c.entry_id AS id, e.key AS key, length(c.body) AS n FROM search_cache c JOIN search_entries e ON e.id = c.entry_id WHERE length(c.body) > ? ORDER BY e.at, e.id").iterate(limits.headChars) as Iterable<{ id: number; key: string; n: number }>;
+    const cut: { id: number; key: string }[] = [];
+    for (const row of oldest) {
+      if (total <= limits.totalChars) break;
+      cut.push({ id: Number(row.id), key: String(row.key) }); total -= Number(row.n) - limits.headChars;
+    }
+    if (!cut.length) return { trimmed: 0, totalChars: total };
+    this.transaction(() => { for (const row of cut) this.prepare("UPDATE search_cache SET body = substr(body, 1, ?) WHERE entry_id = ?").run(limits.headChars, row.id); });
+    this.changed(cut.map((row) => row.key));
+    return { trimmed: cut.length, totalChars: total };
   }
 
   /** Rows and stored text size, for the record ("찾는 길" reports the index size). */

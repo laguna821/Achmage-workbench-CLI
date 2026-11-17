@@ -3,6 +3,7 @@ import type { RemotePeer } from "@workbench/client";
 import type { OfficeOutputFormat } from "../../../packages/contracts/src/office-output.ts";
 import type { KnowledgeLibrary } from "../../../packages/contracts/src/office-knowledge.ts";
 import type { NewOfficeDocument } from "@workbench/contracts";
+import { markNewDocument } from "./doc-new.ts";
 import type { CommandReceipt, TaskCommand, TaskSnapshot, NativeTaskDetail } from "@workbench/contracts";
 import type { AgentProfile, AgentProfileInput } from "@workbench/contracts";
 import type { WorkspaceService, WorkspaceServiceList, WorkspaceServiceOwner, WorkspaceServiceStart } from "@workbench/contracts";
@@ -81,6 +82,8 @@ import type {
   SessionLink,
   StartLinkRequest,
   Timeline,
+  HistoryFilter,
+  HistoryPage,
   TranscriptItem,
   UiPrefs,
   UpdateFolderRequest,
@@ -477,7 +480,7 @@ export class Api {
   exportLink = (linkId: string, request: ExportMarkdownRequest) => this.request<ExportMarkdownResult>("POST", `/api/links/${linkId}/export`, request);
   openFile = (workId: string, path: string, workspaceId?: string, sessionId?: string) => this.request<Artifact>("POST", `/api/works/${workId}/artifacts`, { path, workspaceId, sessionId });
   officeCliInput = () => this.request<{ path: string }>("POST", "/api/office-cli/input");
-  createOfficeDocument = (workId: string, request: NewOfficeDocument) => this.request<Artifact>("POST", `/api/works/${workId}/office-documents`, request);
+  createOfficeDocument = (workId: string, request: NewOfficeDocument) => this.request<Artifact>("POST", `/api/works/${workId}/office-documents`, request).then((made) => { if (made?.id) markNewDocument(made.id); return made; });
   createDesign = (workId: string, name: string, preset: string, workspaceId?: string) => this.request<Artifact>("POST", `/api/works/${workId}/designs`, { name, preset, workspaceId });
   officePages = (artifactId: string, revision: number) =>
     this.request<{ revision: number; pages: { page: number; width: number; height: number }[] }>("GET", `/api/artifacts/${artifactId}/office-pages?revision=${revision}`);
@@ -489,6 +492,8 @@ export class Api {
   removeDocument = (artifactId: string, action: "trash" | "unlisted") => this.request<Artifact>("POST", `/api/artifacts/${artifactId}/remove`, { action });
   /** What can be done with a document now, as the gateway decides it. */
   documentRemoval = (artifactId: string) => this.request<DocumentRemovalPlan>("GET", `/api/artifacts/${artifactId}/removal`);
+  /** 이름 바꾸기: the file renamed inside its folder (same extension); refused with a plain line. Undo = renaming back. */
+  renameDocument = (artifactId: string, name: string) => this.request<{ artifact: Artifact; noteLinks: number; notice?: string }>("POST", `/api/artifacts/${artifactId}/rename`, { name });
   restoreDocument = (artifactId: string) => this.request<Artifact>("POST", `/api/artifacts/${artifactId}/restore`, {});
   /** "다른 곳에 저장" of a deleted project's trashed document: a copy, never over a file; the record stays. */
   saveDocumentCopy = (artifactId: string, to: string) => this.request<{ path: string }>("POST", `/api/artifacts/${artifactId}/save-copy`, { to });
@@ -552,6 +557,16 @@ export class Api {
     );
   revisions = (artifactId: string) => this.request<ArtifactRevision[]>("GET", `/api/artifacts/${artifactId}/revisions`);
   /** Turns and revisions in `[since, until)`, or since a time (home "흐름"). */
+  /** 활동 › 기록: one page, newest first (`before`: the previous page's `next`). */
+  history = (query: { before?: string | null; limit?: number; workId?: string | null; filter?: HistoryFilter }) => {
+    const params = new URLSearchParams();
+    if (query.before) params.set("before", query.before);
+    if (query.limit) params.set("limit", String(query.limit));
+    if (query.workId) params.set("workId", query.workId);
+    if (query.filter && query.filter !== "all") params.set("filter", query.filter);
+    const search = params.toString();
+    return this.request<HistoryPage>("GET", `/api/activity/history${search ? `?${search}` : ""}`);
+  };
   timeline = (since: number, until?: number) =>
     this.request<Timeline>("GET", `/api/views/timeline?since=${Math.floor(since)}${until === undefined ? "" : `&until=${Math.floor(until)}`}`);
   /** Calendar feeds on home "흐름" (never their addresses) and the events of a window. */
@@ -640,6 +655,18 @@ export class Api {
   refreshProviders = (provider?: Provider) => this.request("POST", `/api/providers/refresh${provider ? `?provider=${provider}` : ""}`);
   /** What the app uses now (the readout in the window's bottom line); the gateway reads at most once in 30 s. */
   memory = () => this.request<import("@workbench/contracts").AppMemory>("GET", "/api/memory");
+  /** "내 MCP 서버와 훅 불러오기" for an engine (설정 › AI 엔진); the engine's status follows by event. */
+  setPersonalTools = (provider: Provider, on: boolean) => this.request<ProviderStatus | null>("POST", "/api/providers/personal-tools", { provider, on });
+  /** "쉬는 엔진 지금 끄기" (B1): every idle engine closes now; how many. */
+  closeIdleEngines = () => this.request<{ closed: number }>("POST", "/api/engines/close-idle");
+  /** The resource manager (0.5.3): what runs, what waits and why, the settings and the estimate. */
+  resources = () => this.request<import("@workbench/contracts").ResourceState>("GET", "/api/resources");
+  /** 설정 › AI 엔진 › 동시에 돌리는 작업 / 뒤에서 도는 작업은 천천히. */
+  setResourceSettings = (patch: Partial<import("@workbench/contracts").ResourceSettings>) => this.request<import("@workbench/contracts").ResourceState>("PUT", "/api/resources/settings", patch);
+  /** "지금 바로 실행": a waiting request starts now whatever the limit says (the person's own key). */
+  runNow = (sessionId: string, requestId: string) => this.request<SendResult>("POST", "/api/resources/run-now", { sessionId, requestId });
+  /** The conversations this window shows now (A11): idle engines of the others are closed sooner. */
+  reportOnScreen = (client: string, ids: string[]) => this.request<{ shown: number }>("POST", "/api/sessions/on-screen", { client, ids });
 
   /**
    * Subscribe to events after `since`. Reconnects with the last seen seq so nothing is applied

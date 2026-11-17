@@ -57,6 +57,8 @@ export type SidebarActions = {
   chooseProject?: (work: Work) => void;
   /** N1, 활동: the notifications (알림) and 작업 현황. */
   openNotifications?: () => void;
+  /** 활동 › 기록: a conversation opened at one of its items. */
+  openSessionAt?: (session: Session, itemId: string) => void;
   openTasks?: () => void;
   /** skin 2: the views home's switch held, reached from the list (보기 › 보드·표로 보기; 활동 › 달력으로 보기). */
   openHomeView?: (mode: "projects" | "flow") => void;

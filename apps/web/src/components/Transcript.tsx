@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { State } from "../state.ts";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import { REMARK_BASE } from "../markdown/plugins.ts";
 import { PROVIDER_LABEL, turnEndText, type MessageMedia, type Provider, type TranscriptItem } from "@workbench/contracts";
@@ -9,7 +10,7 @@ import { EngineMark } from "./EngineMark.tsx";
 import { StateWord } from "./StateMark.tsx";
 import { ROW_STATES } from "../row-state.ts";
 import { diagramComponents } from "./Diagram.tsx";
-import { AttachmentStrip, MessageImage } from "./Attachments.tsx";
+import { AttachmentStrip, ConversationPictures, MessageImage, asPicture, isPicture, type ViewerPicture } from "./Attachments.tsx";
 import { PlanApproval } from "./PlanFirst.tsx";
 import { OfficeQuestion } from "./OfficeQuestion.tsx";
 import { ImageCard } from "./ImageGen.tsx";
@@ -20,6 +21,8 @@ import { RequestText } from "./note/RequestText.tsx";
 import { captureReadingAnchor, nearTranscriptEnd, readingAnchorTop, type ChatPosition, type ReadingAnchor } from "../conversation/reading-anchor.ts";
 import { firstLine, registerNoteTarget, setReadingAt } from "../conversation/outline.ts";
 import { approvalKeyApplies } from "../conversation/approval-keys.ts";
+import { useStreamingText } from "../streaming-text.ts";
+import { drawFrom, earlierFrom, reachFrom, slideFrom } from "../conversation/turn-window.ts";
 
 const DRAWN = diagramComponents();
 const STREAMING = diagramComponents(true);
@@ -114,7 +117,27 @@ const TOOL_ICON: Record<string, IconName> = {
   other: "tool",
 };
 
-const AssistantText = memo(function AssistantText({ text, streaming, media = [] }: { text: string; streaming: boolean; media?: MessageMedia[] }) {
+const NO_MEDIA: MessageMedia[] = [];
+
+/** The conversation's pictures in reading order, each once (audit #137: the viewer goes through the whole conversation). */
+export function conversationPictures(items: TranscriptItem[]): ViewerPicture[] {
+  const seen = new Set<string>();
+  const out: ViewerPicture[] = [];
+  const add = (attachment: import("@workbench/contracts").Attachment) => { if (isPicture(attachment.mime) && !seen.has(attachment.id)) { seen.add(attachment.id); out.push(asPicture(attachment)); } };
+  for (const item of items) {
+    if (item.kind === "user") for (const attachment of item.attachments ?? []) add(attachment);
+    else if (item.kind === "tool") for (const attachment of item.images ?? []) add(attachment);
+    else if (item.kind === "assistant") for (const entry of item.media ?? []) add(entry.attachment);
+  }
+  return out;
+}
+const AssistantText = memo(function AssistantText({ text: whole, streaming, media = NO_MEDIA }: { text: string; streaming: boolean; media?: MessageMedia[] }) {
+  // A3 (perf G1): while it streams, the Markdown follows the text ~10 times a second, not on every token; ended, the whole text at once.
+  const text = useStreamingText(whole, streaming);
+  return useMemo(() => <AssistantMarkdown text={text} streaming={streaming} media={media} />, [text, streaming, media]);
+});
+
+function AssistantMarkdown({ text, streaming, media }: { text: string; streaming: boolean; media: MessageMedia[] }) {
   const gallery = media.map(entry => entry.attachment);
   return (
     <div className={`markdown${streaming ? " streaming" : ""}`}>
@@ -127,7 +150,7 @@ const AssistantText = memo(function AssistantText({ text, streaming, media = [] 
       </Markdown>
     </div>
   );
-});
+}
 
 /** What the folded steps did, as the entry's cells (not one middle-dot string). */
 function workSummary(items: Step[]) {
@@ -283,7 +306,7 @@ function ApprovalCard({ item, provider, onAnswer, onTrust, readOnly = false }: {
       <div className="entry-keys approval-actions">
         {onTrust ? (
           <span className="entry-aside">
-            <button type="button" className="text-button approval-trust" onClick={onTrust} title="이 세션은 앞으로 묻지 않고 진행합니다(전체 접근). 입력창 아래 권한에서 다시 바꿀 수 있습니다.">
+            <button type="button" className="text-button approval-trust" onClick={onTrust} title="이 대화는 앞으로 묻지 않고 진행합니다(전체 접근). 입력창 아래 권한에서 다시 바꿀 수 있습니다.">
               <Icon name="unlock" size={14} /> 앞으로 묻지 않기
             </button>
           </span>
@@ -383,8 +406,8 @@ const RequestBlock = memo(function RequestBlock({ index, user, reveal, onFork, o
           </button>
         ) : null}
         {user.peer ? (
-          <span className="from-badge peer-badge" title={user.peer.from ? `보낸 세션: ${user.peer.from} (보낸 쪽이 밝힌 이름)` : undefined}>
-            <Icon name="arrowLeft" size={12} /> 다른 세션에서 온 메시지{user.peer.name ? ` (${user.peer.name})` : ""}
+          <span className="from-badge peer-badge" title={user.peer.from ? `보낸 대화: ${user.peer.from} (보낸 쪽이 밝힌 이름)` : undefined}>
+            <Icon name="arrowLeft" size={12} /> 다른 대화에서 온 메시지{user.peer.name ? ` (${user.peer.name})` : ""}
           </span>
         ) : null}
         {user.link ? <LinkHopBadge hop={user.link} /> : null}
@@ -421,6 +444,115 @@ const RequestBlock = memo(function RequestBlock({ index, user, reveal, onFork, o
     </article>
   );
 });
+
+
+/** What every drawn turn needs from its conversation (A1, perf G1: a turn re-renders only when this or its own items change). */
+type TurnContext = {
+  sessionId: string; provider: Provider; readOnly: boolean;
+  onAnswer: (itemId: string, decision: "accept" | "decline", response?: import("@workbench/contracts").OfficeInteractionResponse) => void;
+  onTrust?: () => void; focusItemId?: string; primaryProposal: string | null;
+  state: Pick<State, "artifacts" | "proposals" | "handoffs">;
+};
+
+function blockContent(block: Block, ctx: TurnContext) {
+  const { sessionId, provider, readOnly, onAnswer, onTrust, focusItemId, primaryProposal, state } = ctx;
+  switch (block.type) {
+    case "user":
+      return null;
+    case "assistant":
+      return (
+        <div key={block.item.id} className="turn-answer">
+          <AssistantText text={block.item.text} streaming={block.item.streaming} media={block.item.media} />
+          <MessageActions sessionId={sessionId} itemId={block.item.id} streaming={block.item.streaming} />
+        </div>
+      );
+    case "work":
+      return (
+        <WorkBlock key={block.id} block={block} focusItemId={focusItemId} />
+      );
+    case "approval":
+      return <ApprovalCard key={block.item.id} item={block.item} provider={provider} readOnly={readOnly} onAnswer={(decision, response) => onAnswer(block.item.id, decision, response)} onTrust={onTrust} />;
+    case "plan":
+      return <PlanCard key={block.item.id} item={block.item} />;
+    case "notice":
+      return (
+        <div key={block.item.id} className={`notice notice-${block.item.level}`} role={block.item.level === "error" ? "alert" : "status"}>
+          {block.item.text}
+        </div>
+      );
+    case "artifact": {
+      const artifact = state.artifacts[block.item.artifactId];
+      return artifact ? <FileCard key={block.item.id} artifact={artifact} revision={block.item.revision} change={block.item.change} /> : null;
+    }
+    case "proposal": {
+      const proposal = state.proposals[block.item.proposalId];
+      return proposal ? <ProposalCard key={block.item.id} proposal={proposal} primary={block.item.id === primaryProposal} /> : null;
+    }
+    case "handoff": {
+      const handoff = state.handoffs[block.item.handoffId];
+      return handoff ? <HandoffCard key={block.item.id} handoff={handoff} viewer={sessionId} /> : null;
+    }
+    case "image":
+      return <ImageCard key={block.item.id} item={block.item} viewer={sessionId} />;
+    case "link":
+      return <LinkEndCard key={block.item.id} linkId={block.item.linkId} />;
+    case "turnEnd":
+      return null;
+  }
+}
+
+function renderBlock(block: Block, ctx: TurnContext) {
+  const id = block.type === "work" ? block.id : block.item.id;
+  return <div key={id} className="transcript-block" data-reading-id={id} data-item-id={block.type === "work" ? undefined : id}>{blockContent(block, ctx)}</div>;
+}
+
+
+const sameBlock = (a: Block, b: Block): boolean => {
+  if (a.type !== b.type) return false;
+  if (a.type === "work") { const other = b as typeof a; return a.id === other.id && a.items.length === other.items.length && a.items.every((step, index) => step === other.items[index]); }
+  return a.item === (b as typeof a).item;
+};
+const sameBlocks = (a: Block[], b: Block[]) => a.length === b.length && a.every((block, index) => sameBlock(block, b[index]!));
+/** The same turn as far as drawing goes: the same items in the same places (applyItemEvent keeps unchanged items as they are). */
+const sameTurn = (a: Turn, b: Turn) => a === b || (a.id === b.id && a.index === b.index && a.user === b.user && a.end === b.end && sameBlocks(a.blocks, b.blocks) && sameBlocks(a.after, b.after));
+
+/** One turn of the conversation, memoised (A1): a key typed, a token of another turn, or an event elsewhere does not redraw it. */
+const TurnSection = memo(function TurnSection({ turn, ctx, waiting, reveal, onFork, onOpenSession, register }: {
+  turn: Turn; ctx: TurnContext; waiting: boolean; reveal: number; onFork?: (itemId: string) => void; onOpenSession: (sessionId: string) => void;
+  register: (turnId: string, element: HTMLElement | null) => void;
+}) {
+  return (
+    <section className="turn" ref={(element) => register(turn.id, element)}>
+      {turn.user ? <RequestBlock index={turn.index} user={turn.user} reveal={reveal} onFork={onFork} onOpenSession={onOpenSession} /> : null}
+      <div className="turn-body">
+        {turn.blocks.map((block) => renderBlock(block, ctx))}
+        {waiting ? (
+          <div className="turn-answer">
+            <div className="response-pending" role="status" aria-label="응답을 기다리는 중">
+              <span className="response-pending-dots">
+                <i />
+                <i />
+                <i />
+              </span>
+            </div>
+          </div>
+        ) : null}
+      </div>
+      {turn.end ? (
+        <div className={`turn-end turn-end-${turn.end.status}`} data-item-id={turn.end.id} data-reading-id={turn.end.id}>
+          <span className="entry-cells inline">
+            <span className="entry-cell">
+              {turn.end.status === "completed" ? <Icon name="check" size={13} /> : null}
+              {turnEndText(turn.end)}
+            </span>
+            {duration(turn.end.durationMs) ? <span className="entry-cell">{duration(turn.end.durationMs)}</span> : null}
+          </span>
+        </div>
+      ) : null}
+      {turn.after.map((block) => renderBlock(block, ctx))}
+    </section>
+  );
+}, (a, b) => a.ctx === b.ctx && a.waiting === b.waiting && a.reveal === b.reveal && a.onFork === b.onFork && a.onOpenSession === b.onOpenSession && a.register === b.register && sameTurn(a.turn, b.turn));
 
 export function Transcript({
   sessionId,
@@ -480,11 +612,60 @@ export function Transcript({
   const sections = useRef(new Map<string, HTMLElement>());
   const blocks = useMemo(() => toBlocks(items), [items]);
   const turns = useMemo(() => toTurns(blocks), [blocks]);
+  // A2 (perf G1): which turn holds a message (its blocks, steps, end) — to draw it before reaching it.
+  const turnOf = useMemo(() => {
+    const map = new Map<string, number>();
+    const add = (block: Block, index: number) => {
+      if (block.type === "work") { map.set(block.id, index); for (const step of block.items) map.set(step.id, index); }
+      else map.set(block.item.id, index);
+    };
+    turns.forEach((turn, index) => {
+      map.set(turn.id, index);
+      if (turn.user) map.set(turn.user.id, index);
+      if (turn.end) map.set(turn.end.id, index);
+      for (const block of turn.blocks) add(block, index);
+      for (const block of turn.after) add(block, index);
+    });
+    return map;
+  }, [turns]);
+  // Only the last turns are drawn (turn-window.ts); `from` is the first drawn one, decided per conversation once
+  // it has turns: from the place the reader comes back to when there is one.
+  const [drawn, setDrawn] = useState<{ sessionId: string; from: number } | null>(null);
+  let from = drawn?.sessionId === sessionId ? Math.min(drawn.from, turns.length) : 0;
+  if (drawn?.sessionId !== sessionId && turns.length && !loading) {
+    const saved = position && !position.follow ? position : readAt.get(sessionId);
+    const keep = focusItem ? turnOf.get(focusItem.itemId) ?? null : saved ? (saved.anchor ? turnOf.get(saved.anchor.messageId) ?? "all" : "all") : null;
+    from = drawFrom(turns.length, keep);
+    setDrawn({ sessionId, from });
+  }
+  const drawnTurns = from > 0 ? turns.slice(from) : turns;
+  /** Draw from turn `index` if it is above what is drawn (a jump, a search hit). True when it was already drawn. */
+  const reach = (index: number) => {
+    const next = reachFrom(from, index);
+    if (next === from) return true;
+    setDrawn({ sessionId, from: next });
+    return false;
+  };
+  const pendingJump = useRef<string | null>(null);
   const pending = items.find((item): item is Item<"approval"> => item.kind === "approval" && item.decision === null);
   // One filled key a view: the approval that Enter answers, else the newest proposal waiting.
   const primaryProposal = pending || readOnly ? null : items.findLast((item): item is Item<"proposal"> => item.kind === "proposal" && state.proposals[item.proposalId]?.status === "pending")?.id ?? null;
   // The engine is working but nothing has arrived since the last request yet.
   const waitingFirst = running && blocks[blocks.length - 1]?.type === "user";
+  // A1: the turns' shared needs, stable while they do not change (callbacks through refs).
+  const answerRef = useRef(onAnswer); answerRef.current = onAnswer;
+  const trustRef = useRef(onTrust); trustRef.current = onTrust;
+  const answer = useCallback<TurnContext["onAnswer"]>((itemId, decision, response) => answerRef.current(itemId, decision, response), []);
+  const trust = useCallback(() => trustRef.current?.(), []);
+  const hasTrust = Boolean(onTrust);
+  const turnContext = useMemo<TurnContext>(() => ({
+    sessionId, provider, readOnly, onAnswer: answer, onTrust: hasTrust ? trust : undefined, focusItemId: focusItem?.itemId, primaryProposal,
+    state: { artifacts: state.artifacts, proposals: state.proposals, handoffs: state.handoffs },
+  }), [sessionId, provider, readOnly, answer, hasTrust, trust, focusItem?.itemId, primaryProposal, state.artifacts, state.proposals, state.handoffs]);
+  const registerSection = useCallback((turnId: string, element: HTMLElement | null) => {
+    if (element) sections.current.set(turnId, element);
+    else sections.current.delete(turnId);
+  }, []);
   const [sticky, setSticky] = useState<Turn | null>(null);
   const [headGone, setHeadGone] = useState(false);
   // A request a search hit or a jump lands in opens its folded words: every time (a new nonce per
@@ -531,7 +712,11 @@ export function Transcript({
     const nextSticky = current && headerGone && stillInside ? current : null;
     setSticky((previous) => (previous?.id === nextSticky?.id ? previous : nextSticky));
     const headElement = element.querySelector<HTMLElement>(".note-head");
-    setHeadGone(Boolean(headElement) && headElement!.offsetTop + headElement!.offsetHeight < top + 4);
+    // The band takes the title over once the head's TITLE has left the view (its properties row may still show): an
+    // approval card that scrolled the column a little hid the title and its close key otherwise (office-leftovers 4b).
+    const titleElement = headElement?.querySelector<HTMLElement>(".note-title");
+    const titleGone = titleElement ? titleElement.getBoundingClientRect().bottom < element.getBoundingClientRect().top + 4 : false;
+    setHeadGone(Boolean(headElement) && (titleGone || headElement!.offsetTop + headElement!.offsetHeight < top + 4));
     setAtBottom(atEnd);
   };
 
@@ -588,6 +773,12 @@ export function Transcript({
     measure();
   };
   useLayoutEffect(() => { reconcileLayout.current(); });
+  // Following the end through a long run of new turns: the ones above the last window are let go.
+  useEffect(() => {
+    if (drawn?.sessionId !== sessionId) return;
+    const next = slideFrom(drawn.from, turns.length, pinned.current && !focusItem);
+    if (next !== drawn.from) setDrawn({ sessionId, from: next });
+  }, [turns.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Image decode, nested tool disclosures and composer/viewport resizing can change geometry
   // without changing `items`. Apply the same message + offset anchor in every case.
@@ -625,7 +816,8 @@ export function Transcript({
   useEffect(() => {
     if (!focusItem || loading) return;
     const target = scroller.current?.querySelector<HTMLElement>(`[data-item-id="${CSS.escape(focusItem.itemId)}"]`);
-    if (!target) return;
+    // Not drawn (above the last turns): draw from its turn; this runs again once it is there.
+    if (!target) { const index = turnOf.get(focusItem.itemId); if (index !== undefined) reach(index); return; }
     // A hit inside folded words: open them first; this runs again once they are open.
     if (target.querySelector(".request-text .markdown.folded") && revealedFor.current !== focusItem.nonce) {
       revealedFor.current = focusItem.nonce;
@@ -647,7 +839,7 @@ export function Transcript({
     const timer = window.setTimeout(() => { target.classList.remove("flash"); flashTarget.current = null; }, 2400);
     flashTarget.current = { element: target, timer };
     onFocusDone?.();
-  }, [focusItem, loading, items.length, onFocusDone, revealed]);
+  }, [focusItem, loading, items.length, onFocusDone, revealed, from]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Enter / Esc answer the pending approval (or plan), only from the page itself or from inside
   // this conversation away from controls: never a key meant for the sidebar, a menu, another pane.
@@ -672,6 +864,8 @@ export function Transcript({
   };
 
   const jumpTo = (turnId: string) => {
+    // An undrawn turn (the outline, the pinned band): drawn first, the jump made once it is there.
+    if (!reach(turns.findIndex((turn) => turn.id === turnId))) { pendingJump.current = turnId; return; }
     const section = sections.current.get(turnId);
     const element = scroller.current;
     if (!section || !element) return;
@@ -679,6 +873,20 @@ export function Transcript({
     readingAnchor.current = null;
     reveal(turnId);
     element.scrollTo({ top: section.offsetTop - 8, behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  };
+
+  useLayoutEffect(() => {
+    const turnId = pendingJump.current;
+    if (!turnId || !sections.current.has(turnId)) return;
+    pendingJump.current = null;
+    jumpTo(turnId);
+  }, [from]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** "이전 대화 보기": TURN_STEP turns more above; the reader stays on what they were reading. */
+  const showEarlier = () => {
+    const element = scroller.current;
+    if (element) { pinned.current = false; restorePending.current = null; readingAnchor.current = captureReadingAnchor(element); }
+    setDrawn({ sessionId, from: earlierFrom(from) });
   };
 
   // The outline (right sidebar, a compact request list) jumps here with the same path.
@@ -696,57 +904,17 @@ export function Transcript({
     onPosition?.({ top: element.scrollTop, follow: true });
   };
 
-  const renderBlockContent = (block: Block) => {
-    switch (block.type) {
-      case "user":
-        return null;
-      case "assistant":
-        return (
-          <div key={block.item.id} className="turn-answer">
-            <AssistantText text={block.item.text} streaming={block.item.streaming} media={block.item.media} />
-            <MessageActions sessionId={sessionId} itemId={block.item.id} streaming={block.item.streaming} />
-          </div>
-        );
-      case "work":
-        return (
-          <WorkBlock key={block.id} block={block} focusItemId={focusItem?.itemId} />
-        );
-      case "approval":
-        return <ApprovalCard key={block.item.id} item={block.item} provider={provider} readOnly={readOnly} onAnswer={(decision, response) => onAnswer(block.item.id, decision, response)} onTrust={onTrust} />;
-      case "plan":
-        return <PlanCard key={block.item.id} item={block.item} />;
-      case "notice":
-        return (
-          <div key={block.item.id} className={`notice notice-${block.item.level}`} role={block.item.level === "error" ? "alert" : "status"}>
-            {block.item.text}
-          </div>
-        );
-      case "artifact": {
-        const artifact = state.artifacts[block.item.artifactId];
-        return artifact ? <FileCard key={block.item.id} artifact={artifact} revision={block.item.revision} change={block.item.change} /> : null;
-      }
-      case "proposal": {
-        const proposal = state.proposals[block.item.proposalId];
-        return proposal ? <ProposalCard key={block.item.id} proposal={proposal} primary={block.item.id === primaryProposal} /> : null;
-      }
-      case "handoff": {
-        const handoff = state.handoffs[block.item.handoffId];
-        return handoff ? <HandoffCard key={block.item.id} handoff={handoff} viewer={sessionId} /> : null;
-      }
-      case "image":
-        return <ImageCard key={block.item.id} item={block.item} viewer={sessionId} />;
-      case "link":
-        return <LinkEndCard key={block.item.id} linkId={block.item.linkId} />;
-      case "turnEnd":
-        return null;
-    }
-  };
-  const renderBlock = (block: Block) => {
-    const id = block.type === "work" ? block.id : block.item.id;
-    return <div key={id} className="transcript-block" data-reading-id={id} data-item-id={block.type === "work" ? undefined : id}>{renderBlockContent(block)}</div>;
-  };
-
+  // Every picture of this conversation in order (attachments, tool pictures, pictures in answers): the viewer's 이전 / 다음 go through all of them.
+  // Kept the same while the list is the same (a streaming answer changes `items` on every step; no picture re-renders for it).
+  const kept = useRef<ViewerPicture[]>([]);
+  const pictures = useMemo(() => {
+    const next = conversationPictures(items);
+    const same = next.length === kept.current.length && next.every((entry, index) => entry.id === kept.current[index]!.id);
+    if (!same) kept.current = next;
+    return kept.current;
+  }, [items]);
   return (
+    <ConversationPictures.Provider value={pictures}>
     <div className="transcript-wrap" ref={wrap} data-screen="S03" data-follow-output={pinned.current}>
       <div
         className="transcript"
@@ -841,43 +1009,16 @@ export function Transcript({
           {loading ? <div className="empty-hint" role="status">대화를 불러오는 중…</div> : null}
           {!loading && !blocks.length ? <div className="empty-hint">요청을 보내면 여기에 대화가 이어집니다.</div> : null}
           {!loading && !blocks.length && emptyNote ? emptyNote : null}
-          {turns.map((turn, position) => (
-            <section
-              key={turn.id}
-              className="turn"
-              ref={(element) => {
-                if (element) sections.current.set(turn.id, element);
-                else sections.current.delete(turn.id);
-              }}
-            >
-              {turn.user ? <RequestBlock index={turn.index} user={turn.user} reveal={revealed?.id === turn.user.id ? revealed.nonce : 0} onFork={onFork ? fork : undefined} onOpenSession={openSession} /> : null}
-              <div className="turn-body">
-                {turn.blocks.map(renderBlock)}
-                {waitingFirst && position === turns.length - 1 ? (
-                  <div className="turn-answer">
-                    <div className="response-pending" role="status" aria-label="응답을 기다리는 중">
-                      <span className="response-pending-dots">
-                        <i />
-                        <i />
-                        <i />
-                      </span>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-              {turn.end ? (
-                <div className={`turn-end turn-end-${turn.end.status}`} data-item-id={turn.end.id} data-reading-id={turn.end.id}>
-                  <span className="entry-cells inline">
-                    <span className="entry-cell">
-                      {turn.end.status === "completed" ? <Icon name="check" size={13} /> : null}
-                      {turnEndText(turn.end)}
-                    </span>
-                    {duration(turn.end.durationMs) ? <span className="entry-cell">{duration(turn.end.durationMs)}</span> : null}
-                  </span>
-                </div>
-              ) : null}
-              {turn.after.map(renderBlock)}
-            </section>
+          {from > 0 ? (
+            <div className="turns-earlier">
+              <button type="button" className="jump-end" onClick={showEarlier} title={`요청 ${from}개가 위에 더 있습니다`}>
+                <Icon name="chevronUp" size={15} /> 이전 대화 보기
+              </button>
+            </div>
+          ) : null}
+          {drawnTurns.map((turn, drawnAt) => (
+            <TurnSection key={turn.id} turn={turn} ctx={turnContext} waiting={waitingFirst && from + drawnAt === turns.length - 1}
+              reveal={turn.user && revealed?.id === turn.user.id ? revealed.nonce : 0} onFork={onFork ? fork : undefined} onOpenSession={openSession} register={registerSection} />
           ))}
         </div>
       </div>
@@ -893,5 +1034,6 @@ export function Transcript({
         </div>
       ) : null}
     </div>
+    </ConversationPictures.Provider>
   );
 }

@@ -17,20 +17,35 @@ export interface ProtectedSocket {
   on(event: "message" | "close" | "error", listener: (...args: unknown[]) => void): void;
 }
 type Upload = { request: RemoteRequest; chunks: Buffer[]; size: number };
+/** All device connections at once, and of those how many may not have signed in or paired yet (L3). */
+export const DEVICE_SOCKET_LIMIT = 32, ANONYMOUS_SOCKET_LIMIT = 8;
 export class DeviceGateway {
   private readonly sockets = new Set<ProtectedSocket>();
+  /**
+   * Connections that have neither signed in with a credential nor made a valid pairing request, oldest
+   * first. Anyone who can reach the listener (since Tailscale, any tailnet peer) can open these; they are
+   * capped so they never take the room of signed-in devices — when full, the oldest one makes way.
+   */
+  private readonly anonymous = new Set<ProtectedSocket>();
   private readonly media: RemoteMediaAccess;
   private readonly options: {
     registry: DeviceRegistry; manager: SessionManager; bus: EventBus;
     localOrigin: () => string | null; localToken: string; dataDir: string; voice?: import("../voice.ts").VoiceService;
     push?: () => import("../push/devices.ts").PushDevices | undefined;
     servicePreviews?: import("../service-previews.ts").ServicePreviews;
+    /** A device signed in; `origin.host` is the name it reached this PC by (the panel's "휴대폰에서 열림"). */
+    onAuthenticated?: (origin: { host?: string } | undefined) => void;
   };
   constructor(options: DeviceGateway["options"]) { this.options = options; this.media = new RemoteMediaAccess(options.dataDir, options.manager); }
-  close() { for (const socket of this.sockets) socket.close(1000, "remote access disabled"); this.sockets.clear(); }
-  attach = async (socket: ProtectedSocket) => {
-    if (this.sockets.size >= 32) { socket.close(1008, "connection limit"); return; }
-    this.sockets.add(socket);
+  close() { for (const socket of this.sockets) socket.close(1000, "remote access disabled"); this.sockets.clear(); this.anonymous.clear(); }
+  attach = async (socket: ProtectedSocket, origin?: { host?: string }) => {
+    if (this.anonymous.size >= ANONYMOUS_SOCKET_LIMIT) {
+      const oldest = this.anonymous.values().next().value!;
+      this.anonymous.delete(oldest); this.sockets.delete(oldest);
+      oldest.close(1013, "too many connections that have not signed in");
+    }
+    if (this.sockets.size >= DEVICE_SOCKET_LIMIT) { socket.close(1008, "connection limit"); return; }
+    this.sockets.add(socket); this.anonymous.add(socket);
     const { registry, manager, bus } = this.options;
     const connectionId = randomUUID(), uploads = new Map<string, Upload>(), requests = new Map<string, AbortController>();
     let credential = "", deviceId = "", rotating = false, closed = false, queued: Promise<void> = Promise.resolve(), releaseEvents: (() => void) | undefined;
@@ -49,7 +64,7 @@ export class DeviceGateway {
     };
     const stop = () => {
       if (closed) return; closed = true; releaseEvents?.(); releaseRegistry();
-      clearInterval(expiry); this.sockets.delete(socket);
+      clearInterval(expiry); this.sockets.delete(socket); this.anonymous.delete(socket);
       for (const controller of requests.values()) controller.abort();
       requests.clear(); uploads.clear();
     };
@@ -165,14 +180,17 @@ export class DeviceGateway {
         const offer = message.offer as { offerId?: string; token?: string };
         // What the device says about itself: it keeps its credential, and which earlier approval was its own.
         // Both only inform the owner's approval; neither grants anything.
-        return reply(id, registry.requestPairing({ offerId: String(offer?.offerId ?? ""), token: String(offer?.token ?? ""), name: String(message.name ?? ""), platform: String(message.platform ?? ""), connectionId,
-          remember: message.remember === true, ...(typeof message.previousDeviceId === "string" && message.previousDeviceId.length <= 64 ? { previousDeviceId: message.previousDeviceId } : {}) }));
+        const ticket = registry.requestPairing({ offerId: String(offer?.offerId ?? ""), token: String(offer?.token ?? ""), name: String(message.name ?? ""), platform: String(message.platform ?? ""), connectionId,
+          remember: message.remember === true, ...(typeof message.previousDeviceId === "string" && message.previousDeviceId.length <= 64 ? { previousDeviceId: message.previousDeviceId } : {}) });
+        // It held this PC's one-time offer (from the QR): no longer an anonymous connection.
+        this.anonymous.delete(socket);
+        return reply(id, ticket);
       }
       if (message.op === "claim") return reply(id, registry.claimCredential({ requestId: String(message.requestId ?? ""), claimToken: String(message.claimToken ?? ""), connectionId }));
       if (message.op === "authenticate") {
         compatibility = handshakeFromHeader(message.protocol === undefined ? undefined : JSON.stringify(message.protocol));
         credential = String(message.credential ?? ""); const grant = authenticated();
-        deviceId = grant.deviceId;
+        deviceId = grant.deviceId; this.anonymous.delete(socket); this.options.onAuthenticated?.(origin);
         return reply(id, { grant, compatibility, hostId: manager.snapshot().hostId, cursor: { epoch: bus.epoch, seq: bus.currentSeq } });
       }
       if (message.op === "unsubscribe") { releaseEvents?.(); releaseEvents = undefined; return; }
@@ -242,6 +260,6 @@ export class DeviceGateway {
       }).catch(() => { socket.close(1011, "connection failure"); stop(); });
     });
     socket.on("close", stop); socket.on("error", stop);
-    await sendProtectedServerInfo(socket as PaseoProtectedSocket, { serverId: manager.snapshot().hostId, hostname: manager.snapshot().hostLabel, version: "0.5.2" });
+    await sendProtectedServerInfo(socket as PaseoProtectedSocket, { serverId: manager.snapshot().hostId, hostname: manager.snapshot().hostLabel, version: "0.5.3" });
   };
 }

@@ -8,10 +8,16 @@
  * shadows it (then THEIR copy's runner runs, as a conversation would). The skill folder is only
  * read; every output goes to a fresh temporary folder.
  *
- * Where the result goes (one rule): a NEW HWPX beside the open document (same folder, a free name
- * from the title), tracked and opened in its own tab; the open document is never changed. (An empty
- * new document is not replaced in place: during the turn its revision belongs to the turn's own
- * editor — the executor's final save would refuse or overwrite a revision written underneath it.)
+ * Where the result goes (doc-default, 0.5.2's leftover 4d):
+ *  - the open document is EMPTY and UNTOUCHED (`emptyUntouched`: an HWPX whose every saved revision has
+ *    no text, with no unsaved edits in any open view) → the made document becomes THIS document's next
+ *    revision; the tab stays; the name follows the made title only while the document keeps the name
+ *    새 문서 gave it (`defaultNamed`), through the gateway's 이름 바꾸기 with all its refusals.
+ *    It is written when the turn ENDS (the view's open-made), never under the running turn: during the
+ *    turn the document's revision belongs to the turn's own editor. Checked again then; touched in the
+ *    meantime → as below.
+ *  - otherwise a NEW HWPX beside the open document (same folder, a free name from the title), tracked
+ *    and opened in its own tab; the open document is never changed. `.hwp` is never filled (read-only input).
  */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -95,12 +101,35 @@ function plan(result: Record<string, unknown>) {
   };
 }
 
+/**
+ * Empty and untouched, from what the gateway knows (never from the file name): an HWPX, no open view
+ * reporting unsaved edits, and every saved revision without text (a few at most: a blank the person
+ * saved, renamed or not). One character typed (saved or not) is a touch.
+ */
+export async function emptyUntouched(doc: { format: string; revisions: number[]; dirty: boolean; text(revision: number): Promise<string> }) {
+  if (doc.format !== "hwpx" || doc.dirty || !doc.revisions.length || doc.revisions.length > 5) return false;
+  for (const revision of doc.revisions) {
+    let text: string;
+    try { text = await doc.text(revision); } catch { return false; }
+    if (text.replace(/\s+/g, "")) return false;
+  }
+  return true;
+}
+
+/** The note 새 문서 gives a blank Hangul document's first revision (sessions.ts createOfficeDocument). */
+export const BLANK_HANGUL_NOTE = "새 한글 문서";
+/** Still the name 새 문서 gave it: made blank by the app and never renamed since (its rename journal). */
+export function defaultNamed(first: { note: string | null } | undefined, artifact: { renamed?: unknown }) {
+  return first?.note === BLANK_HANGUL_NOTE && !artifact.renamed;
+}
+
 export type HangulMade = Awaited<ReturnType<typeof makeHangulDocument>>;
 /**
- * resolve, then (when the request carries any content) compose; copy the HWPX beside the open
- * document; `track` registers it and returns its artifact id. Nothing is written when the runner fails.
+ * resolve, then (when the request carries any content) compose; `fill` may take the HWPX for the open
+ * document itself (empty and untouched: kept for the turn's end); else copy it beside the open document,
+ * and `track` registers it and returns its artifact id. Nothing is written when the runner fails.
  */
-export async function makeHangulDocument(skillDir: string, input: HangulInput, target: { documentPath: string; track(path: string): string | null; signal?: AbortSignal }) {
+export async function makeHangulDocument(skillDir: string, input: HangulInput, target: { documentPath: string; track(path: string): string | null; fill?(hwpx: string, title: string): Promise<{ artifactId: string; name: string } | null>; signal?: AbortSignal }) {
   const work = await mkdtemp(join(tmpdir(), "wb-hangul-"));
   try {
     const context = input.context ?? {};
@@ -121,12 +150,14 @@ export async function makeHangulDocument(skillDir: string, input: HangulInput, t
     if (composed.status === "failed" || !hwpx) return { made: false as const, ...summary, form: form.form };
     target.signal?.throwIfAborted();
     const title = input.title?.trim() || (form.form.templateStatus === "common-draft" ? "새 한글 문서 (초안)" : String(form.form.title ?? "새 한글 문서"));
+    const markdown = files.find((file) => file.name === "document.md");
+    const preview = markdown ? (await readFile(markdown.path, "utf8")).slice(0, 4000) : null, draft = form.form.templateStatus === "common-draft";
+    const filled = target.fill ? await target.fill(hwpx.path, title) : null;
+    if (filled) return { made: true as const, ...summary, form: form.form, artifactId: filled.artifactId, name: filled.name, folder: basename(dirname(target.documentPath)), inPlace: true, draft, markdownPreview: preview };
     const path = madePath(dirname(target.documentPath), title);
     await copyFile(hwpx.path, path, 1 /* COPYFILE_EXCL: never over a file */);
     const artifactId = target.track(path);
-    const markdown = files.find((file) => file.name === "document.md");
-    return { made: true as const, ...summary, form: form.form, artifactId, name: basename(path), folder: basename(dirname(path)),
-      draft: form.form.templateStatus === "common-draft", markdownPreview: markdown ? (await readFile(markdown.path, "utf8")).slice(0, 4000) : null };
+    return { made: true as const, ...summary, form: form.form, artifactId, name: basename(path), folder: basename(dirname(path)), inPlace: false, draft, markdownPreview: preview };
   } finally { await rm(work, { recursive: true, force: true }).catch(() => {}); }
 }
 

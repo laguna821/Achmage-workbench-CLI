@@ -1,6 +1,7 @@
 import type { HostFontProvider, HostFontSnapshot } from "../../../packages/contracts/src/hwp-fonts.ts";
 import { installCrispCanvases } from "../../../third_party/hop/crisp-canvas.ts";
 import { enhanceCustomSelects } from "../../../third_party/hop/custom-select.ts";
+import { installToolbarLabels } from "../../../third_party/hop/toolbar-labels.ts";
 import { installHwpFontRule } from "./hwp-fonts.ts";
 
 type StudioWindow = Window & { rhwpStudio?: { fonts: { setProvider(provider: HostFontProvider): Promise<void> } } };
@@ -13,6 +14,8 @@ export function installHwpEnhancements(frame: HTMLIFrameElement, token: string):
   const stopCrisp = root ? installCrispCanvases(root) : () => {};
   // The font name opens the studio's own categorised picker (document, installed, all fonts).
   const stopSelects = enhanceCustomSelects(doc, { ownPicker: "#font-name" });
+  // HOP's label layer: 보기 › 도구 상자 라벨 표시 (hangul-studio.css hides the labels when it is off).
+  const stopLabels = installToolbarLabels(doc);
   const controller = new AbortController();
   const get = async (path: string, signal: AbortSignal) => {
     const response = await fetch(path, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.any([signal, controller.signal]) });
@@ -34,7 +37,7 @@ export function installHwpEnhancements(frame: HTMLIFrameElement, token: string):
   void view.rhwpStudio.fonts.setProvider(provider).catch(error => {
     if (!controller.signal.aborted) console.warn("한글 설치 글꼴 연결:", error);
   });
-  return () => { controller.abort(); stopCrisp(); stopSelects(); stopFonts(); };
+  return () => { controller.abort(); stopCrisp(); stopSelects(); stopLabels(); stopFonts(); };
 }
 
 /**

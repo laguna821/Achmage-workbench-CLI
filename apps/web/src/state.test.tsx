@@ -21,3 +21,25 @@ describe("the app's state as a document leaves and comes back", () => {
     expect(current.removedArtifacts).toEqual({});
   });
 });
+
+describe("live events of one frame (perf G1)", () => {
+  const delta = (seq: number, text: string) => ({ type: "item.delta", sessionId: "s", itemId: "a", textDelta: text, seq, at: seq }) as never;
+  const loaded = () => state({ transcripts: { s: { items: [{ id: "a", kind: "assistant", text: "", streaming: true } as never], seq: 0 } } });
+  it("a batch gives the same state as one event at a time, in order", () => {
+    const events = [delta(1, "가"), delta(2, "나"), delta(3, "다")];
+    const one = events.reduce((current, event) => reducer(current, { type: "event", event }), loaded());
+    const batch = reducer(loaded(), { type: "events", events });
+    expect(batch).toEqual(one);
+    expect((batch.transcripts.s!.items[0] as { text: string }).text).toBe("가나다");
+  });
+  it("marks a conversation whose items wait aside, until it is shown with them; a resync forgets it", () => {
+    let current = reducer(loaded(), { type: "aside", sessionId: "s" });
+    expect(current.aside).toEqual({ s: true });
+    expect(reducer(current, { type: "aside", sessionId: "s" })).toBe(current);
+    current = reducer(current, { type: "events", events: [delta(1, "가")], shown: "s" });
+    expect(current.aside).toEqual({});
+    expect((current.transcripts.s!.items[0] as { text: string }).text).toBe("가");
+    current = reducer(reducer(current, { type: "aside", sessionId: "s" }), { type: "snapshot", snapshot: { hostLabel: "", hostId: "", seq: 9, folders: [], works: [], sessions: [], providers: [] } as never });
+    expect(current.aside).toEqual({});
+  });
+});

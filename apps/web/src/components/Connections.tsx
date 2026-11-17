@@ -8,6 +8,7 @@ import { capital, EngineCard, usageWords, type EngineActions } from "./EngineSet
 import { PathDetail, SettingsGroup, SettingsRow, SettingsSwitch } from "./SettingsSheet.tsx";
 import { Segmented } from "./ui/Hig.tsx";
 import { MESSENGER_NEEDS } from "./phone-words.ts";
+import { DOC_OPEN_CHOICES, DOC_OPEN_DEFAULT_MARK, DOC_OPEN_HINT, DOC_OPEN_LABEL, defaultDocOpen, useDocOpen } from "../doc-open.ts";
 
 // The rows of 설정 (release unit B). Each section is one component; App gives them the actions
 // the old ⋯ pile had, so every control keeps its behaviour (rel-b report: old → new).
@@ -32,9 +33,11 @@ const key = (label: string, onClick: () => void, extra: { primary?: boolean; dis
 
 // ── 일반 ─────────────────────────────────────────────────────────────────────────────────────
 
-export function GeneralSection({ startScreen, onStartScreen, notifications, onNotifications, brandMotion, onBrandMotion, worksDir, background, bookmarks, onPropertyTemplate, shortcutSettings, onOnboarding }: {
+export function GeneralSection({ startScreen, onStartScreen, notifications, onNotifications, sound, brandMotion, onBrandMotion, worksDir, background, bookmarks, onPropertyTemplate, shortcutSettings, onOnboarding }: {
   startScreen: "home" | "last"; onStartScreen(next: "home" | "last"): void;
   notifications: boolean; onNotifications(next: boolean): void;
+  /** 완료 소리 (DoneSoundSettings): its rows right under 끝나면 알림 보내기. */
+  sound?: ReactNode;
   brandMotion: boolean; onBrandMotion(next: boolean): void;
   /** 프로젝트 기본 폴더 (WorksDirRow). */
   worksDir?: ReactNode;
@@ -54,6 +57,7 @@ export function GeneralSection({ startScreen, onStartScreen, notifications, onNo
         control={<SettingsSwitch label="지금 화면의 로고 움직임" checked={brandMotion} onChange={onBrandMotion} />} />
       <SettingsRow label="끝나면 알림 보내기" hint="창이 뒤에 있을 때 답이 오거나, 확인이 필요하거나, 실패하면 컴퓨터 알림으로 알립니다."
         control={<SettingsSwitch label="끝나면 알림 보내기" checked={notifications} onChange={onNotifications} />} />
+      {sound}
       {background}
     </SettingsGroup>
     <SettingsGroup title="프로젝트">
@@ -87,7 +91,10 @@ function BrowserRow({ status, actions }: { status: AgentBrowserStatus; actions: 
     </>} />;
 }
 
-export function EnginesSection({ providers, connected, engineActions, onRefresh, browser, browserActions, onIntegrations, voice }: {
+/** "내 MCP 서버와 훅 불러오기" (0.5.3, the owner 2026-11-16): what it does, in one sentence. */
+export const personalToolsHint = (provider: Provider) => `켜면 이 컴퓨터의 ${provider === "codex" ? "Codex" : "Claude"} 설정에 넣어 둔 MCP 서버와 훅을 Workbench 대화에서도 쓰며, 대화마다 그것들을 새로 띄웁니다.`;
+
+export function EnginesSection({ providers, connected, engineActions, onRefresh, browser, browserActions, onIntegrations, voice, onPersonalTools, resources }: {
   providers: Partial<Record<Provider, ProviderStatus>>;
   connected: boolean;
   engineActions: EngineActions;
@@ -97,6 +104,10 @@ export function EnginesSection({ providers, connected, engineActions, onRefresh,
   onIntegrations(): void;
   /** 음성 모델 (the first run's model cache, now here). */
   voice?: ReactNode;
+  /** "내 MCP 서버와 훅 불러오기" switched for an engine (off by default; shown when the gateway says what it is). */
+  onPersonalTools?: (provider: Provider, on: boolean) => void;
+  /** 동시에 돌리는 작업 (0.5.3, the resource manager's settings rows). */
+  resources?: ReactNode;
 }) {
   return <>
     <p className="settings-lead">이 컴퓨터에서 찾은 AI 엔진입니다. 로그인은 각 엔진의 로그인 페이지에서 하며, 암호를 이 앱에 넣지 않습니다.</p>
@@ -110,9 +121,12 @@ export function EnginesSection({ providers, connected, engineActions, onRefresh,
             {status?.usage.length ? <ul className="settings-facts">{status.usage.map((window) => <li key={window.label}>{usageWords(window)}</li>)}</ul>
               : status?.loggedIn ? <p className="settings-note">사용량은 첫 요청 뒤에 보입니다.</p> : null}
           </EngineCard>
+          {onPersonalTools && status?.personalTools !== undefined ? <SettingsRow className="settings-personal-tools" label="내 MCP 서버와 훅 불러오기" hint={personalToolsHint(provider)}
+            control={<SettingsSwitch label="내 MCP 서버와 훅 불러오기" checked={status.personalTools} onChange={(next) => onPersonalTools(provider, next)} />} /> : null}
         </div>;
       })}
     </SettingsGroup>
+    {resources ? <SettingsGroup title="동시 작업">{resources}</SettingsGroup> : null}
     <SettingsGroup title="엔진이 함께 쓰는 것">
       {browser ? <BrowserRow status={browser} actions={browserActions} /> : null}
       <SettingsRow label="엔진이 함께 쓰는 도구" hint="Claude와 Codex가 함께 쓰는 도구와 양식을 나란히 보고, 한쪽에 있는 것을 다른 쪽에도 넣습니다."
@@ -135,7 +149,7 @@ export function DevicesSection({ panel, onConnections, onPush, onMessenger, loca
   local: boolean;
 }) {
   return <>
-    <p className="settings-lead">휴대폰에서 이 PC의 AI에게 일을 시키는 길은 둘입니다. 메신저가 가장 쉽습니다. 휴대폰 화면으로 직접 열려면 휴대폰이 열 수 있는 이 PC의 주소를 ‘연결 주소 설정’에 직접 넣어야 합니다. 같은 와이파이에 있어도 저절로 되지 않습니다.</p>
+    <p className="settings-lead">{local ? "휴대폰에서 이 PC의 AI에게 일을 시키는 길은 둘입니다. 메신저가 가장 쉽습니다. 테일스케일을 쓰면 휴대폰에서 이 작업실 화면을 그대로 엽니다(아래 ‘테일스케일로 연결’). 같은 와이파이에 있어도 저절로 되지 않습니다." : "휴대폰이나 다른 기기를 PC에 연결하고, 연결한 PC를 관리합니다."}</p>
     <SettingsGroup title="휴대폰에서 쓰기">
       {local && onMessenger && !panel ? <SettingsRow label="메신저로 쓰기" hint={`텔레그램이나 Slack 대화로 일을 시키고 결과를 받습니다. ${MESSENGER_NEEDS}`} control={key("메신저 설정", onMessenger)} /> : null}
       {onPush ? <SettingsRow label="휴대폰 알림" hint="허용한 기기에 작업이 끝나거나, 실패하거나, 확인이 필요할 때 알립니다." control={key("알림 설정…", onPush, { haspopup: true })} /> : null}
@@ -159,6 +173,14 @@ export function EditorAiRow({ api }: { api: Api }) {
     control={<SettingsSwitch label="편집기 안에 문서 AI 보이기" checked={shown ?? true} disabled={shown === null}
       onChange={(next) => { setProblem(""); void setEditorAiShown(api, next).then(setShown).catch(() => setProblem("바꾸지 못했습니다. 잠시 뒤 다시 해 보세요.")); }} />}
     detail={problem ? <p className="settings-note" role="alert">{problem}</p> : undefined} />;
+}
+
+/** 문서를 열 때: 쪽 보기 first (the default since doc-default) or the editor at once. */
+export function DocOpenRow() {
+  const [choice, setChoice] = useDocOpen();
+  const usual = defaultDocOpen();
+  return <SettingsRow label={DOC_OPEN_LABEL} hint={DOC_OPEN_HINT}
+    control={<Segmented label={DOC_OPEN_LABEL} value={choice} onChange={setChoice} options={DOC_OPEN_CHOICES.map(([value, label]) => ({ value, label: value === usual ? label + DOC_OPEN_DEFAULT_MARK : label }))} />} />;
 }
 
 export function DocumentsSection({ tools, onInstallIeum, onRefreshTools, onOfficeSettings, onDropbox, onOfficeImport, onKnowledge, imageUpload, vault, editorAi }: {
@@ -192,6 +214,7 @@ export function DocumentsSection({ tools, onInstallIeum, onRefreshTools, onOffic
           control={row.key === "ieumApp" && !row.status.busy ? key(row.status.available ? "연결과 업데이트…" : "설치하고 연결…", onInstallIeum, { haspopup: true }) : undefined}
           detail={<>{row.status.message ? <p className="settings-note">{row.status.message}</p> : null}<PathDetail value={row.status.path ? [row.status.path, row.status.version ? `판 ${row.status.version}` : ""].filter(Boolean).join("\n") : null} label="자세히" /></>} />;
       })}
+      <DocOpenRow />
       {onOfficeSettings ? <SettingsRow label="문서 AI" hint="문서 편집기 안의 AI가 쓰는 엔진과 고치는 방식을 정합니다." control={key("문서 AI 설정…", onOfficeSettings, { haspopup: true })} /> : null}
       {editorAi}
       {onOfficeImport ? <SettingsRow label="이음오피스 설정 가져오기" hint="이음오피스 앱에서 쓰던 설정을 이 앱으로 가져옵니다." control={key("이음오피스 설정 가져오기…", onOfficeImport, { haspopup: true })} /> : null}

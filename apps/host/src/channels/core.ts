@@ -1,3 +1,4 @@
+import { withParticle } from "@workbench/contracts";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,7 +10,7 @@ import { MAX_ATTACHMENT, attachmentsDir } from "../attachments.ts";
 import type { Projects } from "../project.ts";
 import type { SessionManager } from "../sessions.ts";
 import type { Store } from "../store.ts";
-import { ChannelComfort, REMOTE_LINE, engineFacts, engineSentence, footerOn, footerWords, renameConversation, statusWords } from "./comfort.ts";
+import { CONFIRM_OFF, CONFIRM_ON, ChannelComfort, REMOTE_LINE, confirmOn, engineFacts, engineSentence, footerOn, footerWords, renameConversation, statusWords } from "./comfort.ts";
 import { needlesOf, withheld, type HoldReason } from "./file-scan.ts";
 import { blockedReason, mimeOf, previewed, turnFiles, type BlockRules, type OutFile } from "./files.ts";
 import { answerFile, closeFence, formatted } from "./format.ts";
@@ -310,6 +311,7 @@ export class ChannelCore {
       projects: () => this.projects(),
       search: (query) => this.search(query),
       now: () => this.now(),
+      waitingLine: (sessionId, requestId) => this.waitingLine(sessionId, requestId),
       show: (adapter, binding, messageId, screen) => this.showScreen(adapter, binding, messageId, screen),
       send: (adapter, binding, key, screen) => this.say(adapter, this.channels.binding(binding.id) ?? binding, key, this.message(screen)),
       label: (session) => this.label(session),
@@ -345,6 +347,8 @@ export class ChannelCore {
       clean: (error) => this.log.clean(error),
       setFooter: (binding, on) => this.comfort.setFooter(binding, on),
       footerOn: (binding) => footerOn(binding, this.footer),
+      confirmOn: (binding) => this.confirmOn(binding),
+      setConfirm: (binding, on) => { this.setConfirm(binding.id, on); },
       compact: (binding) => this.comfort.compact(binding),
       rename: (sessionId, name) => renameConversation(this.manager, (work) => this.hidden(work), sessionId, name),
       remoteAway: (binding) => this.remoteAway(binding),
@@ -365,7 +369,7 @@ export class ChannelCore {
       installed: (provider) => Boolean(this.manager.snapshot().providers.find((status) => status.provider === provider)?.installed),
       create: (binding, work, provider, title) => { const session = this.createConversation(binding, work, null, provider, title ?? undefined); this.changed(); return session; },
       send: (binding, session, requestId, text) => this.remoteSend(binding, session, requestId, text),
-      handed: (binding, remote, session, how, text, requestId) => this.handed(binding, remote, session, how, text, requestId),
+      handed: (binding, remote, session, how, text, requestId, waiting) => this.handed(binding, remote, session, how, text, requestId, waiting),
       stop: async (session) => { if (!busy(session)) return "idle"; await this.manager.interrupt(session.id); return "stopped"; },
       requestId: (binding) => `ch:${binding.kind}:${binding.botId}${REMOTE_REQUEST}${randomBytes(9).toString("base64url")}`,
     });
@@ -692,6 +696,28 @@ export class ChannelCore {
     this.audit(next, next.kind, "revoked");
     for (const row of this.channels.owed(bindingId)) this.discard(row, next);
     this.changed();
+    return next;
+  }
+
+  /** "확인 받기" of a chat (unit 13): off unless turned on. */
+  confirmOn(binding: Binding): boolean {
+    return confirmOn(this.channels.binding(binding.id) ?? binding);
+  }
+
+  /**
+   * "확인 받기" from the chat's 메뉴 › 알림 or the PC's 설정 › 메신저: on, the conversations this chat
+   * makes from now on are `auto` (see `createConversation`); conversations that exist keep their mode.
+   * Off leaves no mark in the prefs (as before the switch existed). The chat is told once, in one line.
+   */
+  setConfirm(bindingId: string, on: boolean): Binding {
+    const binding = this.requireBinding(bindingId);
+    if (confirmOn(binding) === on) return binding;
+    const { confirm: _gone, ...rest } = binding.prefs;
+    const next = this.channels.updateBinding(bindingId, { prefs: on ? { ...rest, confirm: true } : rest });
+    this.audit(next, next.kind, "confirm", { result: on ? "on" : "off" });
+    this.changed();
+    const adapter = this.adapters.get(adapterKey(next.kind, next.botId));
+    if (adapter && !next.revokedAt) this.track(this.say(adapter, next, `confirm:${next.id}:${this.now()}:${on ? 1 : 0}`, { text: on ? CONFIRM_ON : CONFIRM_OFF }).catch((error: unknown) => this.log.note("confirm_note_failed", error)));
     return next;
   }
 
@@ -1269,6 +1295,7 @@ export class ChannelCore {
 
   /**
    * A conversation the channel makes: in the engine's full-access mode (the channel asks nothing),
+   * or `auto` when the chat turned "확인 받기" on (its questions then come as bound buttons),
    * with the agent browser on (web work is asked for in plain words; in full access it shows no
    * approval card, browse-policy.ts `browserDecision`), named "휴대폰 · 월/일", and not made the one
    * the desktop shows. Its engine: the one named › the messenger's default (when this PC has it) ›
@@ -1281,7 +1308,7 @@ export class ChannelCore {
     const same = like?.provider === provider ? like : null;
     const session = this.manager.createSession(work.id, {
       provider,
-      access: "full",
+      access: this.confirmOn(binding) ? "auto" : "full",
       browser: true,
       purpose: purpose ?? `휴대폰 · ${date.getMonth() + 1}/${date.getDate()}`,
       ...(like?.workspaceId && like.workId === work.id ? { workspaceId: like.workspaceId } : {}),
@@ -1346,7 +1373,7 @@ export class ChannelCore {
    * conversation: the gates a line passes, the chat's ordinary origin (so its answer is owed to the
    * chat), queued by the conversation's own queue while it works. The chat's pointer does not move.
    */
-  private async remoteSend(binding: Binding, session: Session, requestId: string, text: string): Promise<{ delivery: string } | { refused: string; message: string }> {
+  private async remoteSend(binding: Binding, session: Session, requestId: string, text: string): Promise<{ delivery: string; waitingFor?: "slot" } | { refused: string; message: string }> {
     const fresh = this.channels.binding(binding.id);
     if (!fresh || fresh.revokedAt || fresh.lockedAt || fresh.pausedAt) return { refused: "closed", message: "휴대폰 채널이 멈춰 있거나 잠겨 있습니다." };
     if (!this.admitted()) return { refused: "updating", message: "PC가 업데이트를 준비하고 있어 지금은 새 일을 시작하지 않습니다." };
@@ -1354,7 +1381,7 @@ export class ChannelCore {
     try {
       const result = await this.manager.send(session.id, requestId, text, [], null, null, "queue", { origin, activate: false });
       this.audit(fresh, fresh.kind, "request", { sessionId: session.id, requestId, result: result.delivery });
-      return { delivery: result.delivery };
+      return { delivery: result.delivery, ...(result.waitingFor ? { waitingFor: result.waitingFor } : {}) };
     } catch (error) {
       if (error instanceof HttpError && error.code === "archived") return { refused: "archived", message: TEXT.archived };
       if (error instanceof HttpError && error.code === "document_removed") return { refused: "document_removed", message: TEXT.documentRemoved };
@@ -1387,11 +1414,17 @@ export class ChannelCore {
    * The hand-over line in the chat, said by the gateway (not by the AI): where it went and the first
    * 120 characters of what was sent, so a wrong or injected hand-over is seen at once.
    */
-  private async handed(binding: Binding, remote: Session, session: Session, how: "start" | "tell", text: string, requestId: string) {
+  /** A request that waits for a slot (0.5.3), in the chat's words: its place and why. */
+  waitingLine(sessionId: string, requestId: string) {
+    const place = this.manager.resources.positionOf(sessionId, requestId);
+    return `차례를 기다립니다${place ? ` · 대기 ${place}번째` : ""} — ${this.manager.resources.reasonNow()}. 차례가 되면 시작하고 알려 드립니다.`;
+  }
+
+  private async handed(binding: Binding, remote: Session, session: Session, how: "start" | "tell", text: string, requestId: string, waiting = false) {
     const work = this.manager.view.works.get(session.workId);
     const where = how === "start" ? `새 ${PROVIDER_LABEL[session.provider]} 대화` : `「${cutAt(session.purpose, 40)}」 대화`;
     const shown = cutAt(text.replace(/\s+/g, " ").trim(), 120);
-    const line = `→ 「${cutAt(work?.title ?? "?", 40)}」 · ${where}에 맡겼습니다\n보낸 말: ${shown}`;
+    const line = `→ 「${cutAt(work?.title ?? "?", 40)}」 · ${where}에 맡겼습니다\n보낸 말: ${shown}${waiting ? `\n${this.waitingLine(session.id, requestId)}` : ""}`;
     // The same line in the remote's own transcript at the PC (a notice: never sent to the chat by itself).
     this.manager.sink.upsertItem(remote.id, { kind: "notice", id: `remote:${requestId}`, level: "info", text: line, at: this.now() });
     const adapter = this.adapters.get(adapterKey(binding.kind, binding.botId));
@@ -1407,9 +1440,18 @@ export class ChannelCore {
    * message that says so: its button, once per conversation (the hand-off does not say it again).
    */
   private strictNote(binding: Binding, session: Session): MenuButton[][] | null {
-    if (this.manager.accessOf(session) === "full") return null;
+    if (!this.strictWanted(binding, session)) return null;
     if (this.channels.outbox(`strict:${binding.id}:${session.id}`)) return null;
     return [[{ label: "전체 접근으로 바꾸기", kind: "full-access" }]];
+  }
+
+  /**
+   * Whether the stricter-mode notice applies: not to full access, nor to an `auto` conversation of a
+   * chat that turned "확인 받기" on (the person chose to be asked; telling it again is noise).
+   */
+  private strictWanted(binding: Binding, session: Session): boolean {
+    const access = this.manager.accessOf(session);
+    return access !== "full" && !(access === "auto" && this.confirmOn(binding));
   }
 
   /** The notice went out inside the message that showed it: the hand-off does not say it again. */
@@ -1500,7 +1542,7 @@ export class ChannelCore {
       session = place.session;
     }
     const access = this.manager.accessOf(session);
-    if (access !== "full") {
+    if (this.strictWanted(binding, session)) {
       // Said once per conversation; the request goes on as it is, in the conversation's own mode.
       await this.say(adapter, binding, `strict:${binding.id}:${session.id}`, {
         text: `이 대화는 '${MODE_LABEL[access]}' 모드라 중간에 확인 요청이 올 수 있습니다.`,
@@ -1541,7 +1583,8 @@ export class ChannelCore {
     if (result.duplicate) return "done";
     this.audit(binding, binding.kind, "request", { sessionId: session.id, requestId: request.requestId, result: result.delivery });
     if (result.delivery === "steered") await request.reply("(덧붙인 말을 지금 일에 넣었습니다)", "delivery");
-    if (result.delivery === "queued") {
+    if (result.delivery === "queued" && result.waitingFor === "slot") await request.reply(this.waitingLine(session.id, request.requestId), "delivery");
+    else if (result.delivery === "queued") {
       const position = (this.manager.view.sessions.get(session.id)?.queued.findIndex((entry) => entry.id === request.requestId) ?? 0) + 1;
       await request.reply(`대기열에 넣었습니다(${Math.max(1, position)}번째)`, "delivery");
     }
@@ -1587,9 +1630,9 @@ export class ChannelCore {
         rmSync(temp, { force: true });
       }
     }
-    if (large.length) await reply(`${names(large)}은(는) ${megabytes}MB가 넘어 받지 못했습니다. ${adapter.kind === "telegram" ? "텔레그램 봇이" : "이 PC가 Slack에서"} 받을 수 있는 파일은 ${megabytes}MB까지입니다.`, "files-large");
-    if (empty.length) await reply(`${names(empty)}은(는) 빈 파일이라 받지 않았습니다.`, "files-empty");
-    if (failed.length) await reply(`${names(failed)}을(를) 받지 못했습니다. 다시 보내 주세요.`, "files-failed");
+    if (large.length) await reply(`${withParticle(`${names(large)}`, "은/는")} ${megabytes}MB가 넘어 받지 못했습니다. ${adapter.kind === "telegram" ? "텔레그램 봇이" : "이 PC가 Slack에서"} 받을 수 있는 파일은 ${megabytes}MB까지입니다.`, "files-large");
+    if (empty.length) await reply(`${withParticle(`${names(empty)}`, "은/는")} 빈 파일이라 받지 않았습니다.`, "files-empty");
+    if (failed.length) await reply(`${withParticle(`${names(failed)}`, "을/를")} 받지 못했습니다. 다시 보내 주세요.`, "files-failed");
     if (kept.length) this.audit(binding, binding.kind, "file.received", { requestId, result: String(kept.length) });
     return kept;
   }
@@ -1603,7 +1646,7 @@ export class ChannelCore {
     const source = this.manager.documents.revisionPath(artifact.id, revision);
     if (statSync(source).size > this.previewLimitBytes) {
       const limit = Math.max(1, Math.round(this.previewLimitBytes / 1024 / 1024));
-      return { path: null, note: `「${artifact.name}」은(는) ${limit}MB가 넘어 1쪽 미리보기를 만들지 않았습니다. 원본은 함께 보냅니다.` };
+      return { path: null, note: `${withParticle(`「${artifact.name}」`, "은/는")} ${limit}MB가 넘어 1쪽 미리보기를 만들지 않았습니다. 원본은 함께 보냅니다.` };
     }
     const out = join(this.folder("outgoing"), `${randomBytes(9).toString("hex")}.png`);
     const svg = pictureSvg(out);
@@ -1694,12 +1737,12 @@ export class ChannelCore {
         if (page.note) result.notes.push(page.note);
       }
     }
-    if (found.blocked.length) result.notes.push(`${names(found.blocked)}은(는) 비밀이 들어 있을 수 있어 보내지 않았습니다.`);
-    if (found.outside.length) result.notes.push(`${names(found.outside)}은(는) 대화의 작업 폴더 밖에 있어 보내지 않았습니다.`);
-    if (large.length) result.notes.push(`${names(large)}은(는) ${Math.floor(adapter.limits.uploadBytes / 1024 / 1024)}MB가 넘어 보내지 못했습니다. PC에서 열어 보세요.`);
+    if (found.blocked.length) result.notes.push(`${withParticle(`${names(found.blocked)}`, "은/는")} 비밀이 들어 있을 수 있어 보내지 않았습니다.`);
+    if (found.outside.length) result.notes.push(`${withParticle(`${names(found.outside)}`, "은/는")} 대화의 작업 폴더 밖에 있어 보내지 않았습니다.`);
+    if (large.length) result.notes.push(`${withParticle(`${names(large)}`, "은/는")} ${Math.floor(adapter.limits.uploadBytes / 1024 / 1024)}MB가 넘어 보내지 못했습니다. PC에서 열어 보세요.`);
     for (const [reason, why] of Object.entries(HELD) as [HoldReason, string][]) {
       const held = found.held.filter((file) => file.reason === reason).map((file) => file.name);
-      if (held.length) result.notes.push(`${names(held)}은(는) ${why} 보내지 않았습니다.`);
+      if (held.length) result.notes.push(`${withParticle(`${names(held)}`, "은/는")} ${why} 보내지 않았습니다.`);
     }
     // Sent, but part of it could not be opened (7z, rar, PDF, an encrypted zip, …): always said.
     if (found.opaque.length) result.notes.push(unopened(found.opaque));
@@ -1717,7 +1760,7 @@ export class ChannelCore {
   /** One line for the files that did not go with an answer that did: the answer is not sent again. */
   private async sayUnsent(adapter: ChannelAdapter, binding: Binding, key: string, unsent: { name: string; delivered: "no" | "unknown" }[]) {
     const failed = unsent.filter((file) => file.delivered === "no").map((file) => file.name), unsure = unsent.filter((file) => file.delivered === "unknown").map((file) => file.name);
-    const lines = [...(failed.length ? [`${names(failed)}은(는) 보내지 못했습니다. PC에서 열어 보세요.`] : []), ...(unsure.length ? [`${names(unsure)}은(는) 전달되지 않았을 수 있습니다. PC에서 확인해 주세요.`] : [])];
+    const lines = [...(failed.length ? [`${withParticle(`${names(failed)}`, "은/는")} 보내지 못했습니다. PC에서 열어 보세요.`] : []), ...(unsure.length ? [`${withParticle(`${names(unsure)}`, "은/는")} 전달되지 않았을 수 있습니다. PC에서 확인해 주세요.`] : [])];
     this.audit(binding, binding.kind, "file.unsent", { result: String(unsent.length) });
     await this.say(adapter, binding, `unsent:${key}`, { text: lines.join("\n") });
   }
@@ -1726,10 +1769,10 @@ export class ChannelCore {
   private async sendDocument(adapter: ChannelAdapter, binding: Binding, key: string, artifact: Artifact, page: boolean, reply: (text: string, part?: string) => Promise<unknown>) {
     if (blockedReason(artifact.path, artifact.name, this.rules())) {
       this.audit(binding, binding.kind, "file.blocked", { result: "1" });
-      return void (await reply(`「${artifact.name}」은(는) 비밀이 들어 있을 수 있어 보내지 않았습니다.`, "blocked"));
+      return void (await reply(`${withParticle(`「${artifact.name}」`, "은/는")} 비밀이 들어 있을 수 있어 보내지 않았습니다.`, "blocked"));
     }
     if (page) {
-      const shown = previewed(artifact) ? await this.pageOf(artifact, artifact.revision) : { file: null, temp: null, note: `「${artifact.name}」은(는) 쪽 미리보기가 없는 형식입니다.` };
+      const shown = previewed(artifact) ? await this.pageOf(artifact, artifact.revision) : { file: null, temp: null, note: `${withParticle(`「${artifact.name}」`, "은/는")} 쪽 미리보기가 없는 형식입니다.` };
       if ("fallback" in shown && shown.fallback) this.audit(binding, binding.kind, "preview.fallback", { result: shown.fallback });
       try {
         if (!shown.file) return void (await reply(shown.note ?? "미리보기를 만들지 못했습니다.", "page"));
@@ -1743,7 +1786,7 @@ export class ChannelCore {
     const path = this.manager.documents.revisionPath(artifact.id, artifact.revision);
     let size = 0;
     try { size = statSync(path).size; } catch { return void (await reply("그 파일을 읽지 못했습니다.")); }
-    if (size > adapter.limits.uploadBytes) return void (await reply(`「${artifact.name}」은(는) ${Math.floor(adapter.limits.uploadBytes / 1024 / 1024)}MB가 넘어 보내지 못했습니다. PC에서 열어 보세요.`));
+    if (size > adapter.limits.uploadBytes) return void (await reply(`${withParticle(`「${artifact.name}」`, "은/는")} ${Math.floor(adapter.limits.uploadBytes / 1024 / 1024)}MB가 넘어 보내지 못했습니다. PC에서 열어 보세요.`));
     const sent = await this.say(adapter, binding, key, { text: "", files: [{ path, name: artifact.name, mime: mimeOf(artifact.name) }] });
     if (sent) this.audit(binding, binding.kind, "file.sent", { result: "1" });
   }
@@ -1834,11 +1877,12 @@ export class ChannelCore {
   }
 
   /** What leaves the PC: text and button labels with the secrets hidden. */
-  private scrubbed(out: Out): Out {
+  private scrubbed(out: Out, adapter?: ChannelAdapter): Out {
     const { markdown, tail = "", head, ...rest } = out;
     // Redacted first, then made readable; formatted() reads the readable text again (comfort of unit 14).
     // The channel's own lines go after it as plain text: never inside the answer's code block.
-    const made = markdown ? formatted(this.log.scrub(out.text), (value) => this.log.scrub(value)) : { text: this.log.scrub(`${out.text}${tail}`) };
+    // A table as the messenger shows it best (Slack: a monospace block when it fits).
+    const made = markdown ? formatted(this.log.scrub(out.text), (value) => this.log.scrub(value), adapter?.tables ? { tables: adapter.tables } : {}) : { text: this.log.scrub(`${out.text}${tail}`) };
     // The channel's own head line (where a handed-over answer is from) goes before it, plain; the marks move with the text.
     const top = head ? `${this.log.scrub(head)}\n\n` : "";
     const body: { text: string; marks?: Mark[] } = top ? { text: `${top}${made.text}`, ...("marks" in made && made.marks ? { marks: made.marks.map((mark) => ({ ...mark, offset: mark.offset + top.length })) } : {}) } : made;
@@ -1859,7 +1903,7 @@ export class ChannelCore {
   private async edit(adapter: ChannelAdapter, bindingId: string, chat: ChatRef, messageId: string, out: Out): Promise<boolean> {
     if (this.gateOf(bindingId) !== "open") return false;
     try {
-      await adapter.edit(chat, messageId, this.scrubbed(out));
+      await adapter.edit(chat, messageId, this.scrubbed(out, adapter));
       return true;
     } catch (error) {
       this.log.note("edit_failed", error);
@@ -1890,7 +1934,7 @@ export class ChannelCore {
     // Asked again by the messenger right before the message leaves (it may wait in a send line first).
     const stillWanted = gate ? () => { const state = this.gateOf(gate.bindingId); return state === "open" || (state === "held" && gate.kind === "reply"); } : undefined;
     try {
-      const { messageId, unsent } = await adapter.send(chat, this.scrubbed(out), stillWanted ? { stillWanted } : {});
+      const { messageId, unsent } = await adapter.send(chat, this.scrubbed(out, adapter), stillWanted ? { stillWanted } : {});
       if (unsent?.length) this.unsent.set(key, unsent);
       if (this.closed) return null;
       this.channels.settle(key, "sent", messageId);
@@ -1996,6 +2040,11 @@ export class ChannelCore {
     // Paused or locked: no status line; the answer is owed, and held until the gate opens.
     if (binding.lockedAt || binding.pausedAt) return;
     const adapter = this.adapters.get(adapterKey(binding.kind, binding.botId));
+    // It waited in the resource manager's line (0.5.3): the chat is told it started, once.
+    if (adapter && this.manager.startedFromLine(requestId)) {
+      const title = cutAt(this.manager.view.sessions.get(sessionId)?.purpose ?? "대화", 40);
+      await this.say(adapter, binding, `line-started:${sessionId}:${requestId}`, { text: `차례가 되어 시작했습니다 · 「${title}」`, silent: true, group: { sessionId } });
+    }
     const key = `${binding.id}:${sessionId}`;
     if (!adapter || this.progress.has(key)) return;
     const now = this.now();
@@ -2241,7 +2290,7 @@ export class ChannelCore {
         this.manager.updateSession(session.id, { access: "full" });
         this.audit(binding, chat.kind, "access", { sessionId: session.id, result: "full" });
         await this.ack(adapter, event.ackHandle, "전체 접근으로 바꿨습니다");
-        if (row.messageId) await this.edit(adapter, binding.id, chat, row.messageId, { text: `「${session.purpose}」을(를) '${MODE_LABEL.full}'으로 바꿨습니다. 지금부터 적용합니다.` });
+        if (row.messageId) await this.edit(adapter, binding.id, chat, row.messageId, { text: `${withParticle(`「${session.purpose}」`, "을/를")} '${MODE_LABEL.full}'으로 바꿨습니다. 지금부터 적용합니다.` });
         return null;
       }
       case "choice": {
@@ -2328,7 +2377,7 @@ export class ChannelCore {
         this.audit(next, chat.kind, "pointer", { sessionId });
         await this.ack(adapter, event.ackHandle, "들어갔습니다");
         const back: ButtonSpec[][] = typeof next.prefs.remote === "string" && next.prefs.remote !== sessionId ? [[{ label: BACK_LABEL, kind: "remote-back" }]] : [];
-        await this.say(adapter, next, `enter:${event.token}`, { text: `이제 ${this.label(session)}로 보냅니다.`, ...(back.length ? { buttons: back } : {}) });
+        await this.say(adapter, next, `enter:${event.token}`, { text: `이제 ${withParticle(`${this.label(session)}`, "으로/로")} 보냅니다.`, ...(back.length ? { buttons: back } : {}) });
         return null;
       }
       case "remote-back": {

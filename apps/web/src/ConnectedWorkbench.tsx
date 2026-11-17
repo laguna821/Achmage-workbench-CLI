@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { App } from "./App.tsx";
+import { App, openExternal } from "./App.tsx";
 import { Api, readToken, setMediaConnection } from "./api.ts";
 import { HostConnections, HostConnectionsPanel } from "./components/HostConnections.tsx";
 import { hostConnections } from "./remote-hosts.ts";
@@ -25,6 +25,10 @@ export function ConnectedWorkbench() {
   useEffect(() => {
     if (initialOffer && location.hash.startsWith("#offer=")) history.replaceState(null, "", location.pathname + location.search);
   }, [initialOffer]);
+  // A phone opening the page again connects by itself to the PC it holds a credential for (M01: no tap on 사용하기).
+  useEffect(() => { if (!token && !location.hash.startsWith("#offer=")) void hostConnections.resume(); }, [token]);
+  // Once a phone is connected it lands on that PC's projects, not behind the connection dialog (M01).
+  useEffect(() => { if (!token && connections.activeHostId && connections.phase === "connected") { setOpen(false); setInitialOffer(""); } }, [token, connections.activeHostId, connections.phase]);
   const local = useMemo(() => new Api(token ?? ""), [token]);
   const management = useMemo<LocalDeviceApi>(() => ({
     state: () => local.request("GET", "/api/devices"),
@@ -35,6 +39,9 @@ export function ConnectedWorkbench() {
     revoke: id => local.request("POST", "/api/devices/" + encodeURIComponent(id) + "/revoke", {}),
     remove: id => local.request("POST", "/api/devices/" + encodeURIComponent(id) + "/remove", {}),
     rotate: id => local.request("POST", "/api/devices/" + encodeURIComponent(id) + "/rotate", {}),
+    tailscale: () => local.request("GET", "/api/devices/tailscale"),
+    tailscaleOn: command => local.request("POST", "/api/devices/tailscale/on", { command }),
+    tailscaleOff: () => local.request("POST", "/api/devices/tailscale/off", {}),
   }), [local]);
   const peer = hostConnections.peer();
   const apiOverride = useMemo(() => {
@@ -71,12 +78,12 @@ export function ConnectedWorkbench() {
   return <>
     {pushError ? <div role="status" className="connection-error">알림을 열지 못했습니다. {pushError} {pushIntent ? <button type="button" className="button small" onClick={() => { setPushError(""); setPushAttempt(value => value + 1); }}>알림 다시 열기</button> : <button type="button" className="button small" onClick={() => setPushError("")}>닫기</button>}</div> : null}
     {token || peer ? <App key={connections.activeHostId ?? "local"} apiOverride={apiOverride} onConnections={() => setOpen(true)} connectionsOpen={open} messengerRequest={messengerRequest}
-      devicePanel={() => <HostConnectionsPanel api={management} controller={hostConnections} localAvailable={!!token} onMessenger={toMessenger} />}
+      devicePanel={() => <HostConnectionsPanel api={management} controller={hostConnections} localAvailable={!!token} onMessenger={toMessenger} openExternal={openExternal} />}
       attentionRequest={pushIntent?.hostId === connections.activeHostId ? pushTarget : null} onAttentionOpened={openedPush}
       connectionLabel={selected ? selected.label + (connections.phase === "connected" ? " · 연결됨" : " · 연결 확인") : "기기 연결"} registerHostSwitchGuard={guard} />
       : <main className="connect-first"><h1>Achmage Workbench</h1><p>작업하는 PC에 연결하면 그 PC의 프로젝트와 대화, 문서를 이 기기에서 이어서 봅니다.</p><button type="button" className="button primary" onClick={() => setOpen(true)}>PC에 연결</button></main>}
     <HostConnections open={open} api={management} controller={hostConnections} localAvailable={!!token} initialOffer={initialOffer}
-      onMessenger={toMessenger}
+      onMessenger={toMessenger} openExternal={openExternal}
       onClose={() => { setOpen(false); setInitialOffer(""); }} />
   </>;
 }

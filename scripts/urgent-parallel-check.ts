@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { chromium, type Browser, type Page } from "playwright-core";
+import { editorFirst } from "./fixtures/editor-first.ts";
 import JSZip from "jszip";
 
 const out = resolve(process.argv[2]!); mkdirSync(out, { recursive: true });
@@ -88,6 +89,7 @@ try {
   page.on("pageerror", error => errors.push(error.message));
   page.on("request", request => { const path = new URL(request.url()).pathname; if (path.startsWith("/api/")) calls.push({ method: request.method(), path }); });
   await page.addInitScript(id => localStorage.setItem("workbench.lastWork", id), work.id);
+  await editorFirst(page);
   await page.goto(`${ready.url}/?token=${ready.token}`);
   // Since Hallmark N1 (in the skin base) a pane's strip holds the tabs of ITS project; another project's
   // open tabs are one ⌄ away ("다른 프로젝트 · …", still open and running). A tab not on the strip is

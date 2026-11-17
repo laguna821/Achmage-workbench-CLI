@@ -7,6 +7,7 @@ import {
   SEARCH_KIND_LABEL,
   SEARCH_SCOPES,
   parseSearchScope,
+  plainExcerpt,
   type Artifact,
   type Folder,
   type FoundGroup,
@@ -375,12 +376,14 @@ export class Finder {
     const has = (value: string) => needles.some((needle) => fold(value).includes(needle));
     const source = text.body && (has(text.body) || (!has(text.title) && !has(text.tags))) ? text.body : has(text.tags) ? text.tags.replace(/\n/g, " · ") : text.title.replace(/\n/g, " · ");
     const excerpt = hit.native?.excerpt;
-    const { snippet, ranges } = excerpt ? { snippet: excerpt.text, ranges: excerpt.ranges } : source ? snippetOf(source, needles) : { snippet: "", ranges: [] as [number, number][] };
+    // Fast Find's excerpts come as typed: Markdown's marks go here, the matches move with the words (plainExcerpt).
+    const clean = (found: { text: string; ranges: [number, number][] }) => { const plain = plainExcerpt(found.text, found.ranges); return { snippet: plain.text, ranges: plain.ranges }; };
+    const { snippet, ranges } = excerpt ? clean(excerpt) : source ? snippetOf(source, needles) : { snippet: "", ranges: [] as [number, number][] };
     const answer = hit.answer;
     let answerSnippet: { snippet: string; ranges: [number, number][] } = { snippet: "", ranges: [] };
     if (answer?.matched) {
       const excerpt = answer.matched.native?.excerpt;
-      answerSnippet = excerpt ? { snippet: excerpt.text, ranges: excerpt.ranges } : snippetOf(texts.get(answer.matched.id)?.body ?? "", needles);
+      answerSnippet = excerpt ? clean(excerpt) : snippetOf(texts.get(answer.matched.id)?.body ?? "", needles);
     }
     else if (answer) {
       const reply = this.host.items(answer.sessionId).find((item) => item.id === answer.itemId);

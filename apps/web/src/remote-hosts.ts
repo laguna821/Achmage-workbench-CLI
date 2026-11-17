@@ -6,6 +6,9 @@ import {
 
 import { platformHostCredentials } from "./native-host-credentials.ts";
 type PeerOptions = { url: string; daemonPublicKeyB64: string; serverId: string };
+/** A PC reached through Tailscale (its MagicDNS name): when it cannot be reached, the road is what to check. */
+const viaTailscale = (endpoint: string) => { try { return /\.ts\.net$/i.test(new URL(endpoint).hostname); } catch { return false; } };
+const ROAD_GONE = "PC에 닿지 않습니다. 이 휴대폰과 PC의 테일스케일이 켜져 있는지 확인하세요. 작업은 PC에서 계속됩니다.";
 export class WorkbenchHostConnections implements HostConnectionsController {
   private readonly storage: HostConnectionStorage;
   private readonly createPeer: (options: PeerOptions) => RemotePeer;
@@ -31,7 +34,7 @@ export class WorkbenchHostConnections implements HostConnectionsController {
       if (this.active !== peer) return;
       if (status.status === "connected" && status.authenticated) this.publish({ phase: "connected", message: undefined });
       else if (status.status === "connecting") this.publish({ phase: "connecting", message: "기기에 다시 연결하고 있습니다." });
-      else if (status.status === "disconnected" || status.status === "closed") this.publish({ phase: "offline", message: status.reason || "연결이 끊겼습니다. 작업은 해당 PC에서 계속됩니다." });
+      else if (status.status === "disconnected" || status.status === "closed") this.publish({ phase: "offline", message: viaTailscale(host.endpoint) ? ROAD_GONE : status.reason || "연결이 끊겼습니다. 작업은 해당 PC에서 계속됩니다." });
     });
     this.publish({ activeHostId: host.hostId, phase: "connected", verificationCode: undefined, message: undefined });
   }
@@ -92,9 +95,28 @@ export class WorkbenchHostConnections implements HostConnectionsController {
       // The PC answered that this approval is over (revoked, removed or expired): a dead credential is not kept.
       const ended = (error as { status?: unknown } | null)?.status === 401;
       if (ended) await this.storage.forgetCredential(hostId);
-      this.publish({ phase: "error", message: ended ? "이 기기의 연결 권한이 끝났습니다. PC에서 새 연결 링크를 만들어 다시 등록해 주세요." : error instanceof Error ? error.message : "기기에 연결하지 못했습니다." });
+      this.publish({ phase: "error", message: ended ? "이 기기의 연결 권한이 끝났습니다. PC에서 새 연결 링크를 만들어 다시 등록해 주세요." : viaTailscale(host.endpoint) ? ROAD_GONE : error instanceof Error ? error.message : "기기에 연결하지 못했습니다." });
       throw error;
     }
+  };
+  /**
+   * Opening the page again (M01: it took one tap on 사용하기): connect by itself to the PC this page
+   * came from — or else the one used last — when this browser still holds its credential. Nothing is
+   * asked of the PC that 사용하기 would not ask; a credential the PC ended is dropped here as there.
+   * Returns the host tried, or null when there is nothing to resume.
+   */
+  resume = async (pageHost: string = typeof location === "undefined" ? "" : location.host) => {
+    if (this.value.activeHostId || this.value.phase !== "local") return null;
+    const hosts = this.storage.list();
+    const sameHost = (endpoint: string) => { try { return new URL(endpoint).host === pageHost; } catch { return false; } };
+    const ordered = [...hosts.filter(host => sameHost(host.endpoint)), ...hosts.filter(host => !sameHost(host.endpoint)).sort((a, b) => (b.lastConnectedAt ?? 0) - (a.lastConnectedAt ?? 0))];
+    for (const host of ordered) {
+      if (!await this.storage.credential(host.hostId)) continue;
+      if (this.value.activeHostId || this.value.phase !== "local") return null;
+      await this.selectHost(host.hostId).catch(() => {});
+      return host.hostId;
+    }
+    return null;
   };
   disconnect = async () => {
     await this.gate?.(); ++this.operation; this.pairing?.close(); this.pairing = null; this.active?.close(); this.active = null;

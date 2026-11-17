@@ -304,7 +304,10 @@ export class OfficeAi {
       const skillContext = operation === "turn-start" && record(raw) ? raw.skillContext : undefined;
       if (skillContext !== undefined && !this.skills) throw new HttpError(503, "office_skills_unavailable", "스킬 보관함을 연결하지 못했습니다.");
       const skills = skillContext === undefined ? undefined : await this.skills!.prepare({ artifactId: artifactId!, token: bearer!, grants }, skillContext);
-      const value = operation === "turn-start" ? await this.sessions!.start(bound, raw, references, attachments, skills) : operation === "turn-events" ? this.sessions!.events(bound, raw) : this.sessions!.finish(bound, raw);
+      // A 문서 AI turn that waits for a slot (0.5.3) stops waiting when its editor goes away.
+      const gone = new AbortController();
+      if (operation === "turn-start") res.once("close", () => { if (!res.writableEnded) gone.abort(); });
+      const value = operation === "turn-start" ? await this.sessions!.start(bound, raw, references, attachments, skills, gone.signal) : operation === "turn-events" ? this.sessions!.events(bound, raw) : this.sessions!.finish(bound, raw);
       if (operation === "turn-start" && "status" in value && value.status === "running") {
         const run = this.sessions!.requireRun(bound, (raw as Record<string, unknown>).turnId);
         Object.assign(value, { executorAvailable: this.executors?.available(artifactId!) ?? false, executionToken: grants.execution(bearer!, run.lease.access, () => {

@@ -45,7 +45,7 @@ it("speaks a teacher's words on every step: no CLI, OS 등록, 이음 앱, 호�
   await mount();
   for (let at = 0; at < 4; at++) {
     const text = document.body.textContent!;
-    expect(text).not.toMatch(/CLI|OS 등록|이음 앱|호스트|orchestration|세션|워크스페이스| · |npm |brew /);
+    expect(text).not.toMatch(/CLI|OS 등록|이음 앱|호스트|orchestration|대화|워크스페이스| · |npm |brew /);
     if (at < 3) await next();
   }
 });

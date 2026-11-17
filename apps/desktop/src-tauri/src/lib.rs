@@ -16,6 +16,7 @@ pub mod office_executor;
 mod office_browser;
 mod shared_browser;
 mod notifications;
+mod window_keys;
 mod host_credentials;
 pub mod host_runtime;
 pub mod office_secrets;
@@ -331,6 +332,30 @@ fn show_main(app: &tauri::AppHandle) {
     }
 }
 
+/// show_main for a notification's click: on Wayland a compositor (niri among them) raises a window only for an
+/// xdg-activation token, which the notification daemon hands over with the click; GTK presents with it.
+fn show_main_activated(app: &tauri::AppHandle, token: Option<String>) {
+    #[cfg(target_os = "linux")]
+    if let Some(token) = token {
+        let handle = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            if let Some(window) = handle.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                if let Ok(gtk_window) = window.gtk_window() {
+                    use gtk::prelude::GtkWindowExt;
+                    gtk_window.set_startup_id(&token);
+                    gtk_window.present();
+                }
+                let _ = window.set_focus();
+            }
+        });
+        return;
+    }
+    let _ = &token;
+    show_main(app);
+}
+
 /// The tray's first line: how many sessions wait for the user ("확인 필요 N"); it opens the first.
 struct Attention(Mutex<Option<MenuItem<tauri::Wry>>>);
 
@@ -463,11 +488,15 @@ pub fn run() {
     } else { None };
     let initial_files = if cli.is_none() { file_arguments(&args, &std::env::current_dir().unwrap_or_default()) } else { Vec::new() };
     let initial_attention = notifications::argument(&args);
+    // Started by a notification's click: the first window comes forward with the daemon's token (GTK reads it).
+    #[cfg(target_os = "linux")]
+    if let Some(token) = notifications::token(&args) { std::env::set_var("XDG_ACTIVATION_TOKEN", token); }
     let mut builder = tauri::Builder::default().manage(OpenFiles(Mutex::new(initial_files)))
         .manage(notifications::OpenAttention(Mutex::new(initial_attention)));
     if let Some(job) = &cli { builder = builder.manage(job.clone()); }
     else { builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
-        if let Some(id) = notifications::argument(args.get(1..).unwrap_or_default()) { notifications::open(app, id); return; }
+        let rest = args.get(1..).unwrap_or_default();
+        if let Some(id) = notifications::argument(rest) { notifications::open(app, id, notifications::token(rest)); return; }
         enqueue_files(app, file_arguments(args.get(1..).unwrap_or_default(), std::path::Path::new(&cwd)));
         show_main(app);
     })); }
@@ -475,7 +504,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![host_credentials::host_credential, open_session_window, notify_session, notifications::notify_attention, notifications::take_open_attention, set_attention, take_open_files, office_output::render_svg_pdf, office_output::print_svg, office_html_output::render_html_pdf, office_html_output::print_html, office_cli::office_cli_job, office_cli::office_cli_write, office_cli::office_cli_done, office_cli::office_cli_trace, office_browser::office_browser, shared_browser::shared_browser, quit_for_update])
+        .invoke_handler(tauri::generate_handler![host_credentials::host_credential, open_session_window, notify_session, notifications::notify_attention, notifications::take_open_attention, set_attention, take_open_files, office_output::render_svg_pdf, office_output::print_svg, office_html_output::render_html_pdf, office_html_output::print_html, office_cli::office_cli_job, office_cli::office_cli_write, office_cli::office_cli_done, office_cli::office_cli_trace, office_browser::office_browser, shared_browser::shared_browser, quit_for_update, window_keys::window_keys])
         .manage(shared_browser::SharedBrowser::default())
         .manage(office_browser::BrowserJobs::default())
         .register_uri_scheme_protocol("workbench-browser", |ctx, request| office_browser::serve(ctx.app_handle(), request.uri().path()))
@@ -546,6 +575,8 @@ pub fn run() {
                         });
                     } else if let Err(error) = build_tray(&handle) {
                         eprintln!("tray unavailable: {error}");
+                    } else {
+                        window_keys::TRAY.store(true, Ordering::SeqCst);
                     }
                 }
                 Err(message) => {

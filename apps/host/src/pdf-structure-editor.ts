@@ -66,7 +66,9 @@ export class PdfStructureEditors {
     const source = this.documents.revisionPath(artifactId!, revision);
     const pathArgument = method === "storeDocHash", requestArgument = ["tree", "text", "convert", "convertOffice", "extractImages", "writeBack", "storeMigrate", "storePageFingerprints"].includes(method);
     if (pathArgument || requestArgument) {
-      if ((pathArgument ? args[0] : isRecord(args[0]) ? args[0].path : null) !== artifact.path) throw new HttpError(403, "pdf_path", "열린 PDF만 처리할 수 있습니다.");
+      const named = pathArgument ? args[0] : isRecord(args[0]) ? args[0].path : null;
+      // An editor opened before a rename still names the old path (documents.isPathOf).
+      if (typeof named !== "string" || !this.documents.isPathOf(artifactId!, named)) throw new HttpError(403, "pdf_path", "열린 PDF만 처리할 수 있습니다.");
       view.paths.add(source);
       args[0] = pathArgument ? source : { ...args[0] as Record<string, unknown>, path: source };
     }

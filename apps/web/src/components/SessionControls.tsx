@@ -36,7 +36,7 @@ export function AccessPicker({ provider, value, onChange }: { provider: Provider
         <Icon name={open ? "chevronUp" : "chevronDown"} size={13} />
       </button>
       <Popover open={open} onClose={close} placement="above" align="left" className="access-menu">
-        <div className="menu-label">권한 · 바로 적용, 새 세션에도 이어짐</div>
+        <div className="menu-label">권한 · 바로 적용, 새 대화에도 이어짐</div>
         {ACCESS_MODES.map((mode) => (
           <button
             key={mode}

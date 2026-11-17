@@ -18,6 +18,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { chromium, type Page } from "playwright-core";
+import { editorFirst } from "./fixtures/editor-first.ts";
 import type { Artifact, Handoff, Proposal, Provider, SearchResult, Session, SessionLink, TranscriptItem, Work } from "@workbench/contracts";
 import { findKordocRunner } from "../apps/host/src/kordoc.ts";
 import { findIeumCli } from "../apps/host/src/ieumoffice.ts";
@@ -143,6 +144,7 @@ async function flow(provider: Provider) {
   };
   try {
     await page.addInitScript((id) => localStorage.setItem("workbench.lastWork", id), work.id);
+    await editorFirst(page);
     await page.goto(`${ready.url}/?token=${ready.token}`);
     await page.waitForSelector(".work-view");
     await openDoc();

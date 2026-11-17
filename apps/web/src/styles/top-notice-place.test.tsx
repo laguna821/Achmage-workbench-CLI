@@ -13,7 +13,7 @@ afterEach(() => { document.head.innerHTML = ""; document.body.innerHTML = ""; })
 it("the standing layout notice has its own row under the top bar, and the title is not faded for it", () => {
   for (const style of SHEETS) document.head.append(Object.assign(document.createElement("style"), { textContent: style }));
   document.body.innerHTML = `<header class="topbar has-standing-notice"><div class="topbar-left"></div><button class="topbar-title">회의록</button>
-    <div class="top-notice layout-problem" data-kind="error"><span class="top-notice-text">다른 창에서 이 작업공간의 배치를 바꿨습니다.</span></div><div class="topbar-right"></div></header>`;
+    <div class="top-notice layout-problem" data-kind="error"><span class="top-notice-text">다른 창에서 이 작업 폴더의 배치를 바꿨습니다.</span></div><div class="topbar-right"></div></header>`;
   const notice = getComputedStyle(document.querySelector(".top-notice")!);
   expect(notice.gridRow).toMatch(/^2/);
   expect(notice.gridColumn.replace(/\s/g, "")).toBe("1/-1");

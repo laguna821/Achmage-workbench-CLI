@@ -22,6 +22,11 @@ export class BackgroundIndex {
     this.running ??= this.drain();
   }
 
+  /** Something waits or runs (the page pictures wait for it). */
+  get active() {
+    return this.running !== null;
+  }
+
   /** Resolves once nothing waits or runs (tests). */
   async settled() {
     while (this.running) await this.running;

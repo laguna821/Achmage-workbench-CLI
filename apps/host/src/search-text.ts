@@ -1,3 +1,4 @@
+import { plainExcerpt } from "@workbench/contracts";
 import { stripJosa } from "./titles.ts";
 
 // Text for the search index and the queries against it, Korean first and without any model.
@@ -203,7 +204,8 @@ export function plainText(text: string) {
 
 /** A short stretch of text around the first match, with every match marked (overlaps merged). */
 export function snippetOf(text: string, needles: string[], width = 140): { snippet: string; ranges: [number, number][] } {
-  const flat = plainText(text).replace(/\s+/g, " ").trim().normalize("NFC");
+  // The same marks go as from Fast Find's excerpts (plainExcerpt, the one function for both).
+  const flat = plainExcerpt(text).text.replace(/\s+/g, " ").trim().normalize("NFC");
   const lower = flat.toLowerCase();
   const wanted = needles.map((needle) => needle.toLowerCase()).filter(Boolean);
   const first = Math.min(...wanted.map((needle) => lower.indexOf(needle)).filter((index) => index >= 0), flat.length);

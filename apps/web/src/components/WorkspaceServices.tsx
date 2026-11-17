@@ -88,7 +88,7 @@ export function WorkspaceServices({ api, workspace, onOpen, onClose, openExterna
     listVersion.current++;
     try {
       const entry = await api.startWorkspaceService(workspace.id, request);
-      if (entry.id !== request.requestId || entry.workspaceId !== workspace.id) throw new Error("실행 응답의 작업공간을 확인할 수 없습니다.");
+      if (entry.id !== request.requestId || entry.workspaceId !== workspace.id) throw new Error("실행 응답의 작업 폴더를 확인할 수 없습니다.");
       upsert(entry); rememberPending(null); if (mounted.current) setNotice(`${entry.label} 실행 요청을 접수했습니다.`);
     } catch (reason) {
       if (mounted.current) setError(message(reason));
@@ -110,7 +110,7 @@ export function WorkspaceServices({ api, workspace, onOpen, onClose, openExterna
     const request = pendingRef.current; if (!request) return;
     const next = await readList();
     if (next.services.some(entry => entry.id === request.requestId)) return;
-    if (!next.available || workspace.archivedAt !== null || workspace.removedAt !== null) throw new Error("현재 작업공간에서는 실행 요청을 다시 보낼 수 없습니다. 기록 확인은 계속됩니다.");
+    if (!next.available || workspace.archivedAt !== null || workspace.removedAt !== null) throw new Error("현재 작업 폴더에서는 실행 요청을 다시 보낼 수 없습니다. 기록 확인은 계속됩니다.");
     await post(request);
   });
   const unavailable = workspace.archivedAt !== null || workspace.removedAt !== null;
@@ -125,14 +125,14 @@ export function WorkspaceServices({ api, workspace, onOpen, onClose, openExterna
       {!pending ? <button aria-busy={busy ? true : undefined} className="button primary" type="submit" disabled={busy || !result?.available || unavailable || !draft.label.trim() || !draft.command.trim()}>{busy ? "요청 처리 중…" : "명령 실행"}</button> : null}
     </form>
     {pending ? <div className="workspace-service-pending" role="status"><strong>{busy ? "실행 요청 확인 중…" : "실행 결과 확인 필요"}</strong><p>응답이 확인되기 전까지 입력한 명령을 유지합니다. 기록을 확인한 뒤 같은 요청만 다시 보낼 수 있습니다.</p><div className="workspace-service-actions"><button type="button" className="button small" disabled={busy} onClick={() => void run(async () => { await readList(); })}>실행 기록 확인</button><button type="button" className="button small" disabled={busy || unavailable} onClick={() => void retry()}>같은 요청 다시 보내기</button></div></div> : null}
-    {unavailable ? <p className="muted">보관되거나 제거된 작업공간입니다. 기존 출력 확인과 실행 종료를 할 수 있습니다.</p> : null}
+    {unavailable ? <p className="muted">보관되거나 제거된 작업 폴더입니다. 기존 출력 확인과 실행 종료를 할 수 있습니다.</p> : null}
     {result && !result.available ? <p className="muted">이 호스트에는 터미널 실행기가 없습니다. 이전 실행 기록은 확인할 수 있습니다.</p> : null}
     {error ? <p className="workspace-service-error" role="alert">{error}</p> : null}
     {readError ? <p className="workspace-service-error" role="alert">실행 기록을 읽지 못했습니다. {readError}</p> : null}
     {notice ? <p role="status">{notice}</p> : null}
     <ServicePreviewSettings api={api} />
     <div className="workspace-service-heading"><h3>실행 기록</h3><button type="button" className="button small" disabled={busy} onClick={() => void run(async () => { await readList(); })}>새로고침</button></div>
-    {!result ? <p className="muted">실행 기록을 읽는 중…</p> : !result.services.length ? <p className="muted">이 작업공간에서 실행한 서버가 없습니다.</p> : <div className="workspace-service-list">{result.services.map(entry => {
+    {!result ? <p className="muted">실행 기록을 읽는 중…</p> : !result.services.length ? <p className="muted">이 작업 폴더에서 실행한 서버가 없습니다.</p> : <div className="workspace-service-list">{result.services.map(entry => {
       const url = entry.status === "running" && Number.isInteger(entry.port) && entry.port! >= 1 && entry.port! <= 65535 ? `http://127.0.0.1:${entry.port}` : null;
       return <article className="workspace-service-row" key={entry.id} aria-label={`${entry.label} 실행 기록`} data-status={entry.status}>
         <header><strong>{entry.label}</strong><span>{statusText(entry)}</span></header>
@@ -144,7 +144,7 @@ export function WorkspaceServices({ api, workspace, onOpen, onClose, openExterna
           {url ? <button type="button" className="button small" onClick={() => setInspect({ id: entry.id, mode: "proxy" })}>서비스 포트 요청</button> : null}
           {url ? <button type="button" className="button small" disabled={busy} onClick={() => void run(async () => {
             const preview = await api.openWorkspaceServicePreview(entry.id);
-            if (preview.serviceId !== entry.id || preview.workspaceId !== workspace.id) throw new Error("서비스 화면의 작업공간을 확인할 수 없습니다.");
+            if (preview.serviceId !== entry.id || preview.workspaceId !== workspace.id) throw new Error("서비스 화면의 작업 폴더를 확인할 수 없습니다.");
             if (mounted.current) setPreviews(before => ({ ...before, [entry.id]: preview }));
             if (onOpenPreview) { await onOpenPreview(preview.openUrl, workspace); onClose(); }
           })}>{onOpenPreview ? "웹 탭으로 열기" : "웹 화면 연결"}</button> : null}

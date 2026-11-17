@@ -10,7 +10,7 @@ import { ChannelLog } from "./log.ts";
 import { Redactor } from "./redact.ts";
 import { SlackAdapter, escapeSlack, identifySlack, plainSlack, slackParts } from "./slack.ts";
 import { until } from "./test-kit.ts";
-import { ChannelSendError, type ChatRef, type Inbound } from "./types.ts";
+import { ChannelSendError, type ChatRef, type Inbound, type SecretForm, type SecretFormAnswer, type SecretFormEvent } from "./types.ts";
 
 // The Slack adapter against a stand-in Slack on loopback (Web API + Socket Mode). No test here
 // reaches Slack.
@@ -19,7 +19,7 @@ type Rig = Awaited<ReturnType<typeof rig>>;
 const rigs: { stop: () => Promise<void> }[] = [];
 afterEach(async () => { for (const entry of rigs.splice(0)) await entry.stop(); });
 
-async function rig(options: { gapMs?: number; pingMs?: number; crowdedNoteMs?: number; sink?: (event: Inbound) => Promise<void>; pairing?: () => { value: string } | null } = {}) {
+async function rig(options: { gapMs?: number; pingMs?: number; crowdedNoteMs?: number; sink?: (event: Inbound) => Promise<void>; pairing?: () => { value: string } | null; secretForms?: (event: SecretFormEvent) => Promise<SecretFormAnswer> } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "wb-slack-"));
   const fake = new FakeSlack();
   await fake.start();
@@ -42,6 +42,7 @@ async function rig(options: { gapMs?: number; pingMs?: number; crowdedNoteMs?: n
     botId: fake.botId, botUserId: fake.botUserId, tokens: async () => ({ bot: FAKE_BOT_TOKEN, app: FAKE_APP_TOKEN }), baseUrl: fake.api, journal, log,
     minSendGapMs: options.gapMs ?? 0, pingMs: options.pingMs ?? 10_000, random: () => 0.5, teamId: fake.teamId,
     ...(options.crowdedNoteMs !== undefined ? { crowdedNoteMs: options.crowdedNoteMs } : {}), ...(options.pairing ? { pairing: options.pairing } : {}),
+    ...(options.secretForms ? { secretForms: options.secretForms } : {}),
     sleep: async (ms) => { sleeps.push(ms); await new Promise((done) => setTimeout(done, Math.min(ms, 20))); },
   });
   let adapter = make();
@@ -437,17 +438,17 @@ describe("what comes in", () => {
     expect(r.events.map((event) => event.chat.chatType)).toEqual(["channel", "channel"]);
   });
 
-  it("a modal's submission goes to the slot (nothing yet), is acknowledged with its answer, and never becomes a message", async () => {
-    const r = await rig();
-    const seen: unknown[] = [];
+  it("a modal that is not ours (another callback id) is refused in the modal, handed to nobody, and never becomes a message", async () => {
+    const seen: SecretFormEvent[] = [];
+    const r = await rig({ secretForms: async (event) => { seen.push(event); return null; } });
     r.listen();
     await r.connected();
-    r.adapter.onViewSubmission = async (payload) => { seen.push(payload); return { response_action: "clear" }; };
-    const env = r.fake.submitView({ field: { value: { value: "비밀 값" } } });
+    const env = r.fake.submitView({ field: { value: { value: "zz-planted-word-0131" } } });
     await until(() => r.fake.acked(env));
-    expect(seen).toHaveLength(1);
+    expect(seen).toHaveLength(0);
+    expect(r.fake.answers.get(env)).toMatchObject({ response_action: "errors" });
     expect(r.events).toHaveLength(0);
-    expect(JSON.stringify(r.store.channels.pending("slack", r.fake.botId))).not.toContain("비밀 값");
+    expect(JSON.stringify(r.store.channels.pending("slack", r.fake.botId))).not.toContain("zz-planted-word-0131");
   });
 
   it("what came while no socket was open is read from the history after the next one, oldest first, once, and marked as waited", async () => {
@@ -595,16 +596,24 @@ describe("what comes in", () => {
 });
 
 describe("what goes out", () => {
-  it("formatting marks (the core's hook, unit 14) are not Slack's: the text goes plain and whole, each link's address written after its words, in a send and in an edit", async () => {
+  it("formatting marks (the core's hook, unit 14) go as mrkdwn: bold, a web link as <address|words>, inline code — in the text and the section block, in a send and in an edit", async () => {
     const r = await rig();
     const marks = [{ type: "bold" as const, offset: 0, length: 2 }, { type: "link" as const, offset: 3, length: 2, url: "https://lib.example.ac.kr/a?b=1&c=2" }, { type: "code" as const, offset: 6, length: 4 }];
     const sent = await r.adapter.send(dm(r), { text: "결과 자료 npm1 끝", marks });
     const call = r.fake.of("chat.postMessage")[0]!;
-    expect(call.params.text).toBe("결과 자료 (https://lib.example.ac.kr/a?b=1&amp;c=2) npm1 끝");
+    expect(call.params.text).toBe("*결과* <https://lib.example.ac.kr/a?b=1&amp;c=2|자료> `npm1` 끝");
+    const section = (JSON.parse(String(call.params.blocks)) as { text: { type: string; text: string; verbatim: boolean } }[])[0]!;
+    expect(section.text).toEqual({ type: "mrkdwn", text: call.params.text, verbatim: true });
     // Nothing of Telegram's formatting is in the request (entities, parse mode).
     expect(Object.keys(call.params).filter((key) => /entit|parse/.test(key))).toEqual([]);
     await r.adapter.edit(dm(r), sent.messageId, { text: "고침 자료", marks: [{ type: "link", offset: 3, length: 2, url: "https://lib.example.ac.kr/b" }] });
-    expect(r.fake.of("chat.update")[0]!.params.text).toBe("고침 자료 (https://lib.example.ac.kr/b)");
+    expect(r.fake.of("chat.update")[0]!.params.text).toBe("고침 <https://lib.example.ac.kr/b|자료>");
+  });
+
+  it("a text without marks (status lines, menus, the channel's own lines) goes escaped exactly as before", async () => {
+    const r = await rig();
+    await r.adapter.send(dm(r), { text: "**별** <!here> _x_" });
+    expect(r.fake.of("chat.postMessage")[0]!.params.text).toBe("**별** &lt;!here&gt; _x_");
   });
 
   it("escapes &, < and > (no mention, link or tag can be made), puts buttons in actions blocks bound to their message", async () => {
@@ -770,5 +779,118 @@ describe("text helpers", () => {
   it("never makes a part longer than the limit, also when escaping grows it", () => {
     for (const part of slackParts("&".repeat(10_000), 3000)) expect(part.length).toBeLessThanOrEqual(3000);
     expect(slackParts("&".repeat(10_000), 3000).join("")).toBe("&amp;".repeat(10_000));
+  });
+});
+
+describe("a modal for a value (audit #131)", () => {
+  const PLANTED = "zz-planted-word-0131";
+  const form = (token = "tok-0131"): SecretForm => ({ token, heading: "「대화」에서 '노션'의 키", field: "키", hint: "Slack 서버를 거쳐 옵니다.", maxLength: 3000 });
+  async function pressed(r: Rig) {
+    r.listen();
+    await r.connected();
+    r.fake.press("tok");
+    await until(() => r.events.length === 1);
+    return r.events[0]!;
+  }
+
+  it("opens with the press's trigger: one plain_text_input, told when closed, the token as private_metadata; the trigger is never written down", async () => {
+    const r = await rig({ secretForms: async () => null });
+    const press = await pressed(r);
+    expect(JSON.stringify(r.store.channels.pending("slack", r.fake.botId))).not.toContain("trig-");
+    expect(await r.adapter.openSecretForm(press.eventId, form())).toBe("opened");
+    const view = r.fake.lastView()!.view as { callback_id: string; private_metadata: string; notify_on_close: boolean; blocks: { type: string; element?: { type: string; max_length: number } }[] };
+    expect(view).toMatchObject({ callback_id: "wb-secret", private_metadata: "tok-0131", notify_on_close: true });
+    expect(view.blocks.filter((block) => block.type === "input").map((block) => block.element)).toEqual([{ type: "plain_text_input", action_id: "value", max_length: 3000, focus_on_load: true }]);
+    // The same press cannot open a second one.
+    expect(await r.adapter.openSecretForm(press.eventId, form("tok-2"))).toBe("retry");
+  });
+
+  it("a press older than Slack's 3 seconds asks for a new press; a refusal a press cannot change turns modals off (values go to the PC)", async () => {
+    const r = await rig({ secretForms: async () => null });
+    const press = await pressed(r);
+    await new Promise((done) => setTimeout(done, 3_100));
+    expect(await r.adapter.openSecretForm(press.eventId, form())).toBe("retry");
+    expect(r.adapter.secretForms()).toBe(true);
+    r.fake.viewsRefusal = "not_allowed_token_type";
+    r.fake.press("tok2");
+    await until(() => r.events.length === 2);
+    expect(await r.adapter.openSecretForm(r.events[1]!.eventId, form())).toBe("unavailable");
+    expect(r.adapter.secretForms()).toBe(false);
+    expect(r.lines.some((line) => line.includes("form_open_failed not_allowed_token_type"))).toBe(true);
+  });
+
+  it("L3: a refusal other than 'this app cannot have modals' fails only that open; labels of spaces still make a valid modal", async () => {
+    const r = await rig({ secretForms: async () => null });
+    const press = await pressed(r);
+    expect(await r.adapter.openSecretForm(press.eventId, { ...form(), field: "   ", heading: " \n " })).toBe("opened");
+    expect(JSON.stringify(r.fake.lastView()!.view)).not.toMatch(/"text":"\s*"/);
+    r.fake.viewsRefusal = "invalid_arguments";
+    r.fake.press("tok2");
+    await until(() => r.events.length === 2);
+    expect(await r.adapter.openSecretForm(r.events[1]!.eventId, form())).toBe("retry");
+    expect(r.adapter.secretForms()).toBe(true);
+  });
+
+  it("L2: while another connection of this app is open no modal is offered, with one sentence why; offered again when it is gone", async () => {
+    const r = await rig({ secretForms: async () => null });
+    r.fake.others = 1;
+    r.listen();
+    await r.connected();
+    expect(r.adapter.secretForms()).toBe(false);
+    expect(r.adapter.secretFormsWhyNot()).toBe("같은 Slack 앱에 다른 프로그램도 연결해 있어 입력 창의 값이 그쪽으로 갈 수 있으므로 입력 창을 열지 않았습니다.");
+    r.fake.others = 0;
+    r.fake.refresh();
+    await until(() => r.adapter.secretForms());
+    expect(r.adapter.secretFormsWhyNot()).toBeNull();
+  });
+
+  it("without the credential module nothing offers a modal", async () => {
+    const r = await rig();
+    expect(r.adapter.secretForms()).toBe(false);
+  });
+
+  it("a submission: the value goes to the module in memory, is taken out of the payload before anything else sees it, and the modal's answer goes back with the acknowledgement", async () => {
+    const seen: SecretFormEvent[] = [];
+    let answer: SecretFormAnswer = { next: form("tok-next") };
+    const r = await rig({ secretForms: async (event) => { seen.push(event); if (event.type === "submit" && event.value === PLANTED) throw new Error(`failed with ${event.value}`); return answer; } });
+    const press = await pressed(r);
+    await r.adapter.openSecretForm(press.eventId, form());
+    const first = r.fake.submitForm("zz-other-word-0131");
+    await until(() => r.fake.acked(first));
+    expect(seen[0]).toMatchObject({ type: "submit", token: "tok-0131", userId: "U0HONG", value: "zz-other-word-0131" });
+    expect(r.fake.answers.get(first)).toMatchObject({ response_action: "update", view: { private_metadata: "tok-next" } });
+    answer = { refuse: "값을 넣어 주세요." };
+    const refused = r.fake.submitForm("x");
+    await until(() => r.fake.acked(refused));
+    expect(r.fake.answers.get(refused)).toEqual({ response_action: "errors", errors: { "wb-value": "값을 넣어 주세요." } });
+    // The module failing never puts its error (which here names the value) into the log.
+    const failed = r.fake.submitForm(PLANTED);
+    await until(() => r.fake.acked(failed));
+    expect(r.fake.answers.get(failed)).toMatchObject({ response_action: "errors" });
+    answer = null;
+    const done = r.fake.submitForm("zz-third-word-0131");
+    await until(() => r.fake.acked(done));
+    expect(r.fake.answers.get(done)).toBeNull();
+    expect(r.lines.join("\n")).not.toContain(PLANTED);
+    expect(r.lines.some((line) => line.includes("form_failed"))).toBe(true);
+    expect(r.events).toHaveLength(1);
+    expect(JSON.stringify(r.store.channels.pending("slack", r.fake.botId))).not.toMatch(/zz-(planted|other|third)-word/);
+    // No Web API call carried any of it.
+    expect(JSON.stringify(r.fake.calls)).not.toMatch(/zz-(planted|other|third)-word/);
+    secretFree(r);
+  });
+
+  it("a submission from another workspace, or a close, reaches the module only as ours; the value is never in a close", async () => {
+    const seen: SecretFormEvent[] = [];
+    const r = await rig({ secretForms: async (event) => { seen.push(event); return null; } });
+    const press = await pressed(r);
+    await r.adapter.openSecretForm(press.eventId, form());
+    const foreign = r.fake.submitForm(PLANTED, { team: "T0OTHERORG" });
+    await until(() => r.fake.acked(foreign));
+    expect(seen).toHaveLength(0);
+    expect(r.fake.answers.get(foreign)).toMatchObject({ response_action: "errors" });
+    const closed = r.fake.closeForm()!;
+    await until(() => r.fake.acked(closed));
+    expect(seen).toEqual([{ type: "closed", token: "tok-0131", viewId: r.fake.lastView()!.id, userId: "U0HONG" }]);
   });
 });

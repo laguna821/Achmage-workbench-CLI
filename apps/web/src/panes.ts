@@ -13,7 +13,7 @@ export type PaneTree = { kind: "pane"; id: PaneId } | { kind: "split"; id: strin
  * focus — the session it keeps showing. The focused pane follows its work's active session, so a
  * session started there shows at once; a pane that loses the focus keeps the session it showed.
  */
-export type TabUiState = { cursor?: { anchor: number; head: number }; scroll?: { top: number; left: number }; mode?: string; chatScroll?: { top: number; follow: boolean; anchor?: { messageId: string; offsetPx: number } }; terminalScroll?: { line: number; follow: boolean }; reading?: { page: number | null; fraction: number; top?: number } };
+export type TabUiState = { cursor?: { anchor: number; head: number }; scroll?: { top: number; left: number }; mode?: string; /** The person edited in the editor on this visit (a woken tab then opens in its editor, not 쪽 보기). */ edited?: boolean; chatScroll?: { top: number; follow: boolean; anchor?: { messageId: string; offsetPx: number } }; terminalScroll?: { line: number; follow: boolean }; reading?: { page: number | null; fraction: number; top?: number }; /** An office editor's place (slide, sheet + cell, scroll): a woken tab opens there. */ office?: import("@workbench/contracts").OfficeViewPosition };
 export type PaneTab<V> = { id: string; view: V; workId: string | null; sessionId: string | null; ui?: TabUiState };
 export type Pane<V> = { id: PaneId; view: V; workId: string | null; sessionId: string | null; tabs?: PaneTab<V>[]; activeTabId?: string; recentTabIds?: string[] };
 
@@ -287,8 +287,26 @@ const readUi = (raw: TabUiState | undefined): TabUiState => {
   }
   if (raw.terminalScroll && Number.isSafeInteger(raw.terminalScroll.line) && raw.terminalScroll.line >= 0 && typeof raw.terminalScroll.follow === "boolean") ui.terminalScroll = { line: raw.terminalScroll.line, follow: raw.terminalScroll.follow };
   if (raw.reading && (raw.reading.page === null || (Number.isSafeInteger(raw.reading.page) && raw.reading.page >= 0)) && Number.isFinite(raw.reading.fraction)) ui.reading = { page: raw.reading.page, fraction: Math.max(0, Math.min(1, raw.reading.fraction)), ...(typeof raw.reading.top === "number" && raw.reading.top >= 0 ? { top: raw.reading.top } : {}) };
+  const office = readOfficePlace(raw.office);
+  if (office) ui.office = office;
   return ui;
 };
+/** An office editor's place (office-leftovers point 3): only well-formed numbers and short names; anything else is dropped. */
+function readOfficePlace(raw: unknown): TabUiState["office"] | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>, out: NonNullable<TabUiState["office"]> = {};
+  const count = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 0 && (n as number) < 10_000_000;
+  const name = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= 200;
+  if (count(r.slide)) out.slide = r.slide;
+  if (name(r.sheet)) out.sheet = r.sheet;
+  if (name(r.cell) && /^[A-Za-z]{1,4}\d{1,8}(:[A-Za-z]{1,4}\d{1,8})?$/.test(r.cell)) out.cell = r.cell;
+  if (count(r.firstRow)) out.firstRow = r.firstRow;
+  if (count(r.firstColumn)) out.firstColumn = r.firstColumn;
+  if (typeof r.zoom === "number" && r.zoom > 0 && r.zoom <= 10) out.zoom = r.zoom;
+  const s = r.scroll as Record<string, unknown> | undefined;
+  if (s && typeof s === "object" && [s.top, s.left].every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0) && typeof s.fraction === "number" && s.fraction >= 0 && s.fraction <= 1) out.scroll = { top: s.top as number, left: s.left as number, fraction: s.fraction };
+  return Object.keys(out).length ? out : undefined;
+}
 const owner = (value: unknown) => value === null || typeof value === "string";
 
 /**

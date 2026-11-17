@@ -1,10 +1,11 @@
 import { UpdatePolicy } from "./update-policy.ts";
+import { EnginePrefs } from "./engine-prefs.ts";
 import { AppUpdates, installedVersion } from "./app-update/service.ts";
 import { detectInstall } from "./app-update/kind.ts";
 import { fileURLToPath } from "node:url";
 import { ServicePreviews } from "./service-previews.ts";
 import { randomBytes } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { EventBus } from "./bus.ts";
@@ -14,6 +15,8 @@ import { CodexAdapter } from "./providers/codex.ts";
 import { SessionManager } from "./sessions.ts";
 import { attachmentsDir } from "./attachments.ts";
 import { Store } from "./store.ts";
+import { StoreMaintenance } from "./store-maintenance.ts";
+import { appendLogLine, trimOpenLog } from "./log-rotate.ts";
 import { Kordoc } from "./kordoc.ts";
 import { IeumOffice, findIeum } from "./ieumoffice.ts";
 import { OfficeCliInput } from "./office-cli-input.ts";
@@ -32,6 +35,7 @@ import { OfficeKnowledge } from "./office-knowledge.mjs";
 import { OfficeSkills } from "./office-skills.ts";
 import { AgentBrowser } from "./browse.ts";
 import { buildTimeline } from "./timeline.ts";
+import { decodeCursor, readHistory } from "./history.ts";
 import { DocImages } from "./doc-images.ts";
 import { CalendarFeeds } from "./calendar-feeds.ts";
 import { Pkm } from "./pkm.ts";
@@ -150,6 +154,8 @@ const manager = new SessionManager(store, bus, {
   ...(desktopNotifications ? { deliverNotification: desktopNotifications } : {}),
 });
 void manager.refreshTools();
+// A saved revision's page pictures are made in the background, so a tab can show its first page while the editor opens.
+manager.documents.enablePictures();
 // "비밀 보관함": what only the person has, used without the AI seeing it; the scrubber keeps stored values out of every transcript.
 const credentials = new CredentialService({ dataDir, vault, manager, log: (code) => console.error(`Credential store: ${code}`) });
 installScrubber(store, manager, credentials.scrubber);
@@ -191,9 +197,13 @@ const remoteTool = new RemoteTool({
 const engineHooks = remoteTool.hooks(credentialTool.hooks(desktopTool.hooks(withFindTool(browse.engineHooks(), find.engineHooks()))));
 pkm.findInstructions = findToolInstructions;
 
+// "내 MCP 서버와 훅 불러오기" per engine (설정 › AI 엔진): off unless the person switches it on.
+const enginePrefs = new EnginePrefs(dataDir);
 const claudeIdleMs = env.WORKBENCH_CLAUDE_IDLE_MS ? Number(env.WORKBENCH_CLAUDE_IDLE_MS) : undefined;
+// An idle engine of a conversation that is not on screen is closed after this (A11; default 2.5 min).
+const offScreenIdleMs = env.WORKBENCH_ENGINE_OFFSCREEN_IDLE_MS ? Number(env.WORKBENCH_ENGINE_OFFSCREEN_IDLE_MS) : undefined;
 manager.registerAdapter(
-  new ClaudeAdapter(manager.sink, { idleMs: claudeIdleMs, modelCacheFile: join(dataDir, "claude-models.json"), attachmentsDir: attachmentsDir(dataDir), browser: engineHooks, launch: pkm.claudeLaunch }),
+  new ClaudeAdapter(manager.sink, { idleMs: claudeIdleMs, offScreenIdleMs, personalTools: () => enginePrefs.personalTools("claude"), modelCacheFile: join(dataDir, "claude-models.json"), attachmentsDir: attachmentsDir(dataDir), browser: engineHooks, launch: pkm.claudeLaunch }),
 );
 manager.registerAdapter(
   new CodexAdapter(manager.sink, {
@@ -201,6 +211,8 @@ manager.registerAdapter(
     approvalPolicy: env.WORKBENCH_CODEX_APPROVAL,
     sandbox: env.WORKBENCH_CODEX_SANDBOX,
     idleMs: env.WORKBENCH_CODEX_IDLE_MS ? Number(env.WORKBENCH_CODEX_IDLE_MS) : undefined,
+    offScreenIdleMs,
+    personalTools: () => enginePrefs.personalTools("codex"),
     browser: engineHooks,
     launch: pkm.codexLaunch,
   }),
@@ -213,7 +225,7 @@ const officeAi = new OfficeAi(dataDir, undefined, manager.office, {
   install: (provider) => manager.installEngineAndWait(provider === "claude-code" ? "claude" : "codex"),
 }, officeSkills, officeKnowledge);
 const editors = createEditorsServer(manager.documents, grants, webDir && existsSync(webDir) ? webDir : null, officeAi);
-const officeExecutors = new OfficeRendererExecutors(manager.documents, manager.office, grants, { binary: env.WORKBENCH_APP_BIN, webDir });
+const officeExecutors = new OfficeRendererExecutors(manager.documents, manager.office, grants, { binary: env.WORKBENCH_APP_BIN, webDir, scrub: (text) => credentials.scrubber.text(text) });
 officeAi.executors = officeExecutors;
 let editorsOrigin: string | null = null;
 let officeSettingsOrigin: string | null = null, applicationOrigin: string | null = null;
@@ -259,6 +271,7 @@ const appUpdates = env.WORKBENCH_CLI_INPUT ? undefined : new AppUpdates({ dataDi
   stopForInstall: () => { void updatePolicy.stop("drain").then(() => stop()).catch(error => { console.error("Update stop:", error instanceof Error ? error.message : String(error)); try { updatePolicy.cancel(); } catch { /* stopping */ } }); },
 });
 const server = createHttpServer(manager, bus, {
+  enginePrefs,
   updatePolicy,
   appUpdates,
   devices, voice, extensions, hub, channels, desktop, browserOutputs, push, servicePreviews,
@@ -278,10 +291,12 @@ const server = createHttpServer(manager, bus, {
   officeSettingsOrigin: () => officeSettingsOrigin,
   webDir: webDir && existsSync(webDir) ? webDir : null,
   // UI errors stay on this machine, next to the state database.
-  onClientLog: (message) => appendFileSync(join(dataDir, "client.log"), `${new Date().toISOString()} ${message}\n`),
+  // Size-bounded: past 5 MiB the file becomes client.log.1 (one previous file kept; log-rotate.ts).
+  onClientLog: (message) => appendLogLine(join(dataDir, "client.log"), `${new Date().toISOString()} ${message}`),
   editors: { grants, origin: () => editorsOrigin },
   browse,
   timeline: (since, until) => buildTimeline(store.turnMarks(since, until), store.revisionMarks(since, until), since, until),
+  history: (query) => readHistory(store, { ...query, before: decodeCursor(query.before) }),
   docImages,
   // Calendars subscribed by their iCal address; the address stays in the data folder (0600).
   calendar: new CalendarFeeds({ dataDir }),
@@ -345,14 +360,38 @@ listen(editors, env.WORKBENCH_EDITORS_PORT, editorsPortFile, (editorsPort) => {
       manager.schedules.start(Number(env.WORKBENCH_SCHEDULE_TICK_MS) || 30_000);
       // The quiet check: one request for the signed manifest at most once a day, while the switch is on.
       appUpdates?.startDailyCheck();
+      maintenance.start();
     });
   });
+});
+
+/**
+ * The state database's idle upkeep (store-maintenance.ts): only while nothing is at work — no conversation turn,
+ * no task, no unsaved document or office execution (the update policy's blockers, without live terminals, which
+ * write nothing during it), no update being prepared or installed, not stopping.
+ */
+const maintenance = new StoreMaintenance({
+  store,
+  terminals: manager.terminals,
+  quiet: () => {
+    if (stopping) return "stopping";
+    const update = updatePolicy.status();
+    if (update.state !== "running") return `update ${update.state}`;
+    const blocker = update.blockers.find((entry) => entry.kind !== "terminal");
+    if (blocker) return `${blocker.kind} ${blocker.id}`;
+    const turn = [...manager.view.sessions.values()].find((session) => !["idle", "error"].includes(session.status));
+    return turn ? `session ${turn.id}` : null;
+  },
+  // The service's own stdout and stderr (daemon/lifecycle.ts opened it before this process started).
+  logs: () => Number(lease.instance.mode === "service" && trimOpenLog(join(dataDir, "service.log"))),
+  onError: (error) => console.error("Store maintenance:", error instanceof Error ? error.message : String(error)),
 });
 
 let stopping = false;
 async function stop() {
   if (stopping) return;
   stopping = true;
+  maintenance.stop();
   appUpdates?.close();
   if (updatePolicy.status().state !== "stopping") await updatePolicy.stop("interrupt");
   dropbox.close();

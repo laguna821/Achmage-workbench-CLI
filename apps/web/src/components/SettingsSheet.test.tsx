@@ -103,7 +103,7 @@ it("says engines and tools in a teacher's words: no developer words, no middle d
   render(<EnginesSection providers={{ claude: status({ origin: "override", billingVars: ["ANTHROPIC_API_KEY"] }) }} connected engineActions={engineActions} onRefresh={() => {}} browser={null} browserActions={{} as never} onIntegrations={() => {}} />);
   const text = document.body.textContent!;
   expect(text).toContain("구독으로 연결됨 (Max)");
-  expect(text).not.toMatch(/ · |환경 변수|CLI|호스트|PATH|세션|런타임/);
+  expect(text).not.toMatch(/ · |환경 변수|CLI|호스트|PATH|대화|런타임/);
   // The path shares its folded box with where it was found and the version (the row itself says only "찾았습니다").
   const path = screen.getByText((_content, node) => node?.tagName === "CODE" && node.textContent!.endsWith("/home/someone/.local/bin/claude"));
   expect(path.textContent).toContain("판 2.1.999");
@@ -206,4 +206,23 @@ it("Home opens the first section and End the last; the section list is ONE tab s
   expect(onSection).toHaveBeenLastCalledWith(SETTINGS_SECTIONS[0]!.id);
   expect(keys.filter((key) => key.tabIndex === 0).map((key) => key.textContent)).toEqual(["AI 엔진"]);
   expect(keys.filter((key) => key.tabIndex === -1)).toHaveLength(keys.length - 1);
+});
+
+it("AI 엔진 has one switch per engine, '내 MCP 서버와 훅 불러오기', off by default, with one sentence on what it does (0.5.3)", () => {
+  const onPersonalTools = vi.fn();
+  render(<EnginesSection providers={{ claude: status({ personalTools: false }), codex: status({ provider: "codex", personalTools: true }) }} connected engineActions={engineActions}
+    onRefresh={() => {}} browser={null} browserActions={{} as never} onIntegrations={() => {}} onPersonalTools={onPersonalTools} />);
+  const switches = screen.getAllByRole("switch", { name: "내 MCP 서버와 훅 불러오기" }) as HTMLInputElement[];
+  expect(switches.map((entry) => entry.checked)).toEqual([false, true]);
+  const hints = [...document.querySelectorAll(".settings-personal-tools .settings-row-hint")].map((node) => node.textContent);
+  expect(hints).toEqual([
+    "켜면 이 컴퓨터의 Claude 설정에 넣어 둔 MCP 서버와 훅을 Workbench 대화에서도 쓰며, 대화마다 그것들을 새로 띄웁니다.",
+    "켜면 이 컴퓨터의 Codex 설정에 넣어 둔 MCP 서버와 훅을 Workbench 대화에서도 쓰며, 대화마다 그것들을 새로 띄웁니다.",
+  ]);
+  fireEvent.click(switches[0]!);
+  expect(onPersonalTools).toHaveBeenCalledWith("claude", true);
+  // An older gateway (it does not say): no switch.
+  cleanup();
+  render(<EnginesSection providers={{ claude: status() }} connected engineActions={engineActions} onRefresh={() => {}} browser={null} browserActions={{} as never} onIntegrations={() => {}} onPersonalTools={onPersonalTools} />);
+  expect(screen.queryByRole("switch", { name: "내 MCP 서버와 훅 불러오기" })).toBeNull();
 });

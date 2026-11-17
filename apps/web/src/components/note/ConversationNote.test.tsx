@@ -232,7 +232,7 @@ describe("the conversation's head", () => {
     head(actions(), { state: withModels, session: lastAnswer, inherited: { name: "검토", model: "mini", effort: null } });
     expect(screen.getByRole("list", { name: "속성" }).textContent).toContain("GPT mini · 역할");
     fireEvent.click(screen.getByRole("button", { name: /Codex/ }));
-    const details = screen.getByRole("dialog", { name: "세션 상세" });
+    const details = screen.getByRole("dialog", { name: "대화 상세" });
     expect(details.textContent).toContain("GPT mini · 역할 · 다음 요청부터");
     expect(details.textContent).toContain("fake-model-2025");
   });
@@ -255,7 +255,7 @@ describe("the conversation's head", () => {
   it("shows the session's details from the engine property", () => {
     head();
     fireEvent.click(screen.getByRole("button", { name: /Codex/ }));
-    const details = screen.getByRole("dialog", { name: "세션 상세" });
+    const details = screen.getByRole("dialog", { name: "대화 상세" });
     expect(details.textContent).toContain("노트북");
     expect(details.textContent).toContain("/works/lecture");
   });

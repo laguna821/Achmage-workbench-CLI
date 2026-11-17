@@ -1,5 +1,5 @@
 import type { OfficeMcpRequest } from "../../../packages/contracts/src/office-mcp.ts";
-import { listen, post, type Init } from "./bridge.ts";
+import { listen, pageRest, post, type Init } from "./bridge.ts";
 import { officeAiBusy, officeCopyBusy } from "./copy.ts";
 import { recovery } from "./recovery.ts";
 
@@ -32,6 +32,9 @@ export function installMcp(init: Init, handlers: {
   run(request: Exclude<OfficeMcpRequest, { kind: "close" | "status" }>): Promise<unknown>;
   afterReply?(): void;
 }) {
+  // The editor's own dirty check also decides whether its hidden page may rest (page-rest.ts): unsaved
+  // edits, an AI write or a copy in flight keep it awake.
+  pageRest.restWhenClean(async () => officeAiBusy() || officeCopyBusy() || await handlers.dirty());
   let queue = Promise.resolve(), closing = false;
   listen(message => {
     if (message.type !== "office:mcp") return;

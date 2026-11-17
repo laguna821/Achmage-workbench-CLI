@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type ImgHTMLAttributes } from "react";
-import { createPortal } from "react-dom";
+import { withParticle } from "@workbench/contracts";
+import { useCallback, useEffect, useState, type ImgHTMLAttributes } from "react";
+import { Lightbox } from "./Attachments.tsx";
 import type { Components } from "react-markdown";
-import { ASPECT_LABEL, IMAGE_ASPECTS, dirOf, markdownImageLink, relativePath, resolvePath, type ImageInfo, type ImageItem, type ImageTemplates, type Provider, type Session, type Work } from "@workbench/contracts";
+import { ASPECT_LABEL, IMAGE_ASPECTS, dirOf, markdownImageLink, relativePath, resolvePath, type ImageItem, type ImageTemplates, type Provider, type Session, type Work } from "@workbench/contracts";
 import { newRequestId, statusText } from "../format.ts";
-import { copyText, currentDoc, drawImage, inDesktop, openInApp, putInDoc, saveTemplates, stopSession, useDocVersion, usePicture, useTemplates, type DrawChoice } from "../imagegen.ts";
+import { copyText, currentDoc, drawImage, putInDoc, saveTemplates, stopSession, useDocVersion, usePicture, useTemplates, type DrawChoice } from "../imagegen.ts";
 import type { State } from "../state.ts";
 import { useDocs } from "./DocCards.tsx";
 import { EngineMark } from "./EngineMark.tsx";
@@ -25,9 +26,9 @@ function codexSessions(state: State, workId: string) {
 
 /** Who draws, in words (always ending in "세션", so "이" fits): this one, or a Codex session of the work. */
 function drawerLabel(state: State, provider: Provider, via: string | null) {
-  if (via === "new") return "새 Codex 세션";
-  if (via) return `「${state.sessions[via]?.purpose ?? "?"}」 Codex 세션`;
-  return provider === "claude" ? "이 작업의 Codex 그림 세션" : "이 Codex 세션";
+  if (via === "new") return "새 Codex 대화";
+  if (via) return `「${state.sessions[via]?.purpose ?? "?"}」 Codex 대화`;
+  return provider === "claude" ? "이 작업의 Codex 그림 대화" : "이 Codex 대화";
 }
 
 export type DrawState = { on: boolean; choice: DrawChoice; via: string | null };
@@ -127,13 +128,13 @@ export function DrawPill({
             <div className="menu-divider" />
             {provider === "claude" ? (
               <div className="draw-note">
-                <EngineMark provider="codex" size={13} /> Claude는 그림을 그리지 못해 <strong>이 작업의 Codex 세션</strong>이 그립니다. 그림은 이 대화에 보입니다. Codex는 이 대화 내용을 모르니 그릴 것을 구체적으로 적어 주세요.
+                <EngineMark provider="codex" size={13} /> Claude는 그림을 그리지 못해 <strong>이 작업의 Codex 대화</strong>가 그립니다. 그림은 이 대화에 보입니다. Codex는 이 대화 내용을 모르니 그릴 것을 구체적으로 적어 주세요.
               </div>
             ) : null}
-            <div className="menu-label">그릴 세션</div>
-            <div className="draw-sessions" role="radiogroup" aria-label="그릴 세션">
+            <div className="menu-label">그릴 대화</div>
+            <div className="draw-sessions" role="radiogroup" aria-label="그릴 대화">
               <button type="button" role="radio" aria-checked={!value.via} className={`menu-item${!value.via ? " active" : ""}`} onClick={() => set({ via: null })}>
-                <span className="menu-item-label">{provider === "claude" ? "자동 · 그림 세션" : "이 세션"}</span>
+                <span className="menu-item-label">{provider === "claude" ? "자동 · 그림 대화" : "이 대화"}</span>
                 <span className="menu-item-hint">{provider === "claude" ? "없으면 만듦" : session ? statusText(session) : "새 대화"}</span>
               </button>
               {others.map((entry) => (
@@ -145,7 +146,7 @@ export function DrawPill({
                 </button>
               ))}
               <button type="button" role="radio" aria-checked={value.via === "new"} className={`menu-item${value.via === "new" ? " active" : ""}`} onClick={() => set({ via: "new" })}>
-                <span className="menu-item-label">새 Codex 세션</span>
+                <span className="menu-item-label">새 Codex 대화</span>
               </button>
             </div>
           </>
@@ -184,7 +185,7 @@ function TemplateManager({ templates, onBack }: { templates: ImageTemplates | nu
         mine.map((template) => (
           <div key={template.id} className="draw-mine" title={template.prompt}>
             <span className="draw-mine-name">{template.name}</span>
-            <button type="button" className="link danger" onClick={() => void save({ ...templates, templates: templates.templates.filter((entry) => entry.id !== template.id) }, `「${template.name}」을(를) 지웠습니다.`)}>
+            <button type="button" className="link danger" onClick={() => void save({ ...templates, templates: templates.templates.filter((entry) => entry.id !== template.id) }, `${withParticle(`「${template.name}」`, "을/를")} 지웠습니다.`)}>
               지우기
             </button>
           </div>
@@ -197,7 +198,7 @@ function TemplateManager({ templates, onBack }: { templates: ImageTemplates | nu
         onSubmit={(event) => {
           event.preventDefault();
           if (!name.trim() || !prompt.trim()) return;
-          void save({ ...templates, templates: [...templates.templates, { id: "", name: name.trim(), prompt: prompt.trim() }] }, `「${name.trim()}」을(를) 더했습니다.`).then((ok) => {
+          void save({ ...templates, templates: [...templates.templates, { id: "", name: name.trim(), prompt: prompt.trim() }] }, `${withParticle(`「${name.trim()}」`, "을/를")} 더했습니다.`).then((ok) => {
             if (ok) {
               setName("");
               setPrompt("");
@@ -239,61 +240,13 @@ export function DrawChip({ state, provider, value, onClear }: { state: State; pr
       <Icon name="image" size={12} /> 그림{detail ? ` · ${detail}` : ""}
       {provider === "claude" || value.via ? (
         <span className="draw-chip-via">
-          <EngineMark provider="codex" size={12} /> {drawerLabel(state, provider, value.via)}이 그리고, 그림은 이 대화에 보입니다
+          <EngineMark provider="codex" size={12} /> {withParticle(drawerLabel(state, provider, value.via), "이/가")} 그리고, 그림은 이 대화에 보입니다
         </span>
       ) : null}
       <button type="button" onClick={onClear} aria-label="그림 끄기" title="그림 끄기">
         <Icon name="x" size={11} />
       </button>
     </span>
-  );
-}
-
-/** The picture full size over the app (Esc or a click outside closes it). */
-function ImageViewer({ info, url, onClose }: { info: ImageInfo; url: string; onClose: () => void }) {
-  const close = useRef<HTMLButtonElement>(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    const origin = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    close.current?.focus();
-    return () => { document.body.style.overflow = overflow; if (origin?.isConnected) origin.focus(); };
-  }, []);
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      onClose();
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
-  // Over everything, inside the app element so the look's colors still apply.
-  return createPortal(
-    <div className="image-viewer" role="dialog" aria-modal="true" aria-label={`그림 · ${firstLine(info.brief)}`} onClick={event => { if (event.target === event.currentTarget) onClose(); }} onKeyDown={event => {
-      if (event.key !== "Tab") return;
-      const controls = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not([disabled])')], first = controls[0], last = controls.at(-1);
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-    }}>
-      {failed ? <p role="alert">그림을 표시하지 못했습니다. 원본 파일을 열어 확인해 주세요.</p> : <img src={url} alt={info.brief} onError={() => setFailed(true)} />}
-      <div className="image-viewer-bar" onClick={(event) => event.stopPropagation()}>
-        <span className="image-viewer-name" title={info.path ?? ""}>
-          {info.relPath} · {info.width}×{info.height}
-        </span>
-        {inDesktop && info.path ? (
-          <button type="button" className="button small" onClick={() => void openInApp(info.path!)}>
-            앱으로 열기
-          </button>
-        ) : null}
-        <button ref={close} type="button" className="button small" onClick={onClose}>
-          닫기 <kbd>Esc</kbd>
-        </button>
-      </div>
-    </div>,
-    document.querySelector(".app") ?? document.body,
   );
 }
 
@@ -334,7 +287,7 @@ export function ImageCard({ item, viewer }: { item: ImageItem; viewer: string })
     }
   };
   const shape = info.aspect === "landscape" ? "3 / 2" : info.aspect === "portrait" ? "2 / 3" : "1 / 1";
-  const status = info.status === "drawing" ? (drawer?.status === "awaitingApproval" ? "Codex 세션이 승인을 기다립니다" : "그리는 중…") : info.status === "failed" ? "그리지 못했습니다" : "그림";
+  const status = info.status === "drawing" ? (drawer?.status === "awaitingApproval" ? "Codex 대화가 승인을 기다립니다" : "그리는 중…") : info.status === "failed" ? "그리지 못했습니다" : "그림";
   const meta = [info.template, info.aspect !== "auto" ? ASPECT_LABEL[info.aspect] : null, info.transparent ? "투명" : null, info.width ? `${info.width}×${info.height}` : null].filter(Boolean).join(" · ");
   return (
     <figure className={`image-card status-${info.status}`} data-image-id={info.id}>
@@ -359,9 +312,9 @@ export function ImageCard({ item, viewer }: { item: ImageItem; viewer: string })
       </figcaption>
       {info.drawSessionId !== viewer && drawer ? (
         <div className="image-card-via">
-          <EngineMark provider="codex" size={13} /> 「{drawer.purpose}」 Codex 세션이 그림
+          <EngineMark provider="codex" size={13} /> 「{drawer.purpose}」 Codex 대화가 그림
           <button type="button" className="link" onClick={() => actions.openSession(drawer.id)}>
-            세션 열기
+            대화 열기
           </button>
         </div>
       ) : info.originSessionId !== viewer && origin ? (
@@ -409,7 +362,7 @@ export function ImageCard({ item, viewer }: { item: ImageItem; viewer: string })
         ) : null}
         {note ? <span className="image-card-note" role="status">{note}</span> : null}
       </div>
-      {viewing && picture.url ? <ImageViewer info={info} url={picture.url} onClose={() => setViewing(false)} /> : null}
+      {viewing && picture.url ? <Lightbox pictures={[{ kind: "file", id: info.id, name: (info.relPath ?? info.path ?? firstLine(info.brief)).split(/[\\/]/).pop() || "그림", url: picture.url, path: info.path ?? null, ...(info.width ? { detail: `${info.width}×${info.height}` } : {}) }]} index={0} onSelect={() => undefined} onClose={() => setViewing(false)} /> : null}
     </figure>
   );
 }

@@ -83,6 +83,9 @@ export function patchPdfHistory(code: string, modulePath: string): string {
   }
   const undo = () => travelHistory('undo')
   const redo = () => travelHistory('redo')
+  // office-leftovers point 2: a new revision (a hidden tab's 문서 AI result) is loaded into this viewer in place —
+  // its own load path (the page serves the new bytes to readFile), the pages, zoom and scroll element kept.
+  ;(window as unknown as Record<string, unknown>).__workbenchPdfReload = () => loadDoc(filePath, doc, undefined, [])
 
 ` + code.slice(end);
   replace("  const saveInPlace = (autosave = false, flushAll = false): Promise<boolean> => {", "  const saveInPlace = (autosave = false, flushAll = false): Promise<boolean> => {\n    if (wbHistoryBusyRef.current) return Promise.resolve(false)");

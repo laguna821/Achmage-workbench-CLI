@@ -31,6 +31,7 @@
 //          request ("[자동 이어 하기] '<이름>'가 준비되었습니다…") runs `workbench-credential need --name <이름>`
 //   "화면 명령: <args>"  runs `playwright-cli -s=<name> <args>` after the above (with the browser's instructions)
 //   "고쳐"  appends to the working copy the request names
+//   "[[hold:<name>]]"  the turn lasts until the file <name> exists in $FAKE_ENGINE_HOLD_DIR (or a stop)
 //   "실패해"  the turn fails without an answer, as Claude Code reports an API error (is_error result)
 // Vault notes attached to a request are named back ("받은 노트 사본: …").
 //   In a messenger's own conversation (the remote's rules in the request): "<이름> 프로젝트에서 <일>" and the
@@ -118,6 +119,12 @@ const option = (name) => {
   }
   return undefined;
 };
+
+// FAKE_ENGINE_ARGS_LOG: one JSON line per conversation process started (its id, its arguments, the
+// session variable Workbench gave it) — the checks of what an engine is started with.
+if (process.env.FAKE_ENGINE_ARGS_LOG && !args.includes("--version") && args[0] !== "auth") {
+  appendFileSync(process.env.FAKE_ENGINE_ARGS_LOG, `${JSON.stringify({ engine: "claude", pid: process.pid, args, session: process.env.WORKBENCH_SESSION ?? null })}\n`);
+}
 
 const MODEL = "claude-fake-1";
 const CONTEXT_WINDOW = 200_000;
@@ -252,6 +259,12 @@ async function runTurn(text) {
     const usage = { input_tokens: 12, cache_creation_input_tokens: 0, cache_read_input_tokens: used, output_tokens: 0, server_tool_use: { web_search_requests: 0, web_fetch_requests: 0 }, service_tier: "standard" };
     send({ type: "result", subtype: "success", is_error: true, result: "API Error: 가짜 오류로 응답을 끝내지 못했습니다", stop_reason: null, duration_ms: Date.now() - started, duration_api_ms: 1, num_turns: 1, total_cost_usd: 0, usage, modelUsage: {}, permission_denials: [], queued_turn_count: queue.length, ...base() });
     return;
+  }
+  // "[[hold:<name>]]": the turn runs until the file <name> appears in $FAKE_ENGINE_HOLD_DIR (a rig decides
+  // how long a turn takes), or until it is stopped.
+  const hold = /\[\[hold:([A-Za-z0-9_-]+)\]\]/.exec(text);
+  if (hold && process.env.FAKE_ENGINE_HOLD_DIR) {
+    while (!turn.interrupted && !existsSync(join(process.env.FAKE_ENGINE_HOLD_DIR, hold[1]))) await sleep(100);
   }
   if (crashes(text)) {
     // Part of an edit lands in the working copy, part of an answer streams, then the process dies.

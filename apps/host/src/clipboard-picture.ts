@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { accessSync, constants } from "node:fs";
 import { delimiter, join } from "node:path";
+import { guiEnvironment } from "./gui-env.ts";
 
 // The picture on the desktop clipboard, read when the user pastes and the page sees nothing:
 // WebKitGTK (the Linux app's engine) gives a page the clipboard's text and copied files, never
@@ -45,7 +46,7 @@ function desktopTool(env: NodeJS.ProcessEnv = process.env): Tool | null {
 }
 
 /** The clipboard's picture (its bytes and type), or null when it holds none or this desktop has no tool for it. */
-export async function clipboardPicture(env: NodeJS.ProcessEnv = process.env): Promise<{ data: Buffer; type: string } | null> {
+export async function clipboardPicture(env: NodeJS.ProcessEnv = guiEnvironment()): Promise<{ data: Buffer; type: string } | null> {
   const tool = desktopTool(env);
   if (!tool) return null;
   let offered: string[];

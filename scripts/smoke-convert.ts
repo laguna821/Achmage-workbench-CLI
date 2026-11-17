@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { randomUUID } from "node:crypto";
 import { chromium } from "playwright-core";
+import { editorFirst } from "./fixtures/editor-first.ts";
 import type { Artifact, ArtifactRevision, CreateTarget, DocRef, Proposal, Session, Snapshot, TranscriptItem, Work } from "@workbench/contracts";
 import { findIeumCli } from "../apps/host/src/ieumoffice.ts";
 
@@ -142,6 +143,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 920 } });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  await editorFirst(page);
   await page.addInitScript(([workId, openIds]) => {
     localStorage.setItem("workbench.lastWork", workId);
     localStorage.setItem("workbench.openDocs", JSON.stringify({ [workId]: openIds }));

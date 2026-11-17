@@ -22,6 +22,7 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { chromium, type Page } from "playwright-core";
+import { editorFirst } from "./fixtures/editor-first.ts";
 import type { Artifact, PkmState, Provider, SearchPage, Session, TranscriptItem, Work } from "@workbench/contracts";
 import { Store } from "../apps/host/src/store.ts";
 import { put } from "../apps/host/src/vault-fixture.ts";
@@ -206,6 +207,7 @@ async function flow(provider: Provider) {
   const scopeOn = () => page.locator(".search-scope.on").innerText();
   try {
     await page.addInitScript(() => localStorage.setItem("workbench.lastWork", "w-hello"));
+    await editorFirst(page);
     await page.goto(`${ready.url}/?token=${ready.token}`);
     await page.waitForSelector(".composer-input");
     await page.waitForTimeout(300);

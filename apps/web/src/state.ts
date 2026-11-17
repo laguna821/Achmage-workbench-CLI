@@ -33,6 +33,11 @@ export type State = {
   sessions: Record<string, Session>;
   providers: Partial<Record<Provider, ProviderStatus>>;
   transcripts: Record<string, Transcript>;
+  /**
+   * Conversations off screen whose items wait aside (perf G1, live-events.ts): their entry in `transcripts` is
+   * behind what the gateway has. What reads a conversation it does not show reads it from the gateway instead.
+   */
+  aside: Record<string, true>;
   prefs: UiPrefs;
   artifacts: Record<string, Artifact>;
   /** Documents taken out of their projects ("삭제"), restorable from 보관함. */
@@ -43,6 +48,8 @@ export type State = {
   links: Record<string, SessionLink>;
   /** "예약 작업" of every session. */
   schedules: Schedule[];
+  /** The resource manager's line (0.5.3): null until the gateway has said it. */
+  resources: import("@workbench/contracts").ResourceState | null;
   tools: DocumentTools | null;
   browser: AgentBrowserStatus | null;
   /** Last `pkm.changed` version per scope (vault, views, rules, pins…): screens refetch on change. */
@@ -61,6 +68,7 @@ export const initialState: State = {
   sessions: {},
   providers: {},
   transcripts: {},
+  aside: {},
   prefs: {},
   artifacts: {},
   removedArtifacts: {},
@@ -68,6 +76,7 @@ export const initialState: State = {
   handoffs: {},
   links: {},
   schedules: [],
+  resources: null,
   tools: null,
   browser: null,
   pkm: {},
@@ -76,6 +85,10 @@ export const initialState: State = {
 export type Action =
   | { type: "snapshot"; snapshot: Snapshot }
   | { type: "event"; event: SequencedEvent }
+  /** Live events of one frame (live-events.ts), applied in their order: the same state as one "event" each. */
+  | { type: "events"; events: SequencedEvent[]; shown?: string }
+  /** A conversation off screen: its items wait (live-events.ts); its loaded transcript is behind until it is shown. */
+  | { type: "aside"; sessionId: string }
   | { type: "transcript"; sessionId: string; transcript: Transcript }
   | { type: "connected"; connected: boolean }
   | { type: "prefs"; prefs: UiPrefs }
@@ -104,6 +117,7 @@ export function reducer(state: State, action: Action): State {
         providers: Object.fromEntries(snapshot.providers.map((status) => [status.provider, status])),
         // Loaded transcripts may have missed events; they are refetched on demand.
         transcripts: {},
+        aside: {},
         prefs: snapshot.prefs ?? {},
         artifacts: byId(snapshot.artifacts ?? []),
         removedArtifacts: byId(snapshot.removedArtifacts ?? []),
@@ -111,6 +125,7 @@ export function reducer(state: State, action: Action): State {
         handoffs: byId(snapshot.handoffs ?? []),
         links: byId(snapshot.links ?? []),
         schedules: snapshot.schedules ?? [],
+        resources: snapshot.resources ?? null,
         tools: snapshot.tools ?? null,
         browser: snapshot.browser ?? null,
       };
@@ -127,6 +142,15 @@ export function reducer(state: State, action: Action): State {
         sessions: state.sessions[action.session.id] ? state.sessions : { ...state.sessions, [action.session.id]: action.session },
       };
     }
+    case "events":
+    {
+      const next = action.events.reduce((current, event) => reducer(current, { type: "event", event }), state);
+      if (!action.shown || !next.aside[action.shown]) return next;
+      const { [action.shown]: _shown, ...aside } = next.aside;
+      return { ...next, aside };
+    }
+    case "aside":
+      return state.aside[action.sessionId] ? state : { ...state, aside: { ...state.aside, [action.sessionId]: true } };
     case "transcript":
       return { ...state, transcripts: { ...state.transcripts, [action.sessionId]: action.transcript } };
     case "event": {
@@ -187,6 +211,8 @@ export function reducer(state: State, action: Action): State {
           return { ...next, links: { ...state.links, [event.link.id]: event.link } };
         case "schedules.changed":
           return { ...next, schedules: event.schedules };
+        case "resources.changed":
+          return { ...next, resources: event.state };
         case "pkm.changed":
           return { ...next, pkm: { ...state.pkm, [event.scope]: event.version } };
         case "project.changed": {

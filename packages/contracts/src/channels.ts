@@ -45,6 +45,11 @@ export type ChannelBinding = {
   /** That conversation by name, for the screen: 「project」 › 「conversation」 (engine · mode). */
   pointerLabel?: string | null;
   /**
+   * "확인 받기" (unit 13): the conversations this chat makes are `auto` and ask through the chat's
+   * buttons, instead of `full`. Off by default; absent from an older gateway.
+   */
+  confirm?: boolean;
+  /**
    * Answers the messenger refused for good (the person blocked the bot, the chat is gone) or that
    * failed too often, since the last message that did reach the chat. They are not tried again.
    * Null (or absent from an older gateway) when there are none.

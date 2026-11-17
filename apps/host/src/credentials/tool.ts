@@ -78,6 +78,8 @@ export class CredentialTool {
   private changed(session: Session) {
     const name = findSessionName(session.id);
     this.byName.set(name, session.id);
+    // An archived conversation's folder is not looked at any more (A9); its next engine start opens it again.
+    if (session.archivedAt) { this.active.get(name)?.watcher?.close(); this.active.delete(name); }
     if (session.provider === "codex" && session.nativeSessionId && this.threads.get(session.nativeSessionId) !== name) {
       this.threads.set(session.nativeSessionId, name);
       writeFileSync(join(this.root, "threads.json.tmp"), JSON.stringify(Object.fromEntries(this.threads)), { mode: 0o600 });

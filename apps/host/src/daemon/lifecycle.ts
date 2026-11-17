@@ -1,3 +1,4 @@
+import { rotateLogAtStart } from "../log-rotate.ts";
 import { PROTOCOL_HEADER, protocolHeader, WORKBENCH_PROTOCOL, negotiateProtocol, requireProtocolWrite } from "@workbench/contracts";
 import { closeSync, existsSync, mkdirSync, openSync } from "node:fs";
 import { spawn } from "node:child_process";
@@ -40,6 +41,8 @@ export async function startHost(options: { dataDir: string; entry: string; env?:
     return existing;
   }
   mkdirSync(options.dataDir, { recursive: true, mode: 0o700 });
+  // One previous file is kept (log-rotate.ts); the running service trims its own in place (store maintenance).
+  rotateLogAtStart(join(options.dataDir, "service.log"));
   const log = openSync(join(options.dataDir, "service.log"), "a", 0o600);
   let launchError: Error | null = null;
   try {

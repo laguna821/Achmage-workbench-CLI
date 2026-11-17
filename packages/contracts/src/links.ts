@@ -99,7 +99,7 @@ export const LINK_REASON_LABEL: Record<LinkReason, string> = {
   typed: "직접 입력해서 멈춤",
   usage: "5시간 사용량이 90%를 넘어 멈춤",
   restart: "앱이 다시 시작되어 멈춤",
-  busy: "다음 세션이 다른 일을 하는 중이라 멈춤",
+  busy: "다음 대화가 다른 일을 하는 중이라 멈춤",
   cut: "응답이 끊겨 멈춤",
   stopped: "끊음",
   agreed: "합의",
@@ -110,7 +110,7 @@ export const LINK_REASON_LABEL: Record<LinkReason, string> = {
   repeat: "같은 답이 되풀이됨",
   failed: "응답 실패",
   interrupted: "응답이 중단됨",
-  gone: "참여 세션이 빠짐",
+  gone: "참여 대화가 빠짐",
 };
 
 /** Messages a link may hand over in all: every participant speaks `maxRounds` times. */

@@ -101,6 +101,11 @@
 .attach-lightbox button, .attach-lightbox a { display: inline-flex; align-items: center; gap: var(--space-xs); min-height: 36px; padding: 6px var(--space-sm); border: 1px solid var(--color-viewer-edge); border-radius: var(--r-md); color: var(--color-on-viewer); background: var(--color-viewer-fill); }
 .attach-lightbox button:disabled { color: color-mix(in oklab, var(--color-on-viewer) 45%, transparent); background-color: transparent; cursor: not-allowed; }
 .attach-gallery-image { min-height: 0; display: flex; align-items: center; justify-content: center; }
+/* Zoomed (audit #137): the picture keeps its size and the frame scrolls; a click on it goes back to fitting the window. */
+.attach-gallery-image[data-zoomed] { overflow: auto; align-items: flex-start; justify-content: flex-start; }
+.attach-gallery-image img { cursor: zoom-in; }
+.attach-gallery-image[data-zoomed] img { cursor: zoom-out; margin: auto; }
+.attach-lightbox .attach-zoom { display: inline-flex; gap: var(--space-xs); margin-inline-start: auto; }
 
 .attach-lightbox img {
   max-width: 100%;

@@ -3,6 +3,7 @@ import type { Writable } from "node:stream";
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import type { Readable } from "node:stream";
 import type { OfficeExecutionBoot, OfficeExecutionState } from "../../../../packages/contracts/src/office-execution.ts";
 import type { DocFormat } from "@workbench/contracts";
 import type { Documents } from "../artifacts.ts";
@@ -10,10 +11,22 @@ import { officeEditorKind, type EditorGrants } from "../editors.ts";
 import { HttpError } from "../errors.ts";
 import type { OfficeSessions, OfficeBinding } from "../office-sessions.ts";
 import { officeExecutorMode } from "./registry.ts";
+import { guiEnvironment, hasDisplay } from "../gui-env.ts";
+import { redact } from "../channels/redact.ts";
 
-type OwnedProcess = { on(event: "error" | "exit", listener: () => void): unknown; stdin: Writable | null; unref(): void; pid?: number };
-type Launch = (url: string) => OwnedProcess;
-type Options = { binary?: string; webDir?: string | null; launch?: Launch };
+type OwnedProcess = { on(event: "error" | "exit", listener: (code?: number | null, signal?: string | null) => void): unknown; stdin: Writable | null; stderr?: Readable | null; unref(): void; pid?: number };
+type Launch = (url: string, env: NodeJS.ProcessEnv) => OwnedProcess;
+type Options = { binary?: string; webDir?: string | null; launch?: Launch;
+  /** The child's environment with the display filled in (gui-env.ts). Default: guiEnvironment; with an injected `launch`, none (no display check) unless given. */
+  environment?: ((base: NodeJS.ProcessEnv) => NodeJS.ProcessEnv) | null;
+  platform?: NodeJS.Platform;
+  /** How long a turn waits for a screen to appear (the person may be logging in) before it fails. */
+  displayWaitMs?: number; displayPollMs?: number;
+  log?: (line: string) => void;
+  /** Hides stored credential values (the credential scrubber) in what is logged. */
+  scrub?: (text: string) => string };
+/** Keep the last ~2 KB of a child's error output: the reason it stopped is never lost again. */
+const STDERR_TAIL = 2048;
 type Entry = { binding: OfficeBinding; turnId: string; boot: OfficeExecutionBoot; claimed: boolean; stopped: boolean; process?: OwnedProcess; timer?: NodeJS.Timeout; dispose(): void };
 const invalid = () => new HttpError(400, "office_executor_state", "원본 편집기의 실행 상태를 전달하지 못했습니다.");
 function executionState(raw: unknown, format: DocFormat): OfficeExecutionState {
@@ -52,12 +65,22 @@ export class OfficeRendererExecutors {
     return !this.closed && Boolean(this.origin) && officeExecutorMode(this.documents.get(artifactId).format) === "independent-renderer"
       && Boolean(this.options.launch || this.options.binary && existsSync(this.options.binary) && this.options.webDir && existsSync(join(this.options.webDir, "office/executor.html")));
   }
-  private launch(url: string) {
-    if (this.options.launch) return this.options.launch(url);
-    const env: NodeJS.ProcessEnv = { ...process.env, WORKBENCH_OFFICE_EXECUTOR_URL: url };
+  /** The executor's environment, or null when (on Linux) there is no screen to open it on. */
+  private environment(url: string): NodeJS.ProcessEnv | null {
+    const pick = this.options.environment !== undefined ? this.options.environment : this.options.launch ? null : guiEnvironment;
+    const env: NodeJS.ProcessEnv = { ...(pick ? pick(process.env) : process.env), WORKBENCH_OFFICE_EXECUTOR_URL: url };
     delete env.WORKBENCH_TOKEN;
     delete env.WORKBENCH_CLI_INPUT;
-    return spawn(this.options.binary!, ["--office-executor"], { env, stdio: ["pipe", "ignore", "ignore"], windowsHide: true });
+    if (pick && (this.options.platform ?? process.platform) === "linux" && !hasDisplay(env)) return null;
+    return env;
+  }
+  private launch(url: string, env: NodeJS.ProcessEnv) {
+    if (this.options.launch) return this.options.launch(url, env);
+    return spawn(this.options.binary!, ["--office-executor"], { env, stdio: ["pipe", "ignore", "pipe"], windowsHide: true });
+  }
+  private log(line: string) {
+    const scrubbed = redact(this.options.scrub ? this.options.scrub(line) : line);
+    (this.options.log ?? ((text: string) => console.error(text)))(scrubbed);
   }
   start(binding: OfficeBinding, turnId: unknown, sourceToken: string, raw: unknown) {
     const run = this.sessions.requireRun(binding, turnId);
@@ -104,15 +127,49 @@ export class OfficeRendererExecutors {
     const entry: Entry = { binding, turnId: run.turnId, boot, claimed: false, stopped: false, dispose: stop };
     this.entries.set(capability, entry); this.turns.set(run.turnId, capability);
     run.controller.signal.addEventListener("abort", stop, { once: true });
-    try {
-      const child = this.launch(`${this.origin}/office/executor.html#${capability}`); entry.process = child;
-      const failed = () => {
-        if (entry.stopped) return;
-        this.sessions.executorLost(binding, run.turnId);
+    const url = `${this.origin}/office/executor.html#${capability}`;
+    const begin = (env: NodeJS.ProcessEnv) => {
+      const child = this.launch(url, env); entry.process = child;
+      let tail = "";
+      child.stderr?.on("data", (chunk: Buffer) => { tail = (tail + chunk.toString("utf8")).slice(-STDERR_TAIL); });
+      (child.stderr as { unref?: () => void } | null | undefined)?.unref?.();
+      let ended = false;
+      const failed = (code?: number | null, signal?: string | null) => {
+        if (ended) return; ended = true;
+        const early = !entry.claimed;
+        const report = () => {
+          // Exit 0 = finished, 3 = stopped by the gateway (office_executor.rs); anything else is a failure worth its reason.
+          const failure = typeof code === "number" ? code !== 0 && code !== 3 : Boolean(signal);
+          if (early || !entry.stopped || failure) this.log(`Document executor for turn ${run.turnId} ${early ? "exited before it started the work" : entry.stopped ? "ended with a failure" : "exited during the work"}`
+            + ` (${typeof code === "number" ? `code ${code}` : signal ? `signal ${signal}` : "did not start"}).${tail.trim() ? ` Its last output:\n${tail.trim()}` : " It wrote no error output."}`);
+        };
+        if (entry.stopped) { report(); return; }
+        this.sessions.executorLost(binding, run.turnId, early ? "early" : undefined);
         stop();
+        // Its error output may still be arriving when the exit is seen.
+        if (child.stderr && !child.stderr.readableEnded) { const timer = setTimeout(report, 200); timer.unref(); child.stderr.once("end", () => { clearTimeout(timer); report(); }); }
+        else report();
       };
-      child.on("error", failed); child.on("exit", failed); child.unref();
-      entry.timer = setTimeout(() => { if (!entry.claimed) failed(); }, 45_000); entry.timer.unref();
+      child.on("error", () => failed()); child.on("exit", (code, signal) => failed(code, signal)); child.unref();
+      entry.timer = setTimeout(() => { if (!entry.claimed && !entry.stopped) { this.sessions.executorLost(binding, run.turnId, "early"); this.log(`Document executor for turn ${run.turnId} did not take its turn within 45 s.`); stop(); } }, 45_000); entry.timer.unref();
+    };
+    try {
+      const env = this.environment(url);
+      if (env) begin(env);
+      else {
+        // No screen now (a gateway started before the graphical login, or nobody logged in): wait a short
+        // bounded time for one to appear, then fail with one true sentence. Nothing is started meanwhile.
+        const until = Date.now() + (this.options.displayWaitMs ?? 20_000), poll = this.options.displayPollMs ?? 1000;
+        this.log(`Document executor for turn ${run.turnId}: no display in the gateway's or the session's environment; waiting up to ${Math.round((until - Date.now()) / 1000)} s.`);
+        const look = () => {
+          if (entry.stopped) return;
+          const found = this.environment(url);
+          if (found) { begin(found); return; }
+          if (Date.now() >= until) { this.log(`Document executor for turn ${run.turnId}: still no display; the turn failed without starting.`); this.sessions.executorLost(binding, run.turnId, "display"); stop(); return; }
+          entry.timer = setTimeout(look, poll); entry.timer.unref();
+        };
+        entry.timer = setTimeout(look, poll); entry.timer.unref();
+      }
     } catch (error) { this.sessions.finish(binding, { turnId: run.turnId, status: "failed", error: "독립 문서 실행기를 시작하지 못했습니다." }); stop(); throw error; }
     return { turnId: run.turnId, mode: "independent-renderer" as const };
   }

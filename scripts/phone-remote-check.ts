@@ -168,6 +168,30 @@ try {
   slack.message("강의계획서 프로젝트 지금 뭐 해?");
   check("Slack: \"…프로젝트 지금 뭐 해?\" is answered from projects/peek in a few lines", await said(slackTexts, slackFrom, (text) => text.startsWith("「강의계획서」 · ") && text.split("\n\n")[0]!.split("\n").length <= 3));
 
+  // 6. Unit 13 "확인 받기" on (at the PC): a hand-over of the remote (which existed before, so stays
+  // full) starts an `auto` conversation; its command approval reaches the chat under the hand-over's
+  // head line with [허용] [거절], and 허용 from the chat lets the turn finish. Claude and Codex.
+  const tgBinding = (await botOf("telegram")).bindings[0]!.id;
+  await api(`/api/channels/bindings/${tgBinding}`, "PATCH", { confirm: true });
+  for (const [project, engine, label] of [["강의계획서", "클로드로", "Claude"], ["연구노트", "코덱스로", "Codex"]] as const) {
+    const workId = (await snapshot()).works.find((work) => work.title === project)!.id;
+    const known = new Set((await sessionsIn(workId)).map((session) => session.id));
+    from = tgTexts().length;
+    tg.message(`${project} 프로젝트에서 ${engine} 명령 실행해서 폴더 확인해 줘`);
+    check(`13 ${label}: the hand-over makes an auto conversation`, await wait(async () => (await sessionsIn(workId)).some((session) => !known.has(session.id) && session.provider === label.toLowerCase())));
+    const made = (await sessionsIn(workId)).find((session) => !known.has(session.id))!;
+    check(`13 ${label}: …in 'auto' (the remote itself stays full)`, made.access === "auto" && (await snapshot()).sessions.find((session) => session.id === remote.id)?.access === "full", String(made.access));
+    const asked = await said(tgTexts, from, (text) => head(text) === `${project} · ${made.purpose} · ${label}` && text.includes(`「${made.purpose}」 · `));
+    check(`13 ${label}: its approval arrives under the hand-over's head line`, asked, tgTexts().slice(from).map(head).join(" | "));
+    if (asked) {
+      const message = tg.button("허용").messageId;
+      check(`13 ${label}: with [허용] [거절] (and the way in)`, tg.button("거절").messageId === message && tg.button("이 대화로 들어가기").messageId === message);
+      tgPress("허용");
+      check(`13 ${label}: 허용 from the chat, the turn finishes and its answer comes back`, await wait(() => (tg.shown(message) ?? "").includes("허용함 · ")) && await said(tgTexts, from, (text) => head(text) === `${project} · ${made.purpose} · ${label}` && !text.includes(`「${made.purpose}」 · `)), tgTexts().slice(from).map(head).join(" | "));
+    }
+  }
+  await api(`/api/channels/bindings/${tgBinding}`, "PATCH", { confirm: false });
+
   // Nothing secret leaves: no key variable named in anything the phones got.
   const phone = [...tgTexts(), ...slackTexts()].join("\n");
   check("no key or key variable in anything sent to the phones", !phone.includes("WORKBENCH_REMOTE_KEY") && !/[A-Za-z0-9_-]{43}/.test(phone));

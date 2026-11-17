@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Artifact } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import type { State } from "../state.ts";
+import { Select } from "./ui/Select.tsx";
 import { KNOWLEDGE_HOME_CHANNELS, type KnowledgeHomeRequest } from "../../../../packages/contracts/src/knowledge-home.ts";
 
 export function KnowledgeHome({ api, state, workId, theme, visible, refreshToken, onOpen, onManage, onSettings, onSkills }: {
@@ -88,10 +89,9 @@ export function KnowledgeHome({ api, state, workId, theme, visible, refreshToken
   };
   return <div className="knowledge-home" hidden={!visible}>
     <div className="knowledge-destination">
-      <label>문서 저장·열기 <select aria-label="지식베이스 문서 프로젝트" value={target} onChange={event => { setTarget(event.target.value); setWorkspace(state.works[event.target.value]?.defaultWorkspaceId ?? ""); }}>
-        <option value="">프로젝트 선택</option>{projects.map(work => <option key={work.id} value={work.id}>{work.title}</option>)}
-      </select></label>
-      {spaces.length > 1 && <select aria-label="지식베이스 문서 작업공간" value={workspace} onChange={event => setWorkspace(event.target.value)}>{spaces.map(space => <option key={space.id} value={space.id}>{space.label}</option>)}</select>}
+      <label>문서 저장·열기 <Select label="지식베이스 문서 프로젝트" value={target} onChange={value => { setTarget(value); setWorkspace(state.works[value]?.defaultWorkspaceId ?? ""); }}
+        options={[{ value: "", label: "프로젝트 선택" }, ...projects.map(work => ({ value: work.id, label: work.title }))]} /></label>
+      {spaces.length > 1 && <Select label="지식베이스 문서 작업 폴더" value={spaces.some(space => space.id === workspace) ? workspace : spaces[0]!.id} onChange={setWorkspace} options={spaces.map(space => ({ value: space.id, label: space.label }))} />}
       <button aria-busy={creating ? true : undefined} type="button" disabled={creating} onClick={() => void createProject()}>{creating ? "만드는 중…" : "새 프로젝트"}</button>
       <small>닫기 전에 필요한 답변을 문서로 저장하세요.</small>
     </div>

@@ -40,7 +40,7 @@ export const BUCKETS: { id: Bucket; label: string }[] = [
 export { rowState, leadState, groupState, needsPerson, isWorking, heldCount, ROW_STATES, ROW_STATE_ORDER } from "./row-state.ts";
 export type { RowStateId, RowStateInfo, RowStateGlyph, RowStateTone, RowStateOptions } from "./row-state.ts";
 
-const BUCKET_OF: Record<RowStateId, Bucket | null> = { attention: "attention", failed: "trouble", running: "running", unseen: "unseen", queued: "queued", done: null };
+const BUCKET_OF: Record<RowStateId, Bucket | null> = { attention: "attention", failed: "trouble", running: "running", waiting: "queued", unseen: "unseen", queued: "queued", done: null };
 
 /** Where a session stands in "지금": its one state (`rowState`); null when nothing waits (완료, or never answered). */
 export function bucketOf(session: Session): Bucket | null {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ensureEditorAiShown, hasEditorAi } from "../../editor-ai.ts";
 import { failure, type Notify } from "../../top-notice.ts";
 import { diagramComponents } from "../Diagram.tsx";
@@ -13,7 +13,7 @@ import { isBusy, turnRunning, type State } from "../../state.ts";
 import { Composer } from "../Composer.tsx";
 import { ModelPicker, type ModelChoice } from "../ModelPicker.tsx";
 import { PendingFiles, usePendingFiles } from "../Attachments.tsx";
-import { FormatBadge, removedLine } from "../DocCards.tsx";
+import { DocContext, FormatBadge, removedLine } from "../DocCards.tsx";
 import { EngineMark } from "../EngineMark.tsx";
 import { PartialNote } from "../Recovery.tsx";
 import { Icon } from "../Icon.tsx";
@@ -55,6 +55,10 @@ import { DocNoticeLine } from "./DocNotice.tsx";
 import { DocProposalBand } from "./DocProposalBand.tsx";
 import { TONE_OF, orderNotices, revisionWord, type DocNotice } from "./doc-notices.ts";
 import "../../styles/doc-head.css";
+import "../../styles/doc-cover.css";
+import { DocCover } from "./DocCover.tsx";
+import { COVER_DRAW_WAIT_MS, COVER_HOLD_MS, COVER_PAGE_WAIT_MS, PAGE_DRAWN_KINDS, coverKind, coverOf, useCover } from "../../doc-cover.ts";
+import { READING_LINE, firstView, isTyping, readDocOpen, readingView, useDocOpen } from "../../doc-open.ts";
 import { useShownPanel } from "../../completion-notifications.ts";
 import { NoteBanner } from "../../conversation/NoteBanner.tsx";
 import { DOCK_READY_WAIT_MS, DOCK_RETRY_MS, EDITOR_MIN_WIDTH, REVEAL_WAIT_MS, documentAgentParent, documentConversationShown, editorAiIsEntry, editorKeepsAiPanel, isOfficeEditing, isRichTextEditor, isWordEditor, narrowPaneStep, narrowView, otherDocumentAgent, readView, reportsAiSidebar, type AgentReveal } from "./document-modes.ts";
@@ -183,6 +187,7 @@ export default function DocumentView({
   onToast: Notify;
 }) {
   const artifact = state.artifacts[artifactId] as Artifact | undefined;
+  const docContext = useContext(DocContext);
   const [agent, setAgent] = useState<Session | null>(null);
   const [agentError, setAgentError] = useState("");
   const [agentRetry, setAgentRetry] = useState(0);
@@ -192,6 +197,8 @@ export default function DocumentView({
   // another tab/main chat must not tear down its writer lease or its running AI.
   // One source of truth: the AI drawn is the one the pane's session names (a click on its row);
   // otherwise the conversation the view opened with.
+  // A phone joined to this PC: it reads documents (page view, text), it does not edit them here.
+  const remoteReader = rootApi.isRemote === true;
   const [openedWith] = useState(() => mainSession?.id ?? null);
   const parentId = documentAgentParent(artifactId, mainSession, openedWith);
   const agentScope = useRef({ artifactId, parentId });
@@ -201,6 +208,9 @@ export default function DocumentView({
     // The writer lease belongs to this view, not to the AI shown: switching keeps the current AI
     // until the next one arrives (never null in between), so the lease is never closed and re-opened.
     setAgentError("");
+    // A phone joined to the PC only reads documents: the device channel carries no document AI or
+    // writer lease, so none is asked for (it was refused, and the document never left its skeleton).
+    if (remoteReader) return;
     void rootApi.documentSession(artifactId, parentId).then((next) => { if (!cancelled) setAgent(next); }, (error) => { if (!cancelled) setAgentError(error instanceof Error ? error.message : String(error)); });
     return () => { cancelled = true; };
   }, [rootApi, artifactId, parentId, agentRetry]);
@@ -277,12 +287,31 @@ export default function DocumentView({
   const office = artifact ? isOfficeFormat(artifact.format) : false;
   const wordEditor = isWordEditor(artifact?.format);
   const richTextEditor = isRichTextEditor(artifact?.format);
-  const [mode, setMode] = useState<"edit" | "preview" | "split" | "render" | "source" | "pages" | "rich">(
+  const [docOpen] = useDocOpen();
+  const [mode, setMode] = useState<"edit" | "preview" | "split" | "render" | "source" | "pages" | "rich">(() =>
     // Beside a conversation every format opens in the app's own read view: no embedded editor
     // there (its own AI panel and input would sit next to the conversation's input).
-    hosted ? readView(artifact?.format) : hangul && uiState?.mode === "pages" ? "edit" : uiState?.mode && ["edit", "preview", "split", "render", "source", "pages", "rich"].includes(uiState.mode) ? uiState.mode as "edit" | "preview" | "split" | "render" | "source" | "pages" | "rich"
-      : richTextEditor ? "rich" : wordEditor ? "edit" : office ? "pages" : "edit",
+    hosted ? readView(artifact?.format)
+      // 쪽 보기로 먼저 열기 (설정 › 문서 도구): a new or woken tab shows its pages; the editor starts on the first wish to edit.
+      // A phone joined to the PC opens documents in their page view: the editors run on the PC, not over the device channel.
+      : (remoteReader ? readingView(artifact?.format) : firstView(readDocOpen(), artifact, uiState, false)) ?? (hangul && uiState?.mode === "pages" ? "edit" : uiState?.mode && ["edit", "preview", "split", "render", "source", "pages", "rich"].includes(uiState.mode) ? uiState.mode as "edit" | "preview" | "split" | "render" | "source" | "pages" | "rich"
+      : richTextEditor ? "rich" : wordEditor ? "edit" : office ? "pages" : "edit"),
   );
+  /**
+   * A Word or PowerPoint tab that starts in 쪽 보기 first asks the gateway whether this revision's
+   * page pictures exist (a small JSON, never a render): without them (still being made, refused for
+   * low memory, over the size bound) the editor opens as before — the person never looks at an empty
+   * 쪽 보기 or a wait for pictures (doc-default, point d). Nothing is drawn for the moment of asking.
+   */
+  const [pagesAsked, setPagesAsked] = useState(() => !hosted && !remoteReader && mode === "pages" && (artifact?.format === "docx" || artifact?.format === "pptx"));
+  useEffect(() => {
+    if (!pagesAsked || !artifact) return;
+    let live = true;
+    const answered = (found: boolean) => { if (!live) return; setPagesAsked(false); if (!found) setMode((current) => (current === "pages" ? "edit" : current)); };
+    coverOf(artifactId, artifact.revision).then((cover) => answered(Boolean(cover)), () => answered(false));
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagesAsked]);
   const officeEditing = isOfficeEditing(artifact?.format, mode);
   // The read views a document offers beside a conversation.
   const hostedViews: Array<["preview" | "edit" | "pages" | "render" | "source", string]> = artifact?.format === "markdown" ? [["preview", "미리보기"], ["edit", "원문"]]
@@ -298,7 +327,8 @@ export default function DocumentView({
   const [narrowOffer, setNarrowOffer] = useState(false);
   const rootRef = useRef<HTMLElement>(null);
   // The tab keeps the view the person has: the stand-in for a narrow pane is not remembered.
-  useEffect(() => { onUiState?.({ mode: narrowAuto ? editorMode : mode }); }, [mode, narrowAuto, editorMode, onUiState]);
+  // Leaving the editor ends "edited in this visit" (a woken tab then follows 쪽 보기 first again).
+  useEffect(() => { onUiState?.({ mode: narrowAuto ? editorMode : mode, ...(!narrowAuto && mode !== editorMode ? { edited: false } : {}) }); }, [mode, narrowAuto, editorMode, onUiState]);
   const [editorAi, setEditorAi] = useState<boolean | null>(null);
   /** The editor says the person turned its own AI panel off (설정 › 연결): 문서 AI is the column then (never for Hangul). */
   const [editorAiOff, setEditorAiOff] = useState(false);
@@ -314,6 +344,15 @@ export default function DocumentView({
   const leaseKnown = lease.ready || Boolean(lease.error);
   const officeRef = useRef<OfficeHandle>(null);
   const [officeStatus, setOfficeStatus] = useState<OfficeStatus>({ dirty: false, revision: null, conflict: null, changed: false, same: false });
+  // Edits in the editor on this visit: a tab that sleeps (its edits saved on the way) wakes in its editor (doc-default, point e).
+  useEffect(() => { if (officeStatus.dirty && officeEditing) onUiState?.({ edited: true }); }, [officeStatus.dirty, officeEditing, onUiState]);
+  // The document's first page over its editor while the editor boots (doc-pages-first): the
+  // picture of the revision it opens, gone once the editor has opened AND drawn. "Opened" comes
+  // before the page is drawn (PowerPoint: ~1.1 s before, measured); the editor's AI panel reports
+  // itself drawn with the page, so that report ends the picture (a short hold lets the page paint);
+  // an editor whose panel is turned off ends it COVER_DRAW_WAIT_MS after "opened".
+  const [editorShown, setEditorShown] = useState(false);
+  const [editorDrawn, setEditorDrawn] = useState(false);
   const [confirmDrop, setConfirmDrop] = useState(false);
   const [selection, setSelection] = useState<EditorSelection>(null);
   const [compare, setCompare] = useState<{
@@ -337,6 +376,19 @@ export default function DocumentView({
   const onHangulWarning = useCallback((warning: string) => setHangulWarnings((list) => (list.includes(warning) ? list : [...list, warning])), []);
   const [viewing, setViewing] = useState<{ revision: number; text: string } | null>(null);
   const officeEditorHere = officeEditing && everWriter.current;
+  const coverHere = coverKind(format);
+  /** This kind's page says when it is drawn at its fitted place (PowerPoint): only that ends the picture. */
+  const pageDrawnKind = Boolean(coverHere && PAGE_DRAWN_KINDS.has(coverHere));
+  // From the tab's first frame (the writer lease is still being asked for) until the editor has opened.
+  const coverFor = officeEditing && !hosted && (everWriter.current || !leaseKnown);
+  const editorBooting = coverFor && !(compare || viewing) && officeStatus.revision === null;
+  useEffect(() => {
+    if (editorBooting) { setEditorShown(false); return; }
+    const timer = window.setTimeout(() => setEditorShown(true), editorDrawn ? COVER_HOLD_MS : pageDrawnKind ? COVER_PAGE_WAIT_MS : COVER_DRAW_WAIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [editorBooting, editorDrawn, pageDrawnKind]);
+  const cover = useCover(artifactId, artifact?.revision ?? 0, format, Boolean(coverHere) && coverFor && !editorShown);
+  const coverShown = Boolean(cover && coverHere && coverFor && !(compare || viewing) && !editorShown);
   // The Hangul editor's own dock is the document's 문서 AI while the editor is on this screen and
   // shown (not under an older revision or a comparison: then the column is the AI, as in 글 보기).
   // aiOpen is the tab's one wish for the document's AI: the dock is brought to it here, the column
@@ -385,7 +437,7 @@ export default function DocumentView({
   wasDock.current = dockEntry;
   /** A new editor page (left and back, or opened again in place): its dock is not the one the tab knew. */
   const forgetDock = () => { setDock({ ready: false, open: false, shown: false }); setDockShowAsked(false); dockText.current = null; dockPut.current = null; };
-  const onEditorReload = () => forgetDock();
+  const onEditorReload = () => { forgetDock(); setEditorDrawn(false); };
   useEffect(() => { if (!officeEditorHere) forgetDock(); }, [officeEditorHere]);
   useEffect(() => {
     if (!leftDock) return;
@@ -405,6 +457,7 @@ export default function DocumentView({
   /** The person (or a flow acting for them) wants the document's AI open or closed. */
   const wishAi = (open: boolean) => { wishKnown.current = true; setDockStuck(false); setAiOpen(open); };
   const onEditorAi = (open: boolean, draft?: string, report?: { ready: boolean; person: boolean; shown?: boolean; off?: boolean }) => {
+    if (report?.ready && !pageDrawnKind) setEditorDrawn(true);
     setEditorAi(report && !report.ready ? false : open);
     if (report) setEditorAiOff(Boolean(report.off));
     if (!editorAiIsEntry(format, report?.off) || !report) return;
@@ -448,6 +501,9 @@ export default function DocumentView({
   useEffect(() => {
     const request = revealAgent;
     if (hosted || !request || revealed.current === request || !format || mainSession?.id !== request.sessionId) return;
+    // In 쪽 보기 the document's AI works in its editor: a row's 문서 AI starts the editor with it open (doc-default, point b);
+    // this effect then runs again with the editor and answers as for any editor.
+    if (wordEditor && !(compare || viewing) && (mode === "pages" || (format === "pdf" && mode === "preview" && docOpen === "pages"))) { wishAi(true); setPagesAsked(false); setMode("edit"); return; }
     const act = (column: boolean) => {
       revealed.current = request;
       onRevealDone?.(artifactId, request);
@@ -466,7 +522,7 @@ export default function DocumentView({
     const timer = window.setTimeout(() => act(true), REVEAL_WAIT_MS);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [revealAgent, mainSession?.id, format, officeEditing, editorAi, editorHere, leaseKnown, Boolean(hosted), dockEntry]);
+  }, [revealAgent, mainSession?.id, format, officeEditing, editorAi, editorHere, leaseKnown, Boolean(hosted), dockEntry, mode]);
   // On screen: the conversation the column shows (this document's AI, or an older one opened in
   // its place), and Word's own AI sidebar while Word says it is open.
   const columnShows = !hosted && (dockEntry ? columnHere : aiOpen);
@@ -543,8 +599,8 @@ export default function DocumentView({
   }, [api, artifactId, textual, hangul, richTextEditor, artifact?.format, onToast, lease.access]);
 
   useEffect(() => {
-    if (lease.ready) void load().catch((error: Error) => onToast(failure(error)));
-  }, [load, onToast, lease.ready]);
+    if (lease.ready || remoteReader) void load().catch((error: Error) => onToast(failure(error)));
+  }, [load, onToast, lease.ready, remoteReader]);
 
   // Keep a local copy of unsaved edits.
   useEffect(() => {
@@ -872,6 +928,9 @@ export default function DocumentView({
     setForcedEditor(isOfficeEditing(artifact.format, value) ? (forced) => forced || (width > 0 && width < EDITOR_MIN_WIDTH) : false);
     setMode(value);
   };
+  // 쪽 보기 first (or the person went to 쪽 보기): pictures of the pages; the first wish to edit starts the editor.
+  const readingFirst = !hosted && wordEditor && !(compare || viewing) && (mode === "pages" || (artifact.format === "pdf" && mode === "preview" && docOpen === "pages"));
+  const editIntent = () => { setPagesAsked(false); void changeMode("edit"); };
   const stoodIn = narrowView(artifact.format);
   // After a conflict: my edits become the next revision; the other one stays in the history.
   const keepMine = async () => {
@@ -977,7 +1036,7 @@ export default function DocumentView({
   );
 
   const body = (() => {
-    if (!lease.ready) return pageSkeleton;
+    if (!lease.ready && !remoteReader) return pageSkeleton;
     if (compare) {
       return (
         <div className="doc-compare">
@@ -1158,7 +1217,9 @@ export default function DocumentView({
   const viewChoices: DocView[] = hosted
     ? hostedViews.map(([value, label]) => ({ value, label }))
     : artifact.format === "markdown" ? [{ value: "rich", label: "편집" }, { value: "edit", label: "원문" }, { value: "split", label: "둘 다" }, { value: "preview", label: "미리보기" }]
-      : wordEditor ? [{ value: "edit", label: "편집" }, { value: "preview", label: artifact.format === "pdf" ? "미리보기" : "글 보기" }]
+      : wordEditor ? [{ value: "edit", label: "편집" }, { value: "preview", label: artifact.format === "pdf" ? "미리보기" : "글 보기" },
+        // 쪽 보기 for the kinds that have it, when it is the opening choice (or the tab is in it).
+        ...(readingView(artifact.format) === "pages" && (docOpen === "pages" || mode === "pages") ? [{ value: "pages" as const, label: "쪽 보기" }] : [])]
         : office ? [{ value: "pages", label: "쪽 보기" }, { value: "preview", label: "글 보기" }]
           : artifact.format === "html" ? [{ value: "rich", label: "편집" }, { value: "render", label: "화면" }, { value: "source", label: "원문" }] : [];
   // Beside a conversation and for the office page views a switch only changes the read view; elsewhere leaving the editor saves first.
@@ -1180,7 +1241,10 @@ export default function DocumentView({
       onToast(`${opened.app}에서 같은 파일을 열었습니다. 저장 내용은 여기에도 자동으로 반영됩니다.`);
     })().catch((error: Error) => onToast(failure(error)));
   };
+  // 이름 바꾸기 (audit #141): the dialog is the app's (DocContext); the project note's name is its project's.
+  const renameDoc = artifact.role === "project-note" ? undefined : docContext?.actions.renameDocument;
   const menuActions: DocMenuAction[] = [
+    ...(renameDoc ? [{ key: "rename", label: "이름 바꾸기", icon: "edit" as const, onSelect: () => renameDoc(artifactId) }] : []),
     ...(hosted ? [{ key: "wide", label: "탭으로 열어 고치기", icon: "openNew" as const, shortcut: "Alt+2", onSelect: () => afterSaving(hosted.onWide) }] : []),
     ...(!hosted && onBeside ? [{ key: "beside", label: "대화 옆에 놓기", icon: "columns" as const, shortcut: "Alt+4", onSelect: onBeside }] : []),
     ...(onRead ? [{ key: "read", label: "읽기", icon: "book" as const, shortcut: "Alt+5", onSelect: () => afterSaving(onRead) }] : []),
@@ -1265,7 +1329,8 @@ export default function DocumentView({
       !unsaved && !(officeEditing && officeStatus.dirty) ? [{ label: "새 판으로 받기", run: () => void api.adoptDisk(artifactId).then((adopted) => onToast(`바뀐 내용을 새 판(${revisionWord(adopted.revision)})으로 받았습니다.`)).catch((error: Error) => onToast(failure(error))) }] : [],
       "reader-chip warn"),
     artifact.diskState === "missing" && notice("disk-missing", "디스크에서 파일이 사라졌습니다. 여기 남은 판은 그대로 읽을 수 있습니다.", [], "reader-chip warn"),
-    canEditFormat && !lease.canWrite && !hosted && notice("read-only",
+    remoteReader && notice("read-only", "휴대폰에서는 문서를 읽기만 합니다. 고치려면 PC에서 열거나, 대화에서 AI에게 부탁하세요.", [], "doc-access"),
+    canEditFormat && !lease.canWrite && !hosted && !remoteReader && notice("read-only",
       `${lease.error ?? (!lease.ready ? "문서 편집 권한을 확인하는 중입니다." : lease.registration?.writer ? "다른 탭이나 창에서 편집 중입니다. 이곳에서는 읽기만 할 수 있습니다." : "이 문서를 읽기 전용으로 보고 있습니다.")}${dirty ? " 저장되지 않은 입력은 이 탭에 유지했습니다." : ""}`,
       [{ label: "편집 권한 받기", run: () => void lease.claim() }], "doc-access"),
     agentError && notice("agent-error", `이 문서의 AI에 연결하지 못했습니다. ${agentError}`, [{ label: "다시 연결", run: () => setAgentRetry((value) => value + 1) }], "doc-agent-error"),
@@ -1295,7 +1360,7 @@ export default function DocumentView({
         )}
         <div className="doc-title">
           <FormatBadge format={artifact.format} />
-          <span className="doc-name" title={artifact.path}>{artifact.name}</span>
+          <span className="doc-name" title={renameDoc ? `${artifact.path}\n두 번 눌러 이름 바꾸기` : artifact.path} onDoubleClick={renameDoc ? () => renameDoc(artifactId) : undefined}>{artifact.name}</span>
         </div>
         <span className={`save-state save-${shownState}`} role="status" data-base-revision={base?.revision ?? ""} data-unsaved={base ? String(text !== base.text) : ""}>
           {saveWords}
@@ -1318,6 +1383,8 @@ export default function DocumentView({
               title={dockEntry ? (hangul ? "이 문서의 AI를 편집기 안에서 엽니다. 고른 부분을 바로 고치고 한 번에 되돌릴 수 있습니다" : "이 문서의 AI를 편집기 안에서 엽니다. 열린 문서를 그 자리에서 고칩니다") : "이 문서의 AI와 나누는 대화를 문서 옆에 엽니다. 메인 대화와 따로 실행됩니다"}
               onClick={() => {
                 setFocusedConversationId(null);
+                // In 쪽 보기 the document's AI works in its editor: asking for it starts the editor with it open.
+                if (readingFirst) { wishAi(true); editIntent(); return; }
                 if (!dockEntry) { setAiOpen(!aiOpen); return; }
                 // The column beside the editor (a notice, an approval) closes; otherwise the dock turns to the other state from what is on screen.
                 if (columnHere) { setColumnHere(false); onFocusDone?.(); wishAi(false); return; }
@@ -1354,7 +1421,7 @@ export default function DocumentView({
       ) : null}
       <div className="doc-body" ref={bodyRef} inert={!lease.canWrite && everWriter.current && Boolean(design || officeEditing)}>
         {officeEditing && everWriter.current ? (
-          <OfficeEditor ref={officeRef} api={api} artifact={artifact} access={lease.access()} sessionId={lease.registration?.view.sessionId ?? null} hidden={Boolean(compare || viewing)} onStatus={setOfficeStatus} onAiPanel={onEditorAi} onReload={onEditorReload} onNotice={onToast} onWarning={onHangulWarning} onCopied={onOpenArtifact} onPresent={onPresent}
+          <OfficeEditor ref={officeRef} api={api} artifact={artifact} access={lease.access()} sessionId={lease.registration?.view.sessionId ?? null} hidden={Boolean(compare || viewing)} onStatus={setOfficeStatus} onAiPanel={onEditorAi} onPageDrawn={() => setEditorDrawn(true)} viewPosition={uiState?.office} onViewPosition={(office) => onUiState?.({ office })} onReload={onEditorReload} onNotice={onToast} onWarning={onHangulWarning} onCopied={onOpenArtifact} onPresent={onPresent}
             onPrepareAi={(revision) => lease.sync(false, revision)} onAiSettings={onAiSettings}
             onNewSession={async (revision) => {
               await lease.sync(false, revision);
@@ -1366,7 +1433,14 @@ export default function DocumentView({
               return next.id;
             }} />
         ) : null}
-        {body}
+        {coverShown && cover && coverHere ? <DocCover cover={cover} kind={coverHere} name={artifact.name} /> : null}
+        {pagesAsked && mode === "pages" ? null : readingFirst ? (
+          <div className="doc-reading" tabIndex={0} aria-label={`${artifact.name} · 쪽 보기`} onDoubleClick={remoteReader ? undefined : editIntent}
+            onKeyDown={(event) => { if (!remoteReader && isTyping(event)) { event.preventDefault(); editIntent(); } }}>
+            <p className="doc-reading-line">{remoteReader ? "쪽 그림입니다. 옆으로 밀어 쪽을 넘기고, 두 손가락이나 두 번 눌러 키웁니다." : READING_LINE}</p>
+            {body}
+          </div>
+        ) : body}
       </div>
       {markdownDoc && lease.canWrite ? (
         <InlineDraw
@@ -1414,7 +1488,7 @@ export default function DocumentView({
               {handoffTo ? (
                 <span className="target-chip">
                   <EngineMark provider={handoffTo.provider} size={13} /> @{handoffTo.purpose}
-                  <button type="button" onClick={() => setHandoffTo(null)} aria-label="받는 세션 지우기">
+                  <button type="button" onClick={() => setHandoffTo(null)} aria-label="받는 대화 지우기">
                     <Icon name="x" size={11} />
                   </button>
                 </span>

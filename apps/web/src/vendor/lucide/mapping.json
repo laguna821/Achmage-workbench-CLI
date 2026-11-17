@@ -76,5 +76,8 @@
   "sort": "arrow-up-down",
   "settings": "settings",
   "dots": "ellipsis",
-  "stop": "square"
+  "stop": "square",
+  "windowMinimize": "minus",
+  "fullscreen": "maximize",
+  "fullscreenExit": "minimize"
 }

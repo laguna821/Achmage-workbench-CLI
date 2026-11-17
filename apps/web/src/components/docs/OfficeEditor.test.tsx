@@ -292,7 +292,7 @@ it("creates the first conversation only on a request after saving and rejects a 
 it("does not create a conversation when the first save fails or the request targets another session", async () => {
   const f = await unbound();
   await f.message({ type: "office:ai-request", action: "prepare", requestId: "stale", sessionId: "other" });
-  expect(f.sent).toHaveBeenCalledWith(expect.objectContaining({ requestId: "stale", error: expect.stringContaining("세션이 바뀌") }), "http://office.test");
+  expect(f.sent).toHaveBeenCalledWith(expect.objectContaining({ requestId: "stale", error: expect.stringContaining("대화가 바뀌") }), "http://office.test");
   await f.message({ type: "office:ai-request", action: "prepare", requestId: "first", sessionId: null });
   await f.message({ type: "office:flushed", revision: null });
   expect(f.onNewSession).not.toHaveBeenCalled();

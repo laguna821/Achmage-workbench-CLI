@@ -69,6 +69,8 @@ export type CodexLaunch = (session: Session & { access: AccessMode }, work: Work
  * One adapter per engine. Sessions are started lazily on the first message so that
  * archived or idle sessions do not keep engine processes alive.
  */
+export type EngineProcess = { provider: Provider; sessionIds: string[]; pid: number | null; marker: string | null; idle: boolean };
+
 export interface ProviderAdapter {
   readonly provider: Provider;
   init(): Promise<void>;
@@ -117,6 +119,17 @@ export interface ProviderAdapter {
   /** What a request can start with ("/"): the engine's commands and the skills it finds for the work. */
   commands?(session: Session & { access: AccessMode }, work: Work): Promise<EngineCommand[]>;
   answerApproval(session: Session, itemId: string, decision: ApprovalDecision): Promise<boolean>;
+  /**
+   * The engine processes alive now (B1): for each, the conversations it serves, its process id when
+   * known, or the WORKBENCH_SESSION value it was started with (`marker`), and whether it is idle.
+   */
+  engineProcesses?(): EngineProcess[];
+  /** "내 MCP 서버와 훅 불러오기" changed for this engine: say so in the status; idle engines close so the next message uses it. */
+  personalToolsChanged?(): void;
+  /** Close every idle engine now (a running turn, a waiting approval or a running child is never touched); how many. */
+  closeIdleEngines?(): number;
+  /** The conversations some window shows now (A11): an idle engine of one that is not on screen is closed sooner. */
+  shownChanged?(shown: ReadonlySet<string>): void;
   shutdown(): Promise<void>;
 }
 

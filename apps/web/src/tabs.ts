@@ -12,6 +12,14 @@ export function contentKey<V>(content: PaneContent<V>): string {
   if (view.kind === "browser") return `browser:${view.pageId}`;
   return JSON.stringify(view);
 }
+/**
+ * A document tab closed while a 문서 AI turn runs live in its editor stays mounted off screen until the turn ends
+ * (Panes.tsx, tab-sleep.ts `useKeepOnClose`). Opening that document again takes the kept tab's id — its view, and so
+ * the same running editor, comes back instead of a second editor on the same document.
+ */
+let reuse: ((key: string) => string | null) | null = null;
+export function setTabIdReuse(find: ((key: string) => string | null) | null) { reuse = find; }
+const newTabId = (key: string) => reuse?.(key) ?? `tab-${crypto.randomUUID()}`;
 export const tabsOf = <V>(pane: Pane<V>): PaneTab<V>[] => pane.tabs ?? [{ id: `tab-${pane.id}`, view: pane.view, workId: pane.workId, sessionId: pane.sessionId }];
 export const activeTab = <V>(pane: Pane<V>) => tabsOf(pane).find((tab) => tab.id === pane.activeTabId) ?? tabsOf(pane)[0]!;
 const project = <V>(pane: Pane<V>, tabs: PaneTab<V>[], activeId: string, recent = pane.recentTabIds ?? []): Pane<V> => {
@@ -108,7 +116,7 @@ export function withTabs<V>(layout: Layout<V>, previous?: Layout<V>): Layout<V> 
     // even if another tab is already showing the same note.
     const currentIndex = tabs.findIndex(tab => tab.id === current.id && contentKey(tab) === key);
     const index = currentIndex >= 0 ? currentIndex : tabs.findIndex((tab) => contentKey(tab) === key);
-    const chosen = index >= 0 ? { ...tabs[index]!, ...content } : { id: `tab-${crypto.randomUUID()}`, ...content };
+    const chosen = index >= 0 ? { ...tabs[index]!, ...content } : { id: newTabId(key), ...content };
     if (index >= 0) tabs[index] = chosen;
     else {
       tabs.push(chosen);
@@ -367,7 +375,7 @@ export function updateTabView<V>(layout: Layout<V>, tabId: string, change: (view
 export function addBackgroundTab<V>(layout: Layout<V>, paneId: string, content: PaneContent<V>): Layout<V> {
   if (findTab(layout, contentKey(content))) return layout;
   if (layout.panes.reduce((sum, pane) => sum + tabsOf(pane).length, 0) >= MAX_TABS) return layout;
-  return { ...layout, panes: layout.panes.map((pane) => pane.id === paneId ? { ...pane, tabs: [...tabsOf(pane), { id: `tab-${crypto.randomUUID()}`, ...content }] } : pane) };
+  return { ...layout, panes: layout.panes.map((pane) => pane.id === paneId ? { ...pane, tabs: [...tabsOf(pane), { id: newTabId(contentKey(content)), ...content }] } : pane) };
 }
 
 /**

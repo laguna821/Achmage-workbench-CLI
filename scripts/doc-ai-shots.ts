@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { chromium, type Browser, type Page } from "playwright-core";
+import { editorFirst } from "./fixtures/editor-first.ts";
 
 const out = resolve(process.argv[2] ?? "doc-ai-shots"); mkdirSync(out, { recursive: true });
 const dark = process.argv.includes("--dark");
@@ -69,6 +70,7 @@ try {
   browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: dark ? "dark" : "light" });
   await context.addInitScript(id => localStorage.setItem("workbench.lastWork", id), work.id);
+  await editorFirst(context);
   page = await context.newPage();
   await page.goto(`${ready.url}/?token=${ready.token}`);
   const activePane = () => page!.locator('.pane[data-pane-active="true"]');
@@ -109,6 +111,18 @@ try {
     await until(async () => (await api("/api/snapshot")).sessions.some((s: { status: string; documentAgent?: { artifactId: string } }) => s.documentAgent?.artifactId === docs.docx.id && s.status === "awaitingApproval"), 30_000)
       .then(() => note("docx 글 보기: the column's 문서 AI waits for an approval"), () => note("docx 글 보기: no approval came (the frame shows the column only)"));
     await shot("docx-read-view-column");
+    // office-leftovers 4b: an approval card scrolls the column's transcript to it; once the head's title has left the
+    // view, the pinned band says the title (and keeps its close key) right under the tab strip — never a cut head.
+    const place = await page.evaluate(() => {
+      const pane = document.querySelector('.pane[data-pane-active="true"]');
+      const box = (sel: string) => { const r = pane?.querySelector(sel)?.getBoundingClientRect(); return r ? { top: Math.round(r.top), bottom: Math.round(r.bottom) } : null; };
+      return { title: box(".agent-column .note-head .note-title"), transcript: box(".agent-column .transcript"), band: box(".agent-column .turn-pin-title"),
+        bandText: pane?.querySelector(".agent-column .turn-pin-title")?.textContent ?? null, close: Boolean(pane?.querySelector(".agent-column .turn-pin-tail .agent-close")) };
+    });
+    note(`docx 글 보기 column: ${JSON.stringify(place)}`);
+    if (place.title && place.transcript && place.title.top < place.transcript.top) {
+      if (!place.band || place.band.top < place.transcript.top || place.bandText !== "이 문서의 AI" || !place.close) throw Error(`the column's title scrolled out with no band in its place: ${JSON.stringify(place)}`);
+    }
     // The list is beside a conversation (an editor in front takes the whole window): the project's conversation, its list level.
     await page.locator('.pane[data-pane-active="true"] .group-tab [role="tab"]').filter({ hasText: "강의 준비" }).first().click();
     await wait(800);

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -13,6 +13,27 @@ for (const file of manifest.files) {
   if (actual !== file.outputSha256) throw new Error(`HOP source differs from reviewed adaptation: ${file.output}`);
 }
 console.log(`HOP: ${manifest.files.length} pinned source adaptations checked`);
+
+// HOP's look of the studio (hop-look): every role HOP's theme binds on the studio's tokens is bound by the role map
+// in hangul-studio.css (on the app's colour set), and HOP's icon sheets are the ones the studio ships.
+{
+  const hop = readFileSync(resolve(folder, 'achmage-theme.css'), 'utf8');
+  const hopBlock = /:root:root:root\s*\{([^}]*)\}/.exec(hop)?.[1] ?? '';
+  const roles = [...hopBlock.matchAll(/(--(?!ach-)[\w-]+)\s*:/g)].map((match) => match[1]);
+  if (roles.length < 30) throw new Error('HOP theme: role list not found in the pinned achmage-theme.css');
+  const studio = readFileSync(resolve(root, 'apps/office/src/ui-adapters/hangul-studio.css'), 'utf8');
+  const mapBlock = /__WB_ROOT__:root:root\s*\{([^}]*)\}/.exec(studio)?.[1] ?? '';
+  const missing = roles.filter((role) => !new RegExp(`(^|[\\s;])${role}\\s*:`).test(mapBlock));
+  if (missing.length) throw new Error(`HOP theme roles not bound by hangul-studio.css: ${missing.join(', ')}`);
+  let sheets = 0;
+  for (const asset of manifest.studioAssets ?? []) {
+    const shipped = resolve(root, asset.shippedAs);
+    if (!existsSync(shipped)) continue; // the studio is built output (apps/office/public/studio is not in git)
+    if (createHash('sha256').update(readFileSync(shipped)).digest('hex') !== asset.sourceSha256) throw new Error(`studio icon sheet differs from HOP's: ${asset.shippedAs}`);
+    sheets++;
+  }
+  console.log(`HOP: ${roles.length} theme roles bound by the studio's role map; ${sheets}/${(manifest.studioAssets ?? []).length} shipped icon sheets equal HOP's${sheets ? '' : ' (studio not built here)'}`);
+}
 
 // The rhwp 0.9.0 patch set (H4) and the engine built from it, beside the shipped 0.8.7 engine.
 const set = JSON.parse(readFileSync(resolve(folder, 'patches-0.9.0/manifest.json'), 'utf8'));

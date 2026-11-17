@@ -33,6 +33,8 @@ export function OfficeDrive({ api, theme }: { api: Api; theme: "light" | "dark" 
     return () => { window.removeEventListener("workbench:drive-pick", receive); current?.finish({ ok: false, reason: "cancelled" }); };
   }, []);
   useEffect(() => {
+    // Drive prompts are the PC's (its Office windows); a phone's channel does not carry them — no refused poll every 1.5 s.
+    if (api.isRemote === true) return;
     let live = true, pending = false;
     const refresh = async () => {
       if (pending) return; pending = true;

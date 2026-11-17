@@ -205,6 +205,8 @@ Gdk.Screen.get_default().set_resolution(96.0)
 window = Gtk.OffscreenWindow()
 window.set_default_size(1440, 920)
 content = WebKit2.UserContentManager()
+# doc-default: documents open 쪽 보기 first; this rig expects the editor, so it chooses it (the one way: scripts/fixtures/editor-first.js).
+content.add_script(WebKit2.UserScript(open(os.path.join(repo, "scripts/fixtures/editor-first.js"), encoding="utf-8").read(), WebKit2.UserContentInjectedFrames.TOP_FRAME, WebKit2.UserScriptInjectionTime.START, None, None))
 content.add_script(WebKit2.UserScript(WINDOW_SCRIPT, WebKit2.UserContentInjectedFrames.TOP_FRAME, WebKit2.UserScriptInjectionTime.START, None, None))
 content.add_script(WebKit2.UserScript(FRAME_EARLY, WebKit2.UserContentInjectedFrames.ALL_FRAMES, WebKit2.UserScriptInjectionTime.START, None, None))
 content.add_script(WebKit2.UserScript(FRAME_SCRIPT, WebKit2.UserContentInjectedFrames.ALL_FRAMES, WebKit2.UserScriptInjectionTime.END, None, None))

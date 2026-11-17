@@ -49,6 +49,11 @@
 .group-tab-close { display: grid; place-items: center; flex: 0 0 24px; border: 0; background: none; color: var(--faint); border-radius: var(--r-sm); }
 .group-tab-close:hover { color: var(--text); background: var(--surface); }
 .group-tab-new { flex: 0 0 auto; align-self: center; }
+/* A tab held over the strip: where it goes, a thin line between two tabs (nothing over the panes). */
+.group-tab { position: relative; }
+.group-tab-drop { position: absolute; top: var(--space-2xs); bottom: var(--space-2xs); width: 2px; border-radius: var(--r-sm); background: var(--chrome-accent); pointer-events: none; }
+.group-tab-drop.before { left: -1px; }
+.group-tab-drop.after { right: -1px; }
 
 /* Flat positioning preserves mounted editors while the split tree changes. The host stays
    unclipped so each sheet's shadow can fall on the window around it. */
@@ -225,9 +230,10 @@
   bottom: 0;
   display: grid;
   place-items: center;
-  border: 1px solid color-mix(in srgb, var(--chrome-accent) 60%, transparent);
+  /* A quiet tint of the part the item would take (0.5.3: the old 60 % edge read as a box over the screen). */
+  border: 1px solid color-mix(in srgb, var(--chrome-accent) 30%, transparent);
   border-radius: var(--r-lg);
-  background: color-mix(in srgb, var(--chrome-accent) 10%, transparent);
+  background: color-mix(in srgb, var(--chrome-accent) 7%, transparent);
   animation: pane-drop-in var(--dur-fast) var(--ease-out);
 }
 

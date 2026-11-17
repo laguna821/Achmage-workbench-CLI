@@ -152,3 +152,25 @@ it("leaves the view with a reader who takes the scroll bar while an answer is wr
   fireEvent.scroll(scroller);
   expect(changed).toHaveBeenLastCalledWith({ top: 500, follow: false });
 });
+
+it("pins the title band once the head's TITLE has scrolled out, not only once the whole head has (office-leftovers 4b: an approval card scrolled 이 문서의 AI under the tab strip, its close key with it)", () => {
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (this: HTMLElement) { return this.classList.contains("transcript") ? 527 : 0; });
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) { return this.classList.contains("transcript") ? 609 : 0; });
+  // The head (112 px: the title, then its properties) is 82 px scrolled: its title is gone, its properties are still on screen.
+  vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (this: HTMLElement) { return this.classList.contains("note-head") ? 0 : this.classList.contains("note-title") ? 28 : this.classList.contains("turn-request") ? 140 : 0; });
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (this: HTMLElement) { return this.classList.contains("note-head") ? 112 : this.classList.contains("note-title") ? 32 : this.classList.contains("turn-request") ? 40 : 0; });
+  let scrolled = 0;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    const [top, height] = this.classList.contains("note-title") ? [28 - scrolled, 32] : [0, 0];
+    return { top, bottom: top + height, height, left: 0, right: 0, width: 0, x: 0, y: top, toJSON() {} } as DOMRect;
+  });
+  const head = <header className="note-head"><h1 className="note-title">이 문서의 AI</h1><ul className="note-props"><li>Codex</li></ul></header>;
+  const view = render(<DocContext.Provider value={{ state: initialState, actions: {} as DocActions }}><section className="pane"><Transcript sessionId="agent-head" head={head} band={{ title: "이 문서의 AI", tail: <button type="button">닫기</button> }} items={[{ kind: "user", id: "u", text: "요청", at: 1 }]} provider="codex" running={false} loading={false} onAnswer={() => {}} position={{ top: 82, follow: false }} /></section></DocContext.Provider>);
+  const scroller = view.container.querySelector<HTMLElement>(".transcript")!;
+  scroller.scrollTop = scrolled = 82; fireEvent.scroll(scroller);
+  expect(view.container.querySelector(".turn-pin-title")?.textContent).toBe("이 문서의 AI");
+  expect(view.container.querySelector(".turn-pin-tail")?.textContent).toBe("닫기");
+  // At the top the head itself shows: no band.
+  scroller.scrollTop = scrolled = 0; fireEvent.scroll(scroller);
+  expect(view.container.querySelector(".turn-pin-title")).toBeNull();
+});

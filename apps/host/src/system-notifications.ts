@@ -1,6 +1,7 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { ATTENTION_LABEL, type AttentionPayload } from "@workbench/contracts";
+import { guiEnvironment } from "./gui-env.ts";
 
 type Result = { status: "sent" | "unavailable" | "unknown"; detail?: string };
 type Command = { file: string; args: string[]; env?: NodeJS.ProcessEnv; opensAttention: boolean };
@@ -8,8 +9,11 @@ type Command = { file: string; args: string[]; env?: NodeJS.ProcessEnv; opensAtt
 // User text never becomes a script. OS payloads are generic; argv/env carry only the fixed copy.
 export function notificationCommand(platform: NodeJS.Platform, payload: AttentionPayload, desktopBinary: string | null): Command | null {
   if (!/^[a-f0-9]{64}$/.test(payload.attentionId)) return null;
+  // Linux (0.5.3): with the app there, notify-send prints the notification's id at once (--print-id: it is shown) and
+  // waits; a click on the body ("default": MacShell, GNOME, KDE …) or on the 열기 button ("open": mako, dunst, swaync …)
+  // is printed when it happens, and the daemon's activation token goes to fd 3 so the window may come forward on Wayland.
   if (platform === "linux") return { file: "notify-send", args: ["--app-name=Achmage Workbench", "--icon=achmage-workbench", "--expire-time=10000",
-    ...(desktopBinary ? ["--wait", "--action=default=열기"] : []), "--", payload.title, payload.body], opensAttention: Boolean(desktopBinary) };
+    ...(desktopBinary ? ["--print-id", "--action=default=열기", "--action=open=열기", "--activation-token-fd=3"] : []), "--", payload.title, payload.body], opensAttention: Boolean(desktopBinary) };
   if (platform === "darwin") return { file: "/usr/bin/osascript", args: ["-e", "on run argv\ndisplay notification (item 2 of argv) with title (item 1 of argv)\nend run", payload.title, payload.body], opensAttention: false };
   if (platform === "win32") {
     // Windows' installed AppUserModelID is also the Tauri identifier. A missing registration
@@ -29,6 +33,18 @@ $toast = [Windows.UI.Notifications.ToastNotification]::new($toastXml)
   }
   return null;
 }
+
+/** A line notify-send printed: the person opened the notification (its body or its 열기 button). */
+export const opensOn = (line: string) => line === "default" || line === "open";
+
+/** The app's arguments for a click: the attention id, and the daemon's activation token when it gave a usable one. */
+export function attentionArgs(attentionId: string, token: string | null): string[] {
+  const usable = token !== null && /^[\x21-\x7e]{1,256}$/.test(token);
+  return ["--attention", attentionId, ...(usable ? ["--activation-token", token] : [])];
+}
+
+/** How long a shown notification can still open its conversation (its notify-send waits that long, at most). */
+const WAIT_MS = 86_400_000, MAX_WAITING = 32;
 
 /** A daemon can submit desktop notifications without a renderer. No listener/process is adopted. */
 export function systemNotifier(binary: string | null) {
@@ -59,8 +75,10 @@ export function systemNotifier(binary: string | null) {
     if (desktopBinary && ["darwin", "win32"].includes(process.platform)) return native(payload);
     const command = notificationCommand(process.platform, payload, desktopBinary);
     if (!command) return Promise.resolve({ status: "unavailable", detail: "이 환경에서는 운영체제 알림을 보낼 수 없습니다." });
+    if (command.opensAttention && desktopBinary) return waitForClick(command, payload.attentionId, desktopBinary);
     return new Promise(resolve => {
-      const worker = execFile(command.file, command.args, { env: command.env, windowsHide: true, timeout: 20_000, maxBuffer: 4096 }, (error, stdout) => {
+      // notify-send needs the session bus (gui-env.ts): a gateway started at login may not have it in its own environment.
+      const worker = execFile(command.file, command.args, { env: command.env ?? guiEnvironment(), windowsHide: true, timeout: 20_000, maxBuffer: 4096 }, (error) => {
         children.delete(worker);
         if (error) {
           resolve(error.killed ? { status: "unknown", detail: "운영체제 알림 표시 결과를 확인하지 못했습니다." }
@@ -68,14 +86,40 @@ export function systemNotifier(binary: string | null) {
           return;
         }
         resolve({ status: "sent" });
-        if (!closed && command.opensAttention && desktopBinary && stdout.trim() === "default") {
-          // The app resolves this opaque ID against its own authenticated host before navigation.
-          const child = spawn(desktopBinary, ["--attention", payload.attentionId], { detached: true, stdio: "ignore", windowsHide: true });
-          child.on("error", () => undefined); child.unref();
-        }
       });
       children.add(worker);
     });
   };
-  return Object.assign(deliver, { close() { closed = true; for (const child of children) child.kill("SIGTERM"); children.clear(); } });
+  /**
+   * Linux with the app: "sent" as soon as the id is printed; the click may come much later (a popup's history in the
+   * notification centre still opens it), so the waiter lives up to a day — the oldest is let go past 32 waiting.
+   */
+  const waiting: ChildProcess[] = [];
+  const waitForClick = (command: Command, attentionId: string, binary: string): Promise<Result> => new Promise(resolve => {
+    // notify-send needs the session bus, and what a click starts is a window (gui-env.ts).
+    const worker = spawn(command.file, command.args, { env: command.env ?? guiEnvironment(), stdio: ["ignore", "pipe", "ignore", "pipe"], windowsHide: true });
+    waiting.push(worker);
+    while (waiting.length > MAX_WAITING) waiting.shift()!.kill("SIGTERM");
+    let out = "", token = "", settled = false;
+    const finish = (result: Result) => { if (!settled) { settled = true; clearTimeout(shown); resolve(result); } };
+    const shown = setTimeout(() => finish({ status: "unknown", detail: "운영체제 알림 표시 결과를 확인하지 못했습니다." }), 20_000);
+    const expiry = setTimeout(() => worker.kill("SIGTERM"), WAIT_MS); expiry.unref();
+    worker.stdout!.on("data", (chunk: Buffer) => {
+      out = (out + chunk.toString("utf8")).slice(-512);
+      if (/^\d+\s*$/m.test(out)) finish({ status: "sent" });
+    });
+    (worker.stdio[3] as NodeJS.ReadableStream | null)?.on("data", (chunk: Buffer) => { token = (token + chunk.toString("utf8")).slice(0, 512); });
+    worker.once("error", () => finish({ status: "unavailable", detail: "운영체제 알림 서비스나 앱 등록을 사용할 수 없습니다." }));
+    worker.once("close", (code) => {
+      clearTimeout(expiry);
+      const index = waiting.indexOf(worker); if (index >= 0) waiting.splice(index, 1);
+      const lines = out.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+      finish(code === 0 || lines.length ? { status: "sent" } : { status: "unavailable", detail: "운영체제 알림 서비스나 앱 등록을 사용할 수 없습니다." });
+      if (closed || !lines.some(opensOn)) return;
+      // The app resolves this opaque ID against its own authenticated host before navigation.
+      const child = spawn(binary, attentionArgs(attentionId, token.trim() || null), { detached: true, stdio: "ignore", windowsHide: true, env: guiEnvironment() });
+      child.on("error", () => undefined); child.unref();
+    });
+  });
+  return Object.assign(deliver, { close() { closed = true; for (const child of [...children, ...waiting]) child.kill("SIGTERM"); children.clear(); waiting.length = 0; } });
 }

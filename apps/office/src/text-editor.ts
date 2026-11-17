@@ -1,7 +1,9 @@
 import { connectOfficeUi } from "./ui-adapters/connect.ts";
 import { createOfficePreferences } from "./preferences.ts";
 import { mountOfficeAi } from "./office-ai.ts";
-import { Events, Gateway, GatewayError, handshake, headlessExport, listen, post } from "./bridge.ts";
+import { Events, Gateway, GatewayError, handshake, headlessExport, listen, pageRest, post } from "./bridge.ts";
+import { installViewPosition, largestScroller, scrollerParts } from "./view-position.ts";
+import { installInPlaceReplace, keepScroll } from "./replace-in-place.ts";
 import { recovery } from "./recovery.ts";
 import { configureTextAssets, resolveTextImage, unresolveTextImage } from "./text-assets.ts";
 import { copyOfficeBytes, officeCopyBusy } from "./copy.ts";
@@ -42,6 +44,7 @@ export async function createTextEditor(kind: "markdown" | "html") {
   const report = (error: unknown) => post({ type: "office:error", message: error instanceof Error ? error.message : String(error) });
   const setDirty = (value: boolean) => { dirty = value; post({ type: "office:dirty", dirty }); };
   let opened = false;
+  let viewPlace: ReturnType<typeof installViewPosition> | null = null;
   installMcp(init, { ready: () => opened && events.has("readText"), dirty: async () => dirty || await liveText() !== savedText,
     async run(request) { if (request.kind === "read") return liveText(); throw new Error("이 문서에는 읽기·저장·닫기 MCP만 사용할 수 있습니다."); } });
   function reportOpen() {
@@ -49,7 +52,42 @@ export async function createTextEditor(kind: "markdown" | "html") {
     opened = true;
     post({ type: "office:opened", revision, recovered: Boolean(recovered) });
     if (recovered) setDirty(true);
+    // The tab keeps where the text was scrolled; a woken tab opens there (office-leftovers point 3).
+    if (!init.execution && !init.headlessExport) viewPlace = installViewPosition(scrollerParts(document, holdsText), { initial: init.view, shown: () => pageRest.onScreen() && window.innerHeight > 0, post: (position) => post({ type: "office:view-position", position }) });
+    // A new revision (a hidden tab's 문서 AI result) goes into this editor in place (office-leftovers point 2): its own
+    // opening path (vendor-fixes.ts hands it to the page), the view kept; unsaved edits are refused before (dirty).
+    if (!init.readOnly && !init.execution && !init.headlessExport) installInPlaceReplace({
+      dirty: async () => dirty || await liveText() !== savedText,
+      replace: async (next) => {
+        const reload = (window as unknown as { __workbenchTextReload?: (raw: string) => (() => void) | void }).__workbenchTextReload;
+        if (!reload) throw new Error("편집기가 아직 준비되지 않았습니다.");
+        const text = decode(await gateway.raw(id, next));
+        const place = viewPlace?.last();
+        let back: (() => void) | undefined;
+        await keepScroll(() => largestScroller(document, holdsText), async () => {
+          back = reload(text) ?? undefined;
+          await new Promise((resolve) => window.setTimeout(resolve, 50));
+        });
+        // A hidden tab's page cannot set its scroll while it is not laid out: the place comes back when it is shown.
+        viewPlace?.again(place);
+        // HTML: its preview frame's scroll, put back once the frame is laid out and has loaded again.
+        if (back) whenShown(back);
+        revision = next; savedText = text;
+        if (kept) { kept = undefined; await queueRecovery(() => recovery.drop(id)); }
+        setDirty(false);
+      },
+    });
   }
+  /** Run `then` once this page is laid out again (a hidden tab's page), after its preview has had time to load. */
+  const whenShown = (then: () => void) => {
+    const timer = window.setInterval(() => {
+      const frames = [...document.querySelectorAll("iframe")];
+      if (window.innerHeight === 0 || (frames.length > 0 && !frames.some((frame) => frame.clientHeight > 0))) return;
+      window.clearInterval(timer);
+      for (const ms of [600, 1500]) window.setTimeout(then, ms);
+    }, 200);
+  };
+  const holdsText = (el: HTMLElement) => Boolean(el.querySelector(".ProseMirror, .cm-content, [contenteditable], iframe"));
 
   let textAnswer: ((result: { text: string } | { error: string }) => void) | null = null;
   async function liveText(): Promise<string> {

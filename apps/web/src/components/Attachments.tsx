@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { artifactCacheKey, type Attachment } from "@workbench/contracts";
 import { decodeMarkdownImage } from "../../../../vendor/paseo/image-decoding/image-decoding.ts";
@@ -167,18 +167,18 @@ export function PendingFiles({ files, onRemove, onRetry }: { files: PendingFile[
 
 /** What a request carried: pictures as thumbnails (click for the whole picture), other files by name. */
 export function AttachmentStrip({ attachments }: { attachments: Attachment[] }) {
+  const pictures = usePictures(attachments.filter(attachment => isPicture(attachment.mime)).map(asPicture));
   const [shown, setShown] = useState<number | null>(null);
-  const pictures = attachments.filter(attachment => isPicture(attachment.mime));
   return (
     <div className="attach-strip">
       {attachments.map((attachment) =>
         isPicture(attachment.mime) ? (
-          <Thumb key={attachment.id} attachment={attachment} onOpen={() => setShown(pictures.indexOf(attachment))} />
+          <Thumb key={attachment.id} attachment={attachment} onOpen={() => setShown(indexOf(pictures, attachment.id))} />
         ) : (
           <AttachmentFile key={attachment.id} attachment={attachment} />
         ),
       )}
-      {shown !== null && pictures[shown] ? <Lightbox attachments={pictures} index={shown} onSelect={setShown} onClose={() => setShown(null)} /> : null}
+      {shown !== null && pictures[shown] ? <Lightbox pictures={pictures} index={shown} onSelect={setShown} onClose={() => setShown(null)} /> : null}
     </div>
   );
 }
@@ -232,6 +232,20 @@ function FileActions({ attachment, host }: { attachment: Attachment; host: strin
     {file && !canShareFile(file) ? <small>이 브라우저에서는 파일 공유를 지원하지 않습니다. 파일 받기를 이용해 주세요.</small> : null}
     {problem ? <span className="attach-file-error" role="alert">{problem}{!file ? <button type="button" onClick={() => setAttempt(value => value + 1)}>다시 불러오기</button> : null}</span> : null}
   </span>;
+}
+
+type FrameProps = { imageRef: { current: HTMLImageElement | null }; zoom: number; fitted: number | null; onToggle(): void };
+function AttachmentPicture({ attachment, ...frame }: { attachment: Attachment } & FrameProps) {
+  const image = useImage(attachment);
+  return <PictureFrame url={image.url && !image.problem ? image.url : null} name={attachment.name} problem={image.problem} onFailed={image.failed} onRetry={image.retry} {...frame} />;
+}
+/** Fitted to the window at first; zoomed, it keeps its place and the frame scrolls (a click toggles fit / 200%). */
+function PictureFrame({ url, name, problem, onFailed, onRetry, imageRef, zoom, fitted, onToggle }: { url: string | null; name: string; problem: string | null; onFailed?(): void; onRetry?(): void } & FrameProps) {
+  const zoomed = zoom > 1 && fitted;
+  return <div className="attach-gallery-image" data-zoomed={zoomed ? "" : undefined}>
+    {url ? <img ref={(element) => { imageRef.current = element; }} src={url} alt={name} onError={onFailed} onClick={onToggle} style={zoomed ? { width: `${Math.round(fitted * zoom)}px`, maxWidth: "none", maxHeight: "none" } : undefined} />
+      : <p role={problem ? "alert" : "status"}>{problem ?? "그림을 불러오는 중…"}{problem && onRetry ? <button type="button" onClick={onRetry}>다시 불러오기</button> : null}</p>}
+  </div>;
 }
 
 function useImage(attachment: Attachment, active = true) {
@@ -310,17 +324,54 @@ function Thumb({ attachment, onOpen }: { attachment: Attachment; onOpen: () => v
 /** Inline Markdown images use the immutable message capture, never an arbitrary file URL. */
 export function MessageImage({ attachment, gallery }: { attachment: Attachment; gallery: Attachment[] }) {
   const [shown, setShown] = useState<number | null>(null);
-  const pictures = gallery.length ? gallery : [attachment];
-  return <span className="message-image"><Thumb attachment={attachment} onOpen={() => setShown(Math.max(0, pictures.findIndex(picture => picture.id === attachment.id)))} />
-    {shown !== null ? <Lightbox attachments={pictures} index={shown} onSelect={setShown} onClose={() => setShown(null)} /> : null}</span>;
+  const pictures = usePictures((gallery.length ? gallery : [attachment]).map(asPicture));
+  return <span className="message-image"><Thumb attachment={attachment} onOpen={() => setShown(indexOf(pictures, attachment.id))} />
+    {shown !== null ? <Lightbox pictures={pictures} index={shown} onSelect={setShown} onClose={() => setShown(null)} /> : null}</span>;
 }
 
+/**
+ * A picture the app's one viewer shows (audit #137): a conversation's attachment or answer picture (by its
+ * captured attachment), or a file the app made (a drawn picture: its address, and its path for 폴더에서 보기).
+ */
+export type ViewerPicture =
+  | { kind: "attachment"; id: string; attachment: Attachment }
+  | { kind: "file"; id: string; name: string; url: string; path: string | null; detail?: string };
+export const asPicture = (attachment: Attachment): ViewerPicture => ({ kind: "attachment", id: attachment.id, attachment });
+const indexOf = (pictures: ViewerPicture[], id: string) => Math.max(0, pictures.findIndex(picture => picture.id === id));
+
+/**
+ * Every picture of the conversation on screen, in order (Transcript provides it): the viewer's 이전 / 다음
+ * go through all of them, not only the message's own. Outside a conversation, the given ones.
+ */
+export const ConversationPictures = createContext<ViewerPicture[] | null>(null);
+function usePictures(own: ViewerPicture[]): ViewerPicture[] {
+  const all = useContext(ConversationPictures);
+  return all && own.length && own.every(picture => all.some(other => other.id === picture.id)) ? all : own;
+}
+
+/** What 폴더에서 보기 does for a drawn picture's file (the desktop app only); a test can stand in for it. */
+export const viewerFolder = { reveal: async (path: string) => { const { revealItemInDir } = await import("@tauri-apps/plugin-opener"); await revealItemInDir(path); } };
+const inDesktopApp = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+/** Zoom steps of the viewer: 1 = fitted to the window. */
+const ZOOMS = [1, 1.5, 2, 3, 4];
+
 /** The gallery retains its own blob while the source thumbnail scrolls out of view. */
-function Lightbox({ attachments, index, onSelect, onClose }: { attachments: Attachment[]; index: number; onSelect(index: number): void; onClose(): void }) {
-  const attachment = attachments[index]!;
-  const image = useImage(attachment);
+export function Lightbox({ pictures, index, onSelect, onClose }: { pictures: ViewerPicture[]; index: number; onSelect(index: number): void; onClose(): void }) {
+  const picture = pictures[index]!;
+  const attachments = pictures;
   const close = useRef<HTMLButtonElement>(null);
   const [host] = useState(attachmentHostId);
+  const [zoom, setZoom] = useState(0);
+  const [fitted, setFitted] = useState<number | null>(null);
+  const imageRef = useRef<HTMLImageElement | null>(null);
+  useEffect(() => { setZoom(0); setFitted(null); }, [picture.id]);
+  const zoomTo = (step: number) => {
+    const next = Math.max(0, Math.min(ZOOMS.length - 1, step));
+    if (zoom === 0 && next > 0 && imageRef.current) setFitted(imageRef.current.getBoundingClientRect().width || imageRef.current.naturalWidth || null);
+    setZoom(next);
+  };
+  const name = picture.kind === "attachment" ? picture.attachment.name : picture.name;
   useEffect(() => {
     const origin = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const overflow = document.body.style.overflow;
@@ -329,27 +380,42 @@ function Lightbox({ attachments, index, onSelect, onClose }: { attachments: Atta
   }, []);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (!["Escape", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      if (!["Escape", "ArrowLeft", "ArrowRight", "+", "=", "-", "0"].includes(event.key)) return;
       event.preventDefault(); event.stopPropagation();
       if (event.key === "Escape") onClose();
       if (event.key === "ArrowLeft") onSelect((index + attachments.length - 1) % attachments.length);
       if (event.key === "ArrowRight") onSelect((index + 1) % attachments.length);
+      if (event.key === "+" || event.key === "=") zoomTo(zoom + 1);
+      if (event.key === "-") zoomTo(zoom - 1);
+      if (event.key === "0") zoomTo(0);
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [onClose, onSelect, index, attachments.length]);
+  });
   return createPortal(
-    <div className="attach-lightbox" role="dialog" aria-modal="true" aria-label={attachment.name} onPointerDown={event => { if (event.target === event.currentTarget) onClose(); }} onKeyDown={event => {
+    <div className="attach-lightbox" role="dialog" aria-modal="true" aria-label={name} onPointerDown={event => { if (event.target === event.currentTarget) onClose(); }} onKeyDown={event => {
       if (event.key !== "Tab") return;
       const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not([disabled]), a[href]')], first = items[0], last = items.at(-1);
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
     }}>
-      <header><span>{attachment.name} · {index + 1}/{attachments.length}{attachment.reference ? " · 답변 당시 그림" : ""}</span>
+      <header><span>{name} · {index + 1}/{attachments.length}{picture.kind === "attachment" && picture.attachment.reference ? " · 답변 당시 그림" : picture.kind === "file" && picture.detail ? ` · ${picture.detail}` : ""}</span>
+        <span className="attach-zoom" role="group" aria-label="크기">
+          <button type="button" onClick={() => zoomTo(zoom - 1)} disabled={zoom === 0} aria-label="축소" title="축소 (-)">−</button>
+          <button type="button" onClick={() => zoomTo(0)} aria-pressed={zoom === 0} title="창에 맞추기 (0)">{zoom === 0 ? "맞춤" : `${Math.round(ZOOMS[zoom]! * 100)}%`}</button>
+          <button type="button" onClick={() => zoomTo(zoom + 1)} disabled={zoom === ZOOMS.length - 1} aria-label="확대" title="확대 (+)"><Icon name="plus" size={15} /></button>
+        </span>
         <button ref={close} type="button" onClick={onClose} aria-label="그림 닫기"><Icon name="x" /></button></header>
-      <div className="attach-gallery-image">{image.url && !image.problem ? <img src={image.url} alt={attachment.name} onError={image.failed} /> : <p role={image.problem ? "alert" : "status"}>{image.problem ?? "그림을 불러오는 중…"}{image.problem ? <button type="button" onClick={image.retry}>다시 불러오기</button> : null}</p>}</div>
+      {picture.kind === "attachment"
+        ? <AttachmentPicture key={picture.id} attachment={picture.attachment} imageRef={imageRef} zoom={ZOOMS[zoom]!} fitted={zoom ? fitted : null} onToggle={() => zoomTo(zoom ? 0 : 2)} />
+        : <PictureFrame url={picture.url} name={name} problem={null} imageRef={imageRef} zoom={ZOOMS[zoom]!} fitted={zoom ? fitted : null} onToggle={() => zoomTo(zoom ? 0 : 2)} />}
       <footer><button type="button" disabled={attachments.length < 2} onClick={() => onSelect((index + attachments.length - 1) % attachments.length)}>이전 그림</button>
-        <FileActions key={attachment.reference ? artifactCacheKey(attachment.reference) : attachment.id} attachment={attachment} host={host} />
+        {picture.kind === "attachment"
+          ? <FileActions key={picture.attachment.reference ? artifactCacheKey(picture.attachment.reference) : picture.id} attachment={picture.attachment} host={host} />
+          : <span className="attach-file-actions"><span className="attach-file-buttons">
+              <a href={picture.url} download={name}><Icon name="download" size={15} /> 저장</a>
+              {picture.path && inDesktopApp() ? <button type="button" onClick={() => void viewerFolder.reveal(picture.path!)}><Icon name="folderOpen" size={15} /> 폴더에서 보기</button> : null}
+            </span></span>}
         <button type="button" disabled={attachments.length < 2} onClick={() => onSelect((index + 1) % attachments.length)}>다음 그림</button></footer>
     </div>,
     document.body,

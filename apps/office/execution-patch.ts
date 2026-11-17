@@ -40,7 +40,9 @@ export function patchOfficeExecution(code: string, id: string, root: string, mod
     lock: (locked) => {
       // No update event: the renderer counts every update as an edit (an untouched document said 저장 안 됨, U38).
       depsRef.current.getEditor()?.setEditable(!locked, false);
-      for (const element of document.querySelectorAll('.app-content, .ribbon')) element.inert = locked;
+      // The page and the ribbon stay open to look at; typing and changing controls wait (editor-hold.ts).
+      const hold = Reflect.get(window, 'workbenchEditorHold');
+      if (hold) hold.lock(locked); else for (const element of document.querySelectorAll('.app-content, .ribbon')) element.inert = locked;
     },
   }), []);
 

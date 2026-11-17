@@ -1115,3 +1115,23 @@ html.nav-dragging * {
 
 /* 설정's "something new here" mark on the rail (a newer version is published; app-update). */
 .rail-icon .rail-new { position: absolute; top: 0; right: 0; box-shadow: 0 0 0 2px var(--color-rail); }
+
+/* 활동: two ways to look (현황 · 기록) under the head; 기록's filters, then lines of two rows (time | what
+   happened / project · conversation · engine), one column at every width (the phone too). */
+.nav-column .nav-activity-looks { display: flex; flex: 0 0 auto; margin: 0 var(--space-sm) var(--space-xs); }
+.nav-column .nav-activity-looks button { flex: 1 1 0; }
+.nav-column .nav-hist-tools { display: flex; flex: 0 0 auto; flex-direction: column; gap: var(--space-xs); padding: 0 var(--space-sm) var(--space-xs); }
+.nav-column .nav-hist-chips { display: flex; flex-wrap: wrap; gap: var(--space-2xs); }
+.nav-column .nav-hist-project { width: 100%; }
+.nav-column .side-row.nav-hist-line { display: flex; align-items: flex-start; width: 100%; padding-block: var(--space-2xs); border: 0; text-align: start; cursor: pointer; }
+.nav-column .side-row.nav-hist-line.nested { padding-inline-start: var(--space-lg); }
+.nav-column .nav-hist-time { flex: 0 0 auto; min-width: 36px; color: var(--muted); font: 400 var(--text-xs)/20px var(--font-ui); font-variant-numeric: tabular-nums; }
+.nav-column .nav-hist-body { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; }
+/* What happened may take two lines (its answer — "· 거절함", "· 답 3건" — ends the line and must not be cut); the place one. */
+.nav-column .nav-hist-text { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+.nav-column .nav-hist-place { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-column .nav-hist-place { color: var(--muted); font: 400 var(--text-xs)/16px var(--font-ui); }
+.nav-column .nav-hist-text.tone-error { color: var(--color-error); font-weight: 600; }
+.nav-column .nav-hist-text.tone-attention { color: var(--color-attention-text); font-weight: 600; }
+.nav-column .nav-hist-line.folded .nav-hist-text { font-weight: 500; }
+.nav-column .nav-hist-chevron { flex: 0 0 auto; align-self: center; color: var(--muted); }

@@ -43,6 +43,10 @@
 .topbar .shell-create, .topbar .shell-bell { --c-ink: var(--chrome-text); }
 .topbar .shell-attention-count { color: var(--chrome-text); }
 .topbar .attention-button { height: 28px; }
+/* 창 단추 (0.5.3): the window's own keys at the right end, after a hairline; the same 32 px keys as the bar's others. */
+.window-keys { display: inline-flex; align-items: center; gap: var(--space-2xs); margin-left: var(--space-2xs); padding-left: var(--space-xs); border-left: 1px solid var(--chrome-line); }
+.topbar .window-keys .icon-button { min-width: 32px; width: 32px; --c-ink: var(--chrome-muted); }
+.topbar .window-keys .window-key-close { --c-ink-hover: var(--danger); --c-fill-hover: var(--danger-soft); }
 /* The search field (release unit A, item 4; the owner's 01-dashboard): quiet — a hairline well with the
    palette's shortcut; it only opens the palette with what was typed. At ≤ 760 px the rail's 찾기 stands for it. */
 .top-search { grid-column: 3; grid-row: 1; display: flex; align-items: center; gap: var(--space-xs); min-width: 0; height: 32px; padding: 0 var(--space-2xs) 0 var(--space-xs); border: 1px solid var(--chrome-line); border-radius: var(--radius-pill); background: var(--chrome-surface); color: var(--chrome-muted); cursor: text; }

@@ -62,7 +62,7 @@ describe("files the person sends", () => {
       { fileRef: "f-small", name: "메모.txt", mime: "text/plain", size: 13, kind: "file" },
     ] }));
     await settle(kit);
-    expect(kit.adapter.texts()).toContain("「녹화.mp4」은(는) 20MB가 넘어 받지 못했습니다. 텔레그램 봇이 받을 수 있는 파일은 20MB까지입니다.");
+    expect(kit.adapter.texts()).toContain("「녹화.mp4」는 20MB가 넘어 받지 못했습니다. 텔레그램 봇이 받을 수 있는 파일은 20MB까지입니다.");
     expect(userItems(kit, kit.engine.sent[0]!.sessionId)[0]!.attachments!.map((entry) => entry.name)).toEqual(["메모.txt"]);
   });
 
@@ -135,7 +135,7 @@ describe("what the AI made comes back", () => {
     const outside = join(kit.dataDir, "..", "밖의 파일.txt");
     const { answer } = await turn(kit, `정리했습니다.\n파일: 예전 파일.txt\n파일: ${outside}`, () => writeFileSync(outside, "y"));
     expect(answer.out.files ?? []).toEqual([]);
-    expect(answer.out.text).toContain("「밖의 파일.txt」은(는) 대화의 작업 폴더 밖에 있어 보내지 않았습니다.");
+    expect(answer.out.text).toContain("「밖의 파일.txt」는 대화의 작업 폴더 밖에 있어 보내지 않았습니다.");
   });
 
   it("keeps secret-bearing files out of the chat, says so, and judges the real file behind a link", async () => {
@@ -149,7 +149,7 @@ describe("what the AI made comes back", () => {
       writeFileSync(join(cwd, "설명.md"), "# 설명\n");
     });
     expect(answer.out.files!.map((file) => file.name)).toEqual(["설명.md"]);
-    expect(answer.out.text).toContain("「.env」, 「열쇠.txt」은(는) 비밀이 들어 있을 수 있어 보내지 않았습니다.");
+    expect(answer.out.text).toContain("「.env」, 「열쇠.txt」는 비밀이 들어 있을 수 있어 보내지 않았습니다.");
     expect(kit.adapter.uploads.map((file) => file.bytes.toString("utf8")).join("")).not.toContain("PRIVATE");
     expect(kit.core.auditList().some((row) => row.action === "file.blocked" && row.result === "2")).toBe(true);
   });
@@ -273,7 +273,7 @@ describe("a recent file from the menu", () => {
     await press(kit, "메모.md");
     await press(kit, "받기");
     expect(kit.adapter.uploads).toHaveLength(uploads);
-    expect(kit.adapter.texts().at(-1)).toBe("「메모.md」은(는) 비밀이 들어 있을 수 있어 보내지 않았습니다.");
+    expect(kit.adapter.texts().at(-1)).toBe("「메모.md」는 비밀이 들어 있을 수 있어 보내지 않았습니다.");
   });
 });
 

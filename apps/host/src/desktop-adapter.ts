@@ -5,6 +5,7 @@ import { DesktopInstall } from "./desktop-install.ts";
 import { DesktopInputLease } from "./desktop-input-lease.ts";
 import { HttpError } from "./errors.ts";
 import type { Store } from "./store.ts";
+import { guiEnvironment } from "./gui-env.ts";
 
 type Hooks = { session(id: string): Session | undefined; item(sessionId: string, item: TranscriptItem): void; image?(data: Buffer, name: string, mime: string): { attachment: Attachment; path: string } };
 export type DesktopRunner = (args: string[], signal: AbortSignal) => Promise<DesktopEnvelope>;
@@ -152,7 +153,7 @@ export class DesktopService {
   }
   private run(args: string[], signal: AbortSignal): Promise<DesktopEnvelope> {
     if (!this.installer.installed || !this.installer.binary) throw new HttpError(409, "desktop_not_installed", "외부 앱 메뉴에서 agent-desktop을 먼저 설치하세요.");
-    const env: NodeJS.ProcessEnv = { ...process.env, AGENT_DESKTOP_HOME: this.installer.stateRoot };
+    const env: NodeJS.ProcessEnv = { ...guiEnvironment(process.env), AGENT_DESKTOP_HOME: this.installer.stateRoot };
     delete env.AGENT_DESKTOP_MACOS_HELPER_PATH;
     delete env.AGENT_DESKTOP_SESSION;
     delete env.AGENT_DESKTOP_AGENT_ID;

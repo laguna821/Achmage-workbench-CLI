@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AgentProfile, AgentProfileInput, ModelOption } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import { AgentProfilePicker } from "./AgentProfilePicker.tsx";
+import { chooseOption } from "./ui/select-testing.ts";
 
 beforeEach(() => { HTMLDialogElement.prototype.showModal = vi.fn(function (this: HTMLDialogElement) { this.open = true; }); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -43,10 +44,10 @@ it("creates a reusable role with discovered or direct IDs without changing the c
   fireEvent.click(await screen.findByRole("menuitem", { name: "새 역할 만들기…" }));
   const dialog = screen.getByRole("dialog", { name: "새 역할 만들기" });
   fireEvent.change(screen.getByLabelText("역할 이름"), { target: { value: "검토 도우미" } });
-  fireEvent.change(screen.getByLabelText("사용할 엔진"), { target: { value: "codex" } });
+  chooseOption(screen.getByLabelText("사용할 엔진"), "Codex");
   fireEvent.change(screen.getByLabelText("기본 모델 ID"), { target: { value: " custom/preview-id " } });
   fireEvent.change(screen.getByLabelText("기본 추론 강도"), { target: { value: "high" } });
-  fireEvent.change(screen.getByLabelText("기본 권한"), { target: { value: "ask" } });
+  chooseOption(screen.getByLabelText("기본 권한"), "묻기");
   fireEvent.change(screen.getByLabelText("역할 지침"), { target: { value: "원문과 대조합니다.\n변경 이유를 씁니다." } });
   expect(dialog.querySelector('option[value="discovered-id"]')).toBeTruthy();
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "저장" })); });

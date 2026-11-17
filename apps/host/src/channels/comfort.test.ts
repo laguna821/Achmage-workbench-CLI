@@ -273,7 +273,7 @@ describe("대화 이름 바꾸기", () => {
     await say(kit, "예산 정리");
     expect(sessionOf(kit, session).purpose).toBe("예산 정리");
     expect(sessionOf(kit, session).purposeSource).toBe("user");
-    expect(last(kit).out.text).toBe("대화 이름을 「예산 정리」(으)로 바꿨습니다.");
+    expect(last(kit).out.text).toBe("대화 이름을 「예산 정리」로 바꿨습니다.");
     expect(kit.engine.sent).toHaveLength(asked);
     expect(JSON.stringify(audits(kit, "rename"))).not.toContain("예산");
   });

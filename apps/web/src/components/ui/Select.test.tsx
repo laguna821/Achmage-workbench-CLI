@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Select, type SelectOption } from "./Select.tsx";
@@ -189,4 +189,43 @@ describe("Select with a pinned action (ProjectChoice)", () => {
     expect(onNew).toHaveBeenCalledOnce();
     expect(onChange).not.toHaveBeenCalled();
   });
+});
+
+describe("Select as a form field (in place of a native select)", () => {
+  const kinds: SelectOption<string>[] = [{ value: "", label: "연결 선택" }, { value: "github", label: "GitHub" }, { value: "slack", label: "Slack" }];
+  function Form({ onSubmit, initial = "" }: { onSubmit: (data: FormData) => void; initial?: string }) {
+    const [value, setValue] = useState(initial);
+    return <form aria-label="양식" onSubmit={event => { event.preventDefault(); onSubmit(new FormData(event.currentTarget)); }}>
+      <label htmlFor="kind-field">서비스</label>
+      <Select id="kind-field" name="kind" required label="서비스" value={value} options={kinds} onChange={setValue} />
+      <button type="submit">저장</button>
+    </form>;
+  }
+
+  it("a <label htmlFor> reaches the trigger, and the value is in the form's data", () => {
+    const onSubmit = vi.fn();
+    render(<Form onSubmit={onSubmit} initial="slack" />);
+    expect(screen.getByText("서비스").closest("label")?.control).toBe(trigger2());
+    expect(trigger2().dataset.value).toBe("slack");
+    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+    expect(onSubmit).toHaveBeenCalledOnce();
+    expect(onSubmit.mock.calls[0]![0].get("kind")).toBe("slack");
+  });
+
+  it("required: the form does not submit with nothing chosen; the trigger is marked and focused", () => {
+    const onSubmit = vi.fn();
+    render(<Form onSubmit={onSubmit} />);
+    const form = screen.getByRole("form", { name: "양식" }) as HTMLFormElement;
+    let valid = true;
+    act(() => { valid = form.checkValidity(); });
+    expect(valid).toBe(false);
+    expect(trigger2().getAttribute("aria-invalid")).toBe("true");
+    expect(document.activeElement).toBe(trigger2());
+    fireEvent.click(trigger2());
+    fireEvent.click(screen.getByRole("option", { name: "GitHub" }));
+    expect(trigger2().getAttribute("aria-invalid")).toBeNull();
+    expect(form.checkValidity()).toBe(true);
+  });
+
+  const trigger2 = () => screen.getByRole("button", { name: "서비스" });
 });

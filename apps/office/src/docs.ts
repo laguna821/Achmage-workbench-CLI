@@ -1,7 +1,9 @@
 import { connectOfficeUi } from "./ui-adapters/connect.ts";
 import { keepPaperWhite } from "./ui-adapters/paper.ts";
 import "./docs.css";
-import { Events, Gateway, GatewayError, handshake, headlessExport, listen, post, stubBridge } from "./bridge.ts";
+import { Events, Gateway, GatewayError, handshake, headlessExport, listen, pageRest, post, stubBridge } from "./bridge.ts";
+import { installInPlaceReplace, keepScroll } from "./replace-in-place.ts";
+import { installViewPosition, readScroll, restoreScroll } from "./view-position.ts";
 import { recovery } from "./recovery.ts";
 import { convertForeignPictures, pasteDesktopPictures } from "./pictures.ts";
 import { createOfficeAi } from "./office-ai.ts";
@@ -69,6 +71,42 @@ async function openResult() {
     hash: init.artifact.sha256,
     recovered: Boolean(kept),
   };
+}
+
+/**
+ * A new revision taken by the running editor (the 문서 AI's result from the executor, or one made
+ * elsewhere): through the editor's own open path (its Electron "open this file" event), with the page's
+ * scroll put back. Its undo history starts again at the new revision (the editor resets it on every
+ * open), so 되돌리기 goes through the revision list (replace-in-place.ts).
+ */
+const editorScroll = () => document.querySelector<HTMLElement>(".editor-scroll");
+function contentSwapped(timeoutMs = 15_000) {
+  return new Promise<void>((resolve, reject) => {
+    const target = () => document.querySelector(".editor-scroll .ProseMirror");
+    let quiet: number | undefined, seen = false;
+    const finish = (error?: Error) => { observer.disconnect(); window.clearTimeout(quiet); window.clearTimeout(limit); if (error) reject(error); else resolve(); };
+    const observer = new MutationObserver(() => { seen = true; window.clearTimeout(quiet); quiet = window.setTimeout(() => finish(), 300); });
+    observer.observe(document.querySelector(".editor-scroll") ?? document.body, { childList: true, subtree: true, characterData: true });
+    const limit = window.setTimeout(() => (seen && target() ? finish() : finish(new Error("문서를 바꾸지 못했습니다."))), timeoutMs);
+  });
+}
+let viewPlace: ReturnType<typeof installViewPosition> | null = null;
+async function replaceInPlace(revision: number) {
+  const place = viewPlace?.last();
+  if (init.readOnly || !document.querySelector(".editor-scroll .ProseMirror")) throw new Error("편집기가 아직 준비되지 않았습니다.");
+  const release = pageRest.hold("replace");
+  try {
+    const bytes = await gateway.raw(artifactId, revision);
+    const swapped = contentSwapped();
+    await keepScroll(editorScroll, async () => {
+      events.emit("openDocx", { path: init.artifact.path, name: init.artifact.name, dataUrl: URL.createObjectURL(new Blob([bytes], { type: DOCX })), hash: init.artifact.sha256, recovered: false });
+      await swapped;
+    });
+    state.revision = revision;
+    if (state.kept) { state.kept = false; void recovery.drop(artifactId).catch(() => undefined); }
+    // A hidden tab's page cannot set its scroll while it is not laid out: the place comes back when it is shown.
+    viewPlace?.again(place);
+  } finally { release(); }
 }
 
 async function save(data: ArrayBuffer) {
@@ -174,7 +212,15 @@ const desktop = stubBridge(
     setAiPanelPrefs: (patch: object) => preferences.setPanel(patch),
     onAiPanelPrefsChanged: events.on("aiPanelPrefsChanged"),
     getRecentFiles: async () => [],
-    consumePendingOpenDocx: async () => (pendingOpen ??= openResult()),
+    consumePendingOpenDocx: async () => (pendingOpen ??= openResult().then((result) => {
+      if (!init.readOnly && !init.execution && !init.headlessExport) installInPlaceReplace({ dirty: askDirty, replace: replaceInPlace });
+      // The tab keeps where the page was scrolled; a woken tab opens there (office-leftovers point 3).
+      if (!init.execution && !init.headlessExport) viewPlace = installViewPosition({
+        read: () => { const scroll = document.querySelector(".editor-scroll .ProseMirror") ? readScroll(editorScroll()) : undefined; return scroll ? { scroll } : null; },
+        restore: (position) => Boolean(document.querySelector(".editor-scroll .ProseMirror")) && restoreScroll(editorScroll(), position.scroll),
+      }, { initial: init.view, shown: () => pageRest.onScreen() && window.innerHeight > 0, post: (position) => post({ type: "office:view-position", position }) });
+      return result;
+    })),
     consumeNewBlankDoc: async () => false,
     confirmDocumentReplace: async () => true,
     onOpenDocx: events.on("openDocx"),

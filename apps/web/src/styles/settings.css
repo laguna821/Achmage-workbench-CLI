@@ -263,3 +263,9 @@
 .update-result.warn { color: var(--color-attention-text); }
 .update-blockers { margin: 0; padding-left: var(--space-md); color: var(--text); }
 .update-blockers li + li { margin-top: var(--space-3xs); }
+
+/* 완료 소리 (done-sound): the volume slider and its 들어 보기 key on one line. */
+.done-sound-volume { display: inline-flex; align-items: center; gap: var(--space-sm); }
+.done-sound .slider-row { display: grid; grid-template-columns: minmax(8rem, 10rem) 3rem; align-items: center; gap: var(--space-xs); }
+.done-sound .slider-value { font-size: var(--text-sm); }
+.done-sound .sheet-select { min-width: 10rem; }

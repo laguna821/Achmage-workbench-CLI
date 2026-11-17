@@ -1,3 +1,4 @@
+import { withParticle } from "@workbench/contracts";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { PROVIDER_LABEL, linkElapsedMs, linkMaxHops, liveLinkOf, type Session, type SessionLink } from "@workbench/contracts";
 import type { Api } from "./api.ts";
@@ -64,7 +65,7 @@ export function useLinkApi(options: {
           }
           const anchor = document.createElement("a");
           anchor.href = URL.createObjectURL(new Blob([markdown], { type: "text/markdown;charset=utf-8" }));
-          anchor.download = "세션 잇기.md";
+          anchor.download = "대화 잇기.md";
           anchor.click();
           URL.revokeObjectURL(anchor.href);
           return;
@@ -72,14 +73,14 @@ export function useLinkApi(options: {
         if (target === "path" && pickSavePath) {
           const first = state.sessions[link.participants[0]!];
           const owner = first ? state.works[first.workId] : undefined;
-          const path = await pickSavePath(owner ? `${owner.cwd}/세션 잇기.md` : "세션 잇기.md");
+          const path = await pickSavePath(owner ? `${owner.cwd}/대화 잇기.md` : "대화 잇기.md");
           if (!path) return;
           const saved = await api.exportLink(link.id, { target: "path", path });
           toast({ text: `저장했습니다: ${saved.path}`, action: opened(saved.artifactId) });
           return;
         }
         const saved = await api.exportLink(link.id, { target: "work" });
-        toast({ text: `${saved.path?.split(/[\\/]/).slice(-2).join("/") ?? ""}(으)로 저장했습니다.`, action: opened(saved.artifactId) });
+        toast({ text: `${withParticle(`${saved.path?.split(/[\\/]/).slice(-2).join("/") ?? ""}`, "으로/로")} 저장했습니다.`, action: opened(saved.artifactId) });
       } catch (error) {
         fail(error);
       }
@@ -95,13 +96,13 @@ export function useLinkApi(options: {
       pause: (link) =>
         void api
           ?.pauseLink(link.id)
-          .then(() => toast("세션 잇기를 멈췄습니다. 하던 답은 끝까지 쓰고, 다음 세션에는 넘기지 않습니다."))
+          .then(() => toast("대화 잇기를 멈췄습니다. 하던 답은 끝까지 쓰고, 다음 대화에는 넘기지 않습니다."))
           .catch(fail),
       resume: (link) => void api?.resumeLink(link.id).catch(fail),
       stop: (link) =>
         void api
           ?.stopLink(link.id)
-          .then(() => toast("세션 잇기를 끊었습니다."))
+          .then(() => toast("대화 잇기를 끊었습니다."))
           .catch(fail),
       extend: (link) =>
         void api
@@ -114,7 +115,7 @@ export function useLinkApi(options: {
         if (!api) return false;
         try {
           await api.startLink({ requestId: newRequestId(), ...start });
-          toast("세션 잇기를 시작했습니다. 첫 세션이 목표에 먼저 답합니다.");
+          toast("대화 잇기를 시작했습니다. 첫 대화가 목표에 먼저 답합니다.");
           // Watch it happen in the first session, unless one of them is already on screen.
           if (!start.participants.includes(visibleSessionId ?? "")) openSession(start.participants[0]!);
           return true;
@@ -139,7 +140,7 @@ export function useLinks() {
 export const linkOfSession = (state: State, sessionId: string) => liveLinkOf(Object.values(state.links), sessionId);
 
 /** "Codex · 초안": how a participant is named on screen. */
-export const participantName = (session: Session | undefined) => (session ? `${PROVIDER_LABEL[session.provider]} · ${session.purpose}` : "없어진 세션");
+export const participantName = (session: Session | undefined) => (session ? `${PROVIDER_LABEL[session.provider]} · ${session.purpose}` : "없어진 대화");
 
 /** "3/6": messages handed over of all it may. */
 export const hopsText = (link: SessionLink) => `${link.hops}/${linkMaxHops(link)}`;

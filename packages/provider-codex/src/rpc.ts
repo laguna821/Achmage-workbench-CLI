@@ -47,6 +47,11 @@ export class CodexRpc {
     return this.child !== null;
   }
 
+  /** The app-server's process id (null when not running). */
+  get pid(): number | null {
+    return this.child?.pid ?? null;
+  }
+
   start() {
     const child = spawn(this.options.binary, [...(this.options.prefixArgs ?? []), "app-server", ...(this.options.args ?? [])], {
       env: this.options.env ?? process.env,

@@ -131,13 +131,13 @@ export function TaskPanel({ api, workId, onOpen, onClose }: {
           <button className="button primary" type="submit" disabled={!draft.trim() || busy !== null}>전달</button>
         </form> : null}
       </section> : <div className="task-panel-list" aria-busy={loading}>
-        {!shown.length ? <p className="task-panel-empty">{loading ? "작업을 불러오는 중…" : "표시할 작업이 없습니다. 세션이나 문서의 AI에서 요청을 시작하세요."}</p> : null}
+        {!shown.length ? <p className="task-panel-empty">{loading ? "작업을 불러오는 중…" : "표시할 작업이 없습니다. 대화나 문서의 AI에서 요청을 시작하세요."}</p> : null}
         {shown.map(task => <article className={`task-row${task.parentSessionId ? " task-child" : ""}`} data-task-state={task.state} key={task.runId}>
-          <div className="task-row-head"><span className="task-kind">{task.executorKind === "office" ? "문서 AI" : task.executorKind === "native_agent" ? "하위 에이전트" : "세션"}</span>
+          <div className="task-row-head"><span className="task-kind">{task.executorKind === "office" ? "문서 AI" : task.executorKind === "native_agent" ? "하위 에이전트" : "대화"}</span>
             <span className="task-state">{TASK_STATE_LABEL[task.state]}</span></div>
           <button type="button" className="task-title" onClick={() => task.nativeTask ? setSelected(task.runId) : onOpen(task.sessionId, task.sourceItemId ?? undefined)}>{task.title}</button>
           <p>{task.activity ?? task.preview ?? ""}</p>
-          <div className="task-row-foot"><span>{task.provider === "codex" ? "Codex" : "Claude"}{task.parentSessionId ? " · 부모 세션에 연결됨" : ""}</span>
+          <div className="task-row-foot"><span>{task.provider === "codex" ? "Codex" : "Claude"}{task.parentSessionId ? " · 부모 대화에 연결됨" : ""}</span>
             <div>{task.approvalIds.length ? <button type="button" className="ghost-button small" onClick={() => onOpen(task.sessionId, task.approvalIds[0])}>요청 확인</button> : null}
               {task.state === "queued" && task.capabilities.queue && task.requestId ? <><button type="button" className="ghost-button small" disabled={busy === task.runId} onClick={() => void command(task, "send_queue", { queuedId: task.requestId! })}>지금 보내기</button>
                 <button type="button" className="ghost-button small" disabled={busy === task.runId} onClick={() => void command(task, "cancel_queue", { queuedId: task.requestId! })}>대기 취소</button></> : null}

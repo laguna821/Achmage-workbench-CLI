@@ -94,7 +94,7 @@ export function useDocumentSession(rootApi: Api, artifactId: string | null, sess
     await update.current();
     const actual = confirmed.current?.view;
     if (!token.current || !actual || actual.sessionId !== expected.sessionId || actual.revision !== revision || actual.dirty !== dirty) {
-      throw new Error("문서와 선택한 세션의 연결을 확인하지 못했습니다. 다시 시도해 주세요.");
+      throw new Error("문서와 선택한 대화의 연결을 확인하지 못했습니다. 다시 시도해 주세요.");
     }
   }, []);
   const access = useCallback(() => ({ viewId, writeToken: token.current }), [viewId]);

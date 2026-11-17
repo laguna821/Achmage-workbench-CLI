@@ -215,7 +215,7 @@ it("installs and themes only the HWP editor frame, then restores both documents"
   const original = inner.body.innerHTML;
   const ui = mount("hangul");
   fireEvent.load(frame);
-  expect(inner.querySelector("style[data-wb-office-chrome]")?.textContent).toContain("#icon-toolbar, #style-bar, #status-bar");
+  expect(inner.querySelector("style[data-wb-office-chrome]")?.textContent).toContain(".memo-modal, #status-bar, .dialog-wrap");
   expect(document.querySelector<HTMLIFrameElement>("#preview")!.contentDocument!.querySelector("style[data-wb-office-chrome]")).toBeNull();
   await applyOfficeTheme("view", "dark");
   expect(inner.documentElement.dataset.wbOfficeTheme).toBe("dark");
@@ -296,11 +296,16 @@ withStudio("gives the HWP studio the app's own light and dark tokens on every su
   }
   // No chrome token keeps the studio's own value in both themes.
   expect([...unchanged]).toEqual([]);
-  // Every studio surface is one of the skinned chrome surfaces.
+  // The status line and the dialogs are skinned chrome surfaces (the app's control recipe). The menu row, the icon
+  // row, the format row and their menus are not (hop-look): they keep the studio's own geometry and type, as
+  // Achmage HOP shows them, and take the app's colours through the role map checked above.
   const style = inner.querySelector<HTMLStyleElement>("style[data-wb-office-chrome]")!;
   const surface = Array.from(style.sheet!.cssRules).find(rule => "selectorText" in rule && rule.cssText.includes("font-family: var(--wb-ui-font) !important")) as CSSStyleRule;
-  for (const selector of ["#menu-bar", ".menu-dropdown", "#icon-toolbar", "#style-bar", "#status-bar", ".context-menu", ".dialog-wrap"]) {
+  for (const selector of ["#status-bar", ".dialog-wrap"]) {
     expect([selector, inner.querySelector(selector)!.matches(surface.selectorText)]).toEqual([selector, true]);
+  }
+  for (const selector of ["#menu-bar", ".menu-dropdown", "#icon-toolbar", "#style-bar", ".context-menu"]) {
+    expect([selector, inner.querySelector(selector)!.matches(surface.selectorText)]).toEqual([selector, false]);
   }
 });
 
@@ -345,7 +350,8 @@ it("marks the drop-down row the arrow keys are on clearly in both themes, apart 
   for (const theme of ["light", "dark"] as const) {
     await applyOfficeTheme("view", theme);
     const tokens = rootTokens(inner);
-    const resolve = (value: string) => value.replace(/var\((--[\w-]+)\)/g, (_, name: string) => tokens.get(name) ?? "");
+    // tokens refer to tokens (the studio's --ui-* roles to the HOP role map's --wb-hop-*, to the set's --wb-ui-*)
+    const resolve = (value: string): string => { let out = value; for (let i = 0; i < 8 && out.includes("var("); i++) out = out.replace(/var\((--[\w-]+)\)/g, (_, name: string) => tokens.get(name) ?? ""); return out; };
     // Declared values of the rules that match, in sheet order (jsdom drops a var() background shorthand
     // from computed style); the studio's rules here have no competing specificity.
     const style = (element: Element) => {

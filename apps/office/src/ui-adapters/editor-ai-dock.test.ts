@@ -36,6 +36,37 @@ const lastOf = (post: ReturnType<typeof vi.fn>) => post.mock.calls.at(-1)![0] as
 afterEach(() => { document.body.replaceChildren(); });
 
 describe("the editors' own AI panel as 문서 AI", () => {
+  // Release re-review 1, next round item 1: after 보이기 off → on, Markdown's rail swallowed the first click made the moment
+  // it appeared, and the panel needed a second press. The tab's wish keeps pressing (a few times, a frame apart) until it is open.
+  it("presses the rail again when its first click is swallowed (Markdown just after 보이기 was turned back on)", async () => {
+    const { dock, clicks } = dockEditor();
+    const rail = dock.querySelector<HTMLElement>(".ai-rail")!;
+    let swallowed = 0;
+    rail.addEventListener("click", (event) => { if (swallowed === 0) { swallowed++; event.stopImmediatePropagation(); } }, { capture: true });
+    const post = vi.fn();
+    const editor = installEditorAiDock(document, { post });
+    editor.set(true);
+    for (let wait = 0; wait < 10 && !lastOf(post).open; wait++) await frame();
+    expect(swallowed).toBe(1);
+    expect(clicks.rail).toBe(1);
+    expect(lastOf(post)).toMatchObject({ open: true, person: false });
+    editor.dispose();
+  });
+
+  it("stops pressing when the person closes it meanwhile or the tab asks for closed", async () => {
+    const { dock } = dockEditor();
+    const rail = dock.querySelector<HTMLElement>(".ai-rail")!;
+    let presses = 0;
+    rail.addEventListener("click", (event) => { presses++; event.stopImmediatePropagation(); }, { capture: true });
+    const post = vi.fn();
+    const editor = installEditorAiDock(document, { post });
+    editor.set(true);
+    editor.set(false);
+    for (let wait = 0; wait < 6; wait++) await frame();
+    expect(presses).toBe(1);
+    editor.dispose();
+  });
+
   it("reports itself drawn and closed at once, then opens and closes through its own keys when the tab asks", async () => {
     const { clicks } = dockEditor();
     const post = vi.fn();

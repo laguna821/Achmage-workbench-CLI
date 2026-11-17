@@ -17,7 +17,8 @@ export type PaneDrag = DragSource & { x: number; y: number; over: Over; own: boo
 /** Where pane drops land: the pane layout registers itself. */
 export type DropArea = {
   element: () => HTMLElement | null;
-  targetAt: (x: number, y: number) => PaneTarget | null;
+  /** Where a drop at (x, y) lands; `item` is what is held (a tab's own place in its strip is not counted). */
+  targetAt: (x: number, y: number, item: PaneItem) => PaneTarget | null;
   drop: (item: PaneItem, target: PaneTarget) => void;
 };
 
@@ -51,7 +52,7 @@ function overAt(item: PaneItem, x: number, y: number): Over {
   }
   const host = area?.element();
   if (!area || !host || !host.contains(element)) return null;
-  const target = area.targetAt(x, y);
+  const target = area.targetAt(x, y, item);
   return target ? { kind: "zone", target } : null;
 }
 
@@ -164,7 +165,7 @@ export function useDropArea(next: DropArea | null) {
     if (!enabled) return;
     const registered: DropArea = {
       element: () => latest.current?.element() ?? null,
-      targetAt: (x, y) => latest.current?.targetAt(x, y) ?? null,
+      targetAt: (x, y, item) => latest.current?.targetAt(x, y, item) ?? null,
       drop: (item, target) => latest.current?.drop(item, target),
     };
     area = registered;

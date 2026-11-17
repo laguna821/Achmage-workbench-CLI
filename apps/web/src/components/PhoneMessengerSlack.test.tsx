@@ -132,7 +132,7 @@ describe("registering Slack (design §4.2)", () => {
     expect(f.sent("POST", "/api/channels/slack/bots")[1]!.body).toEqual({ botToken: BOT, appToken: APP, appName: "Workbench 노트북" });
     expect(document.body.innerHTML).not.toContain(BOT);
     expect(document.body.innerHTML).not.toContain(APP);
-    expect(screen.getByText("Slack 앱 @workbench(연구실)을 확인했습니다.")).toBeTruthy();
+    expect(screen.getByText("Slack 앱 @workbench(연구실)를 확인했습니다.")).toBeTruthy();
   });
 
   it("without an OS keyring, offers to keep both for this run only", async () => {

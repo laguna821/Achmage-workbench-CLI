@@ -54,9 +54,12 @@ export class UpdatePolicy {
     this.stopping = true;
     if (mode === "drain") return;
     await this.beforeInterrupt?.().catch(() => undefined);
-    // Finishing an interrupted parent must not start its already-queued next request during exit.
-    for (const session of this.manager.view.sessions.values()) if (session.queued.length)
-      this.manager.sink.updateSession(session.id, { queued: session.queued.map(request => ({ ...request, held: true })) });
+    // Finishing an interrupted parent must not start its already-queued next request during exit. Requests
+    // waiting only for a free slot (0.5.3) stay in the line — nothing is admitted from now on — so after the
+    // restart they still wait, in order, and start by themselves.
+    this.manager.resources.suspend();
+    for (const session of this.manager.view.sessions.values()) if (session.queued.some(request => !request.held && !request.slot))
+      this.manager.sink.updateSession(session.id, { queued: session.queued.map(request => (request.slot ? request : { ...request, held: true })) });
     const tasks = this.manager.tasks.list().tasks.filter(task => ["running", "waiting_input"].includes(task.state));
     // This is the user's explicit 'stop all work' path, not automatic update behavior.
     await Promise.allSettled(tasks.filter(task => task.executorKind === "native_agent" && task.capabilities.stop).map(task => this.manager.tasks.command({ commandId: `shutdown-${Date.now()}-${task.nativeTask?.childId ?? "child"}`.replace(/[^\w.-]/g, "_").slice(0, 160), target: task, kind: "stop" })));

@@ -148,7 +148,7 @@ try {
     // What the page's security rules stopped, if anything.
     page.on("console", (message) => { if (/Content Security Policy|Refused to/i.test(message.text())) blocked.push(message.text().slice(0, 200)); });
   };
-  const headline = (page: import("playwright-core").Page) => page.evaluate(() => document.querySelector(".host-connections-head p")?.textContent ?? "");
+  const headline = (page: import("playwright-core").Page) => page.evaluate(() => (document.querySelector(".host-connections-head p") ?? document.querySelector(".host-connections-dialog .host-connections-phase"))?.textContent ?? "");
   const credentials = (page: import("playwright-core").Page) => page.evaluate(() => {
     const count = (storage: Storage) => Object.keys(storage).filter((key) => key.startsWith("workbench.remote-credential")).length;
     return { lasting: count(localStorage), tab: count(sessionStorage) };
@@ -228,9 +228,11 @@ try {
     await until(async () => Boolean(request = (await api<Devices>("GET", "/api/devices")).pending[0]));
     check("PC: 같은 확인번호, 기억 요청이 승인 전에 보임", Boolean(request) && request!.verificationCode === shown && request!.remember === true, `remember=${request?.remember}`);
     await api("POST", `/api/devices/enrollments/${request!.requestId}/approve`, { permissions: ["read"], workIds: [work.id] });
-    const connected = await until(async () => (await headline(page)).includes("연결됨"));
+    // Once connected the dialog closes by itself (0.5.3, M01): the top bar's connection button carries the state.
+    const barSays = (p: import("playwright-core").Page) => p.evaluate(() => document.querySelector(".shell-connections")?.getAttribute("aria-label") ?? "");
+    const connected = await until(async () => (await barSays(page)).includes("연결됨") && !(await page.locator(".host-connections-dialog[open]").count()));
     const firstDay = (await api<Devices>("GET", "/api/devices")).devices;
-    check("휴대폰: 승인 뒤 연결됨", connected, await headline(page));
+    check("휴대폰: 승인 뒤 연결됨(대화상자가 닫히고 그 PC의 화면)", connected, await barSays(page));
     check("PC: 기억된 기기로 표시(언제부터)", firstDay.length === 1 && typeof firstDay[0]!.rememberedAt === "number", `rememberedAt=${firstDay[0]?.rememberedAt}`);
     const stored = await credentials(page);
     check("휴대폰: 연결 권한이 탭이 아니라 브라우저에 보관됨", stored.lasting === 1 && stored.tab === 0, JSON.stringify(stored));
@@ -246,23 +248,24 @@ try {
     const next = await context.newPage();
     watch(next);
     await next.goto(address + "/");
-    await next.waitForSelector(".host-connections-dialog[open]");
     const before = await credentials(next);
-    await next.getByRole("button", { name: "사용하기" }).click();
-    const again = await until(async () => (await headline(next)).includes("연결됨"));
+    // 0.5.3 (M01): no tap on 사용하기 — the page connects by itself with the kept credential.
+    const again = await until(async () => (await barSays(next)).includes("연결됨"));
     const secondDay = await api<Devices>("GET", "/api/devices");
     check("휴대폰: 새 탭에는 탭 보관분이 없음", before.tab === 0 && before.lasting === 1, JSON.stringify(before));
-    check("휴대폰: 다시 승인받지 않고 연결됨", again && secondDay.pending.length === 0 && secondDay.devices.length === 1, `${await headline(next)} · 승인 대기 ${secondDay.pending.length}`);
+    check("휴대폰: 다시 승인받지 않고, 누르지 않아도 연결됨", again && secondDay.pending.length === 0 && secondDay.devices.length === 1, `${await barSays(next)} · 승인 대기 ${secondDay.pending.length}`);
     await next.screenshot({ path: join(outDir, "4-second-day-connected.png") });
     // Behind the dialog: the PC's work as this device may see it. What else the page shows there
     // (first-run setup, refused requests) is reported as a note, not judged here.
-    await next.getByRole("button", { name: "닫기", exact: true }).click();
+    if (await next.locator(".host-connections-dialog[open]").count()) await next.getByRole("button", { name: "닫기", exact: true }).click();
     await next.waitForTimeout(1500);
     const behind = await next.evaluate(() => ({ setup: document.body.innerText.includes("작업을 시작할 준비"), refused: document.body.innerText.includes("이 기기에 허용되지 않은 작업입니다") }));
     console.log(`NOTE 연결 직후 화면: 첫 실행 설정 안내 ${behind.setup ? "보임" : "없음"}, ‘이 기기에 허용되지 않은 작업입니다’ ${behind.refused ? "보임" : "없음"}`);
     await next.screenshot({ path: join(outDir, "4-second-day-behind-dialog.png") });
     if (await next.getByRole("button", { name: "나중에 설정" }).count()) await next.getByRole("button", { name: "나중에 설정" }).click();
     if (await next.getByRole("button", { name: "사이드바 열기" }).count()) await next.getByRole("button", { name: "사이드바 열기" }).click();
+    // The projects are one rail item away (the sidebar opens on 지금).
+    await next.locator("nav >> text=프로젝트 >> visible=true").first().click().catch(() => {});
     const sees = await until(async () => next.evaluate(() => document.body.innerText.includes("둘째 날 프로젝트")), 8000);
     check("휴대폰: 허용한 프로젝트가 보임", sees);
     await next.screenshot({ path: join(outDir, "4-second-day-project.png") });

@@ -67,5 +67,5 @@ declare module "opentype.js" {
     charToGlyphIndex(char: string): number;
     charToGlyph(char: string): { advanceWidth?: number };
   }
-  export function parse(buffer: ArrayBuffer): Font;
+  export function parse(buffer: ArrayBuffer, options?: { lowMemory?: boolean }): Font;
 }

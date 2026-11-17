@@ -9,6 +9,7 @@ import { cursorOf, imageInfo, inlineDrawings, rememberCursor, showDoc, takeQueue
 import { isBusy, type State } from "../../state.ts";
 import { EngineMark } from "../EngineMark.tsx";
 import { Icon } from "../Icon.tsx";
+import { Select } from "../ui/Select.tsx";
 import "../../styles/imagegen.css";
 
 // "여기에 그림 그리기": draw at the cursor of a Markdown document. While Codex draws, a mark sits
@@ -258,12 +259,12 @@ function DrawHere({
   const codex = session?.provider === "codex";
   const busy = session ? isBusy(session) : false;
   const who = !session
-    ? "새 Codex 세션이 GPT Image로 그립니다."
+    ? "새 Codex 대화가 GPT Image로 그립니다."
     : codex
       ? busy
-        ? `「${session.purpose}」 세션이 일하는 중이라 이 작업의 Codex 그림 세션이 그립니다.`
-        : `「${session.purpose}」 Codex 세션이 GPT Image로 그립니다.`
-      : "Claude는 그림을 그리지 못해 이 작업의 Codex 그림 세션이 그립니다. 그림은 Claude 대화에도 남습니다.";
+        ? `「${session.purpose}」 대화가 일하는 중이라 이 작업의 Codex 그림 대화가 그립니다.`
+        : `「${session.purpose}」 Codex 대화가 GPT Image로 그립니다.`
+      : "Claude는 그림을 그리지 못해 이 작업의 Codex 그림 대화가 그립니다. 그림은 Claude 대화에도 남습니다.";
   const submit = async () => {
     if (!brief.trim() || sending) return;
     setSending(true);
@@ -302,14 +303,8 @@ function DrawHere({
       <textarea autoFocus value={brief} onChange={(event) => setBrief(event.target.value)} rows={3} placeholder="무엇을 그릴까요? (Ctrl+Enter로 그리기)" aria-label="그릴 내용" />
       <div className="inline-draw-row">
         <span>템플릿</span>
-        <select value={choice.templateId ?? ""} onChange={(event) => setChoice({ ...choice, templateId: event.target.value || null })} aria-label="템플릿">
-          <option value="">없음</option>
-          {(templates?.templates ?? []).map((template) => (
-            <option key={template.id} value={template.id}>
-              {template.name}
-            </option>
-          ))}
-        </select>
+        <Select label="템플릿" value={choice.templateId ?? ""} onChange={(value) => setChoice({ ...choice, templateId: value || null })}
+          options={[{ value: "", label: "없음" }, ...(templates?.templates ?? []).map((template) => ({ value: template.id, label: template.name }))]} />
       </div>
       <div className="inline-draw-row">
         <span>비율</span>

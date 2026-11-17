@@ -7,7 +7,7 @@ import { isUnseen, type Session } from "@workbench/contracts";
 // 완료 is derived, not stored: idle, nothing unseen, no error, and a finished reply exists.
 // A conversation that never answered (just created) has no word: `rowState` returns null.
 
-export type RowStateId = "attention" | "failed" | "running" | "unseen" | "queued" | "done";
+export type RowStateId = "attention" | "failed" | "running" | "waiting" | "unseen" | "queued" | "done";
 
 /**
  * The glyph is a name from the one icon set (`Icon`), except "turn": the quiet turning mark of a
@@ -24,12 +24,14 @@ export const ROW_STATES: Record<RowStateId, RowStateInfo> = {
   attention: { id: "attention", word: "확인 필요", glyph: "alert", tone: "attention", rank: 0 },
   failed: { id: "failed", word: "실패", glyph: "x", tone: "error", rank: 1 },
   running: { id: "running", word: "진행 중", glyph: "turn", tone: "active", rank: 2 },
+  // 0.5.3: a request waits for a free slot (the resource manager's line); 예약's mark, its own word.
+  waiting: { id: "waiting", word: "대기 중", glyph: "clock", tone: "queued", rank: 2.5 },
   unseen: { id: "unseen", word: "새 답", glyph: "dot", tone: "new", rank: 3 },
   queued: { id: "queued", word: "예약", glyph: "clock", tone: "queued", rank: 4 },
   done: { id: "done", word: "완료", glyph: "check", tone: "done", rank: 5 },
 };
 
-export const ROW_STATE_ORDER: RowStateId[] = ["attention", "failed", "running", "unseen", "queued", "done"];
+export const ROW_STATE_ORDER: RowStateId[] = ["attention", "failed", "running", "waiting", "unseen", "queued", "done"];
 
 export const isWorking = (session: Pick<Session, "status">) => session.status === "starting" || session.status === "running" || session.status === "interrupting";
 
@@ -46,6 +48,7 @@ export type RowStateOptions = {
  * - 확인 필요: waits for an approval, or holds requests a stop left behind (only the person sends them)
  * - 실패: the engine failed (status error), or the last turn left an error and nothing runs
  * - 진행 중: starting, running or stopping
+ * - 대기 중: a request waits for a free slot (0.5.3)
  * - 새 답: a reply not looked at (or marked unread), unless it is on screen
  * - 예약: requests wait for the turn to end
  * - 완료: idle, nothing unseen, a finished reply exists
@@ -57,6 +60,7 @@ export function rowState(session: Session, options: RowStateOptions = {}): RowSt
   if (session.status === "error" || (!working && session.lastError)) return ROW_STATES.failed;
   if (!working && heldCount(session) > 0) return ROW_STATES.attention;
   if (working) return ROW_STATES.running;
+  if (session.queued?.some((entry) => entry.slot && !entry.held)) return ROW_STATES.waiting;
   if (!options.onScreen && isUnseen(session)) return ROW_STATES.unseen;
   if (session.queued?.length) return ROW_STATES.queued;
   if (session.previewAt || session.preview) return ROW_STATES.done;

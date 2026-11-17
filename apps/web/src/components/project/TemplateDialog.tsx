@@ -1,7 +1,9 @@
+import { withParticle } from "@workbench/contracts";
 import { useEffect, useRef, useState } from "react";
 import { PROPERTY_TYPES, STAGE_KEY, type PropertyField, type PropertyType } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
 import { Icon } from "../Icon.tsx";
+import { Select } from "../ui/Select.tsx";
 import { keyLabel } from "./PropertiesPanel.tsx";
 
 /**
@@ -92,16 +94,11 @@ export function TemplateDialog({ api, onClose, onSaved, onError }: { api: Api; o
                   aria-label="속성 이름"
                   placeholder="속성 이름"
                   disabled={field.type === "stage"}
-                  title={field.key !== keyLabel(field.key) ? `노트에는 ${field.key}로 씁니다` : undefined}
+                  title={field.key !== keyLabel(field.key) ? `노트에는 ${withParticle(`${field.key}`, "으로/로")} 씁니다` : undefined}
                   onChange={(event) => change(index, { key: event.target.value })}
                 />
-                <select className="sheet-select" aria-label="형식" value={field.type} disabled={field.type === "stage"} onChange={(event) => change(index, { type: event.target.value as PropertyType })}>
-                  {PROPERTY_TYPES.filter((entry) => entry.type !== "stage" || field.type === "stage").map((entry) => (
-                    <option key={entry.type} value={entry.type}>
-                      {entry.label}
-                    </option>
-                  ))}
-                </select>
+                <Select<PropertyType> className="template-type" label="형식" value={field.type} disabled={field.type === "stage"} onChange={(type) => change(index, { type })}
+                  options={PROPERTY_TYPES.filter((entry) => entry.type !== "stage" || field.type === "stage").map((entry) => ({ value: entry.type, label: entry.label }))} />
                 <input className="sheet-input template-hint" value={field.hint ?? ""} aria-label="빈 칸에 보일 안내" placeholder="빈 칸에 보일 안내 (선택)" onChange={(event) => change(index, { hint: event.target.value })} />
                 <button type="button" className="icon-button small" title="빼기" aria-label={`${field.key} 빼기`} onClick={() => setFields(fields.filter((_, at) => at !== index))}>
                   <Icon name="x" size={13} />

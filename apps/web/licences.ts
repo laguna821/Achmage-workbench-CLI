@@ -80,8 +80,12 @@ export function collectLicences(root: string) {
     const components = readdirSync(at).sort(byCodePoint).filter((name) => !name.startsWith(".") && statSync(join(at, name)).isDirectory()).flatMap((name) => {
       const dir = join(at, name);
       if (noticeFiles(dir).length) return [{ name, dir }];
-      const inner = readdirSync(dir).sort(byCodePoint).filter((child) => !child.startsWith(".") && statSync(join(dir, child)).isDirectory() && noticeFiles(join(dir, child)).length);
-      if (!inner.length) throw new Error(`${parent}/${name}: no LICENSE, NOTICE or licenses folder. Every component the app ships names its licence (apps/web/licences.ts).`);
+      const inner = readdirSync(dir).sort(byCodePoint).filter((child) => !child.startsWith(".") && statSync(join(dir, child)).isDirectory());
+      const withNotice = inner.filter((child) => noticeFiles(join(dir, child)).length);
+      if (!withNotice.length) throw new Error(`${parent}/${name}: no LICENSE, NOTICE or licenses folder. Every component the app ships names its licence (apps/web/licences.ts).`);
+      // A group's every component names its licence too: one without is never dropped silently.
+      const missing = inner.find((child) => !withNotice.includes(child));
+      if (missing) throw new Error(`${parent}/${name}/${missing}: no LICENSE, NOTICE or licenses folder. Every component the app ships names its licence (apps/web/licences.ts).`);
       return inner.map((child) => ({ name: child, dir: join(dir, child) }));
     });
     for (const { name, dir } of components) {

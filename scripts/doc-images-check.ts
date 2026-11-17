@@ -26,6 +26,7 @@ import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { deflateSync } from "node:zlib";
 import { chromium, type Frame, type Page } from "playwright-core";
+import { editorFirst } from "./fixtures/editor-first.ts";
 import type { Artifact, Provider, Session, Work } from "@workbench/contracts";
 
 const outDir = process.argv[2] ?? join(tmpdir(), "wb-doc-images");
@@ -298,6 +299,7 @@ async function flow(provider: Provider, index: number) {
   const toast = async () => (await page.locator(".top-notice").innerText().catch(() => "")).replace(/\s+/g, " ");
   try {
     await page.addInitScript((id) => localStorage.setItem("workbench.lastWork", id), work.id);
+    await editorFirst(page);
     await page.goto(`${ready.url}/?token=${ready.token}`);
     await page.waitForSelector(".note-head-more");
 

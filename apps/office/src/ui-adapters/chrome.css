@@ -359,6 +359,9 @@ __WB_ROOT__ [data-u-comp='slide-tab-item'][aria-selected='true'] { color: var(--
     border-inline-start: 1px solid var(--wb-ui-line);
   }
   __WB_ROOT__ .sheet-body:has(> .copilot:not(.collapsed)) { position: relative; grid-template-columns: 34px minmax(0, 1fr); }
+  /* The panel is placed absolutely (over the grid): it leaves the grid's auto-placement, so the grid must be told its
+     track, or it falls into the 34px one and the sheet shows blank (office-leftovers 4a). */
+  __WB_ROOT__ .sheet-body:has(> .copilot:not(.collapsed)) > .sheet-main { grid-column: 2; grid-row: 1; }
   __WB_ROOT__ .sheet-body > .copilot:not(.collapsed) {
     position: absolute;
     inset-block: 0;

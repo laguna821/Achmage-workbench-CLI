@@ -172,7 +172,7 @@ export type AgentTone = "attention" | "error" | "active" | "new" | null;
 /** The AI a document row shows: the most pressing by the one state order (row-state.ts), then the newest. */
 export function leadAgent(agents: Session[], visibleSessionId: string | null): { session: Session; tone: AgentTone } | null {
   if (!agents.length) return null;
-  const TONE: Record<RowStateId, AgentTone> = { attention: "attention", failed: "error", running: "active", unseen: "new", queued: null, done: null };
+  const TONE: Record<RowStateId, AgentTone> = { attention: "attention", failed: "error", running: "active", waiting: null, unseen: "new", queued: null, done: null };
   const lead = leadState(agents, (session) => {
     const state = rowState(session, { onScreen: session.id === visibleSessionId });
     return state && TONE[state.id] ? state : null;

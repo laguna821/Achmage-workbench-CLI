@@ -17,7 +17,7 @@ it("navigates the real context menu, reads disabled reasons, and returns Escape 
       {open ? <ContextMenu onClose={() => setOpen(false)} request={{ x: 0, y: 0, title: "프로젝트", items: [
         { kind: "item", label: "문서", onSelect: choose },
         { kind: "item", label: "삭제", disabled: true, disabledReason: "작업이 끝난 뒤 삭제할 수 있습니다.", onSelect: choose },
-        { kind: "item", label: "선택한 작업공간", checked: true, icon: "folder", onSelect: choose },
+        { kind: "item", label: "선택한 작업 폴더", checked: true, icon: "folder", onSelect: choose },
       ] }} /> : null}
     </AppearanceContext.Provider>;
   }

@@ -1,3 +1,4 @@
+import { withParticle } from "@workbench/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { failure } from "../top-notice.ts";
 import type { Artifact, DocumentRemovalPlan, Folder, NavigatorPrefs, NavSelection, NavShortcut, ProjectStage, ProjectSummary, UiPrefs, Work } from "@workbench/contracts";
@@ -335,7 +336,7 @@ export function Sidebar({
       let first = Math.min(0, ...Object.values(state.works).filter((work) => !work.archivedAt && (work.folderId ?? null) === folderId).map((work) => work.sort));
       const name = folderId ? (state.folders[folderId]?.name ?? "폴더") : "프로젝트";
       void Promise.all(moving.map((work) => api.updateWork(work.id, { folderId, sort: (first -= 1) })))
-        .then(() => moving.length > 1 && onToast(`프로젝트 ${moving.length}개를 「${name}」(으)로 옮겼습니다.`))
+        .then(() => moving.length > 1 && onToast(`프로젝트 ${moving.length}개를 ${withParticle(`「${name}」`, "으로/로")} 옮겼습니다.`))
         .catch(fail);
     },
     [api, state.works, state.folders, onToast, fail],
@@ -371,12 +372,12 @@ export function Sidebar({
     // As the tree always did: a session links with another, reorders among its own, or becomes a page of a work.
     if (dragged.type === "session" && row.type === "work" && actions.sessionPage) {
       const work = row.work;
-      return { element, mark: "drop-page", hint: ` → 「${work.title}」에 세션 기록 페이지`, run: () => actions.sessionPage!(dragged.session, work) };
+      return { element, mark: "drop-page", hint: ` → 「${work.title}」에 대화 기록 페이지`, run: () => actions.sessionPage!(dragged.session, work) };
     }
     const pair = linkPair(dragged, row);
     const where = zoneOf(element, y, holds(row, dragged) || Boolean(pair));
     const link = where === "inside" && pair && linkable(Object.values(state.links), pair.map((session) => session.id)) ? pair : null;
-    if (link) return { element, mark: "drop-link", linking: true, text: `⇄ 세션 잇기: ${link[0].purpose} · ${link[1].purpose}`, run: () => actions.linkSessions(link) };
+    if (link) return { element, mark: "drop-link", linking: true, text: `⇄ 대화 잇기: ${link[0].purpose} · ${link[1].purpose}`, run: () => actions.linkSessions(link) };
     const move = pair && where === "inside" ? null : moveFor(state, dragged, row, where, "manual");
     return { element, mark: move ? `drop-${where}` : "drop-refused", run: move ? () => actions.move(move) : null };
   };
@@ -655,7 +656,7 @@ export function Sidebar({
           setDialog(null);
           void api
             .deleteFolder(folder.id)
-            .then(() => onToast(`「${folder.name}」 폴더를 지웠습니다. 안의 것은 「${parentName}」(으)로 옮겼습니다.`))
+            .then(() => onToast(`「${folder.name}」 폴더를 지웠습니다. 안의 것은 ${withParticle(`「${parentName}」`, "으로/로")} 옮겼습니다.`))
             .catch(fail);
         }}
         onArchive={() => {
@@ -724,7 +725,7 @@ export function Sidebar({
 
       <div className="side-foot">
         <UsageCard providers={state.providers} onRefresh={actions.refreshUsage} folded={Boolean(nav.sections.usage)} onFold={(folded) => saveNav({ sections: { ...nav.sections, usage: folded } })} />
-        <button type="button" className="side-row" onClick={actions.openArchive} title="보관한 세션·작업·폴더와 지운 문서">
+        <button type="button" className="side-row" onClick={actions.openArchive} title="보관한 대화·작업·폴더와 지운 문서">
           <Icon name="archive" size={15} className="side-row-icon" />
           <span className="side-row-label">보관함</span>
           {archived ? <span className="side-row-trail muted">{archived}</span> : null}

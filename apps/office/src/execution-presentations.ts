@@ -5,7 +5,11 @@ const guardDocumentKeyboard = (event: KeyboardEvent) => {
   if (!presentationLocked || event.target instanceof Element && event.target.closest('.ai-dock, .ai-panel, [role="dialog"], input, textarea, select, button')) return;
   event.preventDefault(); event.stopImmediatePropagation();
 };
+/** The visible editor's hold (editor-hold.ts): looking stays free, typing and changes wait, a line says so. */
+const editorHold = () => (globalThis as { workbenchEditorHold?: { lock(locked: boolean): void } }).workbenchEditorHold;
 export function lockPresentationSurface(locked: boolean): void {
+  const hold = editorHold();
+  if (hold) { hold.lock(locked); return; }
   presentationLocked = locked;
   for (const element of document.querySelectorAll<HTMLElement>('.app-content, .ribbon')) element.inert = locked;
   window.removeEventListener('keydown', guardDocumentKeyboard, true);

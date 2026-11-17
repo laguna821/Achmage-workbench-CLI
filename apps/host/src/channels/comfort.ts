@@ -98,6 +98,20 @@ export const footerOn = (binding: Binding, otherwise = true) => (typeof binding.
 /** "리모콘" (ux/briefs/phone-remote-brief.md): the one line in the help and in the pairing welcome. */
 export const REMOTE_LINE = "프로젝트 이름을 대고 시키면 그 프로젝트에서 일합니다. 예: 「강의계획서 프로젝트에서 서론 다시 써 줘」";
 
+/** Whether a chat asked for "확인 받기" (unit 13, design m02 §7.3): off unless turned on. */
+export const confirmOn = (binding: Binding) => binding.prefs.confirm === true;
+
+/**
+ * "확인 받기", said once in the chat each time it is turned on or off. What `auto` lets through is
+ * read from the providers: Claude Code's `acceptEdits` (claude.ts PERMISSION_MODE; reading and the
+ * edit tools go through, any other tool that needs permission asks), Codex's `on-request` with the
+ * `workspace-write` sandbox without network (codex.ts ACCESS / sandboxPolicy; asks to go beyond it).
+ */
+export const CONFIRM_ON = "확인 받기를 켰습니다. 앞으로 이 채팅이 만드는 새 대화는 '자동' 모드입니다: Claude는 파일 읽기·고치기만 알아서 하고 명령 실행·웹 접근 같은 다른 일은 먼저 묻고, Codex는 작업 폴더 안의 일만 인터넷 없이 알아서 하고 그 밖의 일은 먼저 묻습니다. 지금 있는 대화는 그대로입니다.";
+export const CONFIRM_OFF = "확인 받기를 껐습니다. 앞으로 새 대화는 전처럼 묻지 않고 끝까지 합니다. 지금 있는 대화는 그대로입니다.";
+/** The row in 메뉴 › 알림 (its state first, as the rows beside it). */
+export const CONFIRM_ROW = "확인 받기(새 대화가 먼저 묻기)";
+
 const HELP_WORDS = [
   "그냥 적어 보내면 지금 대화의 AI에게 갑니다. 사진·파일도 그대로 보내면 됩니다. 일하는 중에 보내면 그 일에 덧붙입니다.",
   REMOTE_LINE,
@@ -110,6 +124,7 @@ const HELP_WORDS = [
   "· 꼬리말 끄기 / 꼬리말 켜기 — 답 아래 모델·시간 줄",
   "· 계획 먼저: … — 계획을 먼저 받고 [진행]",
   "· 결정으로 적어 줘: … — 프로젝트 노트에 적기",
+  "· 메뉴 › 알림 › 확인 받기 — 켜면 새 대화가 명령 실행 같은 일을 하기 전에 [허용] [거절]로 묻습니다",
   "",
   "메뉴에는: 대화·프로젝트 바꾸기, 엔진·모델, 최근 파일, 프로젝트 노트, 찾기, 예약, 사용량, 알림, 상태·대기열, 채널 잠금",
 ];

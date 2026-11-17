@@ -38,6 +38,8 @@ vi.mock("./OfficeEditor.tsx", async () => {
 
 beforeEach(() => { sidebar.open = true; sidebar.off = false; sidebar.sets = []; vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} })); });
 afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllGlobals(); vi.useRealTimers(); })
+// These open documents in their editor: the person's choice "편집기로 바로 열기" (the default is 쪽 보기 first since doc-default).
+beforeEach(() => { localStorage.setItem("workbench.docOpen", "editor"); });
 
 const work = { id: "w", title: "강의", cwd: "/w", folderId: null, archivedAt: null } as unknown as Work;
 const artifact = { id: "doc", workId: "w", name: "메모.txt", path: "/w/메모.txt", format: "text", revision: 1, sha256: "", size: 4, diskState: "same", readBy: {}, createdAt: 1, updatedAt: 1 } as Artifact;

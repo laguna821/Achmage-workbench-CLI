@@ -77,7 +77,8 @@ function lineOf(session: Session) {
 /** The last request and reply of a session, the reply folded to its points (textfold, no model). */
 /** `asks`: list the approvals still open (off inside an entry, whose head and cells already say what it asks). */
 function LastReply({ api, state, session, asks = true }: { api: Api; state: State; session: Session; asks?: boolean }) {
-  const loaded = state.transcripts[session.id]?.items;
+  // Behind while its items wait aside (perf G1): read from the gateway then.
+  const loaded = state.aside[session.id] ? undefined : state.transcripts[session.id]?.items;
   const [items, setItems] = useState<TranscriptItem[] | null>(loaded ?? null);
   // Which answer the items on screen hold (the session's previewAt when they were read): a newer answer
   // is not "seen" until its own transcript is here and shown (tech review 4).
@@ -188,7 +189,8 @@ const planLine = (text: string | null | undefined) =>
 
 /** What a waiting session asks: its open approval, read from the transcript (loaded if not at hand). */
 function useOpenApproval(api: Api, state: State, session: Session) {
-  const loaded = state.transcripts[session.id]?.items;
+  // Behind while its items wait aside (perf G1): read from the gateway then.
+  const loaded = state.aside[session.id] ? undefined : state.transcripts[session.id]?.items;
   const [items, setItems] = useState<TranscriptItem[] | null>(loaded ?? null);
   useEffect(() => {
     if (loaded) return setItems(loaded);
@@ -486,7 +488,7 @@ function NowMode({ api, state, open, views, onViews }: { api: Api; state: State;
           onOpen={(session) => open.session(session)}
           canMove={fixed}
           onMove={() => pkm?.onToast(failure(fixed() ?? ""))}
-          cardHint="누르면 세션 열기"
+          cardHint="누르면 대화 열기"
         />
         {!ordered.length ? <p className="home-quiet">지금 기다리는 일은 없습니다.</p> : null}
         {panel}

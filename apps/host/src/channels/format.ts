@@ -199,8 +199,38 @@ function cells(line: string): string[] {
 
 const indentOf = (space: string) => Math.min(4, Math.floor(space.replace(/\t/g, "    ").length / 2));
 
+/**
+ * How a messenger shows a table: as a bold header line and a bullet per row (the default: every
+ * width, every messenger), or — `pre` — as an aligned monospace block when it is at most
+ * TABLE_COLUMNS wide (a wider one keeps the bullet form, which wraps on a phone).
+ */
+export type TableStyle = "lines" | "pre";
+export const TABLE_COLUMNS = 60;
+
+/** How many monospace columns a text takes: wide (Hangul, CJK, full-width forms, emoji) characters two. */
+export function columns(text: string): number {
+  let width = 0;
+  for (const char of text) {
+    const code = char.codePointAt(0)!;
+    if (/\p{Mn}|\p{Cf}/u.test(char)) continue;
+    width += (code >= 0x1100 && code <= 0x115f) || (code >= 0x2e80 && code <= 0xa4cf) || (code >= 0xac00 && code <= 0xd7a3) || (code >= 0xf900 && code <= 0xfaff)
+      || (code >= 0xfe30 && code <= 0xfe4f) || (code >= 0xff00 && code <= 0xff60) || (code >= 0xffe0 && code <= 0xffe6) || (code >= 0x1f300 && code <= 0x1faff) || (code >= 0x20000 && code <= 0x3fffd) ? 2 : 1;
+  }
+  return width;
+}
+
+/** A table's cells as text (their inline markdown read, its signs gone) laid out in aligned columns, or null when wider than TABLE_COLUMNS. */
+function tableBlock(rows: string[][]): string | null {
+  const shown = rows.map((row) => row.map((cell) => { const out = new Out(); inline(cell, 0, cell.length, out); return out.text; }));
+  const count = Math.max(...shown.map((row) => row.length));
+  const widths = Array.from({ length: count }, (_, column) => Math.max(1, ...shown.map((row) => columns(row[column] ?? ""))));
+  const line = (row: string[]) => widths.map((width, column) => { const cell = row[column] ?? ""; return column === count - 1 ? cell : cell + " ".repeat(width - columns(cell)); }).join(" | ").trimEnd();
+  const lines = [line(shown[0]!), widths.map((width) => "-".repeat(width)).join("-+-"), ...shown.slice(1).map(line)];
+  return lines.every((text) => columns(text) <= TABLE_COLUMNS) ? lines.join("\n") : null;
+}
+
 /** Markdown as a person reads it: the text, and the marks over it. Never throws. */
-export function readable(markdown: string): { text: string; marks: Mark[] } {
+export function readable(markdown: string, options: { tables?: TableStyle } = {}): { text: string; marks: Mark[] } {
   const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
   const out = new Out();
   let first = true;
@@ -225,15 +255,22 @@ export function readable(markdown: string): { text: string; marks: Mark[] } {
     // A table: its header as a bold line, then each row as a bullet, the cells joined by " · ".
     const header = current.includes("|") && at + 1 < lines.length && isTableRule(lines[at + 1]!) ? cells(current) : [];
     if (header.length >= 2) {
-      const row = (values: string[], bullet: boolean) => line(() => {
+      let end = at + 2;
+      while (end < lines.length && lines[end]!.includes("|") && lines[end]!.trim()) end += 1;
+      const block = options.tables === "pre" ? tableBlock([header, ...lines.slice(at + 2, end).map(cells)]) : null;
+      if (block) {
+        line(() => { const start = out.text.length; out.add(block); out.mark("pre", start); });
+        at = end - 1;
+        continue;
+      }
+      const row =(values: string[], bullet: boolean) => line(() => {
         if (bullet) out.add("• ");
         const start = out.text.length;
         values.filter(Boolean).forEach((cell, index) => { if (index) out.add(" · "); span(cell); });
         if (!bullet) out.mark("bold", start);
       });
       row(header, false);
-      let end = at + 2;
-      for (; end < lines.length && lines[end]!.includes("|") && lines[end]!.trim(); end += 1) row(cells(lines[end]!), true);
+      for (let next = at + 2; next < end; next += 1) row(cells(lines[next]!), true);
       at = end - 1;
       continue;
     }
@@ -400,8 +437,8 @@ export function splitRich(text: string, marks: Mark[], limit: number): { text: s
  * a value the markup had split is still caught; then the text goes plain, with it hidden. A link's
  * address and a code block's language leave too, so they are read as well.
  */
-export function formatted(markdown: string, scrub: (text: string) => string): { text: string; marks?: Mark[] } {
-  const { text, marks } = readable(markdown);
+export function formatted(markdown: string, scrub: (text: string) => string, options: { tables?: TableStyle } = {}): { text: string; marks?: Mark[] } {
+  const { text, marks } = readable(markdown, options);
   const seen = scrub(text);
   // Something was hidden: the text goes plain, with each link's address written out (not dropped) and read again.
   if (seen !== text) return { text: scrub(plain({ text, marks })) };

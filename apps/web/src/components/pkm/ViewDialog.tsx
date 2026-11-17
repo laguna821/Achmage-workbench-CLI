@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { failure } from "../../top-notice.ts";
 import { Icon } from "../Icon.tsx";
+import { Select } from "../ui/Select.tsx";
 import { usePkm } from "./PkmContext.tsx";
 import "../../styles/pkm.css";
 
@@ -93,14 +94,8 @@ export function ViewDialog({ id }: { id: string | null }) {
         <label className="sheet-label" htmlFor="view-group">
           묶기
         </label>
-        <select id="view-group" className="sheet-select" value={groupBy} onChange={(event) => setGroupBy(event.target.value)}>
-          {GROUPS.map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-          {groupBy && !GROUPS.some(([value]) => value === groupBy) ? <option value={groupBy}>{groupBy}</option> : null}
-        </select>
+        <Select id="view-group" label="묶기" value={groupBy} onChange={setGroupBy}
+          options={[...GROUPS.map(([value, label]) => ({ value, label })), ...(groupBy && !GROUPS.some(([value]) => value === groupBy) ? [{ value: groupBy, label: groupBy }] : [])]} />
         <div className="view-preview" role="status">
           {preview ? `맞는 것 ${preview.total}개` : "조건을 적으면 맞는 개수가 보입니다."}
           {preview?.problems.length ? <span className="warn"> · 읽지 못한 조건: {preview.problems.join(" ")}</span> : null}

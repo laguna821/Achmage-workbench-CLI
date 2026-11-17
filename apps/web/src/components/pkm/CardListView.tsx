@@ -121,9 +121,9 @@ function CardView({
               <TagPill key={tag} tag={tag} color={tagColor(tagColors, tag)} />
             ))}
             {card.tags.length > 6 ? <span className="muted">+{card.tags.length - 6}</span> : null}
-            {card.kind === "note" && card.sessions ? <span className="pkm-card-sessions" title="이 노트를 붙여 보낸 세션">붙인 세션 {card.sessions}</span> : null}
-            {card.kind === "note" && card.engineReads ? <span className="pkm-card-sessions" title="엔진이 스스로 이 노트를 읽은 세션">엔진이 읽음 {card.engineReads}</span> : null}
-            {card.kind === "work" && card.sessions ? <span className="pkm-card-sessions">세션 {card.sessions}</span> : null}
+            {card.kind === "note" && card.sessions ? <span className="pkm-card-sessions" title="이 노트를 붙여 보낸 대화">붙인 대화 {card.sessions}</span> : null}
+            {card.kind === "note" && card.engineReads ? <span className="pkm-card-sessions" title="엔진이 스스로 이 노트를 읽은 대화">엔진이 읽음 {card.engineReads}</span> : null}
+            {card.kind === "work" && card.sessions ? <span className="pkm-card-sessions">대화 {card.sessions}</span> : null}
             {card.format && card.kind === "page" ? <span className="pkm-card-where">{FORMAT_LABEL[card.format]}</span> : null}
             {card.where ? <span className="pkm-card-where">{card.where}</span> : null}
           </div>
@@ -229,7 +229,7 @@ export function CardListView({ target }: { target: Exclude<PkmTarget, { kind: "n
               onSelect: () =>
                 void pkm.client
                   .pin(work.id, card.id, !pinned)
-                  .then(() => pkm.onToast(pinned ? `「${work.title}」에서 고정을 풀었습니다.` : `「${work.title}」에 고정했습니다. 그 작업의 새 세션이 이 노트 경로를 받습니다.`))
+                  .then(() => pkm.onToast(pinned ? `「${work.title}」에서 고정을 풀었습니다.` : `「${work.title}」에 고정했습니다. 그 작업의 새 대화가 이 노트 경로를 받습니다.`))
                   .catch((reason: Error) => pkm.onToast(failure(reason))),
             };
           }),
@@ -288,7 +288,7 @@ export function CardListView({ target }: { target: Exclude<PkmTarget, { kind: "n
           {error ? <div className="notice notice-error">{error}</div> : null}
           {list?.problems?.length ? <div className="notice notice-info">읽지 못한 조건은 빼고 보입니다: {list.problems.join(" ")}</div> : null}
           {list && !list.cards.length ? (
-            <div className="empty-hint">{target.kind === "vault" ? "이 폴더에 노트가 없습니다." : target.kind === "folder" ? "이 폴더에 작업이 없습니다." : target.kind === "view" ? "이 보기에 맞는 것이 없습니다." : "아직 세션이나 페이지가 없습니다."}</div>
+            <div className="empty-hint">{target.kind === "vault" ? "이 폴더에 노트가 없습니다." : target.kind === "folder" ? "이 폴더에 작업이 없습니다." : target.kind === "view" ? "이 보기에 맞는 것이 없습니다." : "아직 대화나 페이지가 없습니다."}</div>
           ) : null}
           {groups.map((group) => (
             <section key={group.label} className="pkm-group" aria-label={group.label}>

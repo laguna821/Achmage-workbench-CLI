@@ -9,6 +9,7 @@ import { closeSync, copyFileSync, createReadStream, existsSync, mkdirSync, openS
 import { basename, dirname, join } from "node:path";
 import { versionWith, type AppInstallKind } from "@workbench/contracts";
 import { extractPrefix } from "./tar.ts";
+import { guiEnvironment } from "../gui-env.ts";
 
 export type InstallPlan = {
   /** Only the kinds installed as the person themselves; deb, pacman and MSI take the saved-installer fallback (security review M1). */
@@ -230,7 +231,7 @@ export function systemDeps(log: (line: string) => void, platform: NodeJS.Platfor
       child.once("error", () => { if (timer) clearTimeout(timer); resolve(127); });
       child.once("exit", code => { if (timer) clearTimeout(timer); resolve(code ?? 1); });
     }),
-    launch: (command, args) => { const child = spawn(command, args, { detached: true, stdio: "ignore", windowsHide: false, env: relaunchEnv(process.env) }); child.on("error", () => undefined); child.unref(); },
+    launch: (command, args) => { const child = spawn(command, args, { detached: true, stdio: "ignore", windowsHide: false, env: relaunchEnv(guiEnvironment(process.env)) }); child.on("error", () => undefined); child.unref(); },
     alive: pid => { try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === "EPERM"; } },
     appRunning: appBin => appRunning(appBin, platform),
     sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),

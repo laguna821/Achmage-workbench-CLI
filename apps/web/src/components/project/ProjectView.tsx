@@ -1,3 +1,4 @@
+import { withParticle } from "@workbench/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { ItemIcon } from "../ItemIcon.tsx";
 import { PROVIDER_LABEL, type ProjectEvent, type ProjectPage, type ProjectSummary, type ProjectWrite, type Session, type StoppedPlace, type Work } from "@workbench/contracts";
@@ -587,7 +588,7 @@ function ProjectNotePage({
                 <>
                   {next ? (
                     <button type="button" className="button small project-continue" onClick={() => onOpenSession(next)} title="이 프로젝트에서 이어서 하기">
-                      <EngineMark provider={next.provider} size={14} /> 이어서: {next.purpose || "세션"}
+                      <EngineMark provider={next.provider} size={14} /> 이어서: {next.purpose || "대화"}
                     </button>
                   ) : null}
                   {onCreate ? <button type="button" className="button small" aria-haspopup="menu" title="이 프로젝트에서 새 대화, 문서, 웹" onClick={(event) => onCreate(event.currentTarget)}><Icon name="plus" size={14} /> 새로 만들기</button> : null}
@@ -611,7 +612,7 @@ function ProjectNotePage({
               {page.lastReadable ? (
                 <>
                   <button type="button" className="link small" aria-pressed={comparingBroken} onClick={() => setComparingBroken(!comparingBroken)}>비교</button>
-                  <button type="button" className="link small" onClick={() => run(seenRevision, (base) => api.revertProjectNoteTo(workId, page.lastReadable!.revision, base))}>r{page.lastReadable.revision}로 되돌리기</button>
+                  <button type="button" className="link small" onClick={() => run(seenRevision, (base) => api.revertProjectNoteTo(workId, page.lastReadable!.revision, base))}>r{withParticle(`${page.lastReadable.revision}`, "으로/로")} 되돌리기</button>
                 </>
               ) : null}
             </div>
@@ -765,7 +766,7 @@ function ProjectNotePage({
             <SectionLabel collapsed={detailsFolded} onToggle={toggleDetails} controls="pn-details">자세히</SectionLabel>
             {detailsFolded ? null : (
               <dl className="pn-details" id="pn-details">
-                <div><dt>세션</dt><dd>{facts.sessions}{Object.entries(facts.engines).map(([provider, count]) => <span key={provider} className="pn-detail-part"><EngineMark provider={provider as keyof typeof PROVIDER_LABEL} size={14} />{PROVIDER_LABEL[provider as keyof typeof PROVIDER_LABEL]} {count}</span>)}</dd></div>
+                <div><dt>대화</dt><dd>{facts.sessions}{Object.entries(facts.engines).map(([provider, count]) => <span key={provider} className="pn-detail-part"><EngineMark provider={provider as keyof typeof PROVIDER_LABEL} size={14} />{PROVIDER_LABEL[provider as keyof typeof PROVIDER_LABEL]} {count}</span>)}</dd></div>
                 <div><dt>모델</dt><dd title={facts.models.join(", ")}>{facts.models.join(", ") || "없음"}</dd></div>
                 <div><dt>요청</dt><dd>{facts.requests}회<span className="pn-detail-part">{duration(facts.turnMs)}</span></dd></div>
                 <div><dt>파일 판</dt><dd>{facts.files}<span className="pn-detail-part">사람 {facts.revisions.user}</span><span className="pn-detail-part">AI {facts.revisions.engine}</span>{facts.revisions.external ? <span className="pn-detail-part">앱 밖 {facts.revisions.external}</span> : null}</dd></div>
@@ -790,7 +791,7 @@ function ProjectNotePage({
                     {page.readNotes.map((read) => (
                       <li key={read.path}>
                         {onOpenNote ? <button type="button" className="link" title={read.path} onClick={() => onOpenNote(read.path)}>{read.title}</button> : <span title={read.path}>{read.title}</span>}
-                        <span className="muted">세션 {read.sessions}</span>
+                        <span className="muted">대화 {read.sessions}</span>
                       </li>
                     ))}
                   </ul>

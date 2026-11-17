@@ -1,3 +1,4 @@
+import { withParticle } from "@workbench/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState, type FocusEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Prec } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
@@ -87,7 +88,7 @@ function keyCaret(source: string, key: string): number {
 /** Who wrote the note's latest revision, in a sentence ("Codex · 슬라이드 정리가"). */
 function whoWrote(page: ProjectPage, sessions: Record<string, Session>) {
   const session = page.note.lastSessionId ? sessions[page.note.lastSessionId] : undefined;
-  if (page.note.lastAuthor === "engine") return session ? `${PROVIDER_LABEL[session.provider]} · ${session.purpose || "세션"}이` : "엔진이";
+  if (page.note.lastAuthor === "engine") return session ? `${PROVIDER_LABEL[session.provider]} · ${withParticle(`${session.purpose || "대화"}`, "이/가")}` : "엔진이";
   if (page.note.lastAuthor === "external") return "앱 밖에서";
   return "다른 창에서";
 }

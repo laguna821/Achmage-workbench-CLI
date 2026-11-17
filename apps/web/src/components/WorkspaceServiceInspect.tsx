@@ -1,3 +1,4 @@
+import { Select } from "./ui/Select.tsx";
 import { useEffect, useRef, useState } from "react";
 import type { WorkspaceService } from "@workbench/contracts";
 import type { TerminalSearchResult } from "../../../../packages/contracts/src/terminal-runtime.ts";
@@ -32,10 +33,10 @@ export function WorkspaceServiceInspect({ api, service, mode, onClose }: { api: 
   };
   return <section className="workspace-service-inspect" aria-label={mode === "logs" ? "서비스 로그 검색" : "서비스 포트 요청"} aria-busy={busy}>
     <header><h3>{service.label} · {mode === "logs" ? "로그 검색" : "서비스 포트 요청"}</h3><button type="button" className="button small" onClick={onClose}>접기</button></header>
-    <p className="muted">{mode === "logs" ? "이 실행에 보관된 최근 2 MiB 출력에서 찾습니다." : `호스트 ${service.hostId} · 포트 ${service.port}. 현재 기기와 프로젝트에 허용된 연결로 요청합니다.`}</p>
+    <p className="muted">{mode === "logs" ? "이 실행에 보관된 최근 출력(실행 중 1 MiB, 끝난 뒤 256 KiB)에서 찾습니다." : `호스트 ${service.hostId} · 포트 ${service.port}. 현재 기기와 프로젝트에 허용된 연결로 요청합니다.`}</p>
     <form onSubmit={event => { event.preventDefault(); void run(); }}>
       {mode === "logs" ? <label>찾을 글자<input value={query} maxLength={256} onChange={event => setQuery(event.target.value)} autoFocus /></label> : <>
-        <label>요청 방식<select value={method} onChange={event => setMethod(event.target.value)}>{["GET", "POST", "PUT", "PATCH", "DELETE"].map(value => <option key={value}>{value}</option>)}</select></label>
+        <label>요청 방식<Select label="요청 방식" value={method} onChange={setMethod} options={["GET", "POST", "PUT", "PATCH", "DELETE"].map(value => ({ value, label: value }))} /></label>
         <label>서비스 안의 경로<input value={path} maxLength={16000} onChange={event => setPath(event.target.value)} placeholder="/api/status" /></label>
         {method !== "GET" ? <label>JSON 요청 내용<textarea value={body} onChange={event => setBody(event.target.value)} rows={4} maxLength={1_000_000} /></label> : null}
         <p className="muted">응답 내용을 확인하고 파일로 저장할 수 있습니다. 실제 웹 페이지는 실행 기록의 웹 화면 버튼에서 열 수 있습니다. POST·PUT·PATCH·DELETE는 이 서버의 데이터를 바꿀 수 있습니다.</p>

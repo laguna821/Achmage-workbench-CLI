@@ -134,6 +134,35 @@ describe("the page", () => {
     body.dispatchEvent(after); expect(after.defaultPrevented).toBe(false);
     off(); hold.dispose();
   });
+  it("holds dragging an object like typing: a press on a selected picture/table or its handles, or on a table border, waits; a press elsewhere (caret, select) does not (office-leftovers 4c)", () => {
+    const hold = installHwpHold(document, { stop: vi.fn() });
+    const studio = document.createElement("iframe"); document.body.append(studio);
+    const off = hold.guard(studio.contentWindow);
+    const sdoc = studio.contentDocument!;
+    sdoc.body.innerHTML = `<div id="scroll-container"><div id="scroll-content"><div class="page"></div><div class="table-object-layer"></div></div></div>`;
+    const container = sdoc.getElementById("scroll-container")!, page = sdoc.querySelector<HTMLElement>(".page")!, layer = sdoc.querySelector<HTMLElement>(".table-object-layer")!;
+    const press = (x: number, y: number) => { const e = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y }); page.dispatchEvent(e); return e.defaultPrevented; };
+    reportTurnActivity({ kind: "start" }); reportTurnActivity(edit);
+    // Nothing selected, plain text cursor: a press places the caret / starts a selection — free.
+    expect(press(100, 100)).toBe(false);
+    // A picture is selected (the editor draws its outline and handles in .table-object-layer).
+    const outline = sdoc.createElement("div"); layer.append(outline);
+    vi.spyOn(outline, "getBoundingClientRect").mockReturnValue({ left: 200, top: 200, right: 300, bottom: 260, width: 100, height: 60, x: 200, y: 200, toJSON() {} } as DOMRect);
+    expect(press(250, 230)).toBe(true);   // on the picture: would move it
+    expect(press(305, 265)).toBe(true);   // on a corner handle just outside: would resize it
+    expect(press(600, 600)).toBe(false);  // elsewhere: deselects / places the caret
+    outline.remove();
+    // Hovering a table border (the editor shows col-resize): the press would resize the column.
+    container.style.cursor = "col-resize";
+    expect(press(100, 100)).toBe(true);
+    container.style.cursor = "";
+    // At the end nothing is held.
+    reportTurnActivity({ kind: "end", status: "completed" });
+    container.style.cursor = "move";
+    expect(press(100, 100)).toBe(false);
+    off(); hold.dispose();
+  });
+
   it("the dock's status line sits above its input and shows the engine's error", () => {
     document.body.innerHTML = `<div class="hwp-app"><div class="ai-dock"><div class="panel"><div class="ai-input-box"><textarea></textarea></div></div></div></div>`;
     const hold = installHwpHold(document, { stop: () => {} });

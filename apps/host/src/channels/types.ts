@@ -1,4 +1,5 @@
 import type { ChannelKind } from "@workbench/contracts";
+import type { TableStyle } from "./format.ts";
 
 // What a messenger platform has to do, and nothing more. Pairing, who may speak, which
 // conversation a message goes to, what is sent once, and the audit trail belong to the core
@@ -62,6 +63,17 @@ export type Mark = { type: "bold" | "italic" | "strike" | "code" | "pre" | "link
  */
 export type SendOptions = { stillWanted?: () => boolean };
 export type SecretAsk = { requestId: string; title: string; fields: string[] };
+/**
+ * One value asked for in the messenger's own input form (Slack: a modal with one text field).
+ * `token`: random, single-use, ends with its request, and says nothing of the request or the value.
+ */
+export type SecretForm = { token: string; heading: string; field: string; hint: string; maxLength: number };
+/** What the person did with a form: submitted it (`value` in memory only, never logged or stored) or closed it. */
+export type SecretFormEvent =
+  | { type: "submit"; token: string; viewId: string; userId: string; value: string | null }
+  | { type: "closed"; token: string; viewId: string; userId: string };
+/** The answer to a submit: done (the form closes), the form again for the next field, or one plain line shown in the form. */
+export type SecretFormAnswer = { next: SecretForm } | { refuse: string } | null;
 
 export type ChannelStatus = { state: "connected" | "retrying" | "conflict" | "stopped"; detail: string | null };
 
@@ -125,6 +137,22 @@ export interface ChannelAdapter {
    * absent (its input is the chat's own). An adapter without the hooks must say false.
    */
   readonly secretInput?: boolean;
+  /**
+   * How a markdown table is shown (format.ts TableStyle): Slack as an aligned monospace block when it
+   * fits; absent: a bold header line and a bullet per row (Telegram).
+   */
+  readonly tables?: TableStyle;
+  /**
+   * The messenger's own input form for a value (Slack: a modal), for a chat without an in-chat input.
+   * `secretForms()`: whether one can be offered now (false after the messenger refused to open one:
+   * values go to the PC again). `openSecretForm`: opened from the button press `eventId` (Slack needs
+   * that press's trigger); "unavailable": the app cannot have forms (fall back to the PC); "retry":
+   * the press is too old or the call failed (a new button may be offered).
+   */
+  secretForms?(): boolean;
+  /** One plain sentence why no form is offered now although the messenger could have one (Slack: other connections of the app), else null. */
+  secretFormsWhyNot?(): string | null;
+  openSecretForm?(eventId: string, form: SecretForm): Promise<"opened" | "unavailable" | "retry">;
   /** Leave a chat that is not a direct one (the channel works in direct chats only). */
   leave?(chat: ChatRef): Promise<void>;
   status(): ChannelStatus;

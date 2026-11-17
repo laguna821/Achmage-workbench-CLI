@@ -1,7 +1,9 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { withParticle } from "@workbench/contracts";
+import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { TabClosed, useKeepOnClose } from "../../tab-sleep.ts";
 import { takeDiscarded } from "../../discarded-edits.ts";
 import { failure, type Notify } from "../../top-notice.ts";
-import type { Artifact, DocumentAccess, EditorGrant, OfficePageMessage } from "@workbench/contracts";
+import type { Artifact, DocumentAccess, EditorGrant, OfficePageMessage, OfficeViewPosition } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
 import type { RendererControlRequest, RendererControlReply } from "../../../../../packages/contracts/src/office-control.ts";
 import type { OfficeMcpRequest, OfficeMcpReply } from "../../../../../packages/contracts/src/office-mcp.ts";
@@ -21,6 +23,7 @@ import type { KnowledgeOpenRequest } from "../../../../../packages/contracts/src
 import type { PdfNoteRequest, PdfNoteResult } from "../../../../../packages/contracts/src/pdf-notes.ts";
 import { PdfNoteDialog } from "./PdfNoteDialog.tsx";
 import { paletteOf } from "../../theme.ts";
+import { markNewDocument } from "../../doc-new.ts";
 
 const BUSY = failure("문서를 여는 중이거나 다른 출력을 처리 중입니다.");
 
@@ -80,9 +83,15 @@ export const OfficeEditor = forwardRef<
   { api: Api; artifact: Artifact; access?: DocumentAccess; sessionId: string | null; hidden?: boolean; onStatus(status: OfficeStatus): void; onAiPanel?(open: boolean, draft?: string, dock?: { ready: boolean; person: boolean; shown?: boolean; off?: boolean }): void;
     /** The editor's page is opened again in place (a new frame: its own AI dock, if any, is drawn afresh). */
     onReload?(): void; onNotice: Notify;
+    /** The page reports itself drawn at its fitted place (PowerPoint's slide): the page picture over the booting editor may go. */
+    onPageDrawn?(): void;
+    /** Where the view was when the tab last showed it: a page opened again gets it in its init (office-leftovers point 3). */
+    viewPosition?: OfficeViewPosition;
+    /** The page says where its view is now: the tab keeps it. */
+    onViewPosition?(position: OfficeViewPosition): void;
     /** The Hangul safety net's warnings (a save that may have lost something, or went unchecked): the document's notice line keeps them. Without it they go to `onNotice`. */
     onWarning?(warning: string): void; onCopied?(artifactId: string, scope?: Pick<Artifact, "workId" | "workspaceId"> & { preserveSource?: boolean }): void; onPresent?(value: OfficePresentation): void; onPrepareAi(revision: number): Promise<void>; onNewSession(revision: number): Promise<string>; onAiSettings(): void }
->(function OfficeEditor({ api, artifact, access, sessionId, hidden = false, onStatus, onAiPanel, onReload, onNotice, onWarning, onCopied, onPresent, onPrepareAi, onNewSession, onAiSettings }, ref) {
+>(function OfficeEditor({ api, artifact, access, sessionId, hidden = false, onStatus, onAiPanel, onReload, onNotice, onWarning, onCopied, onPresent, onPrepareAi, onNewSession, onAiSettings, onPageDrawn, viewPosition, onViewPosition }, ref) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [generation, setGeneration] = useState(0);
   // Each opening of the page gets its own grant (a token for this document only).
@@ -105,7 +114,7 @@ export const OfficeEditor = forwardRef<
   const waiters = useRef<((revision: number | null) => void)[]>([]);
   // False only for the reload right after "open the latest revision": kept edits are dropped then.
   const recover = useRef(true);
-  const handlers = useRef({ onStatus, onAiPanel, onReload, onNotice, onWarning, onCopied, onPresent, onPrepareAi, onNewSession, onAiSettings });
+  const handlers = useRef({ onStatus, onAiPanel, onReload, onNotice, onWarning, onCopied, onPresent, onPrepareAi, onNewSession, onAiSettings, onPageDrawn, onViewPosition });
   // While the editor is being left (a leave-save: tab ×, another project), the document's own notice line goes
   // away with the view: the warning also goes to the app-level notice, which outlives it (tech review T1).
   const leavingNow = useRef(false);
@@ -118,7 +127,8 @@ export const OfficeEditor = forwardRef<
     if (uncheckedNoticed.has(artifact.id)) return;
     uncheckedNoticed.add(artifact.id); warn(HWP_UNCHECKED_NOTICE);
   };
-  handlers.current = { onStatus, onAiPanel, onReload, onNotice, onWarning, onCopied, onPresent, onPrepareAi, onNewSession, onAiSettings };
+  handlers.current = { onStatus, onAiPanel, onReload, onNotice, onWarning, onCopied, onPresent, onPrepareAi, onNewSession, onAiSettings, onPageDrawn, onViewPosition };
+  const viewRef = useRef(viewPosition); viewRef.current = viewPosition;
   // The page opened again in place: whoever follows its AI dock must not take the new one for the old.
   const firstGeneration = useRef(generation);
   useEffect(() => { if (generation !== firstGeneration.current) handlers.current.onReload?.(); }, [generation]);
@@ -212,18 +222,67 @@ export const OfficeEditor = forwardRef<
     document.addEventListener("visibilitychange", onVisible);
     return () => { window.removeEventListener("focus", onHint); document.removeEventListener("visibilitychange", onVisible); window.clearTimeout(compareTimer.current); };
   }, [verifies, artifact.id]);
+  // The page said it can take a new revision in place (office:replace-ready); `replacing`: the revision asked for.
+  const replaceable = useRef(false), replacing = useRef<number | null>(null);
+  // A 문서 AI turn running live in this editor (not in the executor): its tab's closing keeps this view mounted off
+  // screen until the turn ends (Panes.tsx); a kept view tells its page so (office:kept-closed).
+  const [liveTurn, setLiveTurn] = useState(false);
+  useKeepOnClose(liveTurn);
+  const closedTab = useContext(TabClosed);
+  /** Open the latest revision: in the running editor when it can (same frame, view kept), else the page again. */
+  const openLatest = () => {
+    const shown = status.current.revision, revision = latest.current.revision;
+    if (replaceable.current && shown !== null) {
+      if (replacing.current !== null && replacing.current >= revision) return;
+      replacing.current = revision;
+      send({ type: "office:replace", revision, before: shown });
+      return;
+    }
+    update({ revision: null });
+    setGeneration((value) => value + 1);
+  };
   const reconcile = () => {
     const shown = status.current.revision, revision = latest.current.revision;
     if (shown === null || revision <= shown || own.current.has(revision)) return;
     if (Date.now() - savingSince.current < 15_000) return;
     if (!status.current.dirty && !status.current.conflict) {
-      update({ revision: null });
-      setGeneration((value) => value + 1);
-    } else if (!status.current.conflict) update({ conflict: { code: "revision_conflict", message: `다른 곳에서 r${revision}이 생겼습니다. 저장하지 않은 편집은 편집기에 그대로 있습니다.` } });
+      openLatest();
+    } else if (!status.current.conflict) update({ conflict: { code: "revision_conflict", message: `다른 곳에서 r${withParticle(`${revision}`, "이/가")} 생겼습니다. 저장하지 않은 편집은 편집기에 그대로 있습니다.` } });
   };
   const send = (value: unknown) => {
     if (opened.current) frame.current?.contentWindow?.postMessage(value, opened.current.origin);
   };
+  // Whether the frame is on screen (A10): a hidden editor rests — its repeating timers and animation
+  // frames wait until it is shown again (apps/office/src/page-rest.ts). Hidden = its pane or tab is not
+  // shown, the view is covered (`hidden`), or the app window itself is hidden.
+  const onScreen = useRef(true), intersecting = useRef(true);
+  const observed = useRef<{ element: HTMLIFrameElement; stop(): void } | null>(null);
+  const tellShown = (force = false) => {
+    const element = frame.current;
+    const next = Boolean(element) && !hidden && document.visibilityState !== "hidden" && intersecting.current;
+    if (next === onScreen.current && !force) return;
+    onScreen.current = next;
+    send({ type: "office:shown", shown: next });
+  };
+  const tellShownRef = useRef(tellShown);
+  tellShownRef.current = tellShown;
+  useEffect(() => {
+    const element = frame.current;
+    if (observed.current?.element === element) { tellShownRef.current(); return; }
+    observed.current?.stop();
+    observed.current = null;
+    if (!element || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver((entries) => {
+      const entry = entries[entries.length - 1];
+      if (entry) intersecting.current = entry.isIntersecting;
+      tellShownRef.current();
+    });
+    observer.observe(element);
+    const onVisibility = () => tellShownRef.current();
+    document.addEventListener("visibilitychange", onVisibility);
+    observed.current = { element, stop: () => { observer.disconnect(); document.removeEventListener("visibilitychange", onVisibility); } };
+  });
+  useEffect(() => () => { observed.current?.stop(); observed.current = null; }, []);
   const waitFlushed = () =>
     new Promise<number | null>((resolve) => {
       const finish = (revision: number | null) => {
@@ -243,7 +302,7 @@ export const OfficeEditor = forwardRef<
     const target = frame.current?.contentWindow, origin = opened.current?.origin;
     if (!target || !origin) return;
     const owner = latest.current.id, selectionSession = opened.current?.sessionId;
-    const checkSelection = () => { if (target !== frame.current?.contentWindow || owner !== latest.current.id || selectionSession !== opened.current?.sessionId) throw new Error("첨부 중 문서 창이나 세션이 바뀌었습니다."); };
+    const checkSelection = () => { if (target !== frame.current?.contentWindow || owner !== latest.current.id || selectionSession !== opened.current?.sessionId) throw new Error("첨부 중 문서 창이나 대화가 바뀌었습니다."); };
     const upload = async (file: File) => {
       checkSelection();
       if (!(file instanceof File) || file.size > 50 * 1024 * 1024) throw new Error("첨부는 파일당 50MB까지입니다.");
@@ -496,6 +555,8 @@ export const OfficeEditor = forwardRef<
     };
   }, [artifact.id, generation, sessionId]);
   useEffect(() => () => { copied.current.clear(); }, [artifact.id, generation]);
+  // A new page says again whether it can take revisions in place.
+  useEffect(() => { replaceable.current = false; replacing.current = null; setLiveTurn(false); }, [artifact.id, generation]);
 
   const handleAi = async (message: Extract<OfficePageMessage, { type: "office:ai-request" }>) => {
     const target = frame.current?.contentWindow, origin = opened.current?.origin;
@@ -503,14 +564,14 @@ export const OfficeEditor = forwardRef<
     const reply = (value?: unknown, error?: string) => target.postMessage({ type: "office:ai-result", requestId: message.requestId, value, error }, origin);
     if (message.action === "settings") { handlers.current.onAiSettings(); reply(); return; }
     if (message.action === "skills") {
-      if (message.sessionId !== opened.current?.sessionId) { reply(undefined, "선택한 세션이 바뀌었습니다."); return; }
+      if (message.sessionId !== opened.current?.sessionId) { reply(undefined, "선택한 대화가 바뀌었습니다."); return; }
       setSkillsOpen(true); reply(); return;
     }
-    if (aiBusy.current) { reply(undefined, "문서 저장과 세션 연결을 확인 중입니다."); return; }
+    if (aiBusy.current) { reply(undefined, "문서 저장과 대화 연결을 확인 중입니다."); return; }
     aiBusy.current = true;
     try {
       const checkSession = () => {
-        if (target !== frame.current?.contentWindow || message.sessionId !== opened.current?.sessionId) throw new Error("선택한 세션이 바뀌었습니다. 새 대화에서 다시 요청해 주세요.");
+        if (target !== frame.current?.contentWindow || message.sessionId !== opened.current?.sessionId) throw new Error("선택한 대화가 바뀌었습니다. 새 대화에서 다시 요청해 주세요.");
       };
       checkSession();
       if (status.current.conflict) throw new Error(status.current.conflict.message);
@@ -532,13 +593,13 @@ export const OfficeEditor = forwardRef<
       if (createdSession) expectedSession = await handlers.current.onNewSession(revision);
       else await handlers.current.onPrepareAi(revision);
       const value = await api.editorGrant(latest.current.id);
-      if (!value.sessionId || value.sessionId !== expectedSession) throw new Error("문서와 선택한 세션의 연결을 확인하지 못했습니다. 다시 요청해 주세요.");
+      if (!value.sessionId || value.sessionId !== expectedSession) throw new Error("문서와 선택한 대화의 연결을 확인하지 못했습니다. 다시 요청해 주세요.");
       opened.current = value;
       setGrant({ generation, value });
       let snapshot: OfficeReferenceSnapshot | null = null;
       if (paths !== undefined) {
         if (paths.length) snapshot = await referenceCall<OfficeReferenceSnapshot>("freeze", { paths, revisions });
-        if (target !== frame.current?.contentWindow || opened.current?.sessionId !== value.sessionId) throw new Error("참조 문서를 확인하는 동안 문서 창이나 세션이 바뀌었습니다.");
+        if (target !== frame.current?.contentWindow || opened.current?.sessionId !== value.sessionId) throw new Error("참조 문서를 확인하는 동안 문서 창이나 대화가 바뀌었습니다.");
         referenceSnapshot.current = snapshot?.id ?? null;
         referenceSession.current = value.sessionId;
       }
@@ -553,9 +614,13 @@ export const OfficeEditor = forwardRef<
     const reply = (value?: unknown, error?: string) => target.postMessage({ type: "office:skills-result", requestId: message.requestId, value, error }, opening.origin);
     try {
       const result = await api.officeSkills<{ ok: boolean; tabId?: string; artifact?: Artifact }>(latest.current.id, opening.token, message.action, message.input);
-      if (target !== frame.current?.contentWindow || opening.sessionId !== opened.current?.sessionId) throw new Error("양식을 준비하는 동안 문서 창이나 세션이 바뀌었습니다. 준비된 사본은 문서 목록에 보존했습니다.");
+      if (target !== frame.current?.contentWindow || opening.sessionId !== opened.current?.sessionId) throw new Error("양식을 준비하는 동안 문서 창이나 대화가 바뀌었습니다. 준비된 사본은 문서 목록에 보존했습니다.");
       reply(result);
-      if (result.ok && result.tabId) handlers.current.onCopied?.(result.tabId, result.artifact);
+      if (result.ok && result.tabId) {
+        // A document made for the person a moment ago (한글 문서 만들기's new HWPX, a template's copy) opens in its editor (doc-default, point a).
+        if ((message.action === "open-made" || message.action === "open-template") && result.tabId !== latest.current.id) markNewDocument(result.tabId);
+        handlers.current.onCopied?.(result.tabId, result.artifact);
+      }
     } catch (error) { reply(undefined, error instanceof Error ? error.message : String(error)); }
   };
 
@@ -658,6 +723,7 @@ export const OfficeEditor = forwardRef<
   const current = grant && grant.generation === generation ? grant : null;
   opened.current = current && "value" in current ? current.value : null;
   useEffect(() => { if (opened.current) send({ type: "office:grant", token: opened.current.token, sessionId: opened.current.sessionId }); }, [current]);
+  useEffect(() => { if (opened.current) send({ type: "office:kept-closed", closed: closedTab }); }, [closedTab, current]);
   const aiHandler = useRef(handleAi); aiHandler.current = handleAi;
   const referenceHandler = useRef(handleReference); referenceHandler.current = handleReference;
   const skillsHandler = useRef(handleSkills); skillsHandler.current = handleSkills;
@@ -669,7 +735,7 @@ export const OfficeEditor = forwardRef<
       if (!opened.current || event.origin !== opened.current.origin || event.source !== frame.current?.contentWindow) return;
       const message = event.data as OfficePageMessage;
       // Whatever else the editor does (its AI, an output, a note) may have changed its text.
-      if (!["office:mcp-result", "office:control-result", "office:dirty", "office:saved", "office:opened", "office:ready"].includes(message.type)) hint.current();
+      if (!["office:mcp-result", "office:control-result", "office:dirty", "office:saved", "office:opened", "office:ready", "office:page-drawn", "office:view-position"].includes(message.type)) hint.current();
       switch (message.type) {
         case "office:skills": void skillsHandler.current(message); break;
         case "office:wiki": void wikiHandler.current(message); break;
@@ -728,8 +794,12 @@ export const OfficeEditor = forwardRef<
             readOnly: false,
             theme: theme(),
             recover: recover.current && !dropped,
+            ...(viewRef.current ? { view: viewRef.current } : {}),
           });
           recover.current = true;
+          // A page starts shown: one opened behind another tab is told at once that it rests.
+          onScreen.current = true;
+          tellShownRef.current();
           break;
         }
         case "office:opened":
@@ -741,7 +811,7 @@ export const OfficeEditor = forwardRef<
               dirty: true,
               conflict: {
                 code: "revision_conflict",
-                message: `r${message.revision}에서 저장하지 않았던 편집을 되살렸습니다. 그사이 문서는 r${latest.current.revision}이 되었습니다.`,
+                message: `r${message.revision}에서 저장하지 않았던 편집을 되살렸습니다. 그사이 문서는 r${withParticle(`${latest.current.revision}`, "이/가")} 되었습니다.`,
               },
             });
           } else {
@@ -753,6 +823,12 @@ export const OfficeEditor = forwardRef<
           // The artifact may advance while this frame is opening. Its revision effect
           // already ran with shown=null; reconcile again with the actual opened revision.
           reconcile();
+          break;
+        case "office:view-position":
+          handlers.current.onViewPosition?.(message.position);
+          break;
+        case "office:page-drawn":
+          handlers.current.onPageDrawn?.();
           break;
         case "office:ai-panel":
           handlers.current.onAiPanel?.(message.open, message.draft, message.ready === undefined ? undefined : { ready: message.ready, person: Boolean(message.person), shown: message.shown ?? message.open, ...(message.off ? { off: true } : {}) });
@@ -775,8 +851,39 @@ export const OfficeEditor = forwardRef<
           if (message.dirty) hint.current(status.current.changed && !savedText.current ? 0 : COMPARE_DELAY_MS);
           break;
         case "office:execution-refresh":
-          if (!status.current.dirty) { recover.current = false; update({ revision: null }); setGeneration(value => value + 1); }
+          // An editor that takes revisions in place does so when the turn's revision is known (reconcile);
+          // a turn that changed nothing reopens nothing. The others are opened again, as before.
+          // A turn that changed nothing (it only answered) reopens nothing. The Hangul page keeps 0.5.2's reopening
+          // (its made-document handoff follows the reload).
+          if (replaceable.current || (latest.current.format !== "hwp" && latest.current.format !== "hwpx")) reconcile();
+          else if (!status.current.dirty) { recover.current = false; update({ revision: null }); setGeneration(value => value + 1); }
           break;
+        case "office:live-turn":
+          setLiveTurn(message.running === true);
+          break;
+        case "office:replace-ready":
+          replaceable.current = true;
+          reconcile();
+          break;
+        case "office:replace-result":
+          replacing.current = null;
+          if (message.ok) reconcile();
+          // Edits made just before it came: kept in the editor; the new revision is a conflict (reconcile says so).
+          else if (message.reason === "dirty") { update({ dirty: true }); reconcile(); }
+          else { recover.current = false; update({ revision: null }); setGeneration(value => value + 1); }
+          break;
+        case "office:revert-ai": {
+          const { revision, before } = message;
+          if (status.current.dirty || status.current.conflict || status.current.revision !== revision || latest.current.revision !== revision) {
+            handlers.current.onNotice("그 뒤에 문서가 바뀌어 되돌리지 않았습니다. 판 기록에서 이전 판을 고를 수 있습니다.");
+            break;
+          }
+          void api.revert(latest.current.id, before).then(
+            (reverted) => handlers.current.onNotice(`문서 AI가 고치기 전 내용(r${before})을 새 판(r${reverted.revision})으로 되돌렸습니다.`),
+            (error: Error) => handlers.current.onNotice(failure(error.message, "되돌리지 못했습니다: ")),
+          );
+          break;
+        }
         case "office:flushed":
           for (const resolve of waiters.current.splice(0)) resolve(message.revision);
           break;

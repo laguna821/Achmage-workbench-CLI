@@ -1,7 +1,9 @@
+import { withParticle } from "@workbench/contracts";
 import { useEffect, useRef, useState } from "react";
 import type { Schedule, SchedulePolicy, ScheduleWhen, Session } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import { Icon } from "./Icon.tsx";
+import { Select } from "./ui/Select.tsx";
 import { ScheduleHistory } from "./ScheduleHistory.tsx";
 import "../styles/schedules.css";
 
@@ -84,7 +86,7 @@ export function ScheduleDialog({ api, session, schedules, onClose, onError, onOp
             <Icon name="clock" size={18} /> 예약 작업
           </h2>
           <p className="muted">
-            「{session.purpose}」을 기준으로 정한 때 요청을 보냅니다. 백그라운드 호스트가 실행 중이면 창을 닫아도 이어집니다. 엔진이 일하는 중이거나 승인을 기다리면 대기열에 보냅니다.
+            {withParticle(`「${session.purpose}」`, "을/를")} 기준으로 정한 때 요청을 보냅니다. 백그라운드 호스트가 실행 중이면 창을 닫아도 이어집니다. 엔진이 일하는 중이거나 승인을 기다리면 대기열에 보냅니다.
           </p>
         </header>
 
@@ -117,8 +119,8 @@ export function ScheduleDialog({ api, session, schedules, onClose, onError, onOp
         <div className="schedule-form">
           <textarea ref={field} rows={3} value={text} onChange={(event) => setText(event.target.value)} placeholder="보낼 요청 (예: 어제 바뀐 문서를 요약해 줘)" />
           <div className="schedule-policy">
-            <label>실행 방식<select value={mode} onChange={event => setMode(event.target.value as SchedulePolicy["mode"])}><option value="resume_session">현재 대화 이어서</option><option value="new_run">같은 작업공간에서 매번 새 대화</option></select></label>
-            <label>호스트가 꺼져 있던 동안<select value={missed} onChange={event => setMissed(event.target.value as SchedulePolicy["missed"])}><option value="once">지난 예약을 한 번만 보내기</option><option value="skip">1분 넘게 지난 예약 건너뛰기</option></select></label>
+            <label>실행 방식<Select<SchedulePolicy["mode"]> label="실행 방식" value={mode} onChange={setMode} options={[{ value: "resume_session", label: "현재 대화 이어서" }, { value: "new_run", label: "같은 작업 폴더에서 매번 새 대화" }]} /></label>
+            <label>호스트가 꺼져 있던 동안<Select<SchedulePolicy["missed"]> label="호스트가 꺼져 있던 동안" value={missed} onChange={setMissed} options={[{ value: "once", label: "지난 예약을 한 번만 보내기" }, { value: "skip", label: "1분 넘게 지난 예약 건너뛰기" }]} /></label>
             {kind === "daily" ? <label>매일 예약 시간대<input value={timezone} onChange={event => setTimezone(event.target.value)} placeholder="Asia/Seoul" /></label> : null}
             <label>종료 기한 (선택)<input type="datetime-local" value={expires} onChange={event => setExpires(event.target.value)} /></label>
             <label>최대 실행 횟수 (선택)<input type="number" min={1} max={100000} value={limit} onChange={event => setLimit(event.target.value)} placeholder="제한 없음" /></label>

@@ -18,7 +18,7 @@ export function LinkBar({ session }: { session: Session }) {
   const speaking = active && speaker && speaker.status !== "idle" && speaker.status !== "error";
   const others = link.participants.filter((id) => id !== session.id).map((id) => links.state.sessions[id]);
   return (
-    <div className={`linked-bar${active ? "" : " paused"}`} role="group" aria-label="세션 잇기">
+    <div className={`linked-bar${active ? "" : " paused"}`} role="group" aria-label="대화 잇기">
       <span className="linked-bar-count" title="주고받은 수 / 정한 수">
         <span aria-hidden>⇄</span> {hopsText(link)}
       </span>
@@ -31,7 +31,7 @@ export function LinkBar({ session }: { session: Session }) {
         {active ? (
           <span className="linked-bar-who">
             {speaker ? <EngineMark provider={speaker.provider} size={13} /> : null}
-            {speaker?.id === session.id ? "이 세션" : participantName(speaker)} {speaking ? "답하는 중" : "차례"}
+            {speaker?.id === session.id ? "이 대화" : participantName(speaker)} {speaking ? "답하는 중" : "차례"}
           </span>
         ) : (
           <span className="linked-bar-who paused">{link.reason ? LINK_REASON_LABEL[link.reason] : "멈춤"}</span>
@@ -43,7 +43,7 @@ export function LinkBar({ session }: { session: Session }) {
       </span>
       <span className="linked-bar-actions">
         {active ? (
-          <button type="button" className="link" onClick={() => links.pause(link)} title="하던 답은 끝내고, 다음 세션에 넘기지 않습니다">
+          <button type="button" className="link" onClick={() => links.pause(link)} title="하던 답은 끝내고, 다음 대화에 넘기지 않습니다">
             멈춤
           </button>
         ) : (

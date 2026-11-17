@@ -50,7 +50,7 @@ type Props = { prefs?: UiPrefs; now?: State; shown?: { work?: string; session?: 
 function Frame({ prefs: initial = { navShortcuts: [] }, now = state, shown = {}, paneMinimum, onPrefs, actions = {}, open: initialOpen = OPEN, onOpen, atNow, onLeaveNow }: Props) {
   const [prefs, setPrefs] = useState<UiPrefs>(initial);
   const [open, setOpen] = useState(initialOpen);
-  const [api] = useState(() => new Proxy({}, { get: (_, key) => (key === "projects" ? async () => summaries : async () => []) }) as unknown as Api);
+  const [api] = useState(() => new Proxy({}, { get: (_, key) => (key === "projects" ? async () => summaries : key === "history" ? async () => ({ events: [], next: null }) : async () => []) }) as unknown as Api);
   const [all] = useState(() => new Proxy(actions, { get: (target, key) => (key in target ? target[key as keyof SidebarActions] : key === "menuFor" || key === "creationMenu" || key === "openRight" || key === "docRemoval" || key === "closeWebTab" || key === "openDocAgent" || key === "sessionPage" || key === "newSubpage" || key === "chooseProject" ? undefined : () => {}) }) as SidebarActions);
   return (
     <AppearanceContext.Provider value={{ appTheme: "light", lookOf: () => NEUTRAL_LOOK.light, themeOf: () => "light", openMenu: () => {} } as unknown as AppearanceApi}>
@@ -360,7 +360,19 @@ describe("the rail's other lists", () => {
     expect(openNotifications).toHaveBeenCalled();
     expect(openTasks).toHaveBeenCalled();
     expect(within(within(sidebar()).getByRole("region", { name: "지금" })).getByText(/강의안\.md · 문서 AI/)).toBeTruthy();
-    expect(within(sidebar()).getByRole("region", { name: "기록" })).toBeTruthy();
+    expect(within(sidebar()).getByRole("region", { name: "최근에 다룬 것" })).toBeTruthy();
+  });
+
+  it("활동 opens on 현황 (as before); 기록 beside it is the history, and back", async () => {
+    render(<Frame prefs={{ navShortcuts: [], navigator: { rail: "activity" } }} />);
+    const today = within(sidebar()).getByRole("radio", { name: "현황" });
+    expect(today.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(within(sidebar()).getByRole("radio", { name: "기록" }));
+    expect(within(sidebar()).queryByRole("region", { name: "지금" })).toBeNull();
+    expect(within(sidebar()).getByRole("list", { name: "활동 기록" })).toBeTruthy();
+    await waitFor(() => expect(within(sidebar()).getByText("아직 기록이 없습니다.")).toBeTruthy());
+    fireEvent.click(within(sidebar()).getByRole("radio", { name: "현황" }));
+    expect(within(sidebar()).getByRole("region", { name: "지금" })).toBeTruthy();
   });
 
   it("활동's head opens the calendar (흐름) in the centre", () => {

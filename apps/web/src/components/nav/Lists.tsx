@@ -10,6 +10,7 @@ import { NowSection, SectionHead } from "./NavPane.tsx";
 import { StateMark, sideClick, sessionState } from "./rows.tsx";
 import type { NavShared } from "./shared.ts";
 import { LIST_STOP, typeAhead } from "./focus.ts";
+import { ActivityHistory } from "./ActivityHistory.tsx";
 
 // The rail's other list destinations (N1): 문서 (every project's documents, each saying its project
 // and opening there), 활동 (what is happening now, then what changed, by time, with the ways to the
@@ -226,6 +227,8 @@ export function ActivityList({ shared }: { shared: NavShared }) {
     return out.sort((a, b) => b.at - a.at).slice(0, 40);
   }, [state]);
   const folded = Boolean(nav.sections.history);
+  // Two ways to look (today's stays the default): 현황 (what runs and waits, recent rows) and 기록 (what happened, in order).
+  const [look, setLook] = useState<"today" | "history">("today");
   const link = (icon: IconName, label: string, run: (() => void) | undefined, count?: number) =>
     run ? (
       <button type="button" className="side-row nav-link-row" data-list-row="" onClick={run} onKeyDown={(event) => stepKey(event)}>
@@ -251,16 +254,21 @@ export function ActivityList({ shared }: { shared: NavShared }) {
           </button>
         ) : null}
       </Head>
-      <div className="nav-scroll side-scroll">
+      <div className="segmented small nav-activity-looks" role="radiogroup" aria-label="활동 보기">
+        {([["today", "현황"], ["history", "기록"]] as const).map(([id, label]) => (
+          <button key={id} type="button" role="radio" aria-checked={look === id} className={look === id ? "active" : ""} data-activity-look={id} onClick={() => setLook(id)}>{label}</button>
+        ))}
+      </div>
+      {look === "history" ? <ActivityHistory shared={shared} onToday={() => setLook("today")} /> : <div className="nav-scroll side-scroll">
         <div className="nav-links">
           {link("bell", "알림", actions.openNotifications, shared.unreadNotices)}
           {link("run", "작업 현황", actions.openTasks)}
           {link("archive", "보관함", actions.openArchive)}
         </div>
         <NowSection shared={shared} />
-        <section className="side-section nav-history" aria-label="기록">
-          <SectionHead id="history" label="기록" shared={shared} count={entries.length || undefined} />
-          {!folded && !entries.length ? <ListEmpty line="아직 기록이 없습니다." action="새 대화" onAction={() => actions.newSession({})} /> : null}
+        <section className="side-section nav-history" aria-label="최근에 다룬 것">
+          <SectionHead id="history" label="최근에 다룬 것" shared={shared} count={entries.length || undefined} />
+          {!folded && !entries.length ? <ListEmpty line="아직 다룬 것이 없습니다." action="새 대화" onAction={() => actions.newSession({})} /> : null}
           {folded ? null : byDate(entries, (entry) => entry.at).map((group) => (
             <div key={group.key} role="none">
               <div className="nav-group" role="presentation"><span>{group.label}</span></div>
@@ -297,7 +305,7 @@ export function ActivityList({ shared }: { shared: NavShared }) {
             </div>
           ))}
         </section>
-      </div>
+      </div>}
     </div>
   );
 }

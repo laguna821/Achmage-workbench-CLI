@@ -7,7 +7,7 @@ import { parseRemoteOffer } from "../../../../packages/client/src/remote.ts";
 import { Store } from "../store.ts";
 import { EventBus } from "../bus.ts";
 import { SessionManager } from "../sessions.ts";
-import { DeviceService } from "./service.ts";
+import { DeviceService, relayEndpointOf } from "./service.ts";
 
 const cleanup: (() => void | Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
@@ -20,8 +20,8 @@ function dataFolder() {
   const manager = new SessionManager(store, bus, { hostId: "loopback-host", hostLabel: "연결 검사 호스트", dataDir: directory, managedWorksDir: join(directory, "works") });
   cleanup.push(async () => { await manager.shutdown(); store.close(); rmSync(directory, { recursive: true, force: true }); });
   /** One gateway run. Only loopback is opened. */
-  async function run(webDir: string | null = null) {
-    const service = new DeviceService({ dataDir: directory, manager, bus, localToken: "test-local-owner", localOrigin: () => null, webDir });
+  async function run(webDir: string | null = null, extra: { portRetryMs?: number } = {}) {
+    const service = new DeviceService({ dataDir: directory, manager, bus, localToken: "test-local-owner", localOrigin: () => null, webDir, ...extra });
     let open = true;
     const stop = () => { if (open) { open = false; service.close(); } };
     cleanup.push(stop);
@@ -156,4 +156,69 @@ test("pages served to devices cannot be framed by another site, load plugins or 
   expect(built.status).toBe(200);
   expect(built.headers.get("content-type")).toContain("javascript");
   expect(built.headers.get("x-content-type-options")).toBe("nosniff");
+});
+
+// ── M01's found-not-fixed list (audit #136) ──────────────────────────────────────────────────────
+
+test("M01: a kept port that is busy at start is tried again by itself, and the same port is taken once it is free", async () => {
+  const folder = dataFolder();
+  const first = await folder.run();
+  const port = (await first.service.configure(on)).port!;
+  first.stop();
+  const blocker = await occupy(port);
+  const second = await folder.run(null, { portRetryMs: 50 });
+  expect(second.service.state()).toMatchObject({ status: "error", port: null });
+  expect(second.service.state().error).toContain("저절로 다시 시도");
+  await new Promise(resolve => setTimeout(resolve, 200));
+  expect(second.service.state().status).toBe("error");
+  await new Promise<void>(resolve => { blocker.close(() => resolve()); });
+  for (let i = 0; i < 40 && second.service.state().status !== "listening"; i++) await new Promise(resolve => setTimeout(resolve, 50));
+  expect(second.service.state()).toMatchObject({ status: "listening", port });
+  expect(second.service.state().error).toBeUndefined();
+});
+
+test("M01: turning remote access off stops the retries", async () => {
+  const folder = dataFolder();
+  const first = await folder.run();
+  const port = (await first.service.configure(on)).port!;
+  first.stop();
+  const blocker = await occupy(port);
+  const second = await folder.run(null, { portRetryMs: 50 });
+  await second.service.configure({ ...on, enabled: false });
+  await new Promise<void>(resolve => { blocker.close(() => resolve()); });
+  await new Promise(resolve => setTimeout(resolve, 250));
+  expect(second.service.state()).toMatchObject({ status: "disabled", port: null });
+});
+
+test("M01: the relay start keeps the relay's port when its address has none (wss → 443)", async () => {
+  expect(relayEndpointOf("wss://relay.example.org")).toBe("relay.example.org:443");
+  expect(relayEndpointOf("wss://relay.example.org/")).toBe("relay.example.org:443");
+  expect(relayEndpointOf("wss://relay.example.org:8443")).toBe("relay.example.org:8443");
+  // Through the service: the endpoint written into a link names the port. (Loopback only: nothing listens on 127.0.0.1:443 here.)
+  const folder = dataFolder();
+  const run = await folder.run();
+  // Before: the relay's own parser wanted host:port and the start failed ("Invalid host:port").
+  expect(await run.service.configure({ ...on, relayUrl: "wss://127.0.0.1" })).toMatchObject({ status: "listening" });
+  expect(parseRemoteOffer((await run.service.createOffer()).url).workbench.endpoint).toMatch(/^wss:\/\/127\.0\.0\.1\/ws\?serverId=loopback-host&role=client/);
+});
+
+test("a request Tailscale Funnel forwarded is refused (page and socket): Serve inside the tailnet only", async () => {
+  const folder = dataFolder();
+  const web = mkdtempSync(join(tmpdir(), "workbench-device-web-"));
+  writeFileSync(join(web, "index.html"), "<!doctype html><title>t</title>");
+  cleanup.push(() => rmSync(web, { recursive: true, force: true }));
+  const run = await folder.run(web);
+  const port = (await run.service.configure(on)).port!;
+  const plain = await fetch(`http://127.0.0.1:${port}/`);
+  expect(plain.status).toBe(200);
+  const funnel = await fetch(`http://127.0.0.1:${port}/`, { headers: { "Tailscale-Funnel-Request": "?1" } });
+  expect(funnel.status).toBe(403);
+  expect((await funnel.json()).code).toBe("funnel_refused");
+  const { WebSocket } = await import("ws");
+  const closed = await new Promise<string>(resolve => {
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/workbench`, { headers: { "Tailscale-Funnel-Request": "?1" } });
+    socket.on("open", () => { resolve("open"); socket.close(); });
+    socket.on("error", () => resolve("refused"));
+  });
+  expect(closed).toBe("refused");
 });

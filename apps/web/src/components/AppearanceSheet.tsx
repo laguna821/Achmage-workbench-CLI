@@ -1,3 +1,4 @@
+import { WINDOW_KEYS_PREFS, type WindowKeysPref } from "./WindowKeys.tsx";
 import { useId, useMemo, useState } from "react";
 import { PROVIDER_LABEL, type Provider } from "@workbench/contracts";
 import {
@@ -15,6 +16,7 @@ import {
 import { PALETTE_SETS, type PaletteChoice, type PaletteSet, type Theme, type ThemePref, type UsagePlace } from "../theme.ts";
 import { DEFAULT_SET, WORKBENCH_SET } from "../styles/atlas-sets.ts";
 import { Icon } from "./Icon.tsx";
+import { Select } from "./ui/Select.tsx";
 import { EngineMark } from "./EngineMark.tsx";
 import { SettingsGroup, SettingsRow, SettingsSwitch } from "./SettingsSheet.tsx";
 import { Segmented } from "./ui/Hig.tsx";
@@ -127,7 +129,7 @@ function UiFontRow({ value, onChange }: { value: string; onChange: (font: string
     </> : null} />;
 }
 
-export function AppearancePanel({ target, onTarget, themePref, onThemePref, palette = DEFAULT_SET, onPalette, uiFont = "pretendard", onUiFont, usagePlace = "list", onUsagePlace, memoryShown = true, onMemoryShown }: {
+export function AppearancePanel({ target, onTarget, themePref, onThemePref, palette = DEFAULT_SET, onPalette, uiFont = "pretendard", onUiFont, usagePlace = "list", onUsagePlace, memoryShown = true, onMemoryShown, windowKeys }: {
   target: SheetTarget;
   onTarget: (target: SheetTarget) => void;
   themePref: ThemePref;
@@ -143,6 +145,8 @@ export function AppearancePanel({ target, onTarget, themePref, onThemePref, pale
   /** 메모리 표시: the app's memory at the right end of the window's bottom line. */
   memoryShown?: boolean;
   onMemoryShown?: (shown: boolean) => void;
+  /** 창 단추 (desktop app only): 자동 / 항상 / 숨김, and what this computer is. */
+  windowKeys?: { value: WindowKeysPref; note: string; onChange: (next: WindowKeysPref) => void };
 }) {
   const { appearance, updateLook, setMode, resetLook } = useAppearance();
   const { provider, theme } = target;
@@ -173,6 +177,8 @@ export function AppearancePanel({ target, onTarget, themePref, onThemePref, pale
         control={<Segmented label="사용 한도 표시" value={usagePlace} onChange={onUsagePlace} options={USAGE_PLACES.map(({ id, label }) => ({ value: id, label }))} />} /> : null}
       {onMemoryShown ? <SettingsRow label="메모리 표시" hint="앱이 지금 쓰는 메모리를 창 오른쪽 아래에 작게 보입니다. 마우스를 올리면 창, AI 엔진과 도구, 게이트웨이로 나누어 보입니다."
         control={<Segmented label="메모리 표시" value={memoryShown ? "on" : "off"} onChange={(next) => onMemoryShown(next === "on")} options={[{ value: "on", label: "켜기" }, { value: "off", label: "끄기" }]} />} /> : null}
+      {windowKeys ? <SettingsRow className="window-keys-row" label="창 단추" hint={`창 오른쪽 위의 내려놓기, 전체 화면, 닫기 단추입니다. 자동은 창에 제목 표시줄이 없을 때만 보입니다. ${windowKeys.note}`}
+        control={<Segmented label="창 단추" value={windowKeys.value} onChange={windowKeys.onChange} options={WINDOW_KEYS_PREFS.map(({ id, label }) => ({ value: id, label }))} />} /> : null}
     </SettingsGroup>
 
     <SettingsGroup title="대화 글자">
@@ -183,11 +189,9 @@ export function AppearancePanel({ target, onTarget, themePref, onThemePref, pale
         </>}
         detail={<ShellPreview provider={provider} look={look} theme={theme} />} />
       <SettingsRow label="읽는 글꼴" hint="대화를 읽는 글꼴입니다. 화면의 메뉴와 버튼은 Pretendard를 씁니다."
-        control={<select className="sheet-select" aria-label="읽는 글꼴" value={custom ? "custom" : look.font}
-          onChange={(event) => update({ font: event.target.value === "custom" ? `custom:${customFamily || "Pretendard"}` : event.target.value })}>
-          {FONT_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label.replace(" · ", ", ")}{available[preset.id] ? "" : " (설치 안 됨)"}</option>)}
-          <option value="custom">직접 입력…</option>
-        </select>}
+        control={<Select className="settings-select" label="읽는 글꼴" value={custom ? "custom" : look.font}
+          onChange={(value) => update({ font: value === "custom" ? `custom:${customFamily || "Pretendard"}` : value })}
+          options={[...FONT_PRESETS.map((preset) => ({ value: preset.id as string, label: preset.label.replace(" · ", ", "), hint: available[preset.id] ? undefined : "설치 안 됨" })), { value: "custom", label: "직접 입력…" }]} />}
         detail={custom ? <input className="sheet-input" aria-label="글꼴 이름" value={customFamily} placeholder="글꼴 이름 (예: Pretendard)"
           onChange={(event) => { setCustomFamily(event.target.value); update({ font: `custom:${event.target.value}` }); }} /> : null} />
       <SettingsRow label="글자 크기" control={<label className="slider-row"><input type="range" aria-label="글자 크기" min={12} max={24} step={1} value={look.fontSize} onChange={(event) => update({ fontSize: Number(event.target.value) })} /><span className="slider-value">{look.fontSize}px</span></label>} />

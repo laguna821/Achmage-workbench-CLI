@@ -14,7 +14,7 @@ describe("the folder chip in a conversation's head", () => {
     expect(workspaceName(ws({ label: "자료", cwd: "/home/t/자료" }), work)).toBe("자료");
     expect(workspaceName(ws({ label: "feat/x", kind: "worktree", cwd: "/home/t/수업-x" }), work)).toBe("feat/x");
   });
-  it("never says 작업공간", () => {
-    expect(workspaceName(ws({ label: "기본 작업공간", cwd: "/elsewhere" }), work)).not.toContain("작업공간");
+  it("never says 작업 폴더", () => {
+    expect(workspaceName(ws({ label: "기본 작업공간", cwd: "/elsewhere" }), work)).not.toContain("작업 폴더");
   });
 });

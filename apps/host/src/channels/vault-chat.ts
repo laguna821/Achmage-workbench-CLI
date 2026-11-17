@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import type { CredentialKind, Session } from "@workbench/contracts";
 import { HttpError } from "../errors.ts";
 import type { CredentialChat, CredentialService } from "../credentials/service.ts";
@@ -12,7 +13,7 @@ import { SecretWindows, SILENT, STARTING, type EndReason, type SecretWindow, typ
 import { parseCommand } from "./shape.ts";
 import { everyday } from "./words.ts";
 import type { Binding, ButtonRow } from "./store.ts";
-import type { ChannelAdapter, ChatRef, Inbound } from "./types.ts";
+import type { ChannelAdapter, ChatRef, Inbound, SecretForm, SecretFormAnswer, SecretFormEvent } from "./types.ts";
 
 // The credential store in the paired chat (design §6.5–6.6): the hand-over message ("X가
 // 필요합니다" and the one control to give it), 매번 묻기 (쓰기 / 안 쓰기), the continuation as a
@@ -37,6 +38,21 @@ const UNDELETED = "보낸 메시지를 지우지 못했습니다. 텔레그램�
 /** Where the messenger has no in-chat input (ChannelAdapter.secretInput false): the value is entered on the PC. */
 const AT_PC = "이 값은 PC의 휴대폰 메신저 → 비밀 보관함에서 넣어 주세요. 넣으면 이어서 합니다.";
 const LISTED = 10;
+/**
+ * A messenger's own input form (Slack's modal, audit #131): the button, the line under the request,
+ * the form's hint (the Telegram NOTICE's counterpart: whose servers the value passes), its bound.
+ */
+const FORM_LABEL = "비밀 값 입력";
+const FORM_ASK = "아래 [비밀 값 입력]을 누르면 열리는 창에 넣어 주세요. 채팅에는 적지 마세요.\n버튼이 반응하지 않으면 PC의 휴대폰 메신저 → 비밀 보관함에서 넣어 주세요.";
+const FORM_HINT = "이 값은 Slack 서버를 거쳐 이 PC로 옵니다. Slack이 그 사이에 무엇을 남기는지는 이 앱이 정할 수 없습니다. 채팅에는 남지 않습니다.";
+const FORM_MAX = 3000;
+const FORM_AGAIN = "입력 창을 열지 못했습니다. 아래 [비밀 값 입력]을 다시 눌러 주세요.";
+const FORM_CLOSED = "입력 창을 닫았습니다. 받은 값은 없습니다. 넣으려면 아래 [비밀 값 입력]을 누르세요.";
+const FORM_GONE = "이 입력 창은 더 이상 쓸 수 없습니다. 창을 닫아 주세요.";
+const FORM_OTHER = "이 입력 창은 이 채팅에 연결된 사람만 쓸 수 있습니다.";
+const FORM_OVER = "이 요청은 이미 끝났습니다. 창을 닫아 주세요.";
+/** One open form: bound to one field of one waiting hand-over, one chat and its paired person; in memory only. */
+type FormRecord = { handoffId: string; field: number; bindingId: string; userId: string; expiresAt: number; viewId: string | null; done: SecretFormAnswer | undefined; running: Promise<SecretFormAnswer> | null };
 /** After an app word while unit 8's input is open (M-e): why a value equal to it cannot be given in the chat. */
 const APP_WORD = "값이 앱의 명령어와 같다면 채팅으로는 받을 수 없으니 PC의 비밀 보관함에서 넣어 주세요.";
 /** An app word sent as the reply to a hand-over (M-e). */
@@ -81,6 +97,8 @@ export class VaultChat implements ChannelExtension, CredentialChat {
   private readonly sealPage: string | null;
   private timer: NodeJS.Timeout | null = null;
   protected readonly store: VaultChatOptions["store"] | null;
+  /** The messenger forms open now, by their random token (never written anywhere: a restart ends them all). */
+  private readonly forms = new Map<string, FormRecord>();
 
   constructor(options: VaultChatOptions) {
     this.service = options.service;
@@ -264,10 +282,18 @@ export class VaultChat implements ChannelExtension, CredentialChat {
     }
     const binding = this.reach.binding(handoff.bindingId);
     const needed = this.needed(handoff);
+    // No in-chat input, but the messenger's own form (Slack's modal): the request with one button that opens it.
+    if (binding && this.inForm(binding)) {
+      const key = `cred-need:${handoff.id}${round}`;
+      const result = outcome(key, await this.reach.say(binding.id, key, { text: `${needed}\n${FORM_ASK}`, buttons: [[{ label: FORM_LABEL, kind: "cred-modal", data: { h: handoff.id } }]] }));
+      if (result === "asked") this.reach.audit(binding, "secret.asked", { sessionId: handoff.sessionId, target: handoff.name, result: "form" });
+      return result;
+    }
     // No in-chat input on this messenger: one line, no control, nothing that asks for the value here.
     if (binding && !this.inChat(binding)) {
       const key = `cred-need:${handoff.id}${round}`;
-      const result = outcome(key, await this.reach.say(binding.id, key, { text: `${needed}\n${AT_PC}` }));
+      const why = this.reach.adapterOf(binding)?.secretFormsWhyNot?.() ?? null;
+      const result = outcome(key, await this.reach.say(binding.id, key, { text: `${needed}\n${AT_PC}${why ? `\n${why}` : ""}` }));
       if (result === "asked") this.reach.audit(binding, "secret.asked", { sessionId: handoff.sessionId, target: handoff.name, result: "pc" });
       return result;
     }
@@ -311,6 +337,10 @@ export class VaultChat implements ChannelExtension, CredentialChat {
 
   /** The hand-over no longer waits (N3): its input ends (its values given: taken; else over, said), and replies to its message are over. */
   ended(handoff: Handoff) {
+    // Its open forms end with it: a submit after this is refused (FORM_GONE). One already answered keeps
+    // only its answer (no value), so Slack's retry of that submission gets the same answer.
+    // One being handed over right now keeps its record too (review L5): its answer is set when it finishes.
+    for (const [token, form] of this.forms) if (form.handoffId === handoff.id && form.done === undefined && !form.running) this.forms.delete(token);
     const binding = handoff.bindingId ? this.reach?.binding(handoff.bindingId) : null;
     if (!binding || !this.windows) return;
     const chat = this.chatOf(binding);
@@ -498,6 +528,15 @@ export class VaultChat implements ChannelExtension, CredentialChat {
         await ack();
         await this.give(adapter, binding, event, handoff);
         return true;
+      case "cred-modal":
+        if (!handoff || !this.pending(handoff.id)) {
+          await ack();
+          await say("over", `${handoff ? `'${handoff.name}' ` : "이 "}요청은 이미 끝났습니다. 필요하면 AI에게 다시 시켜 주세요.`);
+          return true;
+        }
+        await ack();
+        await this.openForm(adapter, binding, event, handoff);
+        return true;
       case "cred-later": {
         if (!handoff || handoff.state !== "waiting") { await ack("이미 끝난 요청입니다"); return true; }
         await ack("나중에 넣습니다");
@@ -610,8 +649,109 @@ export class VaultChat implements ChannelExtension, CredentialChat {
     return Boolean(adapter && adapter.secretInput !== false);
   }
 
-  private atPc(binding: Binding, handoff: Handoff, key: string) {
-    return this.reach!.reply(binding.id, key, `${quoted(handoff.name, "은/는")} PC의 '휴대폰 메신저 → 비밀 보관함'에서 넣어 주세요. 넣으면 이 대화가 이어집니다.`);
+  /** Whether this chat's messenger offers its own input form for a value now (ChannelAdapter.secretForms). */
+  protected inForm(binding: Binding): boolean {
+    const adapter = this.reach?.adapterOf(binding);
+    return Boolean(adapter && adapter.secretInput === false && adapter.openSecretForm && adapter.secretForms?.());
+  }
+
+  /** A new form for one field: a random token that names nothing, bound to this hand-over, chat and person, ending with the request. */
+  private newForm(binding: Binding, handoff: Handoff, field: number): SecretForm {
+    const now = this.now();
+    for (const [token, form] of this.forms) if (form.expiresAt <= now) this.forms.delete(token);
+    const token = randomBytes(18).toString("base64url");
+    this.forms.set(token, { handoffId: handoff.id, field, bindingId: binding.id, userId: binding.userId, expiresAt: handoff.expiresAt, viewId: null, done: undefined, running: null });
+    const name = handoff.fields[field]!;
+    const count = handoff.fields.length > 1 ? ` (${field + 1}/${handoff.fields.length})` : "";
+    return { token, heading: `「${this.session(handoff.sessionId)?.purpose ?? "대화"}」에서 '${handoff.name}'의 ${name}${count}`, field: name, hint: FORM_HINT, maxLength: FORM_MAX };
+  }
+
+  /** [비밀 값 입력]: the form opens at the first field still missing; where the messenger cannot have one, the PC's line. */
+  private async openForm(adapter: ChannelAdapter, binding: Binding, event: Extract<Inbound, { type: "button" }>, handoff: Handoff) {
+    const pending = this.pending(handoff.id)!;
+    if (!adapter.openSecretForm || !adapter.secretForms?.()) return void (await this.atPc(binding, handoff, `cred-form-pc:${handoff.id}:${event.eventId}`, adapter.secretFormsWhyNot?.() ?? null));
+    const form = this.newForm(binding, handoff, pending.next);
+    const result = await adapter.openSecretForm(event.eventId, form).catch(() => "retry" as const);
+    if (result === "opened") return this.reach!.audit(binding, "secret.asked", { sessionId: handoff.sessionId, target: handoff.name, result: "form-opened" });
+    this.forms.delete(form.token);
+    this.reach!.audit(binding, "secret.refused", { sessionId: handoff.sessionId, target: handoff.name, result: `form-${result}` });
+    if (result === "unavailable") return void (await this.atPc(binding, handoff, `cred-form-pc:${handoff.id}:${event.eventId}`));
+    await this.reach!.say(binding.id, `cred-form-again:${handoff.id}:${event.eventId}`, { text: FORM_AGAIN, buttons: [[{ label: FORM_LABEL, kind: "cred-modal", data: { h: handoff.id } }]] });
+  }
+
+  /**
+   * The messenger's form was submitted or closed (the adapter took the value out of its payload).
+   * Only the person it was opened for, only while its request waits, handed over once — the same
+   * submission again (the messenger's retry) gets the answer the first one got.
+   */
+  readonly secretForm = async (event: SecretFormEvent): Promise<SecretFormAnswer> => {
+    const form = this.forms.get(event.token);
+    const submit = event.type === "submit";
+    if (!form) return submit ? { refuse: FORM_GONE } : null;
+    const binding = this.reach?.binding(form.bindingId) ?? null;
+    if (event.userId !== form.userId) {
+      if (binding) this.reach!.audit(binding, "secret.refused", { target: this.service.handoff(form.handoffId)?.name ?? null, result: "form-other" });
+      return submit ? { refuse: FORM_OTHER } : null;
+    }
+    if (form.viewId && form.viewId !== event.viewId) return submit ? { refuse: FORM_GONE } : null;
+    form.viewId = event.viewId;
+    if (!submit) {
+      if (form.done !== undefined || form.running) return null;
+      this.forms.delete(event.token);
+      const handoff = this.service.handoff(form.handoffId);
+      if (binding && handoff && this.pending(handoff.id)) {
+        this.reach!.audit(binding, "secret.cancelled", { sessionId: handoff.sessionId, target: handoff.name, result: "form-closed" });
+        // Said after the acknowledgement (Slack waits only seconds for it; review L4).
+        const work = this.reach!.say(binding.id, `cred-form-closed:${event.token}`, { text: FORM_CLOSED, buttons: [[{ label: FORM_LABEL, kind: "cred-modal", data: { h: handoff.id } }]] }).catch(() => null);
+        this.saying.add(work);
+        void work.finally(() => this.saying.delete(work));
+      }
+      return null;
+    }
+    if (form.done !== undefined) return form.done;
+    if (form.running) return form.running;
+    form.running = this.takeForm(event.token, form, binding, event.value);
+    try {
+      return await form.running;
+    } finally {
+      form.running = null;
+    }
+  };
+
+  private async takeForm(token: string, form: FormRecord, binding: Binding | null, value: string | null): Promise<SecretFormAnswer> {
+    if (!binding || binding.revokedAt || binding.userId !== form.userId) { this.forms.delete(token); return { refuse: FORM_GONE }; }
+    if (binding.lockedAt || binding.pausedAt) return { refuse: `채널이 ${binding.lockedAt ? "잠겨" : "멈춰"} 있어 받지 않았습니다.` };
+    const handoff = this.service.handoff(form.handoffId);
+    const field = handoff?.fields[form.field];
+    if (!handoff || !field || !this.pending(handoff.id) || form.expiresAt <= this.now() || this.service.store.filled(handoff.id).includes(field)) {
+      this.forms.delete(token);
+      return { refuse: FORM_OVER };
+    }
+    if (!value) return { refuse: "값을 넣어 주세요." };
+    if (value.length > FORM_MAX) return { refuse: `값이 너무 깁니다(최대 ${FORM_MAX}자).` };
+    try {
+      // The record's id names the request, the field and Slack's view, never the token (review L1: it would be written to the store).
+      await this.service.receive(handoff.id, field, value, `form:${handoff.id}:${form.field}:${form.viewId ?? "-"}`);
+    } catch (error) {
+      this.reach!.audit(binding, "secret.refused", { target: handoff.name, result: error instanceof HttpError ? error.code : "failed" });
+      return { refuse: "받은 값을 저장하지 못했습니다. 다시 해 주세요." };
+    }
+    if (this.service.complete(handoff.id)) {
+      form.done = null;
+      // Said after the form closes (the messenger waits only seconds for its answer).
+      const work = this.finish(binding, handoff, { eventId: `form:${handoff.id}:${form.field}:${form.viewId ?? "-"}`, chat: this.chatOf(binding) }, false, handoff.fields.join("·"), undefined, false, "form").catch(() => undefined);
+      this.saying.add(work);
+      void work.finally(() => this.saying.delete(work));
+      return null;
+    }
+    const filled = this.service.store.filled(handoff.id);
+    const next = handoff.fields.findIndex((name) => !filled.includes(name));
+    form.done = { next: this.newForm(binding, handoff, next) };
+    return form.done;
+  }
+
+  private atPc(binding: Binding, handoff: Handoff, key: string, why: string | null = null) {
+    return this.reach!.reply(binding.id, key, `${quoted(handoff.name, "은/는")} PC의 '휴대폰 메신저 → 비밀 보관함'에서 넣어 주세요. 넣으면 이 대화가 이어집니다.${why ? `\n${why}` : ""}`);
   }
 
   private chatOf(binding: Binding): ChatRef {
@@ -806,14 +946,15 @@ export class VaultChat implements ChannelExtension, CredentialChat {
   }
 
   /** Every field is in: kept (sealed, or for one use), said by name, and the conversation goes on. */
-  private async finish(binding: Binding, handoff: Handoff, event: { eventId: string; chat: ChatRef }, again: boolean, took?: string, field?: number, unsure = false) {
+  private async finish(binding: Binding, handoff: Handoff, event: { eventId: string; chat: ChatRef }, again: boolean, took?: string, field?: number, unsure = false, via: "chat" | "form" = "chat") {
     this.windows?.end(event.chat, { handoffId: handoff.id }, "taken");
     const held = this.service.store.filledHeld(handoff.id);
     this.reach!.audit(binding, "secret.received", { sessionId: handoff.sessionId, target: handoff.name, result: held });
     const named = took ? (unsure ? `${this.unsureLine(handoff, took)}\n` : `'${handoff.name}'의 ${took}${particle(took, "을/를")} 받았습니다.`) : "받았습니다.";
     const row = [...(held === "sealed" && field !== undefined ? [{ label: "다시 넣기", kind: "cred-redo", data: { h: handoff.id, f: field } }] : []), ...(unsure && field !== undefined ? [notValue(field, handoff.id)] : [])];
     if (!again) await this.reach!.say(binding.id, `cred-done:${handoff.id}`, {
-      text: held === "memory" ? `${named} 이 PC에는 보안 저장소가 없어 저장하지 않았습니다. 이번 한 번만 쓰고 버립니다. 이어서 합니다.` : `${named} 보관함에 봉인해 두었고 이 채팅에서는 지웠습니다. 이어서 합니다.`,
+      // Given in a form, nothing of it was ever in the chat: nothing was deleted there.
+      text: held === "memory" ? `${named} 이 PC에는 보안 저장소가 없어 저장하지 않았습니다. 이번 한 번만 쓰고 버립니다. 이어서 합니다.` : via === "form" ? `${named} 보관함에 봉인해 두었습니다. 이어서 합니다.` : `${named} 보관함에 봉인해 두었고 이 채팅에서는 지웠습니다. 이어서 합니다.`,
       ...(row.length ? { buttons: [row] } : {}),
     });
     await this.service.finish(handoff.id);

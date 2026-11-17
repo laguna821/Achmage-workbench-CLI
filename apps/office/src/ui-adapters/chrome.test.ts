@@ -43,3 +43,8 @@ it("fills an editor's primary key with the app's navy key and its ink, not the f
   const chrome = rule(/--color-btn-primary:/);
   for (const name of ["--color-btn-primary", "--color-btn-primary-hover", "--color-ai-action", "--color-ai-action-hover"]) expect(chrome).toMatch(new RegExp(`${name}: var\\(--wb-ui-key\\);`));
 });
+
+it("Excel in a narrow window with its AI panel open: the panel lies over the grid, the grid keeps the second track (office-leftovers 4a: the absolutely placed panel left the grid in the 34px track — a blank sheet)", () => {
+  const narrow = css.slice(css.indexOf("@media (max-width: 1039px)"));
+  expect(narrow).toMatch(/\.sheet-body:has\(> \.copilot:not\(\.collapsed\)\) > \.sheet-main \{[^}]*grid-column: 2/);
+});

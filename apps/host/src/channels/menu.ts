@@ -1,10 +1,11 @@
+import { withParticle } from "@workbench/contracts";
 import { ACCESS_LABEL, EFFORT_LABEL, MESSENGER_HOME_TITLE, PROVIDER_LABEL, SEARCH_KIND_LABEL, isAccessMode, type AccessMode, type Artifact, type Provider, type Schedule, type ScheduleWhen, type SearchPage, type Session, type Work } from "@workbench/contracts";
 import { HttpError } from "../errors.ts";
 import type { Projects } from "../project.ts";
 import type { SessionManager } from "../sessions.ts";
 import { previewed } from "./files.ts";
 import { cutAt } from "./shape.ts";
-import { NAME_LIMIT } from "./comfort.ts";
+import { CONFIRM_ROW, NAME_LIMIT } from "./comfort.ts";
 import type { Binding, ChannelStore } from "./store.ts";
 import type { ChannelAdapter, ChatRef, Inbound } from "./types.ts";
 
@@ -52,6 +53,7 @@ export type MenuAct =
   | { a: "vault" }
   | { a: "usage" }
   | { a: "notify"; workId?: string }
+  | { a: "confirm" }
   | { a: "lock" }
   | { a: "schedules-on" }
   | { a: "schedule-on"; scheduleId: string }
@@ -180,6 +182,8 @@ export type MenuCore = {
   projects: () => Projects | null;
   search: (query: string) => Promise<SearchPage>;
   now: () => number;
+  /** A request waiting for a slot (0.5.3), in the chat's words. */
+  waitingLine: (sessionId: string, requestId: string) => string;
   /** Show a screen on a message the chat already has (its other buttons are retired). True when it was shown. */
   show(adapter: ChannelAdapter, binding: Binding, messageId: string, screen: Screen): Promise<boolean>;
   /** Send a screen as a new message, once under `key`; its message id. */
@@ -224,6 +228,9 @@ export type MenuCore = {
   /** Unit 14 (comfort.ts): the footer under finished answers, "맥락 줄이기", and the rename through the desktop's own. */
   setFooter(binding: Binding, on: boolean): void;
   footerOn(binding: Binding): boolean;
+  /** Unit 13 "확인 받기": the chat's new conversations in `auto`, their questions as buttons (core.ts `setConfirm`). */
+  confirmOn(binding: Binding): boolean;
+  setConfirm(binding: Binding, on: boolean): void;
   compact(binding: Binding): Promise<string>;
   rename(sessionId: string, name: string): { ok: true; name: string } | { ok: false; text: string };
   /** The remote conversation the chat came from while it is inside another one (리모콘으로 돌아가기), else null. */
@@ -452,6 +459,9 @@ export class ChannelMenu {
       case "footer":
         this.core.setFooter(binding, !this.core.footerOn(this.fresh(binding)));
         return show(this.notifyScreen(binding));
+      case "confirm":
+        this.core.setConfirm(binding, !this.core.confirmOn(this.fresh(binding)));
+        return show(this.notifyScreen(binding));
       case "compact": return show(this.statusScreen(binding, await this.core.compact(binding)));
       case "remote": return show({ text: this.core.backToRemote(binding), buttons: [[BACK]] });
       case "rename": {
@@ -513,7 +523,7 @@ export class ChannelMenu {
     this.core.audit(next, "pointer", { sessionId });
     if (move) await this.core.moveParked(adapter, next, chat, move, sessionId);
     const strict = this.core.strictNote(next, session);
-    const text = `이제 「${session.purpose}」로 보냅니다 (${this.settings(session)}).`;
+    const text = `이제 ${withParticle(`「${session.purpose}」`, "으로/로")} 보냅니다 (${this.settings(session)}).`;
     if (strict) return { text: `${text}\n이 대화는 '${MODE_LABEL[this.manager.accessOf(session)]}' 모드라 중간에 확인 요청이 올 수 있습니다.`, buttons: [...strict, [BACK]], strict: session.id };
     return { text, buttons: [[BACK]] };
   }
@@ -609,9 +619,15 @@ export class ChannelMenu {
     const session = this.pointer(binding);
     const queued = session && !session.archivedAt ? session.queued : [];
     const lines = [this.core.statusText(this.fresh(binding))];
-    queued.slice(0, 5).forEach((entry, index) => lines.push(`${index + 1}. ${this.clip(entry.text.replace(/\s+/g, " "), 60)}${entry.held ? " (남겨 둠)" : ""}`));
+    // 0.5.3: a request waiting for a slot shows its place in the line and why; its key starts it now.
+    const line = (entry: (typeof queued)[number]) => {
+      if (!entry.slot || entry.held || !session) return "";
+      const place = this.manager.resources.positionOf(session.id, entry.id);
+      return ` (대기 중${place ? ` · ${place}번째` : ""} — ${this.manager.resources.reasonNow()})`;
+    };
+    queued.slice(0, 5).forEach((entry, index) => lines.push(`${index + 1}. ${this.clip(entry.text.replace(/\s+/g, " "), 60)}${entry.held ? " (남겨 둠)" : line(entry)}`));
     const rows: MenuButton[][] = queued.slice(0, 5).map((entry, index) => [
-      { label: `${index + 1} 지금 보내기`, act: { a: "q-send", sessionId: session!.id, queuedId: entry.id } },
+      { label: `${index + 1} ${entry.slot && !entry.held ? "지금 바로 실행" : "지금 보내기"}`, act: { a: "q-send", sessionId: session!.id, queuedId: entry.id } },
       { label: `${index + 1} 빼기`, act: { a: "q-drop", sessionId: session!.id, queuedId: entry.id } },
     ]);
     if (session && !session.archivedAt) rows.push([{ label: "이름 바꾸기", act: { a: "rename" } }, { label: "맥락 줄이기", act: { a: "compact" } }]);
@@ -623,9 +639,13 @@ export class ChannelMenu {
   private async sendQueued(binding: Binding, sessionId: string, queuedId: string): Promise<string> {
     if (!this.core.admitted()) return "PC가 업데이트를 준비하고 있어 지금은 새 일을 시작하지 않습니다.";
     try {
-      const result = await this.manager.sendQueued(sessionId, queuedId);
-      this.core.audit(binding, "queue.send", { sessionId, result: result.delivery });
-      return result.delivery === "queued" ? "지금 일이 끝나면 바로 보냅니다." : "보냈습니다.";
+      // A request waiting for a slot: the person's button is "지금 바로 실행" (it starts regardless of the limit).
+      const entry = this.manager.view.sessions.get(sessionId)?.queued.find((item) => item.id === queuedId);
+      const now = Boolean(entry?.slot && !entry.held);
+      const result = now ? await this.manager.runNow(sessionId, queuedId) : await this.manager.sendQueued(sessionId, queuedId);
+      this.core.audit(binding, now ? "queue.run-now" : "queue.send", { sessionId, result: result.delivery });
+      if (result.waitingFor === "slot") return this.core.waitingLine(sessionId, queuedId);
+      return result.delivery === "queued" ? "지금 일이 끝나면 바로 보냅니다." : now ? "바로 시작했습니다." : "보냈습니다.";
     } catch (error) {
       const code = error instanceof HttpError ? error.code : "failed";
       this.core.audit(binding, "refused", { sessionId, result: `queue.${code}` });
@@ -919,7 +939,8 @@ export class ChannelMenu {
     return {
       text: "PC에서 시킨 일이 끝나거나 확인을 기다리면 이 채팅으로 알릴 프로젝트를 고르세요. 휴대폰에서 시킨 일의 답은 언제나 옵니다.",
       buttons: [...works.map((work): MenuButton[] => [{ label: `${on.has(work.id) ? "켜짐" : "꺼짐"} · ${this.clip(work.title, 22)}`, act: { a: "notify", workId: work.id } }]),
-        [{ label: `${this.core.footerOn(this.fresh(binding)) ? "켜짐" : "꺼짐"} · 답 아래 꼬리말(모델·시간·맥락)`, act: { a: "footer" } }], [BACK]],
+        [{ label: `${this.core.footerOn(this.fresh(binding)) ? "켜짐" : "꺼짐"} · 답 아래 꼬리말(모델·시간·맥락)`, act: { a: "footer" } }],
+        [{ label: `${this.core.confirmOn(this.fresh(binding)) ? "켜짐" : "꺼짐"} · ${CONFIRM_ROW}`, act: { a: "confirm" } }], [BACK]],
     };
   }
 
@@ -1011,7 +1032,7 @@ export class ChannelMenu {
       case "rename": {
         const renamed = this.core.rename(stored.sessionId, text.replace(/\s+/g, " "));
         if (renamed.ok) this.core.audit(binding, "rename", { sessionId: stored.sessionId });
-        await send({ text: renamed.ok ? `대화 이름을 「${renamed.name}」(으)로 바꿨습니다.` : renamed.text });
+        await send({ text: renamed.ok ? `대화 이름을 ${withParticle(`「${renamed.name}」`, "으로/로")} 바꿨습니다.` : renamed.text });
         break;
       }
     }

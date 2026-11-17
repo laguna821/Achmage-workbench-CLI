@@ -159,3 +159,24 @@ export function useKeepAwake(hold: boolean) {
   }, [tabId, hold]);
 }
 export const heldAwake = (tabId: string) => held.has(tabId);
+
+// A document tab closed while its 문서 AI turn runs live in its editor (office-ai-live, coordinator's gate 1): the view
+// says so with `useKeepOnClose`, and Panes.tsx keeps the closed tab's view mounted off screen — exactly as a hidden tab's
+// — until it lets go (the turn ended, however it ended). `TabClosed` tells that view it is being kept so.
+const kept = new Map<string, number>();
+const keptListeners = new Set<() => void>();
+const keptChanged = () => { for (const listener of [...keptListeners]) listener(); };
+/** Whether the view in this tab must outlive the tab's closing for now. */
+export const keptOnClose = (tabId: string) => kept.has(tabId);
+export function onKeptOnClose(listener: () => void) { keptListeners.add(listener); return () => { keptListeners.delete(listener); }; }
+/** The view of a closed tab, kept until it lets go (Panes.tsx). */
+export const TabClosed = createContext(false);
+/** While `hold`, closing this view's tab keeps the view mounted off screen until `hold` ends. */
+export function useKeepOnClose(hold: boolean) {
+  const tabId = useContext(SleepTab);
+  useEffect(() => {
+    if (!tabId || !hold) return;
+    kept.set(tabId, (kept.get(tabId) ?? 0) + 1); keptChanged();
+    return () => { const left = (kept.get(tabId) ?? 1) - 1; if (left > 0) kept.set(tabId, left); else kept.delete(tabId); keptChanged(); };
+  }, [tabId, hold]);
+}

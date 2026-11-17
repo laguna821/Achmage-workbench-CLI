@@ -5,7 +5,8 @@ export type WorkerRequest =
   | { type: "mcp"; command: "ready" | "read_deck" | "apply_slide_ops" | "deck_withholds"; payload?: unknown }
   | { type: "init"; token: string }
   /** Open a document (its bytes) as the page's view. */
-  | { type: "open"; name: string; bytes: ArrayBuffer }
+  /** `generation`: a later revision opened in the same page (in place) gets its own path, so nothing of the earlier deck is reused. */
+  | { type: "open"; name: string; bytes: ArrayBuffer; generation?: number }
   /** `ipcRenderer.invoke` of IeumOffice's renderer. */
   | { type: "invoke"; channel: string; args: unknown[]; authorName?: string }
   /** `ipcRenderer.send`. */
@@ -22,10 +23,13 @@ export type WorkerRequest =
 
 export type WorkerCall = WorkerRequest & { id: number };
 
+/** A bundled template face layout has just measured with: the page registers it before the message that carries that layout is handled. */
+export type FontFaceBytes = { id: string; family: string; bold: boolean; italic: boolean; weight?: string; bytes: ArrayBuffer };
+
 export type WorkerMessage =
-  | { type: "reply"; id: number; ok: true; value: unknown; unhandled?: boolean }
-  | { type: "reply"; id: number; ok: false; error: string }
+  | { type: "reply"; id: number; ok: true; value: unknown; unhandled?: boolean; fonts?: FontFaceBytes[] }
+  | { type: "reply"; id: number; ok: false; error: string; fonts?: FontFaceBytes[] }
   /** `webContents.send` to the page. */
-  | { type: "send"; channel: string; args: unknown[] }
+  | { type: "send"; channel: string; args: unknown[]; fonts?: FontFaceBytes[] }
   /** Something the user should be told (an editor message box). */
   | { type: "notice"; message: string };

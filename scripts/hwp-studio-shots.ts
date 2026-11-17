@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { chromium, type Frame, type Page } from "playwright-core";
+import { editorFirst } from "./fixtures/editor-first.ts";
 import init, { ENGINE_DIR, enginePackage, HwpDocument } from "../third_party/hop/engine.ts";
 
 const outDir = process.argv[2];
@@ -97,6 +98,7 @@ try {
       const errors: string[] = [];
       page.on("pageerror", (error) => errors.push(error.message.slice(0, 160)));
       await page.addInitScript((id) => localStorage.setItem("workbench.lastWork", id), work.id);
+      await editorFirst(page);
       await page.goto(`${ready.url}/?token=${ready.token}`);
       await page.waitForSelector(".note-head-more");
       await page.locator(".note-head-more").click();

@@ -98,12 +98,12 @@ export function NewBrowserDialog({ browser, workspaces, target, onOpen, onClose 
     <header><h2 id="browser-create-title">웹 탭 설정</h2><button type="button" className="ghost-button" aria-label="웹 탭 만들기 닫기" onClick={onClose}>닫기</button></header>
     {!browser.available ? <p>공유 웹 탭은 데스크톱 기본 창에서 열 수 있습니다. 기본 창의 + 메뉴를 사용해 주세요.</p> : <>
       <form onSubmit={event => { event.preventDefault(); if (!pending) void run(open); }}>
-        <label>작업공간<select value={workspaceId} disabled={busy || !!pending} onChange={event => setWorkspaceId(event.target.value)}>{spaces.map(space => <option key={space.id} value={space.id}>{space.label}</option>)}</select></label>
-        <label>브라우저 프로필<select value={profileId} disabled={busy || !!pending} onChange={event => setProfileId(event.target.value)}>{data.profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></label>
+        <label>작업 폴더<Select label="작업 폴더" value={workspaceId} disabled={busy || !!pending} onChange={setWorkspaceId} options={spaces.map(space => ({ value: space.id, label: space.label }))} /></label>
+        <label>브라우저 프로필<Select label="브라우저 프로필" value={profileId} disabled={busy || !!pending} onChange={setProfileId} options={data.profiles.map(profile => ({ value: profile.id, label: profile.name }))} /></label>
         <label>웹 주소<input autoFocus type="text" inputMode="url" autoCapitalize="none" spellCheck={false} value={url} disabled={busy || !!pending} onChange={event => setUrl(event.target.value)} placeholder="https://example.com" /></label>
         <button type="submit" className="button" disabled={busy || !!pending || !workspaceId || !profileId || !data.connected}>웹 탭 열기</button>
       </form>
-      {!spaces.length ? <p>프로젝트에 작업공간을 연결한 뒤 웹 탭을 열어 주세요.</p> : null}
+      {!spaces.length ? <p>프로젝트에 작업 폴더를 연결한 뒤 웹 탭을 열어 주세요.</p> : null}
       {pending ? <div className="browser-pending" role="status"><p>생성 요청의 결과를 확인해야 합니다. 같은 요청으로 새 페이지를 자동 실행하지 않습니다.</p><code>{pending.requestId}</code><button type="button" className="button small" disabled={busy} onClick={() => void run(async () => {
         const page = await browser.reconcileCreation(pending);
         if (!page) throw new Error("아직 생성 기록을 확인할 수 없습니다. 호스트 연결을 확인한 뒤 다시 조회해 주세요.");
@@ -114,7 +114,7 @@ export function NewBrowserDialog({ browser, workspaces, target, onOpen, onClose 
       </form>
     </>}
     {error || data.error ? <p role="alert" className="browser-error">{error || data.error}</p> : null}
-    {data.pages.length ? <section className="browser-existing"><h3>열려 있는 웹 페이지</h3><p className="muted">다른 탭이나 작업공간을 보는 동안에도 페이지와 진행 중인 AI 작업은 유지됩니다.</p>{data.pages.filter(page => page.status !== "closed" && (!workspaceId || page.workspaceId === workspaceId)).map(page => <button type="button" className="ghost-button" key={page.pageId} onClick={() => { onOpen(page); onClose(); }}><strong>{page.title || page.url}</strong><small>{/* A page that rests (tab sleep) is an open page like any other: choosing it opens it again. */ page.status === "interrupted" && page.restedAt === undefined ? "연결 중단 · " : ""}{data.profiles.find(profile => profile.id === page.profileId)?.name} · {page.url}</small></button>)}</section> : null}
+    {data.pages.length ? <section className="browser-existing"><h3>열려 있는 웹 페이지</h3><p className="muted">다른 탭이나 작업 폴더를 보는 동안에도 페이지와 진행 중인 AI 작업은 유지됩니다.</p>{data.pages.filter(page => page.status !== "closed" && (!workspaceId || page.workspaceId === workspaceId)).map(page => <button type="button" className="ghost-button" key={page.pageId} onClick={() => { onOpen(page); onClose(); }}><strong>{page.title || page.url}</strong><small>{/* A page that rests (tab sleep) is an open page like any other: choosing it opens it again. */ page.status === "interrupted" && page.restedAt === undefined ? "연결 중단 · " : ""}{data.profiles.find(profile => profile.id === page.profileId)?.name} · {page.url}</small></button>)}</section> : null}
   </dialog>;
 }
 

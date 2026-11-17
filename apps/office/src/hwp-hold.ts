@@ -65,7 +65,8 @@ export const ELAPSED_AFTER_MS = 20_000;
 export const STOP_GRACE_MS = 8_000;
 
 /** The pure state: what is held and what is said, from the turn's reports. */
-export function createHoldState(clock: Clock = { now: () => Date.now() }, silentAfter = SILENT_AFTER_MS) {
+/** `isEdit`: whether a tool line means the AI has started changing the document (the Hangul page trusts the report's `edit`; the other editors name their own, editor-hold.ts). */
+export function createHoldState(clock: Clock = { now: () => Date.now() }, silentAfter = SILENT_AFTER_MS, isEdit: (event: Extract<TurnActivity, { kind: "tool" }>) => boolean = (event) => event.edit) {
   let working = false, locked = false, edited = false, stopping = false, waitedUntil = 0;
   let startedAt = 0, lastLife = 0, step = "", error: string | null = null, observed: string | null = null;
   const begin = () => {
@@ -92,7 +93,7 @@ export function createHoldState(clock: Clock = { now: () => Date.now() }, silent
       if (event.kind === "remote") { observed = event.turnId; locked = true; }
       // An observed executor turn may show a tool only once it is done (polled): it still names the
       // step, and an edit seen done still means the AI has started changing the document.
-      if (event.kind === "tool") { step = stepLabel(event.name); if (event.edit) edited = true; }
+      if (event.kind === "tool") { step = stepLabel(event.name); if (isEdit(event)) edited = true; }
     },
     /** the adapter's lock (execution-adapter.ts): the executor owns the document, or a send is being prepared */
     lock(value: boolean) { locked = value; if (value) begin(); },
@@ -130,6 +131,35 @@ export function commandOnlyLooks(command: string): boolean {
   if (command.startsWith("view:")) return true;
   return ["edit:copy", "edit:select-all", "edit:find", "edit:find-again", "edit:goto", "edit:compare-documents", "edit:document-history",
     "file:print", "file:print-to-pdf", "file:about"].includes(command);
+}
+
+/** Cursors the studio shows over something a press would move, resize, rotate or reshape (a selected object, its handles, a table border). */
+const OBJECT_CURSOR = /^(move|grab|grabbing|crosshair|[a-z]+-resize)$/;
+/** Room around a selected object's outline where its handles (and the rotate handle above it) are drawn. */
+const HANDLE_SLACK = 28;
+/**
+ * A press in the studio that would drag an object (office-leftovers 4c): move, resize or rotate a selected picture,
+ * shape or table, or resize a table's column/row by its border. The studio starts those drags on mousedown only over a
+ * SELECTED object (its outline and handles are drawn in `.table-object-layer`) or where it shows an object cursor.
+ * A press elsewhere places the caret or starts a selection (looking) and is never held; selecting an object is too.
+ */
+export function pressMovesObject(event: MouseEvent): boolean {
+  if (event.button !== 0) return false;
+  const target = event.target as Element | null;
+  const doc = target?.ownerDocument;
+  if (!doc || !target.closest?.("#scroll-content, #scroll-container")) return false;
+  for (let el: Element | null = target; el; el = el.parentElement) {
+    const cursor = (el as HTMLElement).style?.cursor;
+    if (cursor && OBJECT_CURSOR.test(cursor)) return true;
+  }
+  for (const layer of doc.querySelectorAll(".table-object-layer")) {
+    for (const part of layer.children) {
+      const r = part.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue;
+      if (event.clientX >= r.left - HANDLE_SLACK && event.clientX <= r.right + HANDLE_SLACK && event.clientY >= r.top - HANDLE_SLACK && event.clientY <= r.bottom + HANDLE_SLACK) return true;
+    }
+  }
+  return false;
 }
 
 const DIALOG = ".modal-overlay, .dialog-wrap, .find-dialog, .compare-dialog, [role=\"dialog\"]";
@@ -232,6 +262,8 @@ export function installHwpHold(doc: Document, options: { stop(turnId: string | n
     const change = (event: Event) => { if (held() && !inDialog(event.target)) refuse(event); };
     const click = (event: Event) => {
       if (!held()) return;
+      // Dragging an object changes the document: it waits like typing (the press that would start the drag is refused).
+      if (event.type === "mousedown" && !inDialog(event.target) && pressMovesObject(event as MouseEvent)) { refuse(event); return; }
       const command = (event.target as Element | null)?.closest?.("[data-cmd]")?.getAttribute("data-cmd");
       if (command && !commandOnlyLooks(command)) refuse(event);
     };

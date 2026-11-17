@@ -40,6 +40,8 @@ beforeEach(() => {
   });
 });
 afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+// These open documents in their editor: the person's choice "편집기로 바로 열기" (the default is 쪽 보기 first since doc-default).
+beforeEach(() => { localStorage.setItem("workbench.docOpen", "editor"); });
 
 const work = { id: "w", title: "강의", cwd: "/w", folderId: null, archivedAt: null } as unknown as Work;
 const markdown = { id: "doc", workId: "w", name: "강의안.md", path: "/w/강의안.md", format: "markdown", revision: 1, sha256: "", size: 4, diskState: "same", readBy: {}, createdAt: 1, updatedAt: 1 } as Artifact;

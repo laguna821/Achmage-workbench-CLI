@@ -301,7 +301,7 @@ describe("a line from the chat becomes one request", () => {
     await kit.adapter.deliver(kit.adapter.message("", { files: [{ fileRef: "f1", name: "칠판.jpg", mime: "image/jpeg", size: 1000, kind: "photo" }] }));
     await settle(kit);
     expect(kit.engine.sent).toEqual([]);
-    expect(kit.adapter.texts().at(-1)).toBe("「칠판.jpg」을(를) 받지 못했습니다. 다시 보내 주세요.");
+    expect(kit.adapter.texts().at(-1)).toBe("「칠판.jpg」를 받지 못했습니다. 다시 보내 주세요.");
   });
 
   it("tells once when requests waited at the messenger while the PC was off, and runs them", async () => {

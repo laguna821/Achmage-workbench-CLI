@@ -276,3 +276,4 @@
   .hig-composer, .transcript .response-pending-dots i, .attach-lightbox, .image-viewer { animation: none; transition: none; }
 }
 
+.transcript .turns-earlier { display: flex; justify-content: center; padding-block: var(--space-sm); }

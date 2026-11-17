@@ -1,3 +1,4 @@
+import { withParticle } from "@workbench/contracts";
 import { Icon } from "../Icon.tsx";
 import { failure } from "../../top-notice.ts";
 import type { MenuEntry, MenuRequest } from "../ContextMenu.tsx";
@@ -110,7 +111,7 @@ export function PlacementMark({ workId }: { workId: string }) {
   const placement = pkm.pkmState?.placements[workId];
   if (!placement) return null;
   return (
-    <span className="rule-mark" title={`규칙 「${placement.ruleName}」으로 여기 있음`} aria-label={`규칙 ${placement.ruleName}`}>
+    <span className="rule-mark" title={`규칙 ${withParticle(`「${placement.ruleName}」`, "으로/로")} 여기 있음`} aria-label={`규칙 ${placement.ruleName}`}>
       <Icon name="bolt" size={11} />
     </span>
   );

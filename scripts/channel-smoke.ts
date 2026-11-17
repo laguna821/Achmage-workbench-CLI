@@ -102,7 +102,8 @@ try {
   check("1 status line", await answered(count, (text) => text === "작업 중 · 0:00"));
   check("1 answer", await answered(count, (text) => text.includes("답이 길어 앞부분만 보냈습니다"), 60_000));
   check("1 status edited to 끝남", fake.of("editMessageText").some((call) => /^끝남 · \d+:\d{2}$/.test(String(call.params.text))));
-  check("1 whole answer as .md", fake.of("sendDocument").some((call) => call.file?.name.endsWith(" 답.md") === true));
+  // The file follows the text by a moment.
+  check("1 whole answer as .md", await wait(() => fake.of("sendDocument").some((call) => call.file?.name.endsWith(" 답.md") === true), 15_000));
 
   // 2. 문서 만들기: the file the turn wrote comes as an attachment.
   count = texts().length;
@@ -271,7 +272,7 @@ try {
     await answered(count, (text) => text.includes("의 새 이름을 적어 보내 주세요"));
     count = texts().length;
     fake.message("스모크 이름");
-    const renamed = await answered(count, (text) => text === "대화 이름을 「스모크 이름」(으)로 바꿨습니다.");
+    const renamed = await answered(count, (text) => text === "대화 이름을 「스모크 이름」으로 바꿨습니다.");
     check("14 대화 이름 바꾸기 through the desktop's rename", renamed && (await snapshot()).sessions.find((session) => session.id === pointer)?.purpose === "스모크 이름");
     count = texts().length;
     fake.message("꼬리말 끄기");
@@ -286,6 +287,52 @@ try {
     check("14 the command button lists the nine", commands?.map((entry) => entry.command).join(" ") === "menu new chats model status usage retry stop help");
     const record = await api<{ rows: { action: string; target: string | null; result: string | null }[] }>("GET", "/api/channels/audit?limit=500");
     check("14 retry, rename and footer recorded without content", ["retry", "rename", "footer"].every((action) => record.rows.some((row) => row.action === action)) && !JSON.stringify(record.rows).includes("스모크 이름") && !JSON.stringify(record.rows).includes("도식"));
+  }
+
+  // Unit 13 "확인 받기": turned on at the PC, the chat's new conversations are `auto`, and the stand-in
+  // engines' command approvals (Claude Code's can_use_tool, Codex's requestApproval) come to the chat
+  // as [허용] [거절]; answered from the chat, the turn goes on. Off again: `full` as before.
+  {
+    const bindingId = (await api<ChannelsState>("GET", "/api/channels")).bots[0]!.bindings[0]!.id;
+    count = texts().length;
+    const on = await api<ChannelsState>("PATCH", `/api/channels/bindings/${bindingId}`, { confirm: true });
+    check("13 확인 받기 on at the PC", on.bots[0]!.bindings[0]!.confirm === true);
+    check("13 the chat is told once", await answered(count, (text) => text.startsWith("확인 받기를 켰습니다.")));
+    const current = async () => { const id = (await api<ChannelsState>("GET", "/api/channels")).bots[0]!.bindings[0]!.pointerSessionId; return (await snapshot()).sessions.find((session) => session.id === id)!; };
+    for (const provider of ["Claude", "Codex"] as const) {
+      count = texts().length;
+      fake.message("메뉴");
+      await answered(count, (text) => text.startsWith("메뉴 · 지금:"));
+      const engineMenu = press("엔진·모델");
+      await wait(() => shown(engineMenu).includes("지금:"));
+      if (shown(engineMenu).includes(`지금: ${provider}`)) {
+        count = texts().length;
+        fake.message("새 대화");
+        await answered(count, (text) => text.startsWith("새 대화를 만들었습니다"));
+      } else {
+        press(provider);
+        await wait(() => shown(engineMenu).startsWith(`이 대화를 ${provider}로`));
+      }
+      const session = await current();
+      check(`13 ${provider}: the new conversation is auto`, session.access === "auto" && session.provider === provider.toLowerCase(), `${session.provider} ${session.access}`);
+      count = texts().length;
+      fake.message("명령 실행해 줘");
+      const asked = await wait(() => { try { fake.button("허용"); return textsSince(count).some((text) => text.startsWith(`「${session.purpose}」 · `)); } catch { return false; } }, 60_000);
+      check(`13 ${provider}: the approval came with 허용/거절 and the conversation's name`, asked && Boolean(fake.button("거절")), textsSince(count).slice(-2).join(" | "));
+      if (asked) {
+        const question = press("허용");
+        check(`13 ${provider}: answered from the chat, the turn goes on`, await wait(() => shown(question).includes("허용함 · ")) && await answered(count, (text) => !text.startsWith("작업 중") && !text.startsWith("「") && !text.startsWith("대기열"), 60_000), shown(question).split("\n").at(-1));
+        // The turn's whole answer (and its file) has gone before the next check counts what is sent.
+        await wait(async () => (await snapshot()).sessions.find((entry) => entry.id === session.id)?.status === "idle", 60_000);
+        await new Promise((done) => setTimeout(done, 2_000));
+      }
+      check(`13 ${provider}: no stricter-mode notice for the chosen mode`, !textsSince(count).some((text) => text.includes("모드라")));
+    }
+    await api("PATCH", `/api/channels/bindings/${bindingId}`, { confirm: false });
+    count = texts().length;
+    fake.message("새 대화");
+    await answered(count, (text) => text.startsWith("새 대화를 만들었습니다"));
+    check("13 off again: a new conversation is full", (await current()).access === "full");
   }
 
   // The gates hold: nothing secret in the data folder, the record holds no message text.

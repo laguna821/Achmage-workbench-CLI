@@ -55,11 +55,11 @@ const ENTRY_POINTS: [string, (entries: ReturnType<typeof sessionEntries>, ai: Se
   ["왼쪽 사이드바의 문서 줄(AI 표시)", (entries, ai) => entries.documentRow({ id: ai.documentAgent!.artifactId }, ai)],
   ["문서 줄 메뉴 › 문서 AI › 열기", (entries, ai) => entries.open(ai)],
   ["오른쪽 사이드바 연결 줄", (entries, ai) => entries.open(ai)],
-  ["세션 전환기 (Ctrl+Tab)", (entries, ai) => entries.open(ai)],
+  ["대화 전환기 (Ctrl+Tab)", (entries, ai) => entries.open(ai)],
   ["완료 알림 › 열기", (entries, ai) => entries.byId(ai.id)],
   ["프로젝트 쪽 확인 필요 · 대화 카드", (entries, ai) => entries.open(ai)],
-  ["위 막대 확인 N · 세션 탭", (entries, ai) => entries.select({ id: ai.workId }, ai)],
-  ["문서 카드·세션 잇기의 대화 열기", (entries, ai) => entries.byId(ai.id)],
+  ["위 막대 확인 N · 대화 탭", (entries, ai) => entries.select({ id: ai.workId }, ai)],
+  ["문서 카드·대화 잇기의 대화 열기", (entries, ai) => entries.byId(ai.id)],
   ["알림 센터 · 시스템 알림", (entries, ai) => entries.openThen(ai, () => undefined)],
 ];
 

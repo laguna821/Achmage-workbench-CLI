@@ -82,12 +82,16 @@ function docs(code: string, module: string): string {
         const editor = editorRef.current;
         if (locked && editor && !editor.isDestroyed) {
           if (!workbenchEditable.has(editor)) workbenchEditable.set(editor, editor.isEditable);
-          editor.setEditable(false);
+          // No update event: the editor counts every update as an edit (the view said 저장 안 됨 after each turn,
+          // and the AI's result then met a conflict instead of being taken).
+          editor.setEditable(false, false);
         } else if (!locked) {
-          for (const [original, editable] of workbenchEditable) if (!original.isDestroyed) original.setEditable(editable);
+          for (const [original, editable] of workbenchEditable) if (!original.isDestroyed) original.setEditable(editable, false);
           workbenchEditable.clear();
         }
-        workbenchLockDocument('.app-content, .ribbon', locked);
+        // The page and the ribbon stay open to look at; typing and changing controls wait (editor-hold.ts).
+        const hold = Reflect.get(window, 'workbenchEditorHold');
+        if (hold) hold.lock(locked); else workbenchLockDocument('.app-content, .ribbon', locked);
       },
     });
     return () => { unregister(); loopRef.current?.detach(); };

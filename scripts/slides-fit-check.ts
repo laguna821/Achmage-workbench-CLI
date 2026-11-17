@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { chromium, type Browser, type FrameLocator, type Page } from "playwright-core";
+import { editorFirst } from "./fixtures/editor-first.ts";
 
 const out = resolve(process.argv[2] ?? "slides-fit"); mkdirSync(out, { recursive: true });
 const dir = mkdtempSync(join(tmpdir(), "wb-slides-fit-"));
@@ -43,10 +44,25 @@ const server = createServer(async (req, res: ServerResponse) => {
   const body = JSON.parse(raw);
   // The request's own marker: the last user message's (earlier turns' markers are in the history too).
   const lastUser = JSON.stringify(body.messages.filter((message: { role: string }) => message.role === "user").at(-1)?.content ?? "");
-  const marker = Object.keys(TURNS).filter((key) => lastUser.includes(key)).sort((a, b) => b.length - a.length)[0] ?? "FIT_ADD";
+  const grid = /GRID_EDIT_\d+/.exec(lastUser)?.[0];
+  const marker = grid ?? Object.keys(TURNS).filter((key) => lastUser.includes(key)).sort((a, b) => b.length - a.length)[0] ?? "FIT_ADD";
   res.setHeader("content-type", "text/event-stream");
   const send = (delta: unknown, finish_reason: string | null = null) => res.write(`data: ${JSON.stringify({ id: marker, choices: [{ index: 0, delta, finish_reason }] })}\n\n`);
   const last = body.messages.at(-1);
+  // Excel (office-leftovers 4a): the sheet's id from the workbook context, then one cell set (held until the script says).
+  if (grid) {
+    const tools = body.messages.filter((message: { role: string }) => message.role === "tool");
+    if (tools.length === 0) { send({ tool_calls: [{ index: 0, id: `ctx-${grid}`, type: "function", function: { name: "get_workbook_context", arguments: "{}" } }] }); send({}, "tool_calls"); res.end("data: [DONE]\n\n"); return; }
+    if (tools.length === 1) {
+      const sheetId = /id=([\w-]+)/.exec(JSON.stringify(tools[0].content ?? ""))?.[1];
+      held.set(grid, () => {
+        send({ tool_calls: [{ index: 0, id: `set-${grid}`, type: "function", function: { name: "propose_operations", arguments: JSON.stringify({ operations: [{ op: "set_cell", sheetId, address: "B3", value: 7 }], summary: grid }) } }] });
+        send({}, "tool_calls"); res.end("data: [DONE]\n\n");
+      });
+      return;
+    }
+    send({ role: "assistant", content: `${grid} 끝났습니다.` }); send({}, "stop"); res.end("data: [DONE]\n\n"); return;
+  }
   if (last?.role === "tool") { send({ role: "assistant", content: `${marker} 끝났습니다.` }); send({}, "stop"); res.end("data: [DONE]\n\n"); return; }
   send({ role: "assistant", content: `${marker} 슬라이드를 고칩니다.` });
   held.set(marker, () => {
@@ -80,6 +96,7 @@ try {
   const add = async (from: string, name: string) => { const file = join(work.cwd, name); copyFileSync(resolve(from), file); return api(`/api/works/${work.id}/artifacts`, "POST", { path: file }); };
   const deck = await add("scripts/fixtures/cover.pptx", "표지.pptx");
   const word = await add("vendor/ieumoffice/apps/docs/tests/pagination-corpus/docx/simple.docx", "보고서.docx");
+  const book = await add("scripts/fixtures/supplies.xlsx", "물품.xlsx");
   const config = await api("/api/office-ai/settings");
   config.settings.provider = "custom"; config.settings.subscriptionNoticeSeen = true; config.settings.customEndpoint = "fixture";
   config.settings.customEndpoints = [{ id: "fixture", name: "Local fixture", baseUrl: `http://127.0.0.1:${address.port}/v1`, apiKey: "", model: "fit-fixture", kind: "local", modelProfiles: { "fit-fixture": { tools: true, toolsSource: "user", contextLength: 1000000, contextSource: "user" } } }];
@@ -88,6 +105,7 @@ try {
   const tabs = [
     { id: "deck", workId: work.id, sessionId: null, view: { kind: "document", artifactId: deck.id, proposalId: null } },
     { id: "word", workId: work.id, sessionId: null, view: { kind: "document", artifactId: word.id, proposalId: null } },
+    { id: "book", workId: work.id, sessionId: null, view: { kind: "document", artifactId: book.id, proposalId: null } },
     { id: "main", workId: work.id, sessionId: main.id, view: { kind: "work" } },
   ];
   await api("/api/layouts/global", "PUT", { expectedRevision: 0, layout: { version: 2, focus: "test-pane", panes: [{ ...tabs[0], id: "test-pane", tabs, activeTabId: "deck", recentTabIds: ["deck"] }] } });
@@ -95,6 +113,7 @@ try {
   browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await context.addInitScript(id => localStorage.setItem("workbench.lastWork", id), work.id);
+  await editorFirst(context);
   page = await context.newPage();
   page.on("pageerror", error => errors.push(error.message));
   await page.goto(`${ready.url}/?token=${ready.token}`);
@@ -188,6 +207,70 @@ try {
     check(`Word panel ${open ? "open" : "closed"}: the page is centred in its view`, Math.abs(page_.dx) <= TOLERANCE * 2, JSON.stringify(page_));
     await page.screenshot({ path: join(out, `word-panel-${open ? "open" : "closed"}.png`) });
   }
+  // Excel (office-leftovers 4a): the grid's origin — the drawing canvas fills its container from its top-left corner, and
+  // the first row/column in view are the first ones (no stray scroll) — after a panel toggle, a resize and an AI edit.
+  await activate("book");
+  await frameOf().locator("#univer-container canvas").first().waitFor({ timeout: 60_000 });
+  await frameOf().locator(".ai-dock, .copilot").first().waitFor({ timeout: 30_000 });
+  await wait(2500);
+  const gridOrigin = () => frameOf().locator("body").evaluate(() => {
+    const host = document.querySelector<HTMLElement>("#univer-container");
+    if (!host) return null;
+    const h = host.getBoundingClientRect();
+    const canvas = [...host.querySelectorAll("canvas")].map((c) => c.getBoundingClientRect()).sort((a, b) => b.width * b.height - a.width * a.height)[0];
+    const api = (window as unknown as { __workbenchUniverAPI?: { getActiveWorkbook(): { getActiveSheet(): { getScrollState?(): { sheetViewStartRow: number; sheetViewStartColumn: number; offsetX: number; offsetY: number } } } | null } }).__workbenchUniverAPI;
+    const scroll = api?.getActiveWorkbook()?.getActiveSheet().getScrollState?.();
+    return {
+      canvas: canvas ? [Math.round(canvas.left - h.left), Math.round(canvas.top - h.top), Math.round(canvas.width), Math.round(canvas.height)] : null,
+      host: [Math.round(h.width), Math.round(h.height)],
+      first: scroll ? [scroll.sheetViewStartRow, scroll.sheetViewStartColumn, Math.round(scroll.offsetX), Math.round(scroll.offsetY)] : null,
+    };
+  });
+  let gridBase: { top: number; short: number } | null = null;
+  const gridCheck = async (label: string) => {
+    await wait(900);
+    const g = await gridOrigin();
+    measures[`excel ${label}`] = g;
+    if (process.env.GRID_DEBUG) measures[`excel ${label} chain`] = await frameOf().locator("body").evaluate(() => {
+      const out: string[] = [];
+      for (let el: HTMLElement | null = document.querySelector<HTMLElement>("#univer-container"); el && el !== document.body; el = el.parentElement) {
+        const cs = getComputedStyle(el), r = el.getBoundingClientRect();
+        out.push(`${el.tagName.toLowerCase()}.${String(el.className).split(" ").slice(0, 2).join(".")} x=${Math.round(r.left)} w=${Math.round(r.width)} h=${Math.round(r.height)} min=${cs.minWidth} flex=${cs.flex} disp=${cs.display}`);
+        for (const sib of el.parentElement ? [...el.parentElement.children] : []) if (sib !== el) { const sr = sib.getBoundingClientRect(); out.push(`   sib ${sib.tagName.toLowerCase()}.${String(sib.className).split(" ")[0]} w=${Math.round(sr.width)} h=${Math.round(sr.height)} min=${getComputedStyle(sib).minWidth}`); }
+      }
+      const fb = document.querySelector<HTMLElement>(".formula-bar"); if (fb) out.push(`formula-bar h=${Math.round(fb.getBoundingClientRect().height)}`);
+      return out;
+    });
+    // The first measure is the reference: the canvas sits under the formula row (its top offset) and above the sheet
+    // tabs (its height short of the container's); every later state must have the same offsets, the full width, a
+    // grid that is really there (not squeezed) and the first row/column in view.
+    gridBase ??= g && g.canvas ? { top: g.canvas[1]!, short: g.host[1]! - g.canvas[3]! } : null;
+    const ok = Boolean(g && g.canvas && gridBase && Math.abs(g.canvas[0]!) <= 1 && Math.abs(g.canvas[1]! - gridBase.top) <= 2 && Math.abs(g.canvas[2]! - g.host[0]!) <= 2
+      && Math.abs(g.host[1]! - g.canvas[3]! - gridBase.short) <= 2 && g.host[0]! > 200 && g.first && g.first.every((v) => v === 0));
+    check(`Excel ${label}: the grid at its origin (same offsets as when opened), full width, first row/column in view`, ok, JSON.stringify({ ...g, base: gridBase }));
+    await page!.screenshot({ path: join(out, `xlsx-${label.replace(/[^a-z0-9]+/gi, "-")}.png`) });
+  };
+  const gridTurn = async (marker: string) => {
+    const frame = frameOf();
+    const box = frame.locator(".ai-dock:not(.collapsed) textarea, .copilot:not(.collapsed) textarea").first();
+    await box.fill(`셀을 고쳐 주세요 ${marker}`); await box.press("Enter");
+    await until(async () => held.has(marker), 45_000);
+    held.get(marker)!(); held.delete(marker);
+    await until(async () => (await frame.locator("body").innerText()).includes(`${marker} 끝났습니다.`), 45_000);
+    await wait(1_500);
+  };
+  await gridCheck("1440 opened");
+  await panel(true); await gridCheck("1440 panel open");
+  await panel(false); await gridCheck("1440 panel closed");
+  await panel(true);
+  await gridTurn("GRID_EDIT_1"); await gridCheck("1440 after an AI edit");
+  await panel(false); await gridCheck("1440 panel closed after the AI edit");
+  await page.setViewportSize({ width: 1000, height: 800 }); await gridCheck("1000 window resized");
+  await panel(true); await gridCheck("1000 panel open");
+  await gridTurn("GRID_EDIT_2"); await gridCheck("1000 after an AI edit");
+  await page.setViewportSize({ width: 1440, height: 900 }); await gridCheck("1440 resized back with the panel open");
+  await panel(false); await gridCheck("1440 panel closed at the end");
+
   check("no browser exceptions", errors.length === 0, errors.join("; "));
 } catch (error) {
   check("PowerPoint fit scenario", false, String(error));

@@ -14,6 +14,7 @@ const scope = self as unknown as { postMessage(message: WorkerMessage, transfer?
 const post = (message: WorkerMessage, transfer: Transferable[] = []) => scope.postMessage(message, transfer);
 
 let viewId = 0;
+let view: ReturnType<typeof createSheetsView> | null = null;
 let path = "";
 
 connect({
@@ -30,9 +31,17 @@ async function handle(call: WorkerCall): Promise<{ value: unknown; unhandled?: b
       registerSheetsIpc();
       return { value: true };
     case "open": {
+      // A new revision for the RUNNING editor (office-leftovers point 2): its own file per generation, queued for the
+      // same view; the page then runs the editor's own open (menu "open" → the queued workbook), no new view.
+      if (call.generation && view) {
+        path = `/document/g${call.generation}/${call.name.replace(/[\\/]/g, "_")}`;
+        vfs.write(path, new Uint8Array(call.bytes));
+        queueWorkbookForView(view.webContents, path);
+        return { value: viewId };
+      }
       path = `/document/${call.name.replace(/[\\/]/g, "_")}`;
       vfs.write(path, new Uint8Array(call.bytes));
-      const view = createSheetsView({ includeAiHandlers: false, openingWorkbook: true });
+      view = createSheetsView({ includeAiHandlers: false, openingWorkbook: true });
       queueWorkbookForView(view.webContents, path);
       viewId = view.webContents.id;
       return { value: viewId };

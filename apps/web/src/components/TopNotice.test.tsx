@@ -74,7 +74,7 @@ it("keeps its clock while the app re-renders around it, and restarts it for a ne
 
 it("a standing notice stays until its cause is gone: no clock, no close, and its two ways out do not dismiss it", () => {
   const onClose = vi.fn(), load = vi.fn(), keep = vi.fn();
-  render(<TopNotice slot={{ kind: "error", text: "다른 창에서 이 작업공간의 배치를 바꿨습니다.", action: { label: "저장된 배치 불러오기", run: load } }} more={{ label: "현재 배치로 저장", run: keep }} standing serial={0} onOpen={() => {}} onClose={onClose} />);
+  render(<TopNotice slot={{ kind: "error", text: "다른 창에서 이 작업 폴더의 배치를 바꿨습니다.", action: { label: "저장된 배치 불러오기", run: load } }} more={{ label: "현재 배치로 저장", run: keep }} standing serial={0} onOpen={() => {}} onClose={onClose} />);
   act(() => { vi.advanceTimersByTime(60_000); });
   expect(onClose).not.toHaveBeenCalled();
   expect(screen.getByRole("alert").textContent).toContain("배치를 바꿨습니다");

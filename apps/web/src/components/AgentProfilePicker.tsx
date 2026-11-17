@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { ACCESS_LABEL, ACCESS_MODES, EFFORT_LABEL, PROVIDER_LABEL, type AgentProfile, type AgentProfileInput, type ModelOption, type Provider, type Session } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import { Icon } from "./Icon.tsx";
+import { Select } from "./ui/Select.tsx";
 import { MenuItem, Popover } from "./Popover.tsx";
 import { plainModelLabel } from "./ModelPicker.tsx";
 import { restoreSurfaceFocus } from "./controls/menu-navigation.ts";
@@ -52,12 +53,10 @@ function ProfileEditor({ profile, provider, models, onRefreshModels, onSave, onD
       <fieldset disabled={busy}>
         <label>역할 이름<input autoFocus required value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></label>
         <div className="profile-field-pair">
-          <label>사용할 엔진<select value={draft.provider ?? ""} onChange={event => setDraft({ ...draft, provider: (event.target.value || null) as Provider | null })}>
-            <option value="">대화의 엔진 따르기</option>{(["claude", "codex"] as const).map(value => <option key={value} value={value}>{PROVIDER_LABEL[value]}</option>)}
-          </select></label>
-          <label>기본 권한<select value={draft.access ?? ""} onChange={event => setDraft({ ...draft, access: (event.target.value || null) as AgentProfileInput["access"] })}>
-            <option value="">대화 기본값</option>{ACCESS_MODES.map(value => <option key={value} value={value}>{ACCESS_LABEL[value]}</option>)}
-          </select></label>
+          <label>사용할 엔진<Select label="사용할 엔진" value={draft.provider ?? ""} onChange={value => setDraft({ ...draft, provider: (value || null) as Provider | null })}
+            options={[{ value: "", label: "대화의 엔진 따르기" }, ...(["claude", "codex"] as const).map(value => ({ value, label: PROVIDER_LABEL[value] }))]} /></label>
+          <label>기본 권한<Select label="기본 권한" value={draft.access ?? ""} onChange={value => setDraft({ ...draft, access: (value || null) as AgentProfileInput["access"] })}
+            options={[{ value: "", label: "대화 기본값" }, ...ACCESS_MODES.map(value => ({ value, label: ACCESS_LABEL[value] }))]} /></label>
         </div>
         <label>기본 모델 ID<input list={modelListId} value={draft.model ?? ""} placeholder="비워 두면 엔진 기본값" onChange={event => setDraft({ ...draft, model: event.target.value || null })} /></label>
         <datalist id={modelListId}>{discovered.map(model => <option key={model.id} value={model.id}>{plainModelLabel(model.label)}</option>)}</datalist>

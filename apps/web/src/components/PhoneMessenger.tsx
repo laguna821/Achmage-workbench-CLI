@@ -1,3 +1,5 @@
+import { particle, withParticle } from "@workbench/contracts";
+import { PHONE_TWO_WAYS } from "./phone-words.ts";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { PROVIDER_LABEL, type ChannelAuditRow, type ChannelBinding, type ChannelBot, type ChannelKind, type ChannelPairingLink, type ChannelPairingRequest, type ChannelsState, type Provider } from "@workbench/contracts";
 import { ApiRequestError, type Api } from "../api.ts";
@@ -52,9 +54,13 @@ const RISKS = [
 const NO_KEYRING = "이 PC에는 토큰을 봉인해 둘 보안 저장소(키링)가 없습니다. 토큰을 평문으로 저장하지 않습니다.";
 const BOT_NAME = "내 Workbench";
 const AUTOSTART = "PC를 켜면 자동으로 시작";
+/** In the wizard the switch is a wish applied when the connection is made, so it says so (it is not the current setting). */
+const AUTOSTART_WISH = "연결을 마치면 PC를 켤 때 자동으로 시작";
 // "이 메신저의 기본 엔진": the engine of the conversations a messenger's chat makes (the first one, 새 대화, a move
 // to another project) when none was named. Also set from the chat's own engine screen; each shows the other's.
 const DEFAULT_ENGINE = "기본 엔진";
+/** Unit 13: the chat's 메뉴 › 알림 › 확인 받기, the same value. */
+const CONFIRM = "확인 받기";
 const ENGINE_CHOICES: { value: Provider | "none"; label: string }[] = [{ value: "none", label: "정하지 않음" }, { value: "claude", label: PROVIDER_LABEL.claude }, { value: "codex", label: PROVIDER_LABEL.codex }];
 const REMOVE_WARNING = "이 PC에서 봇 등록을 지웁니다. 휴대폰 연결도 끊어지고, 다시 쓰려면 토큰을 넣고 다시 연결해야 합니다. 봇과 토큰은 텔레그램에 그대로 남습니다(끝내려면 BotFather에서 토큰을 폐기하세요).";
 const REMOVE_WARNING_SLACK = "이 PC에서 Slack 앱 등록을 지웁니다. 연결도 끊어지고, 다시 쓰려면 토큰 두 개를 넣고 다시 연결해야 합니다. Slack 앱과 토큰은 Slack에 그대로 남습니다(끝내려면 api.slack.com에서 앱을 지우세요).";
@@ -117,7 +123,7 @@ export function PhoneMessenger({ api, openExternal, copy, readClipboard, onClose
     setState(next);
     setError("");
     const bot = next.bots.find((entry) => entry.kind === view);
-    setNotice(bot ? (bot.kind === "slack" ? `Slack 앱 @${bot.username}(${bot.name})을 확인했습니다.` : `봇 @${bot.username}을 확인했습니다.`) : "");
+    setNotice(bot ? (bot.kind === "slack" ? `Slack 앱 @${bot.username}(${bot.name})${particle(bot.username, "을/를")} 확인했습니다.` : `봇 @${withParticle(`${bot.username}`, "을/를")} 확인했습니다.`) : "");
     if (wantAutostart && autostart?.supported && !autostart.enabled) await setStartup(true);
   };
   const toRows = () => { setOpened(null); setError(""); setNotice(""); };
@@ -159,6 +165,7 @@ function MessengerRows({ state, onOpen, onVault }: { state: ChannelsState; onOpe
       control={<button type="button" className="button small" aria-label={`${name} 열기`} onClick={() => onOpen(which)}>열기</button>} />;
   };
   return <>
+    <p className="settings-lead">{PHONE_TWO_WAYS}</p>
     <SettingsGroup>{row("telegram")}{row("slack")}</SettingsGroup>
     <SettingsGroup><SettingsRow label="비밀 보관함" hint="AI가 쓸 로그인과 키를 넣어 두는 곳입니다." control={<button type="button" className="button small" aria-label="비밀 보관함 열기" onClick={onVault}>열기</button>} /></SettingsGroup>
   </>;
@@ -200,7 +207,7 @@ function Wizard({ api, openExternal, copy, readClipboard, autostart, wantAutosta
     <div className="feature-actions">
       <button type="button" className="button primary" onClick={() => go("open")}>텔레그램으로 시작</button>
     </div>
-    {autostart?.supported ? <SettingsGroup><SettingsRow label={AUTOSTART} control={<SettingsSwitch label={AUTOSTART} checked={autostart.enabled || wantAutostart} disabled={autostart.enabled} onChange={setWantAutostart} />} /></SettingsGroup> : null}
+    {autostart?.supported ? <SettingsGroup><SettingsRow label={AUTOSTART_WISH} control={<SettingsSwitch label={AUTOSTART_WISH} checked={autostart.enabled || wantAutostart} disabled={autostart.enabled} onChange={setWantAutostart} />} /></SettingsGroup> : null}
   </section>;
 
   if (step === "open") return shell(<>
@@ -365,7 +372,11 @@ function Registered({ api, bot, autostart, notice, setNotice, setError, setState
           <div className="feature-actions"><button type="button" className="button small" disabled={busy} onClick={() => void patch({ revoked: true }, "연결을 끊었습니다. 그 휴대폰에서 온 글은 이제 실행하지 않습니다.")}>연결 끊기</button></div>
         </section> : <Pairing api={api} bot={bot} busy={busy} act={act} refresh={refresh} openExternal={openExternal} copy={copy} />}
         <SettingsGroup><SettingsRow label={DEFAULT_ENGINE} hint="이 메신저에서 새 대화를 만들 때 쓰는 엔진입니다. 휴대폰의 메뉴 › 엔진·모델에서도 바꿉니다."
-          control={<Segmented label={DEFAULT_ENGINE} value={bot.defaultEngine ?? "none"} onChange={setEngine} options={ENGINE_CHOICES} />} /></SettingsGroup>
+          control={<Segmented label={DEFAULT_ENGINE} value={bot.defaultEngine ?? "none"} onChange={setEngine} options={ENGINE_CHOICES} />} />
+          {binding ? <SettingsRow label={CONFIRM} hint="켜면 이 채팅이 새로 만드는 대화는 '자동' 모드로, 명령 실행처럼 먼저 물어야 하는 일은 휴대폰에 [허용] [거절]로 묻습니다. 꺼 두면 묻지 않고 끝까지 합니다. 휴대폰의 메뉴 › 알림에서도 바꿉니다."
+            control={<SettingsSwitch label={CONFIRM} checked={Boolean(binding.confirm)} disabled={busy} onChange={(next) => void patch({ confirm: next }, next
+              ? "확인 받기를 켰습니다. 이 채팅이 새로 만드는 대화는 '자동' 모드로, 묻는 일은 휴대폰에 [허용] [거절]로 갑니다."
+              : "확인 받기를 껐습니다. 새 대화는 전처럼 묻지 않고 끝까지 합니다.")} />} /> : null}</SettingsGroup>
         <section className="pm-section" aria-label="토큰 보관">
           <dl className="pm-facts"><div><dt>{bot.kind === "slack" ? "토큰 두 개" : "봇 토큰"}</dt><dd>{bot.token === "sealed" ? "보안 저장소에 봉인해 두었습니다." : bot.token === "memory" ? "이번 실행 동안만 기억합니다. PC를 다시 켜면 다시 넣어야 합니다." : "없습니다. 다시 넣어 주세요."}</dd></div></dl>
           {replacing ? (bot.kind === "slack" ? <SlackTokenForm api={api} fresh readClipboard={readClipboard} onCancel={() => setReplacing(false)}
@@ -501,7 +512,7 @@ function Pairing({ api, bot, busy, act, refresh, openExternal, copy }: {
             : <div className="pm-qr-row">
               <img className="pm-qr" src={link.qr} alt="텔레그램 봇 연결 QR" width={208} height={208} />
               <div>
-                <p>찍으면 휴대폰 텔레그램이 봇 @{bot.username}을 엽니다. [시작]을 누르세요.</p>
+                <p>찍으면 휴대폰 텔레그램이 봇 @{withParticle(`${bot.username}`, "을/를")} 엽니다. [시작]을 누르세요.</p>
                 <p>휴대폰에 숫자 네 개가 나오면 이 화면에도 같은 숫자가 나옵니다.</p>
                 <p className="pm-hint"><span data-testid="pairing-countdown" aria-hidden="true">{clock(left)} 남음. </span><span>{time(link.expiresAt)}까지 쓸 수 있는 한 번만 쓰는 QR입니다.</span></p>
                 <p className="pm-hint">카메라로 열리지 않으면, 같은 계정으로 로그인한 이 PC의 텔레그램에서 열 수 있습니다.</p>
@@ -588,6 +599,7 @@ export function actionLabel(row: ChannelAuditRow): string {
     case "command": return "모르는 명령";
     case "compact": return `대화 압축${row.result === "started" ? "" : ", 하지 못함"}`;
     case "footer": return `답 아래 안내 ${row.result === "on" ? "켬" : "끔"}`;
+    case "confirm": return `확인 받기 ${row.result === "on" ? "켬" : "끔"}`;
     case "rename": return "대화 이름 바꿈";
     case "retry": return `다시 하기${row.result === "refused" ? ", 할 수 없음" : ""}`;
     // A record this screen does not know yet: a plain word, never the code (design review I9).

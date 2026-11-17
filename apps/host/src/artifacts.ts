@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { chmodSync, constants as fsConstants, copyFileSync, existsSync, linkSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmdirSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, constants as fsConstants, copyFileSync, existsSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, rmdirSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { diffLines } from "diff";
 import {
@@ -15,6 +15,7 @@ import {
   type ProposalCloser,
   type Provenance,
   type RefSummary,
+  type RenameJournal,
   type TurnBreak,
 } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
@@ -26,6 +27,8 @@ import { hangulPages } from "./hwp-pages.mjs";
 import { designAssetPath, designGuide, designProblem, designStem, saveDesignAsset } from "./design.ts";
 import type { IeumOffice, OfficePage } from "./ieumoffice.ts";
 import { BackgroundIndex } from "./doc-text.ts";
+import { PagePictures, PICTURE_CACHE_BOUND, sweepPictures, type PicturesOptions } from "./page-pictures.ts";
+import { hangulPicture, pictureSvg } from "./channels/hangul-picture-run.ts";
 import { DocumentRegistry } from "./document-registry.ts";
 import { writeAtomic } from "./atomic-write.ts";
 import { DesignDrafts } from "./design-drafts.ts";
@@ -52,15 +55,71 @@ function readFileOrNull(path: string): Buffer | null {
   }
 }
 
-/** File system steps a test can stand in for (a failing link, another device). */
+/**
+ * File system steps a test can stand in for (a failing link, another device, a file system where two
+ * names are one entry, storage without hard links, a file another program holds).
+ */
 export const fileOps = {
-  link: linkSync,
+  link: (from: string, to: string) => linkSync(from, to),
   device: (path: string) => statSync(path).dev,
+  unlink: (path: string) => unlinkSync(path),
+  rename: (from: string, to: string) => renameSync(from, to),
+  lstat: (path: string) => lstatSync(path),
+  readdir: (dir: string): string[] => readdirSync(dir),
+  read: (path: string) => readFileSync(path),
+  /** An exclusive copy (never over a file). */
+  copy: (from: string, to: string) => copyFileSync(from, to, fsConstants.COPYFILE_EXCL),
+  /** The file's bytes on the disk before going on. */
+  syncFile: (path: string) => {
+    const fd = openSync(path, "r+");
+    try { fsyncSync(fd); } finally { closeSync(fd); }
+  },
+  /** A folder's new or removed name on the disk; where the platform cannot (Windows), nothing. */
+  syncDir: (dir: string) => {
+    let fd: number | undefined;
+    try { fd = openSync(dir, "r"); fsyncSync(fd); } catch { /* not possible here */ } finally { if (fd !== undefined) closeSync(fd); }
+  },
 };
 
 const exists = (path: string) => {
-  try { lstatSync(path); return true; } catch { return false; }
+  try { fileOps.lstat(path); return true; } catch { return false; }
 };
+
+const errorCode = (error: unknown) => (error as NodeJS.ErrnoException | null)?.code;
+
+/** What identifies the person's file in a rename journal: its size, content hash and dev:ino. */
+function fileIdentity(path: string) {
+  const entry = fileOps.lstat(path);
+  return { size: entry.size, sha256: sha256(fileOps.read(path)), fileId: `${entry.dev}:${entry.ino}` };
+}
+
+/** Is the file at `path` the one the journal recorded (an older journal recorded nothing: yes). */
+function holdsJournalled(path: string, journal: RenameJournal) {
+  try {
+    const entry = fileOps.lstat(path);
+    if (!entry.isFile()) return false;
+    if (journal.sha256 === undefined) return true;
+    if (journal.mode !== "copy" && journal.fileId === `${entry.dev}:${entry.ino}`) return true;
+    return entry.size === journal.size && sha256(fileOps.read(path)) === journal.sha256;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Are `from` and `to` two directory entries (both listed, byte-different names)? false: one entry the
+ * file system finds under both names (letter case, NFC/NFD). null: the folder could not be read.
+ */
+function twoEntries(from: string, to: string): boolean | null {
+  const a = basename(from), b = basename(to);
+  if (a === b) return false;
+  try {
+    const names = fileOps.readdir(dirname(from));
+    return names.includes(a) && names.includes(b);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Move a file on one file system without ever replacing one: an exclusive hard link (fails when
@@ -77,11 +136,97 @@ function moveByLink(from: string, to: string) {
   }
 }
 
+/** Names Windows keeps for devices, the superscript-digit forms too (refused everywhere, so a project can travel). */
+const RESERVED_NAMES = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])$/i;
+
+/**
+ * The file name a typed document name becomes (이름 바꾸기), or a plain refusal before anything is
+ * tried on disk: the same extension, byte for byte (added when it is not typed; typed in another
+ * letter case it is the original's), no character an OS refuses (`/ \ : * ? " < > |`, control
+ * characters), no device name, no hidden (`.…`) or Office lock-file (`~$…`) name, no trailing dot or
+ * space, at most 255 bytes.
+ */
+export function documentFileName(artifact: Pick<Artifact, "format" | "name">, typed: string): string {
+  const name = typed.trim();
+  if (!name) throw new HttpError(400, "rename_empty", "새 이름을 적어 주세요.");
+  if (/[/\\:*?"<>|\u0000-\u001f\u007f]/.test(name)) throw new HttpError(400, "rename_chars", "이름에 쓸 수 없는 글자가 있습니다: / \\ : * ? \" < > | 와 줄바꿈·탭.");
+  const extension = extensionOf(artifact);
+  const lower = name.toLowerCase();
+  let full = name;
+  if (!extension || !lower.endsWith(extension.toLowerCase())) {
+    const typedFormat = formatOf(name);
+    if (typedFormat && extname(name)) throw new HttpError(400, "rename_extension", `확장자는 바꿀 수 없습니다(${extension}). 이름만 고쳐 주세요.`);
+    full = `${name}${extension}`;
+  } else {
+    // Revision copies are named by the extension: it keeps its original bytes (B.MD for 강의안.md is B.md).
+    full = `${name.slice(0, name.length - extension.length)}${extension}`;
+  }
+  const stem = full.slice(0, full.length - extension.length);
+  if (!stem || /^\.+$/.test(name) || RESERVED_NAMES.test(stem.split(".")[0]!)) throw new HttpError(400, "rename_reserved", "그 이름은 컴퓨터가 쓰는 이름이라 쓸 수 없습니다.");
+  if (full.startsWith(".")) throw new HttpError(400, "rename_hidden", "점(.)으로 시작하는 이름은 숨김 파일이 되어 쓸 수 없습니다.");
+  if (full.startsWith("~$")) throw new HttpError(400, "rename_lockname", "~$로 시작하는 이름은 오피스 프로그램의 임시 파일 이름이라 쓸 수 없습니다.");
+  if (/[. ]$/.test(full) || /[. ]$/.test(stem)) throw new HttpError(400, "rename_trailing", "이름 끝에 점이나 빈칸은 쓸 수 없습니다.");
+  if (Buffer.byteLength(full, "utf8") > 255) throw new HttpError(400, "rename_long", "이름이 너무 깁니다. 조금 줄여 주세요.");
+  return full;
+}
+
+/** A Markdown link target as it was written: `<…>`, percent-encoded, or plain (spaces then need `<…>`). */
+function linkTarget(original: string, name: string) {
+  if (original.startsWith("<")) return `<${name}>`;
+  if (/%[0-9a-f]{2}/i.test(original)) return encodeURIComponent(name);
+  return /[\s()<>]/.test(name) ? `<${name}>` : name;
+}
+
+/** Code the note shows as code (fenced blocks, inline spans): links inside it are not links. */
+const CODE_IN_MARKDOWN = /(`{3,}|~{3,})[\s\S]*?(?:\1|$)|(`+)[^\n]*?\2/g;
+
+/**
+ * The project note's links to a renamed document, rewritten only where they resolve to this file:
+ * `[[name]]` (with `|alias` or `#heading`), the bare `[[stem]]` only for a Markdown document (that is
+ * what it resolves to; `[[계획]]` never means 계획.hwpx), and Markdown links `](name)`, `](<name>)`,
+ * `](./name)`, `](percent-encoded)` in the same folder, `#section` kept. Code spans and fenced code,
+ * other text, and links to other files stay byte for byte.
+ */
+export function renameLinks(text: string, from: string, to: string, extension: string): { text: string; count: number } {
+  const fromStem = from.slice(0, from.length - extension.length), toStem = to.slice(0, to.length - extension.length);
+  const bareStem = extension.toLowerCase() === ".md";
+  let count = 0;
+  const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const wiki = new RegExp(`\\[\\[(${escape(from)}${bareStem ? `|${escape(fromStem)}` : ""})(?=[|#\\]])`, "g");
+  const decoded = (value: string) => { try { return decodeURIComponent(value); } catch { return value; } };
+  const rewrite = (part: string) => part
+    .replace(wiki, (_whole, target: string) => {
+      count += 1;
+      return `[[${target === from ? to : toStem}`;
+    })
+    .replace(/\]\((<[^>\n]*>|[^)\s]+)((?:\s+"[^"\n]*")?)\)/g, (whole, target: string, title: string) => {
+      const angled = target.startsWith("<");
+      const inner = angled ? target.slice(1, -1) : target;
+      const hashAt = inner.indexOf("#");
+      const path = hashAt === -1 ? inner : inner.slice(0, hashAt), anchor = hashAt === -1 ? "" : inner.slice(hashAt);
+      const prefix = path.startsWith("./") ? "./" : "";
+      const plain = path.slice(prefix.length);
+      if (plain !== from && decoded(plain) !== from) return whole;
+      count += 1;
+      const written = linkTarget(angled ? `<${plain}>` : plain, to);
+      return written.startsWith("<") ? `](<${prefix}${to}${anchor}>${title})` : `](${prefix}${written}${anchor}${title})`;
+    });
+  let out = "", last = 0;
+  for (const code of text.matchAll(CODE_IN_MARKDOWN)) {
+    out += rewrite(text.slice(last, code.index)) + code[0];
+    last = code.index + code[0].length;
+  }
+  out += rewrite(text.slice(last));
+  return { text: out, count };
+}
+
 const isHangul = (format: string) => format === "hwpx" || format === "hwp";
 /** Pre-native proposals contain Markdown, identified by their persisted path, never by a new default. */
 const legacyHangulProposal = (artifact: Artifact, proposal: Proposal) => isHangul(artifact.format) && /\.hwpx?\.md$/i.test(proposal.workingPath);
 
 /** Formats searched through their editor engine's text view instead of binary bytes. */
+/** Formats whose tab can show the first page as a picture while its editor opens. */
+const pictured = (format: DocFormat) => isOfficeFormat(format) || format === "hwpx" || format === "hwp";
 const hasTextView = (format: DocFormat) => isHangul(format) || isOfficeFormat(format) || format === "xmind" || format === "epub";
 
 /** Extension kept on copies of a document (designs keep their two-part `.design.json`). */
@@ -146,6 +291,14 @@ export class Documents {
   private readonly officeCache = new Map<string, Promise<OfficePage[]>>();
   /** Hangul and Office revisions waiting for their text to be indexed (one at a time). */
   readonly textIndex = new BackgroundIndex((artifactId, revision) => this.indexView(artifactId, revision));
+  /** Office renders a page view asked for now (the background pictures wait while one runs). */
+  private rendering = 0;
+  /**
+   * Page pictures made ahead when a revision is recorded (doc-pages-first): off until the gateway
+   * turns them on (`enablePictures`), so tests never start the picture child by themselves.
+   */
+  pictures: PagePictures | null = null;
+  pictureBound = PICTURE_CACHE_BOUND;
 
   private readonly workspaces: Workspaces | null;
   readonly dataDir: string;
@@ -161,6 +314,7 @@ export class Documents {
     this.ieum = ieum;
     for (const artifact of store.artifacts()) (artifact.removed ? this.removedDocs : this.artifacts).set(artifact.id, { ...artifact, readBy: artifact.readBy ?? {} });
     this.reconcileTrash();
+    this.reconcileRenames();
     // Proposals a restart left running are finished by the session manager, with the turn it cut.
     for (const proposal of store.proposals()) this.proposals.set(proposal.id, proposal);
     if (store.getMeta("search.documents") !== DOCUMENT_SEARCH_VERSION) {
@@ -331,6 +485,222 @@ export class Documents {
     this.settle(artifact, null);
     this.indexLatest(this.get(artifactId));
     return this.check(artifactId);
+  }
+
+  /** Paths a document had before a rename in this gateway's run (an open editor still names the old one). */
+  private readonly formerPaths = new Map<string, Set<string>>();
+
+  /** Is `path` this document's file: its path now, or one it had before a rename while its editor stayed open. */
+  isPathOf(artifactId: string, path: string) {
+    return this.get(artifactId).path === path || Boolean(this.formerPaths.get(artifactId)?.has(path));
+  }
+
+  /**
+   * 이름 바꾸기: the file renamed inside its folder, never over another file. Recorded first (`renaming`,
+   * committed with a full sync, with what identifies the file), then moved: by an exclusive hard link
+   * and the old name's removal; where the two names are one directory entry on this file system (letter
+   * case, NFC/NFD), by a plain rename (it cannot replace another file there); on storage without hard
+   * links, by an exclusive copy checked against the file before the old name goes. The folder is synced
+   * after each step where the platform allows. Then the record follows; a failed record update puts
+   * the file back. Refused when another record uses the same file. The caller (the session manager)
+   * has refused it while an AI works there. Revisions, page pictures and the search entry are kept by
+   * id; this document's open editors follow the file (registry.moved).
+   */
+  rename(artifactId: string, typed: string): { artifact: Artifact; from: string } {
+    const artifact = this.get(artifactId);
+    if (artifact.renaming) throw new HttpError(409, "rename_unfinished", `앞서 한 이름 바꾸기가 아직 끝나지 않았습니다(「${basename(artifact.renaming.from)}」 → 「${basename(artifact.renaming.to)}」). 파일을 연 프로그램을 닫고 앱을 다시 시작하면 정리됩니다.`);
+    const name = documentFileName(artifact, typed);
+    const from = artifact.path, to = join(dirname(from), name), dir = dirname(from), oldName = basename(from);
+    if (to === from) return { artifact, from };
+    let entry;
+    try { entry = fileOps.lstat(from); } catch { throw new HttpError(409, "file_missing", "파일이 없어 이름을 바꿀 수 없습니다. 파일이 옮겨졌는지 확인해 주세요."); }
+    if (entry.isSymbolicLink()) throw new HttpError(409, "rename_link", "링크(바로 가기)로 연 문서라 이름을 바꾸지 않습니다. 원래 파일이 있는 곳에서 바꿔 주세요.");
+    if (!entry.isFile()) throw new HttpError(409, "rename_not_file", "보통 파일이 아니라 이름을 바꾸지 않습니다.");
+    // Another record on this file (another project, a link to it) would be left pointing nowhere (as for the trash).
+    for (const other of this.list()) {
+      if (other.id === artifactId) continue;
+      let twin;
+      try { twin = statSync(other.path); } catch { continue; }
+      if (twin.dev === entry.dev && twin.ino === entry.ino) throw new HttpError(409, "rename_shared", "다른 문서도 이 파일을 쓰고 있어 이름을 바꾸지 않습니다. 다른 프로젝트나 링크(바로 가기)로 연 같은 파일을 목록에서 뺀 뒤 바꿔 주세요.");
+    }
+    const taken = () => new HttpError(409, "rename_exists", `같은 폴더에 「${name}」 파일이 이미 있습니다. 다른 이름을 골라 주세요.`);
+    if (this.list().some((other) => other.id !== artifactId && other.path === to)) throw taken();
+    // The new name free; another entry (a file, a link, a second hard link of this file: taken); or this
+    // very entry, found under a name the file system does not tell apart: decided by the folder's listing.
+    let sameEntry = false;
+    let target = null;
+    try { target = fileOps.lstat(to); } catch { target = null; }
+    if (target) {
+      const two = twoEntries(from, to);
+      if (two === null) throw new HttpError(409, "rename_unsure", `폴더를 읽지 못해 이름을 바꾸지 않습니다. 문서 이름은 「${oldName}」 그대로입니다.`);
+      if (two || target.isSymbolicLink() || target.dev !== entry.dev || target.ino !== entry.ino) throw taken();
+      sameEntry = true;
+    }
+    let journal: RenameJournal;
+    try { journal = { from, to, mode: sameEntry ? "same-entry" : "link", ...fileIdentity(from) }; } catch { throw new HttpError(409, "file_unreadable", `파일을 읽지 못해 이름을 바꾸지 않습니다. 문서 이름은 「${oldName}」 그대로입니다.`); }
+    const relativePath = artifact.relativePath ? join(dirname(artifact.relativePath), name).split(sep).join("/") : undefined;
+    const moved: Artifact = { ...artifact, path: to, name, ...(relativePath ? { relativePath } : {}), updatedAt: Date.now() };
+    delete moved.renaming;
+    const identity = this.registry.identity(from);
+    this.store.saveArtifactDurably({ ...artifact, renaming: journal });
+    const cancel = () => this.store.saveArtifact(artifact);
+    // Both names stay (the old one could not go, nor the new one be taken back): the journal stays, and
+    // the record on the old name, so the next start settles it.
+    const keep = () => {
+      journal = { ...journal, held: true };
+      const kept: Artifact = { ...artifact, renaming: journal };
+      this.store.saveArtifactDurably(kept);
+      this.artifacts.set(artifactId, kept);
+    };
+    const inUse = () => new HttpError(409, "rename_in_use", `다른 프로그램이 이 파일을 열고 있어 이름을 바꾸지 못했습니다. 문서 이름은 「${oldName}」 그대로입니다. 그 프로그램에서 파일을 닫은 뒤 다시 해 주세요.`);
+    const failed = (error: unknown) => new HttpError(500, "rename_failed", `이름을 바꾸지 못했습니다(${(error as Error).message}). 문서 이름은 「${oldName}」 그대로입니다.`);
+    const twoNames = (held: boolean) => new HttpError(409, "rename_two_names", `${held ? "다른 프로그램이 이 파일을 열고 있어 " : ""}이름을 끝까지 바꾸지 못했습니다. 지금 폴더에 「${oldName}」, 「${name}」 두 이름이 있습니다. 문서는 「${oldName}」 이름으로 그대로 쓰입니다. ${held ? "그 프로그램을 닫고 " : ""}앱을 다시 시작하면 앱이 두 이름을 확인해 정리합니다.`);
+    const held = (error: unknown) => ["EBUSY", "EPERM", "EACCES"].includes(errorCode(error) ?? "");
+    if (sameEntry) {
+      try { fileOps.rename(from, to); } catch (error) { cancel(); throw held(error) ? inUse() : failed(error); }
+      fileOps.syncDir(dir);
+    } else {
+      let linked = false;
+      try { fileOps.link(from, to); linked = true; } catch (error) {
+        if (errorCode(error) === "EEXIST") { cancel(); throw taken(); }
+      }
+      if (!linked) {
+        // No hard links on this storage (FAT/exFAT, cloud placeholders, some network shares): an exclusive
+        // copy, synced and checked against the file before the old name goes.
+        journal = { ...journal, mode: "copy" };
+        this.store.saveArtifactDurably({ ...artifact, renaming: journal });
+        try { fileOps.copy(from, to); } catch (error) {
+          cancel();
+          if (errorCode(error) === "EEXIST") throw taken();
+          throw new HttpError(409, "rename_unsupported", `이 저장 장치(USB 메모리, 클라우드·네트워크 폴더 등)에서는 앱이 이름을 바꿀 수 없습니다. 문서 이름은 「${oldName}」 그대로입니다.`);
+        }
+        let same = false;
+        try { fileOps.syncFile(to); same = fileOps.lstat(to).size === journal.size && sha256(fileOps.read(to)) === journal.sha256; } catch { same = false; }
+        if (!same) {
+          try { fileOps.unlink(to); } catch { keep(); throw twoNames(false); }
+          cancel();
+          throw new HttpError(500, "rename_failed", `새 이름으로 옮긴 파일이 원래 파일과 달라 이름을 바꾸지 않았습니다. 문서 이름은 「${oldName}」 그대로입니다.`);
+        }
+      }
+      fileOps.syncDir(dir);
+      try { fileOps.unlink(from); } catch (error) {
+        // The file is held (Windows: open in Word or 한글): the new name is taken back.
+        try { fileOps.unlink(to); } catch { keep(); fileOps.syncDir(dir); throw twoNames(held(error)); }
+        fileOps.syncDir(dir);
+        cancel();
+        throw held(error) ? inUse() : failed(error);
+      }
+      fileOps.syncDir(dir);
+    }
+    const done: Artifact = { ...moved, renamed: { ...journal, at: Date.now() } };
+    try {
+      this.store.saveArtifact(done);
+    } catch (error) {
+      // The record could not follow: the file goes back, so the two agree (else the journal settles it at the next start).
+      try {
+        this.putBack(to, from, journal);
+        this.store.saveArtifact(artifact);
+      } catch {
+        this.artifacts.set(artifactId, { ...artifact, renaming: journal });
+        throw new HttpError(500, "rename_failed", `이름을 바꾸는 중 기록을 저장하지 못했습니다(${(error as Error).message}). 파일은 「${name}」 이름에 있고, 앱을 다시 시작하면 문서가 그 이름을 따릅니다.`);
+      }
+      throw failed(error);
+    }
+    this.artifacts.set(artifactId, done);
+    this.registry.moved(artifactId, identity, to);
+    const former = this.formerPaths.get(artifactId) ?? new Set<string>();
+    former.add(from);
+    former.delete(to);
+    this.formerPaths.set(artifactId, former);
+    // A presentation's style file (`<name>.styleskill.json`) follows it, never over a file.
+    if (artifact.format === "pptx" && !sameEntry) {
+      const sidecar = (path: string) => path.replace(/\.pptx$/i, ".styleskill.json");
+      try { if (!exists(sidecar(to)) && fileOps.lstat(sidecar(from)).isFile()) moveByLink(sidecar(from), sidecar(to)); } catch { /* left under the old name */ }
+    }
+    this.bus.publish({ type: "artifact.upserted", artifact: done });
+    this.indexLatest(done);
+    return { artifact: done, from };
+  }
+
+  /** The file back under its old name the way it moved (the record could not follow). */
+  private putBack(to: string, from: string, journal: RenameJournal) {
+    if (journal.mode === "same-entry") { fileOps.rename(to, from); return; }
+    if (journal.mode === "copy") fileOps.copy(to, from);
+    else fileOps.link(to, from);
+    fileOps.unlink(to);
+    fileOps.syncDir(dirname(from));
+  }
+
+  /** The record on `path` (the journal kept as the last finished rename when given). */
+  private settledAt(artifact: Artifact, path: string, journal?: RenameJournal): Artifact {
+    const next: Artifact = { ...artifact, path, name: basename(path) };
+    if (artifact.relativePath) next.relativePath = join(dirname(artifact.relativePath), basename(path)).split(sep).join("/");
+    delete next.renaming;
+    if (journal) { const { held: _held, ...last } = journal; next.renamed = last; }
+    return next;
+  }
+
+  /**
+   * At start, a rename the record says was in flight: the record follows the person's file (identified
+   * by what the journal recorded) to wherever it is. One directory entry under both names (letter case,
+   * NFC/NFD) is never removed. Two entries on one file (linked, the old name not removed yet), or a
+   * checked copy byte-identical to it, finish the move. Otherwise both files are kept and reported;
+   * nothing is deleted. Also: a record on a missing name after a power cut finds the file under the
+   * last rename's other name when it is that file.
+   */
+  private reconcileRenames() {
+    for (const artifact of [...this.artifacts.values()]) {
+      const next = artifact.renaming ? this.finishRename(artifact, artifact.renaming)
+        : artifact.renamed && !exists(artifact.path) ? this.refindRenamed(artifact, artifact.renamed) : null;
+      if (!next) continue;
+      this.artifacts.set(next.id, next);
+      this.store.saveArtifact(next);
+    }
+  }
+
+  private finishRename(artifact: Artifact, journal: RenameJournal): Artifact {
+    const { from, to } = journal;
+    const label = `이름 바꾸기가 멈춘 「${artifact.name}」`;
+    const atFrom = exists(from), atTo = exists(to);
+    if (atFrom && atTo) {
+      const two = twoEntries(from, to);
+      if (two !== true) {
+        // One entry under both names, or the folder unreadable: nothing is removed.
+        let listed = false;
+        try { listed = fileOps.readdir(dirname(to)).includes(basename(to)); } catch { listed = false; }
+        return two === false && listed ? this.settledAt(artifact, to, journal) : this.settledAt(artifact, from);
+      }
+      const ours = { from: holdsJournalled(from, journal), to: holdsJournalled(to, journal) };
+      let linked = false;
+      try { const a = fileOps.lstat(from), b = fileOps.lstat(to); linked = a.dev === b.dev && a.ino === b.ino; } catch { linked = false; }
+      if (journal.mode === "copy" ? ours.from && ours.to : linked && ours.to) {
+        try {
+          fileOps.unlink(from);
+        } catch {
+          this.trashReport.push(`${label}: 옛 이름을 지우지 못해 두 이름(${from}, ${to})이 그대로 있습니다. 파일을 연 프로그램을 닫고 앱을 다시 시작해 주세요.`);
+          return { ...artifact, renaming: { ...journal, held: true } };
+        }
+        fileOps.syncDir(dirname(from));
+        return this.settledAt(artifact, to, journal);
+      }
+      if (!journal.held && ours.to && !ours.from) {
+        this.trashReport.push(`${label}: 옛 이름 자리에 다른 파일이 있어 그대로 두고, 문서는 새 이름의 파일을 따릅니다(${to}; 그대로 둔 파일 ${from}).`);
+        return this.settledAt(artifact, to, journal);
+      }
+      this.trashReport.push(`${label}: 두 이름에 다른 파일이 있어 둘 다 두었습니다(${from}, ${to}).`);
+      return this.settledAt(artifact, from);
+    }
+    if (atTo) return this.settledAt(artifact, to, journal);
+    if (atFrom) return this.settledAt(artifact, from);
+    this.trashReport.push(`${label}의 파일이 두 이름 모두에 없습니다(${from}, ${to}).`);
+    return this.settledAt(artifact, from);
+  }
+
+  private refindRenamed(artifact: Artifact, last: RenameJournal): Artifact | null {
+    const other = artifact.path === last.to ? last.from : artifact.path === last.from ? last.to : null;
+    if (!other || !exists(other) || !holdsJournalled(other, last)) return null;
+    this.trashReport.push(`이름을 바꾼 직후 컴퓨터가 꺼졌던 「${artifact.name}」 문서를 「${basename(other)}」 이름에서 다시 찾았습니다.`);
+    return this.settledAt(artifact, other, last);
   }
 
   /** "다른 곳에 저장": a copy of a deleted project's trashed file, created exclusively; the record stays as it is. */
@@ -531,6 +901,7 @@ export class Documents {
     } else {
       this.store.indexDocument(updated.id, searchText(updated.format, data));
     }
+    if (pictured(updated.format)) this.pictures?.add(updated.id, updated.revision);
     return updated;
   }
 
@@ -688,6 +1059,91 @@ export class Documents {
     return found.file;
   }
 
+  /** Where a revision's first-page picture is kept: Office page 1 of `r<N>.pages`, Hangul `r<N>.cover.png`. */
+  private coverFile(artifact: Artifact, revision: number) {
+    return isHangul(artifact.format) ? join(this.root, artifact.id, `r${revision}.cover.png`) : join(this.root, artifact.id, `r${revision}.pages`, "pages.json");
+  }
+
+  /**
+   * The first-page picture of a revision when it is already made — never made here (a tab's
+   * placeholder must not wait for it, nor add a render while the editor opens). None yet: its making
+   * is queued in the background and the tab shows its usual text this time.
+   */
+  cover(artifactId: string, revision?: number): { revision: number; cover: { page: number; width: number; height: number } | null } {
+    const artifact = this.check(artifactId);
+    const target = revision ?? artifact.revision;
+    if (!pictured(artifact.format)) return { revision: target, cover: null };
+    const found = this.coverPicture(artifact, target);
+    if (!found) this.pictures?.add(artifact.id, target);
+    return { revision: target, cover: found ? { page: found.page, width: found.width, height: found.height } : null };
+  }
+
+  /** The kept first-page picture of a revision (PNG), or null. */
+  coverPicture(artifact: Artifact, revision: number): OfficePage | null {
+    const file = this.coverFile(artifact, revision);
+    try {
+      if (isHangul(artifact.format)) {
+        // The page as its engine drew it (SVG, with its size in CSS px beside it); a PNG only from before.
+        const drawn = file.replace(/\.png$/, ".svg"), size = readFileOrNull(file.replace(/\.png$/, ".json"));
+        if (size && existsSync(drawn)) {
+          const page = JSON.parse(size.toString("utf8")) as { width: number; height: number };
+          return { page: 1, width: page.width, height: page.height, file: drawn };
+        }
+        const head = readFileSync(file).subarray(0, 24);
+        return { page: 1, width: head.readUInt32BE(16), height: head.readUInt32BE(20), file };
+      }
+      const pages = JSON.parse(readFileSync(file, "utf8")) as OfficePage[];
+      const first = pages.find((entry) => entry.page === 1);
+      return first && existsSync(first.file) ? first : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Make a revision's pictures (the background job): every page for Office (the page view uses them too), page 1 for Hangul in its own child process. */
+  async makePictures(artifactId: string, revision: number) {
+    const artifact = this.get(artifactId);
+    if (isOfficeFormat(artifact.format)) {
+      await this.renderPages(`${artifactId}:${revision}`, this.revisionPath(artifactId, revision), join(this.root, artifactId, `r${revision}.pages`));
+      return;
+    }
+    if (!isHangul(artifact.format)) return;
+    const out = this.coverFile(artifact, revision), part = `${out}.part.png`;
+    const made = await hangulPicture(this.revisionPath(artifactId, revision), artifact.format, part);
+    // What is kept is the page as the engine drew it (SVG): the PNG's rasterizer (resvg with the
+    // messenger's fonts) drops glyphs some Hangul fonts lack (a heading's digits); the window's own
+    // text drawing keeps them. The page's size in CSS px (its viewBox) goes beside it.
+    const svgPart = pictureSvg(part), svg = readFileOrNull(svgPart)?.toString("utf8") ?? "";
+    rmSync(part, { force: true });
+    const box = /viewBox="[\d. -]+ ([\d.]+) ([\d.]+)"/.exec(svg);
+    if (!svg || !box) { rmSync(svgPart, { force: true }); throw new Error(`picture ${made.ok ? "missing" : made.code}`); }
+    writeFileSync(out.replace(/\.png$/, ".json"), JSON.stringify({ width: Number(box[1]), height: Number(box[2]) }));
+    renameSync(svgPart, out.replace(/\.png$/, ".svg"));
+  }
+
+  /** Turn the background pictures on (the gateway does, at start). */
+  enablePictures(options: Partial<PicturesOptions> = {}) {
+    this.pictures = new PagePictures({
+      make: (artifactId, revision) => this.makePictures(artifactId, revision),
+      has: (artifactId, revision) => this.artifacts.has(artifactId) && this.coverPicture(this.get(artifactId), revision) !== null,
+      current: (artifactId, revision) => this.artifacts.get(artifactId)?.revision === revision,
+      busy: () => this.textIndex.active || this.rendering > 0,
+      sweep: () => this.sweepPictures(),
+      ...options,
+    });
+    return this.pictures;
+  }
+
+  /** Keep the picture cache under its bound: the oldest go, never a document's current revision. */
+  sweepPictures() {
+    const result = sweepPictures(this.root, this.pictureBound, (artifactId, revision) => this.artifacts.get(artifactId)?.revision === revision);
+    for (const path of result.removed) {
+      const match = /([^/\\]+)[/\\]r(\d+)\.pages$/.exec(path);
+      if (match) this.officeCache.delete(`${match[1]}:${match[2]}`);
+    }
+    return result;
+  }
+
   /** Page images of a proposal's base revision or of its working copy. */
   async proposalPages(proposalId: string, side: "base" | "proposed") {
     const proposal = this.proposal(proposalId);
@@ -709,9 +1165,14 @@ export class Documents {
         ? Promise.resolve(JSON.parse(kept.toString("utf8")) as OfficePage[])
         : (async () => {
             if (!this.ieum?.available) throw new HttpError(501, "ieumoffice_missing", "이음오피스를 찾지 못해 미리보기를 만들 수 없습니다. 앱을 다시 설치해 주세요.");
-            const rendered = await this.ieum.render(input, folder);
-            writeFileSync(manifest, JSON.stringify(rendered));
-            return rendered;
+            this.rendering += 1;
+            try {
+              const rendered = await this.ieum.render(input, folder);
+              writeFileSync(manifest, JSON.stringify(rendered));
+              return rendered;
+            } finally {
+              this.rendering -= 1;
+            }
           })();
       pages.catch(() => this.officeCache.delete(key));
       this.officeCache.set(key, pages);
@@ -751,7 +1212,8 @@ export class Documents {
     const current = this.check(artifactId);
     if (current.revision !== expectedRevision || current.diskState !== "same") throw new HttpError(409, "revision_conflict", "저장하는 동안 문서가 바뀌었습니다.");
     this.registry.assertWrite(artifactId, access);
-    writeAtomic(artifact.path, data);
+    // `current`: a rename while this save waited moved the file; it is written under its name now.
+    writeAtomic(current.path, data);
     const hangul = isHangul(artifact.format);
     const saved = this.record(current, data, { author: "user", sessionId: null, baseRevision: expectedRevision, note: null }, !hangul);
     if (hangul) {
@@ -812,6 +1274,31 @@ export class Documents {
     if (sha256(data) === artifact.sha256) return artifact;
     writeAtomic(artifact.path, data);
     return this.record(artifact, data, { author: "user", sessionId: null, baseRevision: expectedRevision, note: null });
+  }
+
+  /** A Markdown note's links rewritten by the app (이름 바꾸기): a new revision, refused like any save that would overwrite a change. */
+  saveLinks(artifactId: string, expectedRevision: number, text: string, note: string) {
+    this.registry.assertWrite(artifactId);
+    const artifact = this.check(artifactId);
+    if (artifact.format !== "markdown" || artifact.revision !== expectedRevision || artifact.diskState !== "same") throw new HttpError(409, "revision_conflict", "노트가 바뀌었습니다.");
+    const data = Buffer.from(text, "utf8");
+    writeAtomic(artifact.path, data);
+    return this.record(artifact, data, { author: "user", sessionId: null, baseRevision: expectedRevision, note });
+  }
+
+  /**
+   * 한글 문서 만들기 into an EMPTY untouched open document (doc-default, 0.5.2's leftover 4d): the made HWPX
+   * becomes this document's next revision (the one before it stays restorable in 판 기록). Refused like
+   * any write that would overwrite a change: the revision it was decided on, the file as recorded.
+   */
+  fillEmpty(artifactId: string, expectedRevision: number, data: Buffer, sessionId: string | null, note: string) {
+    const artifact = this.check(artifactId);
+    if (artifact.format !== "hwpx") throw new HttpError(415, "hangul_format", "HWPX 문서에만 채울 수 있습니다.");
+    if (artifact.revision !== expectedRevision) throw new HttpError(409, "revision_conflict", `문서가 r${artifact.revision}로 바뀌었습니다.`);
+    if (artifact.diskState !== "same") throw new HttpError(409, "disk_changed", "다른 프로그램이 이 파일을 바꿨습니다.");
+    if (data.length === 0) throw new HttpError(400, "empty_document", "빈 문서는 저장하지 않습니다.");
+    writeAtomic(artifact.path, data);
+    return this.record(artifact, data, { author: "engine", sessionId, baseRevision: expectedRevision, note, derivedFrom: [{ artifactId, revision: expectedRevision }] });
   }
 
   /** Keep what is on disk now as a new revision (after an external edit the user chose to keep). */

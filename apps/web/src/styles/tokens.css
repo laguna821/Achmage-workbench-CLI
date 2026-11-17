@@ -97,6 +97,11 @@
   --color-page-ink: oklch(24% 0.01 262);
   --color-page-check: oklch(87% 0 0);         /* the transparency checkerboard under an image */
   --shadow-page: 0 1px 2px oklch(22% 0.035 262 / 0.12), 0 0 0 1px oklch(22% 0.035 262 / 0.06);
+  /* The document editors' own grounds (apps/office), drawn by a tab's first-page placeholder while its editor boots (doc-cover.css). */
+  --color-editor-ground: #e6e6e6;            /* Word's and PowerPoint's grey around the page (their own colour, measured) */
+  --color-editor-ground-hangul: #ffffff;     /* the Hangul studio's white around the page */
+  --color-editor-band: #ffffff;              /* the editors' toolbar */
+  --color-editor-side: #ffffff;              /* the editors' left rail and status bar */
   /* ── The picture viewer and the camera: a dark room of their own ── */
   --color-on-viewer: oklch(97% 0.006 85);
   --color-viewer-fill: oklch(12% 0.01 262 / 0.3);
@@ -194,6 +199,8 @@
 /* ── Dark: a neutral dark, a lighter sheet, near-white ink; the rail the darkest navy; elevation by lightness, no shadows ── */
 :root[data-theme="dark"],
 .look-scope[data-theme="dark"] {
+  /* The document editors' own dark grounds (measured in their dark theme; doc-cover.css). */
+  --color-editor-ground: #2b2b2b; --color-editor-ground-hangul: #1c1c1e; --color-editor-band: #242426; --color-editor-side: #1e1e1e;
   color-scheme: dark;
   --color-paper: oklch(17.8% 0.004 260);
   --color-paper-2: oklch(21.3% 0.005 260);

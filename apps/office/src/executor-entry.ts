@@ -64,6 +64,12 @@ try {
         ...(message.action === "prepare" ? { value: { revision: job.init.artifact.revision, token: job.init.token, sessionId: job.init.sessionId, referenceSnapshot: job.init.execution?.referenceSnapshot } }
           : { error: "진행 중인 문서 작업의 설정과 대화는 Workbench에서 변경해 주세요." }) });
     }
+    if (message?.type === "office:markdown") {
+      // The Markdown page asks its window for its paper theme and image host before it draws; unanswered, it never
+      // drew and every Markdown turn from a hidden tab failed after 60 s. The executor changes no settings: it says
+      // so, and the page draws with its defaults (the saved text is the same).
+      send({ type: "office:markdown-result", requestId: message.requestId, error: "실행기에서는 Markdown 설정을 읽거나 바꾸지 않습니다." });
+    }
     if (message?.type === "office:references") {
       void api("executor-reference", { ...message, turnId: job.init.execution!.turnId, snapshot: job.init.execution!.referenceSnapshot
         }).then(value => send({ type: "office:references-result", requestId: message.requestId, value }),

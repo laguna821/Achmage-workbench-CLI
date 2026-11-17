@@ -1,4 +1,5 @@
 export * from "./desktop.ts";
+export * from "./resources.ts";
 export * from "./voice.ts";
 export * from "./extensions.ts";
 // Shared contract between the host gateway and the UI.
@@ -21,6 +22,8 @@ export * from "./document-registry.ts";
 export * from "./office-new.ts";
 export * from "./tasks.ts";
 export * from "./host-session.ts";
+export * from "./korean.ts";
+export * from "./plain-excerpt.ts";
 export * from "./browser.ts";
 export * from "./channels.ts";
 export * from "./credentials.ts";
@@ -190,6 +193,11 @@ export type ContextUsage = { used: number; window: number | null; compactAt: num
  */
 export type QueuedMessage = { id: string; text: string; refs: DocRef[]; create: CreateTarget | null; at: number; held?: boolean; attachments?: Attachment[]; plan?: boolean; notes?: string[]; runSettings?: import("./agent-profiles.ts").RunSettings; /** Sent from a paired messenger chat: kept while it waits (see `RequestOrigin`). */ origin?: import("./channels.ts").RequestOrigin;
   /**
+   * Waits for a free slot of the resource manager (0.5.3), not for this conversation's own turn: starts by
+   * itself when its turn in the line comes, also after a restart (not held like the others).
+   */
+  slot?: boolean;
+  /**
    * Typed by the person (this PC's composer, an edit at this PC, or the paired chat): their draft,
    * shown and edited exactly as typed (ruling R6). Absent: written by anything else (a workflow, a
    * remote Hub, a review batch, an AI draft) or by a build before this mark: shown with stored values hidden.
@@ -221,6 +229,18 @@ export const OFFICE_FORMATS = ["docx", "pptx", "xlsx"] as const;
 export type OfficeFormat = (typeof OFFICE_FORMATS)[number];
 export const isOfficeFormat = (format: DocFormat): format is OfficeFormat => (OFFICE_FORMATS as readonly string[]).includes(format);
 
+/**
+ * A document rename's journal (이름 바꾸기). `mode`: "link" (exclusive hard link, then the old name
+ * removed), "same-entry" (the two names are one directory entry on this file system: letter case or
+ * NFC/NFD only; a plain rename), "copy" (no hard links on this storage: an exclusive copy, checked,
+ * then the old name removed). `size`/`sha256`/`fileId` (dev:ino) identify the person's file, so start-up
+ * never takes another file at either name for it. `held`: the old name could not be removed (another
+ * program holds the file) and the record stayed on it. Older journals have only `from`/`to`.
+ */
+export type RenameJournal = { from: string; to: string; mode?: "link" | "same-entry" | "copy"; size?: number; sha256?: string; fileId?: string; held?: boolean;
+  /** When the rename finished (활동 › 기록); absent in older records. */
+  at?: number };
+
 export type Artifact = {
   id: string;
   workId: string;
@@ -241,6 +261,13 @@ export type Artifact = {
   readBy: Record<string, number>;
   /** The project's own note (project.ts): tracked like any document, left out of document lists. */
   role?: "project-note";
+  /**
+   * 이름 바꾸기 recorded before the file moves and cleared once the record follows it: a gateway that
+   * stopped in between finishes or undoes it at start, so the record and the file always agree.
+   */
+  renaming?: RenameJournal;
+  /** The last rename that finished: start-up finds the file under its other name if a power cut undid the move. */
+  renamed?: RenameJournal;
   /**
    * Taken out of the project (보관함 lists it). "trash": its file was moved to the app's trash
    * (`trashPath`, inside the data folder) and comes back on restore; "unlisted": a file the app does
@@ -434,6 +461,8 @@ export type TranscriptItem = (
       notes?: { path: string; title: string }[];
       /** Sent from a paired messenger chat, not typed at this PC (the desktop marks it "휴대폰"). */
       origin?: import("./channels.ts").RequestOrigin;
+      /** It waited in the resource manager's line for a free slot this long (ms) before it started (활동 › 기록). */
+      waitedMs?: number;
     }
   | { kind: "assistant"; id: string; text: string; streaming: boolean; at: number; media?: import("./artifacts.ts").MessageMedia[] }
   | { kind: "reasoning"; id: string; text: string; at: number }
@@ -560,6 +589,11 @@ export type ProviderStatus = {
   configuredAccess: AccessMode | null;
   /** Whether the engine can draw pictures (Codex's image tool), as it reports; absent or null when unknown. */
   imageGeneration?: boolean | null;
+  /**
+   * "내 MCP 서버와 훅 불러오기" (설정 › AI 엔진): whether Workbench's conversations start the person's own MCP
+   * servers and hooks of this engine. Off by default (0.5.3). Absent from older gateways (they loaded them).
+   */
+  personalTools?: boolean;
   error: string | null;
 };
 
@@ -567,6 +601,8 @@ export type WorkbenchEvent =
   | { type: "attention.changed" }
   /** The messenger channel changed (pairing, a paired chat, a bot's connection): the screen fetches it again. */
   | { type: "channels.changed" }
+  /** The resource manager's line or limit changed (0.5.3). */
+  | { type: "resources.changed"; state: import("./resources.ts").ResourceState }
   | { type: "office.note.ready"; artifactId: string }
   | { type: "office.control" }
   | { type: "folder.upserted"; folder: Folder }
@@ -639,6 +675,8 @@ export type IntegrationsView = {
 };
 
 export type Snapshot = {
+  /** The resource manager's line and settings (0.5.3); absent from older gateways. */
+  resources?: import("./resources.ts").ResourceState;
   protocolVersion: number;
   seq: number;
   epoch?: string;
@@ -774,7 +812,7 @@ export type SendMessageRequest = {
   notes?: string[];
 };
 
-export type SendResult = { duplicate: boolean; delivery: "turn" | "steered" | "queued" };
+export type SendResult = { duplicate: boolean; delivery: "turn" | "steered" | "queued"; /** 0.5.3: queued because no slot was free (the resource manager's line), not behind this conversation's own turn. */ waitingFor?: "slot" };
 
 export type HandoffRequest = {
   requestId: string;
@@ -869,6 +907,21 @@ export type OfficeEditorKind = "docs" | "slides" | "sheets" | "hwp" | "markdown"
 export type EditorGrant = { url: string; origin: string; token: string; sessionId: string | null };
 
 /** Workbench window → office editor page (iframe at /office/<kind>.html). */
+/**
+ * Where an office editor's view is (office-leftovers point 3), kept with the tab across sleep: no content, only the place.
+ * `scroll`: the editor's main scroller (`fraction` = top / (scrollHeight − clientHeight), used when the height differs);
+ * `slide` (PowerPoint, 0-based), `sheet` + `cell` (Excel, A1), `frame` (Hangul: its studio's scroller), `zoom` when known.
+ */
+export type OfficeViewPosition = {
+  scroll?: { top: number; left: number; fraction: number };
+  slide?: number;
+  sheet?: string;
+  cell?: string;
+  /** Excel: the first row and column in view (0-based). */
+  firstRow?: number;
+  firstColumn?: number;
+  zoom?: number;
+};
 export type OfficeHostMessage =
   | { type: "office:execute"; instruction: string; state: import("./office-execution.ts").OfficeExecutionState }
   | import("./pdf-notes.ts").PdfNoteReply
@@ -897,6 +950,8 @@ export type OfficeHostMessage =
       theme: "light" | "dark";
       /** Reopen unsaved edits kept from an earlier visit (false when the user chose the latest revision). */
       recover: boolean;
+      /** Where the view was when the tab last showed it (a woken or reopened tab comes back there): restored once after opening; never touches the content. */
+      view?: OfficeViewPosition;
       /** A single native CLI export, using the original renderer's File-menu action. */
       headlessExport?: { outPath: string; format: "pdf" | "html" | "docx" };
       /** An independently owned original renderer attaches to this admitted turn. */
@@ -916,6 +971,12 @@ export type OfficeHostMessage =
   | { type: "office:ai-result"; requestId: string; value?: { revision: number; token: string; sessionId: string | null; createdSession?: boolean; referenceSnapshot?: string }; error?: string }
   /** Save unsaved edits now (before a request is sent, the tab changes or the view switches). */
   | { type: "office:flush" }
+  /** Whether the editor's frame is on screen: a hidden one rests (its repeating timers and animation frames wait, apps/office/src/page-rest.ts). */
+  | { type: "office:shown"; shown: boolean }
+  /** Take this revision IN PLACE (the running editor loads it, keeping the view; no reboot) — asked only of a page that said `office:replace-ready`, and only while the window knows of no unsaved edit. `before`: the revision it shows now (for 되돌리기). */
+  | { type: "office:replace"; revision: number; before: number }
+  /** The tab of this editor was closed while its live 문서 AI turn runs: the page is kept off screen until the turn ends; with no sign of life for the bound time, it stops the turn itself (nobody is there to press 중단). */
+  | { type: "office:kept-closed"; closed: boolean }
   /** Keep my edits after a conflict: save them as the revision after this one. */
   | { type: "office:rebase"; revision: number }
   /** Leaving with edits that cannot be saved now (a conflict): keep them for the next visit. */
@@ -927,6 +988,14 @@ export type OfficeHostMessage =
 export type OfficePageMessage =
   | { type: "office:execution-attached" }
   | { type: "office:execution-refresh" }
+  /** This editor can take a new revision in place (office:replace); without it a new revision reopens the page. */
+  | { type: "office:replace-ready" }
+  /** A 문서 AI turn runs live in this page (not in the executor) — its page must outlive its tab's closing — or no longer. */
+  | { type: "office:live-turn"; running: boolean }
+  /** The answer to office:replace (after its office:opened when ok). `dirty`: it had unsaved edits and kept them; `failed`: reopen the page. */
+  | { type: "office:replace-result"; revision: number; ok: boolean; reason?: "dirty" | "failed" }
+  /** 되돌리기 of the 문서 AI's edit taken in place: make `before` the newest revision again (only while `revision` is still what is shown, unchanged). */
+  | { type: "office:revert-ai"; revision: number; before: number }
   | import("./pdf-notes.ts").PdfNoteRequest
   | import("./office-knowledge.ts").KnowledgeOpenRequest
   | import("./office-wiki.ts").OfficeWikiRequest
@@ -948,6 +1017,10 @@ export type OfficePageMessage =
   | { type: "office:ai-panel"; open: boolean; draft?: string; ready?: boolean; person?: boolean; /** Open AND on screen (the Hangul dock steps aside for a studio dialog at a narrow pane); absent: as `open`. */ shown?: boolean; /** The person turned the editor's own panel off (설정 › 연결): 문서 AI is the conversation column then. */ off?: boolean }
   /** The editor shows this revision; `recovered` when it reopened unsaved edits made on it. */
   | { type: "office:opened"; revision: number; recovered: boolean }
+  /** Where the view is now (slide / sheet + cell / scroll / zoom), said when it changes: the tab keeps it, a woken tab is opened there. */
+  | { type: "office:view-position"; position: OfficeViewPosition }
+  /** The page is drawn at its fitted place (PowerPoint: the slide, after its open and its first fit settled) — the page picture over the booting editor goes on this. */
+  | { type: "office:page-drawn" }
   /** A save of this page is on its way: the next revision the window hears of is this one (its "office:saved" follows). */
   | { type: "office:saving" }
   /** `unchecked` (Hangul): the gateway saved without its save check on some side (its answer said `text` or `structure` "unchecked"). */

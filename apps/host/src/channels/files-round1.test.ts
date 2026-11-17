@@ -86,7 +86,7 @@ describe("files out", () => {
     await say(kit, "받았나?");
     kit.adapter.refuseFiles.add("결과.txt");
     await press(kit, "마지막 답 보기");
-    expect(kit.adapter.texts().at(-1)).toBe("「결과.txt」은(는) 보내지 못했습니다. PC에서 열어 보세요.");
+    expect(kit.adapter.texts().at(-1)).toBe("「결과.txt」는 보내지 못했습니다. PC에서 열어 보세요.");
   });
 
   it("records 1쪽 보기 as a file sent (M6)", async () => {
@@ -132,7 +132,7 @@ describe("files in", () => {
     vi.spyOn(kit.adapter, "download").mockRejectedValue(Object.assign(new Error("too large"), { delivered: "no", code: "too_large" }));
     await kit.adapter.deliver(kit.adapter.message("봐 줘", { files: [{ fileRef: "f", name: "영상.mp4", mime: "video/mp4", size: 1000, kind: "file" }] }));
     await settle(kit);
-    expect(kit.adapter.texts()).toContain("「영상.mp4」은(는) 20MB가 넘어 받지 못했습니다. 텔레그램 봇이 받을 수 있는 파일은 20MB까지입니다.");
+    expect(kit.adapter.texts()).toContain("「영상.mp4」는 20MB가 넘어 받지 못했습니다. 텔레그램 봇이 받을 수 있는 파일은 20MB까지입니다.");
   });
 
   it("says an empty file is empty instead of asking to send it again (M7)", async () => {
@@ -141,7 +141,7 @@ describe("files in", () => {
     kit.adapter.files.set("empty", Buffer.alloc(0));
     await kit.adapter.deliver(kit.adapter.message("봐 줘", { files: [{ fileRef: "empty", name: "빈.txt", mime: "text/plain", size: 0, kind: "file" }] }));
     await settle(kit);
-    expect(kit.adapter.texts()).toContain("「빈.txt」은(는) 빈 파일이라 받지 않았습니다.");
+    expect(kit.adapter.texts()).toContain("「빈.txt」는 빈 파일이라 받지 않았습니다.");
   });
 
   it("removes files left in its own folders by a stop in the middle, when it starts (M7)", async () => {

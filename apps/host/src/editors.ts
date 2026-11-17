@@ -120,7 +120,7 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
       if (/^\/office\//.test(path) && method === "GET") {
         if (["/office/settings.html", "/office/knowledge.html"].includes(decodeURIComponent(path).toLowerCase())) throw new HttpError(404, "not_here", "설정과 지식베이스는 전용 화면에서 열립니다.");
         if (!webDir) throw new HttpError(404, "no_web", "편집기 화면이 빌드되지 않았습니다.");
-        return serveStatic(res, webDir, path, PAGE_HEADERS);
+        return serveStatic(res, webDir, path, PAGE_HEADERS, req);
       }
       const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, "") ?? null;
       if (path === "/api/office-executor/boot" && method === "POST" && ai.executors) return sendJson(res, 200, ai.executors.boot(bearer));
@@ -256,7 +256,7 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
           if (artifact.diskState === "changed") throw new HttpError(409, "disk_changed", "PDF 파일이 외부에서 바뀌었습니다. 편집을 보관한 뒤 원문을 확인해 주세요.");
         }
         const { request, source } = decodePdfRequest(await readBody(req, PDF_MAX_BYTES + PDF_REQUEST_MAX_BYTES + 4));
-        if (request.path !== undefined && request.path !== artifact.path) throw new HttpError(403, "pdf_path", "열린 PDF만 처리할 수 있습니다.");
+        if (request.path !== undefined && (typeof request.path !== "string" || !documents.isPathOf(artifact.id, request.path))) throw new HttpError(403, "pdf_path", "열린 PDF만 처리할 수 있습니다.");
         const loader = pdfLoader(documents.dataDir);
         if (operation === "loader-state") return sendJson(res, 200, loader.status());
         if (operation === "loader-install") { void loader.install(request.ocr === true ? "ocr" : "core"); return sendJson(res, 200, loader.status()); }

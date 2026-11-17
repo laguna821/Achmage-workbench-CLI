@@ -2955,6 +2955,16 @@ kbd {
   box-shadow: var(--shadow-page);
 }
 
+/* A phone reading Hangul pages (HwpxView TouchPages): one page at a time, swipe to turn, pinch to zoom.
+   At 1× the browser keeps vertical scrolling and leaves sideways swipes and pinches to the page;
+   zoomed, the browser pans the page in both directions. */
+.hwpx-touch-reader { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; flex: 1 1 auto; }
+.hwpx-touch-stage { overflow: auto; touch-action: pan-y; padding: var(--space-sm); outline-offset: -2px; }
+.hwpx-touch-stage[data-zoom]:not([data-zoom="1"]) { touch-action: pan-x pan-y; }
+.hwpx-touch-stage .hwpx-page { display: block; margin: 0 auto; user-select: none; -webkit-user-select: none; }
+.hwpx-touch-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); padding: var(--space-xs) var(--space-sm); border-top: 1px solid var(--line); }
+.hwpx-touch-bar .button { min-height: 44px; min-width: 64px; }
+
 /* Design documents (vendored doory editor in its own page) */
 .format-design {
   background: color-mix(in srgb, var(--motion) 12%, var(--surface));
@@ -4900,6 +4910,28 @@ kbd {
 .memory-parts dt { color: var(--muted); }
 .memory-parts dd { margin: 0; }
 .memory-note { margin: var(--space-xs) 0 0; padding-top: var(--space-xs); border-top: 1px solid var(--line); color: var(--muted); }
+/* 0.5.3 B1: the engines alive, one row each, and "쉬는 엔진 지금 끄기" under them. */
+.memory-engines { margin-top: var(--space-xs); padding-top: var(--space-xs); border-top: 1px solid var(--line); }
+.memory-engines dt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22rem; }
+.memory-close-idle { margin-top: var(--space-xs); }
+/* 0.5.3 the resource manager: "실행 4 · 대기 3" before the memory readout, the same small muted key; its list in the same popover. */
+.resource-line { position: relative; align-self: stretch; display: flex; align-items: center; margin-left: auto; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.resource-line + .memory-readout { margin-left: 0; }
+.resource-line-text { padding: 0 var(--space-xs); border: 0; border-radius: var(--radius-pill); background: none; color: inherit; font: inherit; cursor: pointer; }
+.resource-line-text:hover { color: var(--text-soft); }
+.resource-line-text:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.popover.resource-pop { min-width: min(300px, calc(100vw - 24px)); }
+.resource-pop > .memory-note:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.resource-rows { margin-top: var(--space-xs); }
+.resource-rows dt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22rem; }
+.resource-rows > div { align-items: baseline; }
+.resource-rows .text-button { min-height: 0; padding: 0; font-size: inherit; }
+.resource-pressure { color: var(--color-attention-text); }
+.resource-limit-control { display: flex; align-items: center; gap: var(--space-xs); }
+.resource-facts { display: grid; gap: var(--space-3xs); margin-top: var(--space-2xs); }
+.resource-facts > div { display: flex; justify-content: space-between; gap: var(--space-lg); max-width: 24rem; }
+.resource-facts dt { color: var(--muted); }
+.resource-facts dd { margin: 0; }
 
 /* ── Home ────────────────────────────────────────────────────────────── */
 /* The wordmark in ink, whatever the look's heading color: the brand is the arc's teal. */

@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { HttpError } from "./errors.ts";
 import { latestDesktopRelease } from "./ieum-release.ts";
 import { shipped } from "./resources.ts";
+import { guiEnvironment } from "./gui-env.ts";
 
 // Word, PowerPoint and Excel documents through the `ieumoffice` command line tool of IeumOffice
 // (https://github.com/pblsketch/openoffice, Apache-2.0). Release builds ship the whole official
@@ -175,7 +176,8 @@ export class IeumOffice {
 
   /** The tool may read and write only inside `roots`; its own command log is off (Workbench keeps revisions). */
   private env(roots: string[]): NodeJS.ProcessEnv {
-    const inherited = { ...process.env };
+    // The headless export starts the app binary (a WebKit window): it needs the display (gui-env.ts).
+    const inherited = guiEnvironment(process.env);
     delete inherited.ELECTRON_RUN_AS_NODE;
     const exportApp = this.appWrapper ?? this.install?.app;
     return {

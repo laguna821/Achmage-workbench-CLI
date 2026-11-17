@@ -416,7 +416,7 @@ export function ProjectsLevel({ shared, local, docCount, onChoose, onFolderNew, 
         </span>
       </div>
       {/* The one filled key of the column (the owner's draft: "새 작업" under the head), the creation menu. */}
-      <button type="button" className="button primary nav-new" aria-haspopup="menu" title="새 프로젝트·문서·세션·폴더" onClick={(event) => {
+      <button type="button" className="button primary nav-new" aria-haspopup="menu" title="새 프로젝트·문서·대화·폴더" onClick={(event) => {
         const box = event.currentTarget.getBoundingClientRect();
         if (actions.creationMenu) actions.creationMenu(shared.currentWorkId ? state.works[shared.currentWorkId] ?? null : null, box.left, box.bottom);
         else actions.newSession({});

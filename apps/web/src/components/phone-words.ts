@@ -7,3 +7,5 @@
 
 export const MESSENGER_NEEDS = "휴대폰에 텔레그램이나 Slack 앱만 있으면 됩니다.";
 export const PHONE_PAGE_SETUP = "이 방법은 준비가 필요합니다. 휴대폰이 열 수 있는 이 PC의 주소를 아래 ‘연결 주소 설정’에 직접 넣어야 QR이 만들어집니다. 같은 와이파이에 있어도 저절로 되지 않습니다. 잘 모르겠으면 메신저를 쓰세요.";
+/** The two ways, in one line (0.5.3): the messenger is the easy one; Tailscale opens this PC's own screen on the phone. */
+export const PHONE_TWO_WAYS = "휴대폰에서 이 PC를 쓰는 길은 둘입니다. 메신저는 가장 쉽고, 테일스케일은 작업실 화면을 그대로 엽니다(설정 › 휴대폰과 다른 기기).";

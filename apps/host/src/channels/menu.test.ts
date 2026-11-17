@@ -128,7 +128,7 @@ describe("switching conversation and project", () => {
     expect(labels.some((label) => label.startsWith("예산표 정리 ·"))).toBe(true);
     expect(labels.some((label) => label.startsWith("보관한 대화"))).toBe(false);
     await press(kit, labels.find((label) => label.startsWith("문헌 목록"))!);
-    expect(shownText(kit, id)).toBe("이제 「문헌 목록」로 보냅니다 (Claude · 전체 접근).");
+    expect(shownText(kit, id)).toBe("이제 「문헌 목록」으로 보냅니다 (Claude · 전체 접근).");
     expect(kit.core.bindings()[0]!.pointerSessionId).toBe(desk.id);
     expect(kit.manager.snapshot().works.find((entry) => entry.id === work.id)!.activeSessionId).toBe(desk.id);
     await say(kit, "여기서 이어 줘");
@@ -577,10 +577,10 @@ describe("usage and notifications", () => {
     await pair(kit);
     const id = await menu(kit);
     await press(kit, "알림");
-    expect(new Set(labelsOf(kit, id))).toEqual(new Set(["꺼짐 · 다른 일", "꺼짐 · 연구계획서", "꺼짐 · 답 아래 꼬리말(모델·시간·맥락)", "← 메뉴"]));
+    expect(new Set(labelsOf(kit, id))).toEqual(new Set(["꺼짐 · 다른 일", "꺼짐 · 연구계획서", "꺼짐 · 답 아래 꼬리말(모델·시간·맥락)", "꺼짐 · 확인 받기(새 대화가 먼저 묻기)", "← 메뉴"]));
     await press(kit, "꺼짐 · 연구계획서");
     // What is on comes first.
-    expect(labelsOf(kit, id)).toEqual(["켜짐 · 연구계획서", "꺼짐 · 다른 일", "꺼짐 · 답 아래 꼬리말(모델·시간·맥락)", "← 메뉴"]);
+    expect(labelsOf(kit, id)).toEqual(["켜짐 · 연구계획서", "꺼짐 · 다른 일", "꺼짐 · 답 아래 꼬리말(모델·시간·맥락)", "꺼짐 · 확인 받기(새 대화가 먼저 묻기)", "← 메뉴"]);
     const a = kit.manager.createSession(watched.id, { provider: "claude", purpose: "예산표 정리", access: "full" });
     const b = kit.manager.createSession(quiet.id, { provider: "claude", purpose: "다른 대화", access: "full" });
     await kit.manager.send(a.id, "pc-1", "PC에서 시킨 일");

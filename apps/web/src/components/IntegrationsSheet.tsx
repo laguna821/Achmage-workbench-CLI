@@ -1,3 +1,4 @@
+import { withParticle } from "@workbench/contracts";
 import { useCallback, useEffect, useState } from "react";
 import { failure, type Notify } from "../top-notice.ts";
 import type { IntegrationsView, McpDefinition } from "@workbench/contracts";
@@ -126,9 +127,9 @@ export function IntegrationsSheet({ api, onClose, onToast }: { api: Api; onClose
                         onClick={() =>
                           act(
                             `mcp:${server.name}`,
-                            `${ENGINE_LABEL[missing]}에도 MCP 서버 '${server.name}'을(를) 추가합니다.\n\n쓰는 곳: ${missing === "claude" ? view.paths.claudeConfig : view.paths.codexConfig}\n방법: ${missing === "claude" ? "claude mcp add-json --scope user" : "codex mcp add"}`,
+                            `${ENGINE_LABEL[missing]}에도 MCP 서버 ${withParticle(`'${server.name}'`, "을/를")} 추가합니다.\n\n쓰는 곳: ${missing === "claude" ? view.paths.claudeConfig : view.paths.codexConfig}\n방법: ${missing === "claude" ? "claude mcp add-json --scope user" : "codex mcp add"}`,
                             () => api.copyMcp(server.name, missing),
-                            `${ENGINE_LABEL[missing]}에 ${server.name}을(를) 추가했습니다. 새 세션부터 쓸 수 있습니다.`,
+                            `${ENGINE_LABEL[missing]}에 ${withParticle(`${server.name}`, "을/를")} 추가했습니다. 새 대화부터 쓸 수 있습니다.`,
                           )
                         }
                       >

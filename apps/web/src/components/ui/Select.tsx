@@ -65,7 +65,16 @@ export type SelectProps<T> = {
   align?: Align;
   title?: string;
   className?: string;
+  /** The trigger's id, for a `<label htmlFor>` beside it. */
+  id?: string;
+  /** Form field name: a hidden input carries the value into the form (FormData). */
+  name?: string;
+  /** A form will not submit while nothing is chosen (the value is "" or null); the trigger is marked invalid. */
+  required?: boolean;
 };
+
+/** The hidden form field under a Select: in the form's data and its validation, never seen or tabbed to. */
+const PROXY_STYLE = { position: "absolute", width: 1, height: 1, minHeight: 0, margin: 0, padding: 0, border: 0, opacity: 0, pointerEvents: "none" } as const;
 
 const fold = (text: string) => text.normalize("NFC").toLocaleLowerCase();
 
@@ -81,13 +90,17 @@ export function matchesOption<T>(option: SelectOption<T>, query: string) {
 export function Select<T extends string | number>({
   value, options, onChange, label, placeholder = "선택", searchable = false, filter = matchesOption, onQueryChange,
   searchPlaceholder, emptyText = "맞는 항목이 없습니다.", actions = [], disabled, icon, renderValue, side, align, title, className = "",
+  id, name, required = false,
 }: SelectProps<T>) {
   const [open, setOpen] = useState(false);
+  const [invalid, setInvalid] = useState(false);
   const [initial, setInitial] = useState<"checked" | "first" | "last">("checked");
   const [query, setQueryState] = useState("");
   const setQuery = (next: string) => { setQueryState(next); onQueryChange?.(next); };
   const trigger = useRef<HTMLButtonElement>(null);
   const current = options.find(option => option.value === value);
+  const formValue = value === null || value === undefined ? "" : String(value);
+  if (invalid && formValue) setInvalid(false);
   const shown = useMemo(() => (filter ? options.filter(option => filter(option, query)) : options), [options, query, filter]);
   const groups = useMemo(() => {
     const order: (string | undefined)[] = [];
@@ -110,8 +123,9 @@ export function Select<T extends string | number>({
   );
 
   return <>
-    <button ref={trigger} type="button" className={`ui-select ${className}`} aria-haspopup="listbox" aria-expanded={open} aria-label={label}
-      disabled={disabled} title={title} data-placeholder={current ? undefined : ""}
+    <button ref={trigger} id={id} type="button" className={`ui-select ${className}`} aria-haspopup="listbox" aria-expanded={open} aria-label={label}
+      aria-invalid={invalid || undefined}
+      disabled={disabled} title={title} data-placeholder={current ? undefined : ""} data-value={formValue}
       onClick={() => (open ? setOpen(false) : show("checked"))}
       onKeyDown={event => {
         const from = event.key === "ArrowDown" || event.key === "ArrowUp" ? "checked" : event.key === "Home" ? "first" : event.key === "End" ? "last" : null;
@@ -123,6 +137,11 @@ export function Select<T extends string | number>({
       <span className="ui-select-value">{current ? renderValue?.(current) ?? current.label : placeholder}</span>
       <Icon name="chevronDown" size={14} className="ui-select-chevron" />
     </button>
+    {name !== undefined || required
+      ? <input className="ui-select-proxy" style={PROXY_STYLE} tabIndex={-1} aria-hidden name={name} required={required} disabled={disabled}
+        value={formValue} onChange={() => {}} onFocus={() => trigger.current?.focus()}
+        onInvalid={() => { setInvalid(true); trigger.current?.focus(); }} />
+      : null}
     <ListLayer role="listbox" open={open} onClose={() => setOpen(false)} anchor={trigger} label={label} side={side} align={align}
       minWidth="anchor" className={`ui-select-menu${searchable ? " searchable" : ""}`} initialActive={initial}
       search={searchable ? { query, onQuery: setQuery, label: `${label} 찾기`, placeholder: searchPlaceholder } : undefined}

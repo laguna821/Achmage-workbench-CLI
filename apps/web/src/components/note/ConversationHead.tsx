@@ -259,12 +259,12 @@ export function ConversationHead({ state, work, session, actions, cwd, raw, onRa
         {conversations ? <li className="note-prop-conversations">{conversations}</li> : null}
         {session ? (
           <li>
-            <button type="button" ref={engine} className="note-prop" aria-expanded={details} aria-haspopup="dialog" title="세션 상세" onClick={() => setDetails(!details)}>
+            <button type="button" ref={engine} className="note-prop" aria-expanded={details} aria-haspopup="dialog" title="대화 상세" onClick={() => setDetails(!details)}>
               <EngineMark provider={session.provider} size={14} /><span>{PROVIDER_LABEL[session.provider]}</span>
             </button>
-            <AnchoredLayer open={details} onClose={() => setDetails(false)} anchor={engine} label="세션 상세" className="status-detail">
+            <AnchoredLayer open={details} onClose={() => setDetails(false)} anchor={engine} label="대화 상세" className="status-detail">
               <dl>
-                <dt>세션</dt>
+                <dt>대화</dt>
                 <dd>{sessionLabel(session)}</dd>
                 <dt>모델</dt>
                 <dd>{modelLabel}{changed ? <span className="muted"> · 다음 요청부터</span> : null}</dd>

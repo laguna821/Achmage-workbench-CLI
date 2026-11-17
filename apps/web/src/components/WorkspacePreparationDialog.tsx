@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { HookSource, PreparationJob, PreparationOptions, PreparationPreview, TerminalSession, Workspace, WorkspaceEnvironment } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import "../styles/preparation.css";
+import { Select } from "./ui/Select.tsx";
 
 const labels: Record<PreparationJob["phase"], string> = { queued: "대기", paths: "파일 준비", hook: "명령 실행 중", tabs: "기본 터미널 생성", complete: "완료", failed: "실패", canceled: "취소됨", interrupted: "이전 준비 중단" };
 const active = (job: PreparationJob) => ["queued", "paths", "hook", "tabs"].includes(job.phase);
@@ -40,7 +41,7 @@ export function WorkspacePreparationDialog({ api, workspace, onOpen, onClose }: 
     catch (error) { setPreview(null); fail(error); } finally { setBusy(false); }
   };
   return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <section className="preparation-dialog" role="dialog" aria-modal="true" aria-label="작업공간 환경 준비">
+    <section className="preparation-dialog" role="dialog" aria-modal="true" aria-label="작업 폴더 환경 준비">
       <header><h2>{workspace.label} · 환경 준비</h2><button className="button small" onClick={onClose} disabled={busy}>닫기</button></header>
       <p className="preparation-path">{workspace.cwd}</p>
       <p className="muted">적용 전에 원본·목적지와 실행할 명령을 확인합니다. 기존 목적지 파일은 유지합니다.</p>
@@ -52,7 +53,7 @@ export function WorkspacePreparationDialog({ api, workspace, onOpen, onClose }: 
         }}>
           <p>이 앱에만 저장합니다. 저장소의 orca.yaml과 .worktreeinclude는 바꾸지 않습니다.</p>
           {(["setup", "archive"] as const).map((kind) => <div key={kind}>
-            <label>{kind === "setup" ? "준비" : "보관"} 명령 출처<select aria-label={`${kind === "setup" ? "준비" : "보관"} 명령 출처`} value={settings[`${kind}Source`]} onChange={(event) => change({ [`${kind}Source`]: event.target.value as HookSource })}>{Object.entries(sourceLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+            <label>{kind === "setup" ? "준비" : "보관"} 명령 출처<Select<HookSource> label={`${kind === "setup" ? "준비" : "보관"} 명령 출처`} value={settings[`${kind}Source`]} onChange={(value) => change({ [`${kind}Source`]: value })} options={(Object.entries(sourceLabels) as [HookSource, string][]).map(([value, label]) => ({ value, label }))} /></label>
             <label>개인 {kind === "setup" ? "준비" : "보관"} 명령<textarea aria-label={`개인 ${kind === "setup" ? "준비" : "보관"} 명령`} rows={3} value={settings[`${kind}Script`]} onChange={(event) => change({ [`${kind}Script`]: event.target.value })} /></label>
           </div>)}
           <label>공유 경로 · 저장소 상대 경로, 한 줄에 하나<textarea aria-label="개인 공유 경로" rows={3} value={settings.sharedPaths.join("\n")} onChange={(event) => change({ sharedPaths: event.target.value.split("\n") })} /></label>
@@ -63,13 +64,13 @@ export function WorkspacePreparationDialog({ api, workspace, onOpen, onClose }: 
         </form> : <p>개인 설정을 읽는 중…</p>}
       </details>
       <div className="preparation-options">
-        <label>작업<select aria-label="환경 준비 종류" value={options.kind} onChange={(event) => choose({ kind: event.target.value as PreparationOptions["kind"] })}><option value="setup">작업 시작 준비</option><option value="archive">보관·제거 준비</option></select></label>
+        <label>작업<Select<PreparationOptions["kind"]> label="환경 준비 종류" value={options.kind} onChange={(kind) => choose({ kind })} options={[{ value: "setup", label: "작업 시작 준비" }, { value: "archive", label: "보관·제거 준비" }]} /></label>
         {options.kind === "setup" ? <><label><input type="checkbox" checked={options.applyPaths} onChange={(event) => choose({ applyPaths: event.target.checked })} />복사·공유 적용</label><label><input type="checkbox" checked={options.openTabs} onChange={(event) => choose({ openTabs: event.target.checked })} />기본 터미널 만들기</label></> : null}
         <label><input aria-label="준비 명령 실행" type="checkbox" checked={options.runCommands} onChange={(event) => choose({ runCommands: event.target.checked })} />명령 실행</label>
         <button className="button small preparation-preview-button" disabled={busy || dirty || workspace.archivedAt !== null || workspace.removedAt !== null} onClick={() => void readPreview()}>미리보기</button>
       </div>
       {dirty ? <p>개인 설정을 저장한 뒤 미리보기를 열어 주세요.</p> : null}
-      {workspace.archivedAt !== null || workspace.removedAt !== null ? <p>보관되거나 제거된 작업공간의 기록입니다. 새 준비 작업을 실행하지 않습니다.</p> : null}
+      {workspace.archivedAt !== null || workspace.removedAt !== null ? <p>보관되거나 제거된 작업 폴더의 기록입니다. 새 준비 작업을 실행하지 않습니다.</p> : null}
       {!options.runCommands ? <p className="preparation-warning">이번 준비의 명령을 건너뜁니다. 보관 준비에서 적용하면 보관·제거가 허용됩니다.</p> : null}
       {error ? <p className="preparation-error" role="alert">{error}</p> : null}
       {preview ? <div className="preparation-preview" data-revision={preview.revision}>

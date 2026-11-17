@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { chromium, type Page } from "playwright-core";
+import { editorFirst } from "./fixtures/editor-first.ts";
 import { pagePng } from "./fixtures/png.mjs";
 import type { Provider, Session, TranscriptItem, Work } from "@workbench/contracts";
 
@@ -126,6 +127,7 @@ async function flow(provider: Provider) {
   const uploaded = (count: number) => page.waitForFunction((n) => document.querySelectorAll(".composer .attach-chip").length === n && !document.querySelector(".composer .attach-chip .spinner"), count, { timeout: 10_000 });
   try {
     await page.addInitScript((id) => localStorage.setItem("workbench.lastWork", id), work.id);
+    await editorFirst(page);
     await page.goto(`${ready.url}/?token=${ready.token}`);
     await page.waitForSelector(".composer-input");
 

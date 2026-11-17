@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { DIVIDER, MAX_PANES, minimumSize, paneGeometry, resizeSplit, treeOf, type PaneNeed, type DividerRect, type DropEffect, type Layout, type Pane, type PaneId, type PaneItem, type PaneRect, type PaneTab, type PaneTarget, type Side } from "../panes.ts";
 import { paneDrag, useDropArea, usePaneDrag, usePaneDragSlice } from "../panedrag.ts";
+import { stripDropIndex } from "../tab-drop.ts";
 import { Icon } from "./Icon.tsx";
 import { Select } from "./ui/Select.tsx";
-import { activeTab, tabsOf } from "../tabs.ts";
-import { SleepTab, heldAwake, sleepPlan, tabSleepAfter } from "../tab-sleep.ts";
+import { activeTab, contentKey, setTabIdReuse, tabsOf } from "../tabs.ts";
+import { SleepTab, TabClosed, heldAwake, keptOnClose, onKeptOnClose, sleepPlan, tabSleepAfter } from "../tab-sleep.ts";
 import { fadeIn, returnTo, revealFrom } from "../flip.ts";
 import "../styles/panes.css";
 
@@ -22,14 +23,23 @@ const SIDE_LABEL = { left: "왼쪽으로 분할", right: "오른쪽으로 분할
  */
 export type TabSleep<V> = { unsaved: (tab: PaneTab<V>) => boolean; atWork: (tab: PaneTab<V>) => boolean; before: (tab: PaneTab<V>) => (() => Promise<void>) | null };
 
+/** Under memory pressure a tab off screen this long sleeps (instead of ten minutes), for PRESSURE_SOON_MS after the gateway said so. */
+export const PRESSURE_SLEEP_MS = 30_000;
+export const PRESSURE_SOON_MS = 10 * 60_000;
+
 /** The tree determines geometry; editors retain the same parent and React key when moved. */
-export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, maximized = false, onMaximize, onPresent, onResize, onFocus, onClose, onMove, onSplit, onDrop, head, scope, effectOf, render, onNarrow, tabBar, minWidthOf, foot, sleep, onSleeping }: {
+export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, maximized = false, onMaximize, onPresent, onResize, onFocus, onClose, onMove, onSplit, onDrop, head, scope, effectOf, render, onNarrow, tabBar, minWidthOf, foot, sleep, sleepNow = 0, onSleeping }: {
   layout: Layout<V>; enabled: boolean;
   /**
    * Given: a view that has been off screen for ten minutes is unmounted (its tab stays; shown again, it is mounted
    * again), by tab-sleep.ts `sleepPlan`. Not given: a view stays mounted until its tab closes.
    */
   sleep?: TabSleep<V>;
+  /**
+   * Rises when the gateway says memory is short (0.5.3, the resource manager): tabs off screen for
+   * PRESSURE_SLEEP_MS or more sleep now, by the same plan (recent tabs, unsaved edits and AI at work are kept).
+   */
+  sleepNow?: number;
   /** Told the number of tabs asleep right now — views this window took down that are neither shown again nor closed — at the start and whenever it changes. */
   onSleeping?: (count: number) => void;
   /**
@@ -84,9 +94,31 @@ export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, maximized = 
     const open = new Set(layout.panes.flatMap(tabsOf).map((tab) => tab.id));
     for (const id of [...rest.current.asleep]) if (front.has(id) || !open.has(id)) rest.current.asleep.delete(id);
   }
+  // Closed tabs whose view must outlive the closing for now (a 문서 AI turn running live in its editor): kept
+  // mounted, hidden, in the same place among the views (same key, same order: its frame is not reloaded) until the
+  // view lets go; opened again meanwhile (the same tab id, tabs.ts `setTabIdReuse`), it is that same view again.
+  const [, keptTick] = useState(0);
+  const known = useRef(new Map<string, { group: Pane<V>; tab: PaneTab<V> }>());
+  const lingering = useRef(new Map<string, { group: Pane<V>; tab: PaneTab<V> }>());
+  {
+    const open = new Map(layout.panes.flatMap((group) => tabsOf(group).map((tab) => [tab.id, { group, tab }] as const)));
+    for (const [id, entry] of known.current) if (!open.has(id) && mountedTabs.current.has(id) && keptOnClose(id)) lingering.current.set(id, entry);
+    for (const id of [...lingering.current.keys()]) {
+      if (open.has(id)) { lingering.current.delete(id); mountedTabs.current.add(id); }
+      else if (!keptOnClose(id)) { lingering.current.delete(id); mountedTabs.current.delete(id); }
+    }
+    known.current = open;
+  }
+  useEffect(() => onKeptOnClose(() => keptTick((count) => count + 1)), []);
+  useEffect(() => {
+    setTabIdReuse((key) => [...lingering.current.values()].find((entry) => contentKey(entry.tab) === key)?.tab.id ?? null);
+    return () => setTabIdReuse(null);
+  }, []);
   const sleeping = rest.current.asleep.size;
   useEffect(() => onSleeping?.(sleeping), [sleeping, onSleeping]);
   const [, slept] = useState(0);
+  const kick = useRef<(() => void) | null>(null);
+  const soonUntil = useRef(0);
   const latest = useRef({ layout, shown, sleep });
   latest.current = { layout, shown, sleep };
   const sleeps = Boolean(sleep);
@@ -98,16 +130,16 @@ export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, maximized = 
       const { layout, shown, sleep } = latest.current, { shownAt, askedAt, front } = rest.current, now = Date.now();
       if (!sleep) return [];
       const open = new Set(layout.panes.flatMap(tabsOf).map((tab) => tab.id));
-      for (const known of [mountedTabs.current, shownAt, askedAt]) for (const id of [...known.keys()]) if (!open.has(id)) known.delete(id);
+      for (const known of [mountedTabs.current, shownAt, askedAt]) for (const id of [...known.keys()]) if (!open.has(id) && !lingering.current.has(id)) known.delete(id);
       for (const id of front) shownAt.set(id, now);
-      const plan = sleepPlan({ layout, drawn: shown, mounted: mountedTabs.current, now, shownAt, askedAt, after, unsaved: sleep.unsaved,
+      const plan = sleepPlan({ layout, drawn: shown, mounted: mountedTabs.current, now, shownAt, askedAt, after: now < soonUntil.current ? Math.min(after, PRESSURE_SLEEP_MS) : after, unsaved: sleep.unsaved,
         atWork: (tab) => heldAwake(tab.id) || sleep.atWork(tab), saved: saved ? new Set([saved]) : undefined });
       const down = saved ? plan.sleep.filter((id) => id === saved) : plan.sleep;
       for (const id of down) { mountedTabs.current.delete(id); rest.current.asleep.add(id); }
       if (down.length) slept((count) => count + 1);
       return saved ? [] : plan.ask;
     };
-    const timer = window.setInterval(() => {
+    const tick = () => {
       for (const id of settle()) {
         // Unsaved edits: the editor saves through its tab's leave path first; a web page: its native page is released
         // first. Done: decided again, as things are then. Refused, failed or no way to: the view stays, and is asked
@@ -117,9 +149,19 @@ export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, maximized = 
         const before = tab && latest.current.sleep?.before(tab);
         if (before) void before().then(() => { settle(id); }, () => undefined);
       }
-    }, Math.min(30_000, Math.max(250, after / 4)));
-    return () => window.clearInterval(timer);
+    };
+    kick.current = tick;
+    const timer = window.setInterval(tick, Math.min(30_000, Math.max(250, after / 4)));
+    return () => { window.clearInterval(timer); kick.current = null; };
   }, [sleeps]);
+  // Memory is short: off-screen tabs sleep sooner, starting now; the usual time again once it is back.
+  const pressed = useRef(sleepNow);
+  useEffect(() => {
+    if (sleepNow === pressed.current) return;
+    pressed.current = sleepNow;
+    soonUntil.current = Date.now() + PRESSURE_SOON_MS;
+    kick.current?.();
+  }, [sleepNow]);
   const split = shown.panes.length > 1;
   const tree = treeOf(live ? resizeSplit(shown, live.id, live.ratio) : shown);
   const need: PaneNeed | undefined = minWidthOf && split && !layout.grid ? (id) => { const pane = layout.panes.find((entry) => entry.id === id); return pane ? minWidthOf(pane) : 0; } : undefined;
@@ -159,14 +201,16 @@ export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, maximized = 
   useEffect(() => () => cancelResize.current?.(), []);
   useDropArea(enabled ? {
     element: () => host.current,
-    targetAt: (x, y) => {
+    targetAt: (x, y, item) => {
       const origin = host.current?.getBoundingClientRect();
       if (!origin) return null;
       const bar = document.elementFromPoint(x, y)?.closest<HTMLElement>(".group-tabs");
       if (bar?.dataset.paneId) {
+        // Over a strip: a place between its tabs (its insertion mark), never a zone over the panes.
         const rows = Array.from(bar.querySelectorAll<HTMLElement>("[data-tab-index]"));
-        const before = rows.find((row) => x < row.getBoundingClientRect().left + row.getBoundingClientRect().width / 2);
-        return { paneId: bar.dataset.paneId, side: "center", tabIndex: before ? Number(before.dataset.tabIndex) : rows.length };
+        const held = item.kind === "tab" ? rows.find((row) => row.dataset.tabId === item.id) : undefined;
+        const tabIndex = stripDropIndex(rows.map((row) => { const box = row.getBoundingClientRect(); return { index: Number(row.dataset.tabIndex), left: box.left, width: box.width }; }), x, held ? Number(held.dataset.tabIndex) : undefined);
+        return { paneId: bar.dataset.paneId, side: "center", tabIndex };
       }
       for (const [paneId, box] of Object.entries(boxes)) {
         const px = (x - origin.left - box.left) / box.width, py = (y - origin.top - box.top) / box.height;
@@ -209,8 +253,15 @@ export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, maximized = 
   };
   const takesFocus = (target: EventTarget | null) => !(target instanceof Element && target.closest(".pane-head-tools,.pane-narrow"));
   return <div ref={host} data-grid={layout.grid} data-dense={layout.grid && !collapsed ? "true" : undefined} className={`panes recursive${split && !narrow ? " two" : ""}${narrow ? " narrow" : ""}`}>
-    {layout.panes.flatMap((group) => tabsOf(group).filter((tab) => mountedTabs.current.has(tab.id)).map((tab) => ({ group, tab }))).sort((a, b) => a.tab.id.localeCompare(b.tab.id)).map(({ group, tab }) => {
+    {[...layout.panes.flatMap((group) => tabsOf(group).filter((tab) => mountedTabs.current.has(tab.id)).map((tab) => ({ group, tab, closed: false }))),
+      ...[...lingering.current.values()].map((entry) => ({ ...entry, closed: true }))].sort((a, b) => a.tab.id.localeCompare(b.tab.id)).map(({ group, tab, closed }) => {
       const pane = { ...group, view: tab.view, workId: tab.workId, sessionId: tab.sessionId };
+      // The same element shape open or kept (header slot, bar slot, view): the view is never remounted by the change.
+      if (closed) return <section key={tab.id} className="pane look-scope" data-tab={tab.id} data-tab-kept="closed" data-tab-active="false" data-pane-active="false" hidden aria-hidden>
+        {null}
+        {null}
+        <SleepTab.Provider value={tab.id}><TabClosed.Provider value>{render(pane, { focused: false, split, tabId: tab.id, active: false })}</TabClosed.Provider></SleepTab.Provider>
+      </section>;
       const active = onScreen.has(group.id) && activeTab(group).id === tab.id;
       const focused = active && pane.id === layout.focus, look = scope(pane, focused), title = head(pane);
       // A tab behind this one holds an unseen answer.
@@ -240,7 +291,7 @@ export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, maximized = 
           </span>
         </header> : null}
         {tabBar?.(group)}
-        <SleepTab.Provider value={tab.id}>{render(pane, { focused, split, tabId: tab.id, active })}</SleepTab.Provider>
+        <SleepTab.Provider value={tab.id}><TabClosed.Provider value={false}>{render(pane, { focused, split, tabId: tab.id, active })}</TabClosed.Provider></SleepTab.Provider>
       </section>;
     })}
     {split && !collapsed ? geometry.dividers.map((divider) => {
@@ -256,25 +307,41 @@ export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, maximized = 
           event.preventDefault(); onResize(divider.id, Math.max(divider.min, Math.min(divider.max, next)));
         }} />;
     }) : null}
-    {enabled ? <><DropPreview boxes={boxes} effectOf={effectOf} /><DragGhost /></> : null}
+    {enabled ? <><DropPreview boxes={boxes} effectOf={effectOf} panes={layout.panes} /><DragGhost /></> : null}
     {foot}
   </div>;
 }
 
-function DropPreview({ boxes, effectOf }: { boxes: Record<string, PaneRect>; effectOf: (item: PaneItem, target: PaneTarget) => DropEffect }) {
-  const held = usePaneDragSlice((drag) => drag?.over?.kind === "zone" ? JSON.stringify([drag.over.target, drag.item]) : "");
+/**
+ * Where a held item lands on a pane's body: a quiet tint of the half it would take (or of THAT pane, for a
+ * move into it). Over a tab strip nothing is laid over the panes (the strip draws its insertion mark), and a
+ * tab held over the middle of its own pane shows nothing (it is there already).
+ */
+function DropPreview<V>({ boxes, effectOf, panes }: { boxes: Record<string, PaneRect>; effectOf: (item: PaneItem, target: PaneTarget) => DropEffect; panes: Pane<V>[] }) {
+  const held = usePaneDragSlice((drag) => drag?.over?.kind === "zone" && drag.over.target.tabIndex === undefined ? JSON.stringify([drag.over.target, drag.item]) : "");
   if (!held) return null;
   const [target, item] = JSON.parse(held) as [PaneTarget, PaneItem];
-  const effect = item.kind === "pane" ? item.id === target.paneId ? "none" : "swap" : effectOf(item, target);
   const rect = boxes[target.paneId];
-  if (effect === "none" || !rect) return null;
+  if (!rect) return null;
+  if (item.kind === "tab") {
+    const own = panes.find((pane) => tabsOf(pane).some((tab) => tab.id === item.id));
+    if (target.side === "center" && own?.id === target.paneId) return null;
+    if (target.side !== "center" && own?.id === target.paneId && tabsOf(own).length === 1) return null;
+    return <Zone rect={rect} side={target.side} icon={target.side === "center" ? "swap" : "columns"} label={target.side === "center" ? "이 칸으로 옮기기" : SIDE_LABEL[target.side]} />;
+  }
+  const effect = item.kind === "pane" ? item.id === target.paneId ? "none" : "swap" : effectOf(item, target);
+  if (effect === "none") return null;
+  return <Zone rect={rect} side={target.side} icon={effect === "swap" ? "swap" : "columns"} label={effect === "swap" ? target.side === "center" ? "자리 바꾸기" : "이쪽으로 옮기기" : SIDE_LABEL[target.side]} />;
+}
+
+function Zone({ rect, side, icon, label }: { rect: PaneRect; side: PaneTarget["side"]; icon: "swap" | "columns"; label: string }) {
   const box = { ...rect };
-  if (target.side === "left" || target.side === "right") box.width /= 2;
-  if (target.side === "top" || target.side === "bottom") box.height /= 2;
-  if (target.side === "right") box.left += box.width;
-  if (target.side === "bottom") box.top += box.height;
+  if (side === "left" || side === "right") box.width /= 2;
+  if (side === "top" || side === "bottom") box.height /= 2;
+  if (side === "right") box.left += box.width;
+  if (side === "bottom") box.top += box.height;
   return <div className="pane-drop" aria-hidden><div className="pane-drop-zone" style={box}><span className="pane-drop-label">
-    <Icon name={effect === "swap" ? "swap" : "columns"} size={14} />{effect === "swap" ? target.side === "center" ? "자리 바꾸기" : "이쪽으로 옮기기" : SIDE_LABEL[target.side]}
+    <Icon name={icon} size={14} />{label}
   </span></div></div>;
 }
 

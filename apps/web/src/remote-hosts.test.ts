@@ -166,3 +166,55 @@ it("does not keep a connection on a page opened by this PC's own address, where 
   openedBy("https://desk.tailnet.example/");
   expect(platformHostCredentials().canRemember).toBe(true);
 });
+
+// ── M01: opening the page again connects by itself (no tap on 사용하기) ────────────────────────────
+
+it("M01: a remembered phone opening the page again connects by itself, to the PC the page came from", async () => {
+  await tab(pc({ rememberedAt: 1_000 })).connectOffer(link(), "내 휴대폰", { remember: true });
+  sessionStorage.clear(); // the next day
+  const nextDay = pc({ rememberedAt: 1_000 }), nextTab = tab(nextDay);
+  expect(await nextTab.resume("desk.example")).toBe("desk");
+  expect(nextDay.connect).toHaveBeenCalledExactlyOnceWith(CREDENTIAL);
+  expect(nextTab.getSnapshot()).toMatchObject({ phase: "connected", activeHostId: "desk" });
+  // Already connected: nothing more.
+  expect(await nextTab.resume("desk.example")).toBeNull();
+});
+
+it("M01: without a credential (not remembered, tab closed) nothing is tried and the list waits for a new link", async () => {
+  await tab(pc()).connectOffer(link(), "내 휴대폰");
+  sessionStorage.clear();
+  const nextDay = pc(), nextTab = tab(nextDay);
+  expect(await nextTab.resume("desk.example")).toBeNull();
+  expect(nextDay.connect).not.toHaveBeenCalled();
+  expect(nextTab.getSnapshot()).toMatchObject({ phase: "local", activeHostId: null });
+});
+
+it("M01: a credential the PC ended is dropped at the automatic try, as it was at the tap", async () => {
+  await tab(pc({ rememberedAt: 1_000 })).connectOffer(link(), "내 휴대폰", { remember: true });
+  sessionStorage.clear();
+  const ended = pc({ connect: async () => { throw Object.assign(new Error("revoked"), { status: 401 }); } }), nextTab = tab(ended);
+  expect(await nextTab.resume("desk.example")).toBe("desk");
+  expect(nextTab.getSnapshot()).toMatchObject({ phase: "error", message: expect.stringContaining("연결 권한이 끝났습니다") });
+  expect(everything(localStorage)).not.toContain(CREDENTIAL);
+});
+
+it("a PC reached through Tailscale that cannot be reached says the road is what to check", async () => {
+  const tailnetLink = () => {
+    const data = { v: 2, serverId: "desk", daemonPublicKeyB64: KEY, relay: { endpoint: "desk.tail1a2b.ts.net:443", useTls: true }, minimumSecurityMode: "protected",
+      workbench: { version: 1, endpoint: "wss://desk.tail1a2b.ts.net/workbench", offerId: "offer-1", token: "single-use-token-0123456789", expiresAt: Date.now() + 60_000, label: "연구실 PC" } };
+    return "https://desk.tail1a2b.ts.net/#offer=" + Buffer.from(JSON.stringify(data)).toString("base64url");
+  };
+  openedBy("https://desk.tail1a2b.ts.net/");
+  await tab(pc({ rememberedAt: 1_000 })).connectOffer(tailnetLink(), "내 휴대폰", { remember: true });
+  sessionStorage.clear();
+  const gone = pc({ connect: async () => { throw new Error("WebSocket error"); } }), nextTab = tab(gone);
+  await nextTab.resume("desk.tail1a2b.ts.net");
+  expect(nextTab.getSnapshot().message).toBe("PC에 닿지 않습니다. 이 휴대폰과 PC의 테일스케일이 켜져 있는지 확인하세요. 작업은 PC에서 계속됩니다.");
+  // While connected, a dropped connection says the same.
+  const live = pc({ rememberedAt: 1_000 }); let report: ((status: { status: string }) => void) | undefined;
+  live.onStatus.mockImplementation(((listener: (status: { status: string }) => void) => { report = listener; return () => {}; }) as never);
+  const liveTab = tab(live);
+  await liveTab.selectHost("desk").catch(() => {});
+  report?.({ status: "disconnected" });
+  expect(liveTab.getSnapshot()).toMatchObject({ phase: "offline", message: expect.stringContaining("테일스케일이 켜져 있는지") });
+});

@@ -8,9 +8,11 @@ import { HttpError } from "../errors.ts";
 import type { ChannelLog } from "./log.ts";
 import { cutAt } from "./shape.ts";
 import type { ChannelStore } from "./store.ts";
-import { plain } from "./format.ts";
+import { escapeSlack, mrkdwnParts } from "./slack-format.ts";
 import { splitText } from "./telegram.ts";
-import { ChannelSendError, type ChannelAdapter, type ChannelStatus, type ChatRef, type InFile, type Inbound, type Out, type SendOptions, type Sender } from "./types.ts";
+import { ChannelSendError, type ChannelAdapter, type ChannelStatus, type ChatRef, type InFile, type Inbound, type Out, type SecretForm, type SecretFormAnswer, type SecretFormEvent, type SendOptions, type Sender } from "./types.ts";
+
+export { escapeSlack };
 
 // Slack by Socket Mode: the PC opens a WebSocket to Slack (apps.connections.open with the app-level
 // token) and receives events and button presses over it, so no public address and no inbound port
@@ -117,14 +119,35 @@ async function call(baseUrl: string, token: string, method: string, params: Json
   throw new SlackRefusal(method, response.status, typeof body.error === "string" ? body.error : "no_error_code", null);
 }
 
-/** `&`, `<` and `>` as Slack's text needs them: a line can never become a mention (`<!channel>`), a link or a user tag. */
 /**
- * The text as it goes to Slack. The core's formatting marks (unit 14) are Telegram's way and are
- * not sent: the readable text goes plain and whole, each link's address written after its words.
+ * A modal for one value (audit #131): its callback id, the input's block and action ids. The
+ * private_metadata is the form's random token only (types.ts SecretForm).
  */
-const plainText = (out: Out) => (out.marks?.length ? plain({ text: out.text, marks: out.marks }) : out.text);
+const FORM_CALLBACK = "wb-secret";
+const FORM_BLOCK = "wb-value";
+const FORM_ACTION = "value";
+/** Slack's trigger_id is good for 3 seconds after the press. */
+const TRIGGER_MS = 3_000;
+const FORM_REFUSED = "이 입력 창은 쓸 수 없습니다. 창을 닫아 주세요.";
+/** views.open refusals that mean this app cannot open modals at all (security review L3); any other fails that one open only. */
+const FORMS_OFF = new Set(["not_allowed_token_type", "missing_scope", "access_denied", "no_permission", "enterprise_is_restricted"]);
+/** Why no modal is offered while other connections of this app are open (Slack may hand the submission to any of them; review L2). */
+const FORMS_SHARED = "같은 Slack 앱에 다른 프로그램도 연결해 있어 입력 창의 값이 그쪽으로 갈 수 있으므로 입력 창을 열지 않았습니다.";
+/** A label as the modal shows it: trimmed, within `limit`, never empty (an empty one makes views.open invalid). */
+const label = (text: string, limit: number, empty: string) => cutAt(text.replace(/\s+/g, " ").trim(), limit).trim() || empty;
 
-export const escapeSlack = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+/**
+ * A view payload's typed values and its token taken out, in place, the moment they are read: after
+ * this nothing that logs, records or rethrows the envelope can hold the value. Returns the value.
+ */
+export function takeFormValue(payload: Json): string | null {
+  const view = (payload.view ?? {}) as Json;
+  const state = (view.state ?? {}) as Json;
+  const values = (state.values ?? {}) as Record<string, Record<string, Json>>;
+  const value = values[FORM_BLOCK]?.[FORM_ACTION]?.value;
+  for (const block of Object.values(values)) for (const action of Object.values(block ?? {})) if (action && typeof action === "object" && "value" in action) action.value = "[값]";
+  return typeof value === "string" ? value : null;
+}
 
 /** What a person wrote, as plain text: Slack's escapes undone, a link `<url|label>` as its address. */
 export function plainSlack(text: string): string {
@@ -239,6 +262,11 @@ export type SlackOptions = {
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   random?: () => number;
   onStatus?: () => void;
+  /**
+   * Where a modal for a value goes when submitted or closed (the credential module, vault-chat.ts).
+   * Without it no modal is offered: values are entered at the PC.
+   */
+  secretForms?: (event: SecretFormEvent) => Promise<SecretFormAnswer>;
 };
 
 const defaultSleep = (ms: number, signal?: AbortSignal) => new Promise<void>((done) => {
@@ -258,16 +286,21 @@ export class SlackAdapter implements ChannelAdapter {
   readonly kind = "slack" as const;
   /** Slack names the sender and a bare 연결 pairs (see ChannelAdapter.pairingByWord). */
   readonly pairingByWord = true;
-  /** No in-chat secret input: nothing takes a line out before the inbox, and a bot cannot delete a person's message. */
+  /**
+   * No in-chat secret input: nothing takes a line out before the inbox, and a bot cannot delete a
+   * person's message. A value is given in a modal instead (`openSecretForm`), or at the PC.
+   */
   readonly secretInput = false;
+  /** A table goes as an aligned monospace block when it fits (format.ts TableStyle). */
+  readonly tables = "pre" as const;
   readonly botId: string;
   readonly limits = { text: TEXT_LIMIT, caption: TEXT_LIMIT, uploadBytes: 100 * 1024 * 1024, downloadBytes: MAX_ATTACHMENT, minEditGapMs: 15_000 };
-  /**
-   * Where a submitted modal goes (Slack's view_submission). Nothing is connected to it yet: the
-   * human-only input belongs to the credential units. Its answer, when it gives one, is sent back
-   * with the acknowledgement (a modal's `response_action`).
-   */
-  onViewSubmission: ((payload: Json) => Promise<Json | void>) | null = null;
+  /** The trigger of each recent button press (in memory only, for views.open within Slack's 3 seconds). */
+  private readonly triggers = new Map<string, { id: string; at: number }>();
+  /** False once Slack refused to open a modal for a reason a new press cannot change: values go to the PC. */
+  private forms = true;
+  /** Connections of this app as the last hello said (this one included). */
+  private connections = 1;
   private readonly options: SlackOptions;
   private readonly baseUrl: string;
   private readonly sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
@@ -439,6 +472,7 @@ export class SlackAdapter implements ChannelAdapter {
         try { message = JSON.parse(String(data)) as Envelope & Json; } catch { return; }
         if (message.type === "hello") {
           ending.hello = true;
+          this.connections = Math.max(1, Number(message.num_connections ?? 1) || 1);
           // Not a reason to stop: Slack allows up to 10 connections and does not define this number.
           if (Number(message.num_connections ?? 1) > 1) {
             if (this.crowdedSince === null) this.options.log.note("socket_others", String(message.num_connections));
@@ -462,8 +496,11 @@ export class SlackAdapter implements ChannelAdapter {
           if (message.reason !== "warning") socket.close();
           return;
         }
+        // A modal's submission or close is answered at once, not behind the lines being read (Slack waits 3 s; review L4).
+        const view = message.type === "interactive" && ["view_submission", "view_closed"].includes(String((message.payload as Json | undefined)?.type));
+        if (typeof message.envelope_id === "string" && view) void this.envelope(socket, message, sink);
         // Read one after another, so the person's lines keep their order (a name lookup can take a moment).
-        if (typeof message.envelope_id === "string") this.intake = this.intake.then(() => this.envelope(socket, message, sink));
+        else if (typeof message.envelope_id === "string") this.intake = this.intake.then(() => this.envelope(socket, message, sink));
       });
     });
   }
@@ -484,7 +521,7 @@ export class SlackAdapter implements ChannelAdapter {
       if (envelope.type === "events_api") events = await this.fromEvent(envelope.payload ?? {});
       else if (envelope.type === "interactive") {
         const payload = envelope.payload ?? {};
-        if (payload.type === "view_submission") answer = this.onViewSubmission ? await this.onViewSubmission(payload) : undefined;
+        if (payload.type === "view_submission" || payload.type === "view_closed") answer = await this.fromView(payload);
         else events = this.fromAction(payload);
       }
       if (events.length) this.record(events);
@@ -621,11 +658,92 @@ export class SlackAdapter implements ChannelAdapter {
     if (!action || action.type !== "button" || typeof action.value !== "string" || typeof user !== "string" || !channel) return [];
     const messageId = container.message_ts ?? (payload.message as Json | undefined)?.ts;
     const known = this.names.get(user);
+    const eventId = `a:${channel}:${String(action.action_ts ?? "")}:${user}`;
+    // Kept in memory only (not in the event, which is written down): a modal opens from it within seconds or not at all.
+    if (typeof payload.trigger_id === "string") {
+      const now = Date.now();
+      for (const [key, trigger] of this.triggers) if (now - trigger.at > TRIGGER_MS * 4) this.triggers.delete(key);
+      this.triggers.set(eventId, { id: payload.trigger_id, at: now });
+    }
     return [{
-      type: "button", eventId: `a:${channel}:${String(action.action_ts ?? "")}:${user}`, chat: { kind: "slack", botId: this.botId, chatId: channel, chatType: chatTypeOf(channel) },
+      type: "button", eventId, chat: { kind: "slack", botId: this.botId, chatId: channel, chatType: chatTypeOf(channel) },
       from: known ?? { userId: user, displayName: shown((payload.user as Json).username) || user }, token: action.value, ackHandle: `${channel} ${user}`, at: Date.now(),
       ...(typeof messageId === "string" ? { messageId } : {}),
     }];
+  }
+
+  /**
+   * A modal of ours submitted or closed: the value is taken out of the payload at once (takeFormValue),
+   * handed to the credential module in memory, and answered with what the modal shows next. A view
+   * of anyone else's (another workspace, another callback) is refused without a word of why.
+   */
+  private async fromView(payload: Json): Promise<Json | void> {
+    const value = takeFormValue(payload);
+    const view = (payload.view ?? {}) as Json;
+    const user = (payload.user ?? {}) as Json;
+    const token = typeof view.private_metadata === "string" ? view.private_metadata : "";
+    view.private_metadata = "";
+    const submit = payload.type === "view_submission";
+    const refuse = (line: string) => (submit ? { response_action: "errors", errors: { [FORM_BLOCK]: cutAt(line, 150) } } : undefined);
+    const handler = this.options.secretForms;
+    if (view.callback_id !== FORM_CALLBACK || !handler || !token || typeof user.id !== "string" || typeof view.id !== "string"
+      || !this.ours((payload.team as Json | undefined)?.id) || !this.ours(user.team_id)) return refuse(FORM_REFUSED);
+    const event: SecretFormEvent = submit ? { type: "submit", token, viewId: view.id, userId: user.id, value } : { type: "closed", token, viewId: view.id, userId: user.id };
+    let result: SecretFormAnswer;
+    try {
+      result = await handler(event);
+    } catch {
+      // Never the error itself: it could name what was being handled.
+      this.options.log.note("form_failed");
+      result = { refuse: "받은 값을 저장하지 못했습니다. 다시 해 주세요." };
+    }
+    if (!submit || result === null) return undefined;
+    if ("next" in result) return { response_action: "update", view: this.formView(result.next) };
+    return refuse(result.refuse);
+  }
+
+  /** The modal for one value: a heading line, one plain_text_input with a hint, 넣기 and 취소. Told when it is closed. */
+  private formView(form: SecretForm): Json {
+    return {
+      type: "modal", callback_id: FORM_CALLBACK, private_metadata: form.token, notify_on_close: true,
+      title: { type: "plain_text", text: "비밀 값 입력" }, submit: { type: "plain_text", text: "넣기" }, close: { type: "plain_text", text: "취소" },
+      blocks: [
+        { type: "section", text: { type: "plain_text", text: label(form.heading, 2900, "값 입력") } },
+        {
+          type: "input", block_id: FORM_BLOCK, label: { type: "plain_text", text: label(form.field, 2000, "값") }, hint: { type: "plain_text", text: label(form.hint, 2000, "값") },
+          element: { type: "plain_text_input", action_id: FORM_ACTION, max_length: form.maxLength, focus_on_load: true },
+        },
+      ],
+    };
+  }
+
+  secretForms(): boolean {
+    return this.forms && Boolean(this.options.secretForms) && this.connections <= 1;
+  }
+
+  /** Why no modal is offered now when one otherwise would be: other connections of this app are open. */
+  secretFormsWhyNot(): string | null {
+    return this.forms && this.options.secretForms && this.connections > 1 ? FORMS_SHARED : null;
+  }
+
+  /** views.open with the press's trigger. A refusal a new press cannot change turns forms off for this run (values go to the PC). */
+  async openSecretForm(eventId: string, form: SecretForm): Promise<"opened" | "unavailable" | "retry"> {
+    const trigger = this.triggers.get(eventId);
+    this.triggers.delete(eventId);
+    if (!this.secretForms()) return "unavailable";
+    if (!trigger || Date.now() - trigger.at > TRIGGER_MS) return "retry";
+    try {
+      await this.api("views.open", { trigger_id: trigger.id, view: this.formView(form) }, AbortSignal.timeout(TRIGGER_MS * 3));
+      return "opened";
+    } catch (error) {
+      const code = error instanceof SlackRefusal ? error.error : "failed";
+      this.options.log.note("form_open_failed", code);
+      if (error instanceof SlackRefusal && FORMS_OFF.has(code)) {
+        this.forms = false;
+        return "unavailable";
+      }
+      return "retry";
+    }
   }
 
   /** Mark, per conversation, the first message that waited at Slack with how many waited. */
@@ -764,8 +882,8 @@ export class SlackAdapter implements ChannelAdapter {
       const stillWanted = () => {
         if (options.stillWanted && !options.stillWanted()) throw new ChannelSendError(messageId ? "unknown" : "no", "withdrawn", "chat.postMessage: no longer wanted");
       };
-      const text = plainText(out);
-      const parts = text.trim() ? slackParts(text) : [];
+      // An answer's marks (format.ts) as mrkdwn; a text without marks as escaped text, as before.
+      const parts = !out.text.trim() ? [] : out.marks?.length ? mrkdwnParts(out.text, out.marks, TEXT_LIMIT) : slackParts(out.text);
       for (const [index, part] of parts.entries()) {
         const last = index === parts.length - 1;
         stillWanted();
@@ -828,10 +946,16 @@ export class SlackAdapter implements ChannelAdapter {
   async edit(chat: ChatRef, messageId: string, out: Out): Promise<void> {
     // A shared file is not a message that can be rewritten.
     if (messageId.startsWith("file:")) return;
-    const whole = plainText(out);
-    let text = whole;
-    for (let limit = TEXT_LIMIT - 1; escapeSlack(text).length > TEXT_LIMIT; limit -= 100) text = `${cutAt(whole, limit)}…`;
-    const escaped = escapeSlack(text);
+    let escaped: string;
+    if (out.marks?.length) {
+      // As the first part of a send: cut on a paragraph border, marked as cut.
+      const parts = mrkdwnParts(out.text, out.marks, TEXT_LIMIT - 1);
+      escaped = parts.length > 1 ? `${parts[0]}…` : parts[0] ?? "";
+    } else {
+      let text = out.text;
+      for (let limit = TEXT_LIMIT - 1; escapeSlack(text).length > TEXT_LIMIT; limit -= 100) text = `${cutAt(out.text, limit)}…`;
+      escaped = escapeSlack(text);
+    }
     await this.api("chat.update", { channel: chat.chatId, ts: messageId, text: escaped, blocks: this.blocks(escaped, out.buttons) });
   }
 

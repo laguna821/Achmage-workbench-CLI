@@ -84,6 +84,13 @@ it("fails the build for a shipped component without a notice (no silent drop)", 
   finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+// Release re-review 1, next round 3: a component without a notice INSIDE a group folder was dropped silently.
+it("fails the build for a component without a notice inside a group folder (third_party/skills/x), naming it", () => {
+  const root = tree({ "third_party/skills/kordoc/LICENSE": MIT, "third_party/skills/zz-nolicence/SKILL.md": "no licence here" });
+  try { expect(() => collectLicences(root)).toThrow(/third_party\/skills\/zz-nolicence/); }
+  finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 it("orders by code point, the same on every build machine", () => {
   const root = tree({ "vendor/b/LICENSE": MIT + "b", "vendor/a/LICENSE": MIT + "a", "vendor/B/LICENSE": MIT + "B", "vendor/_x/LICENSE": MIT + "x" });
   try { expect(collectLicences(root).filter((entry) => !entry.href).map((entry) => entry.name)).toEqual(["B", "_x", "a", "b"]); }

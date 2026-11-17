@@ -1,3 +1,4 @@
+import { withParticle } from "@workbench/contracts";
 import { useMemo, useState } from "react";
 import { ItemIcon, artifactKind } from "./ItemIcon.tsx";
 import type { Artifact, Folder, Session, Work } from "@workbench/contracts";
@@ -116,13 +117,13 @@ export function ArchiveView({
                     <button type="button" className="archive-open" onClick={() => onOpenWork(entry.work)}>
                       <ItemIcon kind="project" size={17} />
                       <span className="archive-title">{entry.work.title}</span>
-                      <span className="muted">작업 · 세션 {entry.sessions}개</span>
+                      <span className="muted">작업 · 대화 {entry.sessions}개</span>
                     </button>
                   ) : (
                     <button type="button" className="archive-open" onClick={() => onOpenSession(entry.session)}>
                       <EngineMark provider={entry.session.provider} size={16} />
                       <span className="archive-title">{entry.session.purpose}</span>
-                      <span className="muted">{retired(entry.session) ? `${state.removedArtifacts[entry.session.documentAgent!.artifactId]?.removed?.kind === "unlisted" ? "목록에서 뺀" : "지운"} 문서의 문서 AI · 기록` : "세션"} · {state.works[entry.session.workId]?.title ?? ""}</span>
+                      <span className="muted">{retired(entry.session) ? `${state.removedArtifacts[entry.session.documentAgent!.artifactId]?.removed?.kind === "unlisted" ? "목록에서 뺀" : "지운"} 문서의 문서 AI · 기록` : "대화"} · {state.works[entry.session.workId]?.title ?? ""}</span>
                     </button>
                   )}
                   <span className="muted archive-when">{ago(entry.at)} 보관</span>
@@ -146,7 +147,7 @@ export function ArchiveView({
         )}
         {purging && onPurgeDoc ? (
           <ConfirmDialog
-            title={`「${purging.name}」을(를) 영구 삭제할까요?`}
+            title={`${withParticle(`「${purging.name}」`, "을/를")} 영구 삭제할까요?`}
             lines={[
               "앱 휴지통의 이 파일과 판 기록을 지웁니다. 되돌릴 수 없습니다.",
               purging.removed?.trashPath ?? purging.path,

@@ -58,6 +58,17 @@ export class FakeSlack {
   url = "";
   /** Most sockets ever open at once. */
   maxOpen = 0;
+  /** chat.postMessage answers after this long (a slow send). */
+  postDelayMs = 0;
+  /** views.open answers ok:false with this while set (an app that cannot have modals). */
+  viewsRefusal: string | null = null;
+  /** Modals opened (views.open) or replaced by an acknowledgement's `response_action: "update"`, as they show now. */
+  readonly views: { id: string; user: string; view: Json; openedAt: number }[] = [];
+  /** What the last acknowledgement of each envelope carried back (a modal's response_action; null: nothing), by envelope id. */
+  readonly answers = new Map<string, Json | null>();
+  /** Trigger ids handed out with presses: when, and whether one was used (Slack: good for 3 seconds, once). */
+  private readonly triggers = new Map<string, { at: number; user: string; used: boolean }>();
+  private nextView = 1;
   private server: Server | null = null;
   private wss: WebSocketServer | null = null;
   private readonly sockets = new Set<WebSocket>();
@@ -131,6 +142,7 @@ export class FakeSlack {
   press(value: string, options: { user?: string; channel?: string; messageTs?: string; actionId?: string; team?: string } = {}) {
     const user = options.user ?? "U0HONG", channel = options.channel ?? `D${user.slice(1)}`, team = options.team ?? this.teamId;
     const shown = this.messages.find((entry) => entry.ts === options.messageTs);
+    this.triggers.set(`trig-${this.nextEnvelope}`, { at: Date.now(), user, used: false });
     return this.send("interactive", {
       type: "block_actions", user: { id: user, username: String(this.users.get(user)?.name ?? user), team_id: String(this.users.get(user)?.team_id ?? team) }, team: { id: team }, api_app_id: this.appId,
       channel: { id: channel, name: "directmessage" }, container: { type: "message", message_ts: options.messageTs ?? "0", channel_id: channel, is_ephemeral: false },
@@ -140,9 +152,39 @@ export class FakeSlack {
     });
   }
 
-  /** A modal is submitted (the slot for units 7–8). */
+  /** A modal of someone else's (another callback id) is submitted. */
   submitView(values: Json, user = "U0HONG") {
     return this.send("interactive", { type: "view_submission", user: { id: user }, view: { id: "V0VIEW", callback_id: "secret", private_metadata: "", state: { values } } });
+  }
+
+  /** The modal shown last (to this person). */
+  lastView(user = "U0HONG") { return [...this.views].reverse().find((entry) => entry.user === user) ?? null; }
+
+  /**
+   * The person types `value` into the modal's one input and presses its submit button, as Slack sends
+   * it (view_submission). `as`: someone else submits; `view`: another modal (its id and token).
+   */
+  submitForm(value: string, options: { user?: string; as?: string; view?: { id: string; view: Json }; team?: string } = {}) {
+    const shown = options.view ?? this.lastView(options.user ?? "U0HONG");
+    if (!shown) throw new Error("no modal is open");
+    const user = options.as ?? options.user ?? "U0HONG", team = options.team ?? this.teamId;
+    const input = ((shown.view.blocks as Json[]) ?? []).find((block) => block.type === "input") ?? {};
+    const actionId = String((input.element as Json | undefined)?.action_id ?? "value");
+    return this.send("interactive", {
+      type: "view_submission", team: { id: team, domain: "stand-in" }, user: { id: user, username: String(this.users.get(user)?.name ?? user), team_id: String(this.users.get(user)?.team_id ?? team) },
+      api_app_id: this.appId, trigger_id: `trig-${this.nextEnvelope}`,
+      view: { ...shown.view, id: shown.id, team_id: team, hash: `h${this.nextEnvelope}`, state: { values: { [String(input.block_id ?? "b")]: { [actionId]: { type: "plain_text_input", value } } } } },
+      response_urls: [],
+    });
+  }
+
+  /** The person closes the modal ([취소] or the cross): view_closed, sent because the modal asked to be told. */
+  closeForm(options: { user?: string } = {}) {
+    const shown = this.lastView(options.user ?? "U0HONG");
+    if (!shown) throw new Error("no modal is open");
+    const user = options.user ?? "U0HONG";
+    if (shown.view.notify_on_close !== true) return null;
+    return this.send("interactive", { type: "view_closed", team: { id: this.teamId }, user: { id: user, team_id: this.teamId }, api_app_id: this.appId, view: { ...shown.view, id: shown.id }, is_cleared: false });
   }
 
   /** An envelope of any type (an event the adapter ignores, a slash command). */
@@ -254,6 +296,15 @@ export class FakeSlack {
         const id = String(parsed.envelope_id ?? "");
         const sent = [...this.envelopes].reverse().find((entry) => entry.id === id && entry.ackedAt === null) ?? this.envelopes.find((entry) => entry.id === id);
         if (sent && sent.ackedAt === null) sent.ackedAt = Date.now();
+        // The last acknowledgement's payload (null: none), so a retry's answer can be compared with the first.
+        this.answers.set(id, parsed.payload && typeof parsed.payload === "object" ? parsed.payload as Json : null);
+        if (parsed.payload && typeof parsed.payload === "object") {
+          const answer = parsed.payload as Json;
+          // As Slack does: an update replaces the modal the submission came from.
+          const from = ((sent?.body.payload as Json | undefined)?.view as Json | undefined)?.id;
+          const shown = this.views.find((entry) => entry.id === from);
+          if (answer.response_action === "update" && shown && answer.view) shown.view = answer.view as Json;
+        }
         this.trail.push(`ack ${id}`);
       });
       ws.on("close", () => { this.sockets.delete(ws); this.trail.push("closed"); });
@@ -348,6 +399,7 @@ export class FakeSlack {
         return user ? ok({ user }) : refuse("user_not_found");
       }
       case "chat.postMessage": {
+        if (this.postDelayMs) await new Promise((done) => setTimeout(done, this.postDelayMs));
         const message: SlackMessage = { ts: this.ts(), channel: String(params.channel), bot_id: this.botId, text: String(params.text ?? ""), ...(params.blocks ? { blocks: JSON.parse(String(params.blocks)) as Json[] } : {}) };
         if (!message.channel.startsWith("D") && !message.channel.startsWith("C")) return refuse("channel_not_found");
         this.messages.push(message);
@@ -367,6 +419,21 @@ export class FakeSlack {
         if (!this.messages[at]!.bot_id) return refuse("cant_delete_message");
         this.messages.splice(at, 1);
         return ok({ channel: params.channel, ts: params.ts });
+      }
+      case "views.open": {
+        if (this.viewsRefusal) return refuse(this.viewsRefusal);
+        const trigger = this.triggers.get(String(params.trigger_id ?? ""));
+        if (!trigger) return refuse("invalid_trigger_id");
+        if (trigger.used) return refuse("exchanged_trigger_id");
+        if (Date.now() - trigger.at > 3_000) return refuse("expired_trigger_id");
+        trigger.used = true;
+        const view = JSON.parse(String(params.view ?? "{}")) as Json;
+        // As Slack does: a plain_text with no text (or only spaces) makes the view invalid.
+        const empty = JSON.stringify(view).match(/"type":"plain_text","text":"\s*"/);
+        if (view.type !== "modal" || !Array.isArray(view.blocks) || empty) return refuse("invalid_arguments");
+        const id = `V0VIEW${this.nextView++}`;
+        this.views.push({ id, user: trigger.user, view, openedAt: Date.now() });
+        return ok({ view: { id, ...view } });
       }
       case "chat.postEphemeral":
         this.ephemeral.push({ channel: String(params.channel), user: String(params.user), text: String(params.text) });

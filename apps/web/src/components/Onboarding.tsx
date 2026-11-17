@@ -213,7 +213,7 @@ export function Onboarding({ foot, providers, engineActions, onRefresh, onDone, 
           </> : null}
           {step === "phone" ? <>
             <h2 id="onboarding-title" ref={heading} tabIndex={-1}>휴대폰 메신저로도 쓰기</h2>
-            <p className="onboarding-lead">밖에서 휴대폰 메신저로 이 PC의 AI에게 일을 시키고 결과를 받습니다. {MESSENGER_NEEDS} 지금 하지 않아도 됩니다.</p>
+            <p className="onboarding-lead">밖에서 휴대폰 메신저로 이 PC의 AI에게 일을 시키고 결과를 받습니다. {MESSENGER_NEEDS} 지금 하지 않아도 됩니다. 휴대폰에서 작업실 화면을 그대로 열고 싶다면 나중에 설정 › 휴대폰과 다른 기기의 ‘테일스케일로 연결’을 쓰세요.</p>
             <ul className="onboarding-ways">
               {MESSENGERS.map(way => {
                 const bot = channels?.bots.find(entry => entry.kind === way.id);

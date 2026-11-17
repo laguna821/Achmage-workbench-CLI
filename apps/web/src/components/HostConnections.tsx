@@ -8,6 +8,7 @@ import {
 import { restoreSurfaceFocus } from "./controls/menu-navigation.ts";
 import { Icon } from "./Icon.tsx";
 import { QrScanner } from "./QrScanner.tsx";
+import { TailscalePanel } from "./TailscalePanel.tsx";
 import { NoteBanner } from "../conversation/NoteBanner.tsx";
 import { PathDetail } from "./SettingsSheet.tsx";
 import { Segmented } from "./ui/Hig.tsx";
@@ -25,6 +26,8 @@ export type HostConnectionsProps = {
   initialOffer?: string;
   /** Opens the phone messenger set-up (this PC only): the easiest way to use this PC from a phone. */
   onMessenger?: () => void;
+  /** Opens a fixed page (Tailscale's download and admin pages) in the browser. */
+  openExternal?: (url: string) => Promise<void> | void;
 };
 
 const time = (value: number) => new Date(value).toLocaleString("ko-KR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -71,7 +74,7 @@ function HostConnectionsDialog(props: HostConnectionsProps) {
  * 기기 연결 itself: in 설정 › 휴대폰과 다른 기기, and inside the dialog above. Using this PC from a
  * phone comes first, as numbered steps (what you do on the phone, what you see here).
  */
-export function HostConnectionsPanel({ api, controller, localLabel = "현재 PC", localAvailable = true, initialOffer = "", onMessenger, scanning }: Omit<HostConnectionsProps, "open" | "onClose"> & { scanning?: { current: () => boolean } }) {
+export function HostConnectionsPanel({ api, controller, localLabel = "현재 PC", localAvailable = true, initialOffer = "", onMessenger, openExternal, scanning }: Omit<HostConnectionsProps, "open" | "onClose"> & { scanning?: { current: () => boolean } }) {
   const snapshot = useSyncExternalStore(useCallback(listener => controller.subscribe(listener), [controller]), useCallback(() => controller.getSnapshot(), [controller]));
   const local = localAvailable && snapshot.activeHostId === null;
   const live = useRef(true), pending = useRef(false);
@@ -122,6 +125,8 @@ export function HostConnectionsPanel({ api, controller, localLabel = "현재 PC"
     finally { pending.current = false; if (live.current) setBusy(""); }
   }
   const changed = (message: string) => { setNotice(message); void refresh(); };
+  // 테일스케일 켜기/끄기 changed the connection settings themselves: the form shows them as they now are.
+  const settingsChanged = () => { void api.state().then(next => { if (live.current) { setState(next); setConfig(next.config); setOffer(null); } }).catch(() => {}); };
   const saveConfig = () => {
     if (!config) return;
     void perform("config", () => api.configure(config), next => {
@@ -280,6 +285,11 @@ export function HostConnectionsPanel({ api, controller, localLabel = "현재 PC"
           <p>텔레그램이나 Slack 대화로 이 PC의 AI에게 일을 시키고 결과를 받습니다. {MESSENGER_NEEDS}</p></div>
         <button type="button" className="button primary" onClick={onMessenger}>휴대폰 메신저 열기</button>
       </li> : null}
+      {api.tailscale && local ? <li className="host-connection-way">
+        <div><strong>테일스케일로 <span className="host-connection-easy">작업실 화면 그대로</span></strong>
+          <p>이 PC와 휴대폰에 테일스케일을 설치해 같은 계정으로 로그인하면, 휴대폰 브라우저에 이 작업실 화면이 그대로 열립니다. 내 기기들끼리만 통합니다.</p></div>
+        <button type="button" className="button" onClick={() => document.getElementById("tailscale-title")?.scrollIntoView({ block: "start", behavior: "smooth" })}>테일스케일 안내 보기</button>
+      </li> : null}
       <li className="host-connection-way">
         <div><strong>휴대폰 화면으로 직접 열기</strong>
           <p>이 PC가 만든 QR을 휴대폰 카메라로 찍으면 휴대폰 브라우저에 이 화면이 열립니다. {PHONE_PAGE_SETUP}</p></div>
@@ -294,6 +304,7 @@ export function HostConnectionsPanel({ api, controller, localLabel = "현재 PC"
     {notice ? <p className="host-connections-notice" role="status">{notice}</p> : null}
     {localAvailable ? <>
       {phoneSection}
+      {local && api.tailscale ? <TailscalePanel api={api} openExternal={openExternal} onChanged={settingsChanged} /> : null}
       {localSection}
       <details className="host-connections-other" open={otherOpen || joining} onToggle={event => setOtherOpen(event.currentTarget.open)}>
         <summary><strong>이 기기에서 다른 PC 쓰기</strong><span>이 앱을 다른 PC의 화면으로 쓸 때만 엽니다. 휴대폰에서 이 PC를 쓰려면 위쪽을 보세요.</span></summary>

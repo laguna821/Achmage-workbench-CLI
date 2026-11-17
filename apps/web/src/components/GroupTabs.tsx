@@ -2,7 +2,8 @@ import { Component, createRef, useState, type ReactNode } from "react";
 import type { Pane } from "../panes.ts";
 import { slideX, widenIn } from "../flip.ts";
 import { activeTab, offScope, projectOfTab, tabsOf } from "../tabs.ts";
-import { paneDrag } from "../panedrag.ts";
+import { paneDrag, usePaneDragSlice } from "../panedrag.ts";
+import { stripMark } from "../tab-drop.ts";
 import type { PaneHead } from "./Panes.tsx";
 import { Icon } from "./Icon.tsx";
 import { StateMark } from "./StateMark.tsx";
@@ -191,12 +192,16 @@ export function GroupTabs<V>({ pane, head, onSelect, onClose, onReorder, onNew, 
   const [overflowed, setOverflowed] = useState<string[]>([]);
   const list = useMenuTrigger();
   const shownOverflow = overflowed.filter((id) => tabs.some((tab) => tab.id === id));
+  // Something held over this strip: an insertion mark between its tabs (nothing is laid over the panes).
+  const dropAt = usePaneDragSlice((drag) => drag?.over?.kind === "zone" && drag.over.target.paneId === pane.id && drag.over.target.tabIndex !== undefined
+    ? `${drag.item.kind === "tab" ? drag.item.id : ""}\n${drag.over.target.tabIndex}` : "");
+  const dropMark = dropAt ? (() => { const [held, index] = dropAt.split("\n") as [string, string]; return stripMark(all.map((tab) => tab.id), held && all.some((tab) => tab.id === held) ? held : null, Number(index), (id) => tabs.some((tab) => tab.id === id)); })() : null;
   // The count is this project's own overflow; what is behind (home, other projects) is not announced.
   const listed = shownOverflow.length;
   const apart = all.filter((tab) => behind.has(tab.id) && projectOfTab(tab) === null), others = all.filter((tab) => behind.has(tab.id) && projectOfTab(tab) !== null);
   // Something to list beyond what the strip shows: the overflow, another project's tab, a second place (home behind a project; the archive beside home).
   const more = listed > 0 || others.length > 0 || apart.some((tab) => tab.id !== activeId) || Boolean(scope?.all && all.some((tab) => { const owner = projectOfTab(tab); return owner && owner !== scope.workId; }));
-  return <nav className="group-tabs" data-pane-id={pane.id} aria-label={scope?.label ? `${scope.label} 탭` : "작업공간 탭"}>
+  return <nav className="group-tabs" data-pane-id={pane.id} aria-label={scope?.label ? `${scope.label} 탭` : "작업 폴더 탭"}>
     {scope?.label ? <span className="group-tabs-project" title={`이 칸의 프로젝트: ${scope.label}`}>{scope.label}</span> : null}
     <TabStrip paneId={pane.id} activeId={activeId} onOverflow={setOverflowed}>
       {tabs.map((tab, index) => {
@@ -233,6 +238,7 @@ export function GroupTabs<V>({ pane, head, onSelect, onClose, onReorder, onNew, 
               if (event.key === "Delete") { event.preventDefault(); if (!(title.home && all.length === 1)) onClose(tab.id); }
             }}><span className="badged" aria-hidden>{title.icon}{unseen && !mark ? <span className="new-badge" /> : null}</span>{elsewhere ? <span className="group-tab-project" title={`다른 프로젝트: ${elsewhere}`}>{elsewhere}</span> : null}{showKind ? <span className="group-tab-kind">{kind}</span> : null}<span className="group-tab-title">{title.title}</span>{mark ? <span className="group-tab-state" title={mark.word}><StateMark state={mark} size={14} /></span> : null}</button>
           {title.home && all.length === 1 ? null : <button type="button" className="group-tab-close" aria-label={`${title.title} 탭 닫기`} title="탭 닫기, 파일과 대화 기록은 남습니다" onClick={() => onClose(tab.id)}><Icon name="x" size={12} /></button>}
+          {dropMark && ("before" in dropMark ? dropMark.before : dropMark.after) === tab.id ? <span className={`group-tab-drop ${"before" in dropMark ? "before" : "after"}`} aria-hidden /> : null}
         </div>;
       })}
     </TabStrip>

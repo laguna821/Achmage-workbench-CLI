@@ -2,7 +2,9 @@ import { connectOfficeUi } from "./ui-adapters/connect.ts";
 import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
 import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
 import "./sheets.css";
-import { Gateway, GatewayError, handshake, headlessExport, listen, post } from "./bridge.ts";
+import { Gateway, GatewayError, handshake, headlessExport, listen, pageRest, post } from "./bridge.ts";
+import { installViewPosition } from "./view-position.ts";
+import { installInPlaceReplace } from "./replace-in-place.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
 import { recovery } from "./recovery.ts";
 import { beginOfficeCopy, copyOfficeBytes, officeCopyBusy, type OfficeCopy } from "./copy.ts";
@@ -424,6 +426,69 @@ await value({ type: "init", token: init.token });
 await value({ type: "open", name: init.artifact.name, bytes }, [bytes]);
 post({ type: "office:opened", revision: state.revision, recovered: Boolean(kept) });
 reportDirty();
+
+// The tab keeps the sheet, the active cell and the first row/column in view; a woken tab opens there (office-leftovers
+// point 3). Through Univer's facade of the opened workbook (vendor-fixes.ts hands it to the page): read and move only.
+type Facade = { getActiveWorkbook(): { getActiveSheet(): Sheet | null; getSheetByName(name: string): Sheet | null; getActiveRange(): { getA1Notation(): string } | null } | null };
+type Sheet = { getSheetName(): string; activate(): unknown; getRange(a1: string): { activate(): unknown }; getScrollState?(): { sheetViewStartRow: number; sheetViewStartColumn: number }; scrollToCell?(row: number, column: number): unknown };
+const book = () => (window as unknown as { __workbenchUniverAPI?: Facade }).__workbenchUniverAPI?.getActiveWorkbook() ?? null;
+if (!init.execution && !init.headlessExport) installViewPosition({
+  read: () => {
+    const wb = book(), sheet = wb?.getActiveSheet();
+    if (!wb || !sheet) return null;
+    const scroll = sheet.getScrollState?.();
+    return { sheet: sheet.getSheetName(), cell: wb.getActiveRange()?.getA1Notation(), ...(scroll ? { firstRow: scroll.sheetViewStartRow, firstColumn: scroll.sheetViewStartColumn } : {}) };
+  },
+  restore: (position) => {
+    const wb = book();
+    if (!wb || !wb.getActiveSheet()) return false;
+    const sheet = position.sheet ? wb.getSheetByName(position.sheet) : wb.getActiveSheet();
+    if (!sheet) return true; // that sheet is gone: open where the editor opens
+    if (wb.getActiveSheet()?.getSheetName() !== sheet.getSheetName()) { sheet.activate(); return false; }
+    try { if (position.cell) sheet.getRange(position.cell).activate(); } catch { /* a cell beyond the sheet now */ }
+    try { if (position.firstRow !== undefined) sheet.scrollToCell?.(position.firstRow, position.firstColumn ?? 0); } catch { /* no scrolling view */ }
+    return true;
+  },
+}, { initial: init.view, shown: () => pageRest.onScreen() && window.innerHeight > 0, post: (position) => post({ type: "office:view-position", position }) });
+
+// A new revision (a hidden tab's 문서 AI result) goes into this editor in place (office-leftovers point 2): the worker
+// queues it for the same view and the editor runs its own File › Open (handleInspectWorkbook → the queued workbook),
+// so the frame and the editor instance stay; the sheet, cell and first row/column are put back. Unsaved edits refuse it.
+type Book = NonNullable<ReturnType<typeof book>> & { getId?(): string };
+let openGeneration = 0;
+async function replaceInPlace(next: number) {
+  const before = book() as Book | null;
+  if (!before || !before.getActiveSheet()) throw new Error("편집기가 아직 준비되지 않았습니다.");
+  const sheet = before.getActiveSheet()!, scroll = sheet.getScrollState?.();
+  const place = { sheet: sheet.getSheetName(), cell: before.getActiveRange()?.getA1Notation(), ...(scroll ? { firstRow: scroll.sheetViewStartRow, firstColumn: scroll.sheetViewStartColumn } : {}) };
+  const beforeId = before.getId?.();
+  const bytes = await gateway.raw(artifactId, next);
+  (window as unknown as { __workbenchUniverAPI?: unknown }).__workbenchUniverAPI = undefined;
+  await value({ type: "open", name: init.artifact.name, bytes, generation: ++openGeneration }, [bytes]);
+  dispatch("menu:action", ["open"]);
+  const end = Date.now() + 30_000;
+  const opened = () => { const now = book() as Book | null; return Boolean(now?.getActiveSheet()) && (!beforeId || now!.getId?.() !== beforeId); };
+  while (Date.now() < end && !opened()) await new Promise((resolve) => setTimeout(resolve, 50));
+  if (!opened()) throw new Error("새 판을 열지 못했습니다.");
+  state.revision = next; state.uncommitted = false;
+  if (state.kept) { state.kept = false; void recovery.drop(artifactId).catch(() => undefined); }
+  // Back where it was (the grid draws after its first range loads: tried for a while).
+  const back = Date.now() + 5_000;
+  while (Date.now() < back) {
+    const now = book();
+    const target = now && (place.sheet ? now.getSheetByName(place.sheet) : now.getActiveSheet());
+    if (target) {
+      try {
+        if (now!.getActiveSheet()?.getSheetName() !== target.getSheetName()) target.activate();
+        if (place.cell) target.getRange(place.cell).activate();
+        if (place.firstRow !== undefined) target.scrollToCell?.(place.firstRow, place.firstColumn ?? 0);
+        if (now!.getActiveRange()?.getA1Notation() === place.cell || !place.cell) break;
+      } catch { /* not drawn yet */ }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+}
+if (!init.readOnly && !init.execution && !init.headlessExport) installInPlaceReplace({ dirty: async () => dirty(), replace: replaceInPlace });
 
 // Pictures in formats the editor does not take go on to it as PNG; a paste that shows the page
 // nothing (a screenshot in WebKitGTK) gets the desktop clipboard's picture.

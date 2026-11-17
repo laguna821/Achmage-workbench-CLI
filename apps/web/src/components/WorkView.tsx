@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { failure, type Notify } from "../top-notice.ts";
 import { PROVIDER_LABEL, accessFor, type BrowserPage, type AccessMode, type AgentProfile, type Attachment, type CreateTarget, type DocRef, type EngineCommand, type Provider, type Session, type UiPrefs, type Work, type Workspace, type UpdateWorkspaceRequest } from "@workbench/contracts";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
@@ -25,6 +25,7 @@ import { Transcript } from "./Transcript.tsx";
 import { AccessPicker, ContextGauge } from "./SessionControls.tsx";
 import { PendingFiles, usePendingFiles } from "./Attachments.tsx";
 import { PlanToggle } from "./PlanFirst.tsx";
+import { ResourcesContext, waitingWords } from "./ResourceManager.tsx";
 import "../styles/worktrees.css";
 import { DrawChip, DrawPill, type DrawState } from "./ImageGen.tsx";
 import { readDrawChoice, writeDrawChoice } from "../imagegen.ts";
@@ -56,6 +57,8 @@ export type WorkActions = {
   commands: (session: Session) => Promise<EngineCommand[]>;
   queued: {
     send: (session: Session, queuedId: string) => void;
+    /** "지금 바로 실행" (0.5.3): a request waiting for a slot starts now, whatever the limit. */
+    runNow?: (session: Session, queuedId: string) => void;
     edit: (session: Session, queuedId: string, text: string) => void;
     cancel: (session: Session, queuedId: string) => void;
   };
@@ -108,15 +111,19 @@ const NO_PAGES: BrowserPage[] = [];
 export function QueuedList({ session, busy, actions, readOnly = false }: { session: Session; busy: boolean; actions: WorkActions["queued"]; readOnly?: boolean }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const resources = useContext(ResourcesContext);
   if (!session.queued.length) return null;
   const kept = session.queued.filter((entry) => entry.held).length;
-  const waiting = session.queued.length - kept;
+  // Waiting for a free slot (0.5.3): said with its place in the line, not as "끝나면 보낼".
+  const slot = busy ? 0 : session.queued.filter((entry) => entry.slot && !entry.held).length;
+  const waiting = session.queued.length - kept - slot;
   return (
     <div className="queued-list" role="list" aria-label="끝나면 보낼 요청">
       <div className="queued-head">
         {/* Requests kept after a stop, a failure or a restart go only by hand; the others follow the turn. */}
         <Icon name="bell" size={13} />{" "}
         {[
+          slot ? `차례를 기다리는 요청 ${slot}개, 차례가 되면 저절로 시작합니다.` : null,
           waiting ? `끝나면 보낼 요청 ${waiting}개, 차례대로 보냅니다.` : null,
           kept ? `남겨 둔 요청 ${kept}개, ${readOnly ? "대화를 되돌리면 보낼 수 있습니다." : "직접 보내거나 지울 수 있습니다."}` : null,
         ]
@@ -154,15 +161,18 @@ export function QueuedList({ session, busy, actions, readOnly = false }: { sessi
             <span className="queued-text" title={entry.text}>
               {entry.origin ? <span className="queued-tag" title="휴대폰 메신저에서 보낸 요청">휴대폰</span> : null}
               {entry.held ? <span className="queued-tag">남겨 둠</span> : null}
+              {!busy && waitingWords(resources, session, entry) ? <span className="queued-tag queued-waiting">{waitingWords(resources, session, entry)}</span> : null}
               {entry.text}
               {entry.refs.length ? <span className="ref-chip-fact">문서 {entry.refs.length}</span> : null}
               {entry.attachments?.length ? <span className="ref-chip-fact">첨부 {entry.attachments.length}</span> : null}
             </span>
           )}
           {readOnly ? null : <span className="queued-actions">
-            <button type="button" className="link" onClick={() => actions.send(session, entry.id)} title={busy ? "하던 작업에 지금 전하기" : "지금 보내기"}>
-              {busy ? "지금 끼어들기" : "지금 보내기"}
-            </button>
+            {!busy && entry.slot && !entry.held && actions.runNow
+              ? <button type="button" className="link" onClick={() => actions.runNow!(session, entry.id)} title="동시에 돌리는 수와 상관없이 지금 시작합니다">지금 바로 실행</button>
+              : <button type="button" className="link" onClick={() => actions.send(session, entry.id)} title={busy ? "하던 작업에 지금 전하기" : "지금 보내기"}>
+                {busy ? "지금 끼어들기" : "지금 보내기"}
+              </button>}
             <button
               type="button"
               className="link"
@@ -209,7 +219,7 @@ function TargetPicker({
         <Icon name={open ? "chevronUp" : "chevronDown"} size={14} />
       </button>
       <Popover open={open} onClose={close} placement="above" align="right">
-        {sessions.length ? <div className="menu-label">이 작업의 세션</div> : null}
+        {sessions.length ? <div className="menu-label">이 작업의 대화</div> : null}
         {sessions.map((session) => (
           <MenuItem
             key={session.id}
@@ -237,7 +247,7 @@ function TargetPicker({
           >
             <span className="menu-engine">
               <EngineMark provider={provider} size={15} />
-              새 {PROVIDER_LABEL[provider]} 세션
+              새 {PROVIDER_LABEL[provider]} 대화
             </span>
           </MenuItem>
         ))}
@@ -251,7 +261,7 @@ function TargetPicker({
             }}
           >
             <span className="menu-engine">
-              <EngineMark provider={provider} size={15} />새 {PROVIDER_LABEL[provider]} 세션, 격리 사본에서
+              <EngineMark provider={provider} size={15} />새 {PROVIDER_LABEL[provider]} 대화, 격리 사본에서
             </span>
           </MenuItem>
         ))}
@@ -264,7 +274,7 @@ function TargetPicker({
           }}
         >
           <span className="menu-engine">
-            <Icon name="send" size={15} /> 다른 세션에 보내기…
+            <Icon name="send" size={15} /> 다른 대화에 보내기…
           </span>
         </MenuItem>
       </Popover>
@@ -702,7 +712,7 @@ export function WorkView({
                 {handoffTo ? (
                   <span className="target-chip">
                     <EngineMark provider={handoffTo.provider} size={13} /> @{handoffTo.purpose}
-                    <button type="button" onClick={() => setHandoffTo(null)} aria-label="받는 세션 지우기">
+                    <button type="button" onClick={() => setHandoffTo(null)} aria-label="받는 대화 지우기">
                       <Icon name="x" size={11} />
                     </button>
                   </span>

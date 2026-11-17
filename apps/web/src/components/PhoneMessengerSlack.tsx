@@ -1,3 +1,4 @@
+import { withParticle } from "@workbench/contracts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ChannelKind, ChannelsState } from "@workbench/contracts";
 import { ApiRequestError, type Api } from "../api.ts";
@@ -107,7 +108,7 @@ export function SlackWizard({ api, openExternal, copy, readClipboard, onRegister
   useEffect(() => { heading.current?.focus(); }, [step]);
   const index = STEPS.indexOf(step);
   const open = (url: string) => void openExternal(url).catch((reason) => setError(featureError(reason)));
-  const copied = (format: "yaml" | "json") => void copy(slackManifest(name, format)).then(() => setSaid(`매니페스트를 ${format.toUpperCase()}로 복사했습니다.`)).catch((reason) => setError(featureError(reason)));
+  const copied = (format: "yaml" | "json") => void copy(slackManifest(name, format)).then(() => setSaid(`매니페스트를 ${withParticle(`${format.toUpperCase()}`, "으로/로")} 복사했습니다.`)).catch((reason) => setError(featureError(reason)));
   const back = <button type="button" className="button small" onClick={() => { if (index) go(STEPS[index - 1]!); else { forgetSlackPlace(); onBack(); } }}>이전</button>;
   const next = <button type="button" className="button small primary" onClick={() => go(STEPS[index + 1]!)}>다음</button>;
   // The Slack tab may be gone after a day's wait for the admin: the app's settings page lists the app.
@@ -225,7 +226,7 @@ export function SlackPairingLine({ say, open, username, appName, left, until, co
       <p>이 PC에서: 브라우저 Slack의 왼쪽 위 검색에 “{appName}”를 넣어 앱을 열고, 메시지 칸에 “연결”이라고 보내세요.</p>
       <p>휴대폰 Slack에서 앱 이름 “{appName}”를 검색해 열고 “연결”이라고 보내세요.</p>
     </> : <>
-      <p>이 PC에서: 브라우저 Slack의 왼쪽 위 검색에 @{username}을 넣어 앱을 열고, 메시지 칸에 “연결”이라고 보내세요.</p>
+      <p>이 PC에서: 브라우저 Slack의 왼쪽 위 검색에 @{withParticle(`${username}`, "을/를")} 넣어 앱을 열고, 메시지 칸에 “연결”이라고 보내세요.</p>
       <p>휴대폰 Slack에서 앱 이름(@{username})을 검색해 열고 “연결”이라고 보내세요.</p>
     </>}
     <p>그러면 Slack에 숫자 네 개가 나오고, 이 화면에도 같은 숫자가 나옵니다.</p>

@@ -27,3 +27,21 @@ it("locking and unlocking the Markdown editor for its AI emits no update (no edi
     expect(updates).toBe(0);
   } finally { editor.destroy(); }
 });
+
+it("locking and unlocking the Word editor for its AI emits no update (no edit; 0.5.3: the result then met a conflict)", () => {
+  const root = resolve("vendor/ieumoffice");
+  const id = `${root}/apps/docs/src/renderer/ai/AiPanel.tsx`;
+  const code = patchOfficeExecution(readFileSync(id, "utf8"), id, root, "/workbench/execution-adapter.ts");
+  const body = /lock: \(locked\) => \{\n([\s\S]*?)\n {6}\},\n/.exec(code)?.[1];
+  expect(body).toBeTruthy();
+  const editor = new Editor({ element: document.createElement("div"), extensions: [StarterKit], content: "<p>그대로</p>" });
+  let updates = 0;
+  editor.on("update", () => { updates++; });
+  const lock = new Function("editorRef", "workbenchEditable", "workbenchLockDocument", "window", `return (locked) => {\n${body}\n}`)(
+    { current: editor }, new Map(), () => {}, { workbenchEditorHold: { lock: () => {} } }) as (locked: boolean) => void;
+  try {
+    lock(true); expect(editor.isEditable).toBe(false);
+    lock(false); expect(editor.isEditable).toBe(true);
+    expect(updates).toBe(0);
+  } finally { editor.destroy(); }
+});

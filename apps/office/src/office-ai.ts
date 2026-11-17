@@ -3,7 +3,7 @@ import type { OfficeTurnReceipt } from "../../../packages/contracts/src/office-a
 import type { OfficeExecutionState } from "../../../packages/contracts/src/office-execution.ts";
 import type { AgentMessage } from "../../../vendor/ieumoffice/packages/agent-core/src/types.ts";
 import type { IpcStreamChunk } from "../../../vendor/ieumoffice/packages/agent-core/src/electron-transport.ts";
-import { Events, Gateway, flushOfficeDocument, listen, post, type Init } from "./bridge.ts";
+import { Events, Gateway, flushOfficeDocument, listen, pageRest, post, type Init } from "./bridge.ts";
 import { officeCopyBusy, setCopyAiBusy } from "./copy.ts";
 import { installOfficeConversation, type OfficeConversationPort, type OfficeRun, type WorkbenchAgentLoop } from "./office-agent.ts";
 import { createOfficeReferences } from "./office-references.ts";
@@ -43,6 +43,15 @@ export function officeChat(items: TranscriptItem[]): Chat[] {
 export function officeModelHistory(items: TranscriptItem[], liveInstructions?: ReadonlyMap<string, string>): AgentMessage[] {
   const modelItems = items.filter((item) => !item.office?.cardSaved).map((item) => item.kind === "user" && item.office && liveInstructions?.has(item.office.turnId) ? { ...item, text: liveInstructions.get(item.office.turnId)! } : item);
   return officeChat(modelItems).map((item) => ({ role: item.role, text: [item.text, ...(item.tools ?? []).map((tool) => `이전 도구 실행 기록 (자료):\n${JSON.stringify(tool)}`)].filter(Boolean).join("\n\n") }));
+}
+
+/** Whether a turn sent now runs in this (visible) editor rather than the executor. `workbench.check.office-ai`
+ * = "executor" (set only by the rig checks, scripts/office-ai-live-check.ts) keeps the executor path; "0.5.2" also
+ * the reopened page at the end (replace-in-place.ts), for before/after numbers. */
+export function runsLiveHere(): boolean {
+  let forced: string | null = null;
+  try { forced = localStorage.getItem("workbench.check.office-ai"); } catch { /* storage unavailable */ }
+  return forced !== "executor" && forced !== "0.5.2" && pageRest.onScreen() && document.visibilityState !== "hidden";
 }
 
 export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
@@ -184,7 +193,12 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
         const admittedInstruction = executionState?.format === "pptx" && typeof executionState.data.queueText === "string" ? executionState.data.queueText : instruction;
         const receipt = await api.json<OfficeTurnReceipt>("turn-start", { turnId, instruction: admittedInstruction, revision: prepared.revision, ...(skillContext ? { skillContext } : {}), ...(prepared.referenceSnapshot ? { referenceSnapshot: prepared.referenceSnapshot } : {}) });
         if (receipt.duplicate || receipt.status !== "running") throw new Error("이미 처리된 요청입니다. 중복 실행하지 않았습니다.");
-        if (executionState && receipt.executorAvailable) {
+        // Live where it is safe (brief office-ai-live, point 4): a turn sent while this editor is on screen runs
+        // HERE, so its edits arrive in the open document as they are made (no reload at the end). The page stays
+        // awake while it runs (bridge.ts turn hold) and its tab stays awake and mounted (the session is running:
+        // the window's tab sleep skips it). A turn sent from a hidden editor goes to the independent executor.
+        // The Hangul editor keeps 0.5.2's executor path (its made-document handoff follows the executor's reload).
+        if (executionState && receipt.executorAvailable && (/\.hwpx?$/i.test(init.artifact.path) || !runsLiveHere())) {
           try { await api.json("executor-start", { turnId, instruction, state: executionState, images, referenceSnapshot: prepared.referenceSnapshot }); }
           catch (error) { await api.json("turn-finish", { turnId, status: "failed", error: error instanceof Error ? error.message : String(error) }).catch(() => {}); throw error; }
           return {
@@ -195,6 +209,8 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
           };
         }
         if (hasAdapter) lockOfficeExecution(false);
+        // The window keeps this page alive if its tab is closed now, until the turn's finish says otherwise.
+        post({ type: "office:live-turn", running: true });
         const releaseExecution = receipt.executionToken ? gateway.pinExecution(receipt.executionToken) : () => {};
         if (receipt.executionToken) api = gateway.aiSession(init.artifact.id, receipt.executionToken);
         const stopHeartbeat = receipt.executionToken ? maintainOfficeTurn(api, turnId, () => { active?.cancel(); abortWeb(); }) : () => {};
@@ -214,13 +230,21 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
           },
           finish: async (status, error) => {
             try { await api.json("turn-finish", { turnId, status, ...(error ? { error } : {}) }); }
-            finally { stopHeartbeat(); releaseExecution(); if (run?.turnId === turnId) run = null; references.release(); }
+            finally { stopHeartbeat(); releaseExecution(); if (run?.turnId === turnId) run = null; references.release(); post({ type: "office:live-turn", running: false }); }
           },
         };
-      } catch (error) { if (!init.execution) lockOfficeExecution(false); references.release(); throw error; }
+      } catch (error) { if (!init.execution) { lockOfficeExecution(false); post({ type: "office:live-turn", running: false }); } references.release(); throw error; }
     },
   };
   installOfficeConversation(port);
+  // A closed tab kept for its live turn (office:kept-closed): nobody is there to press 중단, so a turn with no sign
+  // of life for the hold's bound (editor-hold.ts: 응답이 없습니다) is stopped here; its finish lets the page go.
+  let keptClosed = false;
+  listen((message) => { if (message.type === "office:kept-closed") keptClosed = message.closed; });
+  if (!init.execution) window.setInterval(() => {
+    const hold = (window as { workbenchEditorHold?: { state: { view(): { silent: boolean } } } }).workbenchEditorHold;
+    if (keptClosed && active && run && hold?.state.view().silent) active.cancel();
+  }, 5_000);
   if (!init.execution) observeOfficeExecution(() => sessionId ? gateway.aiSession(init.artifact.id) : null, () => active !== null);
   const getSettings = () => gateway.aiSession(init.artifact.id).json("settings");
   const statuses = (refresh = false) => gateway.aiSession(init.artifact.id).json(`statuses${refresh ? "?refresh=1" : ""}`);

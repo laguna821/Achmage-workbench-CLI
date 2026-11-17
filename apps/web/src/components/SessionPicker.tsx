@@ -49,7 +49,7 @@ export function SessionPicker({
       <div
         className="session-picker"
         role="dialog"
-        aria-label="어느 세션에 보낼까요?"
+        aria-label="어느 대화에 보낼까요?"
         onKeyDown={(event) => {
           if (event.key === "Escape") onClose();
           else if (event.key === "ArrowDown") {
@@ -64,7 +64,7 @@ export function SessionPicker({
           }
         }}
       >
-        <h2>어느 세션에 보낼까요?</h2>
+        <h2>어느 대화에 보낼까요?</h2>
         <label className="search-field">
           <Icon name="search" size={17} />
           <input ref={input} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="이름이나 작업으로 찾기" />
@@ -90,14 +90,14 @@ export function SessionPicker({
               </button>
             );
           })}
-          {!sessions.length ? <div className="picker-empty">맞는 세션이 없습니다.</div> : null}
+          {!sessions.length ? <div className="picker-empty">맞는 대화가 없습니다.</div> : null}
         </div>
         <div className="picker-foot">
-          <span className="muted">다른 작업의 세션도 찾을 수 있습니다.</span>
+          <span className="muted">다른 작업의 대화도 찾을 수 있습니다.</span>
           <span className="picker-new">
             {(["claude", "codex"] as const).map((provider) => (
               <button key={provider} type="button" className="text-button" onClick={() => onNew(provider)}>
-                <EngineMark provider={provider} size={14} /> 새 {PROVIDER_LABEL[provider]} 세션에
+                <EngineMark provider={provider} size={14} /> 새 {PROVIDER_LABEL[provider]} 대화에
               </button>
             ))}
           </span>

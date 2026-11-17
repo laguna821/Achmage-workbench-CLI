@@ -15,6 +15,7 @@ import { homedir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebDriver, sleep } from "./webdriver.ts";
+import { EDITOR_FIRST } from "../fixtures/editor-first.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "../..");
@@ -371,6 +372,9 @@ async function launchApp(input: { stage: Stage; options: LaunchOptions; dpiModul
     else await sleep(200);
   }
   if (options.window) await wd.setWindowRect(options.window);
+  // doc-default: the app opens documents 쪽 보기 first; these runs drive the editors, so the window chooses
+  // 편집기로 바로 열기 before any document opens (the one way: fixtures/editor-first.js; a profile's own choice stays).
+  await wd.execute(EDITOR_FIRST);
   const api = async <T>(method: string, path: string, body?: unknown): Promise<T> => {
     const response = await fetch(`${origin}${path}`, {
       method,

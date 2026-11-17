@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import type { CredentialHandoffView, CredentialKind, CredentialSummary, CredentialsState } from "@workbench/contracts";
+import { particle, type CredentialHandoffView, type CredentialKind, type CredentialSummary, type CredentialsState } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import { featureError } from "./FeatureDialog.tsx";
 import { Segmented } from "./ui/Hig.tsx";
@@ -24,15 +24,6 @@ const KINDS = (Object.keys(KIND_LABEL) as CredentialKind[]).map((value) => ({ va
 const POLL_MS = 2_000;
 const NO_KEYRING = "이 PC에는 보안 저장소가 없어 저장하지 않았습니다. 이번 한 번만 쓰고 버립니다.";
 
-/** 을/를, 이/가 after a word as it is read (by its last syllable's final consonant). */
-function particle(word: string, pair: "을/를" | "이/가"): string {
-  const [withFinal, without] = pair.split("/") as [string, string];
-  const last = [...word.trim()].at(-1) ?? "";
-  const code = last.charCodeAt(0);
-  if (code >= 0xac00 && code <= 0xd7a3) return (code - 0xac00) % 28 ? withFinal : without;
-  if (/[0-9]/.test(last)) return "013678".includes(last) ? withFinal : without;
-  return `${withFinal}(${without})`;
-}
 const day = (at: number) => new Date(at).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" });
 const Name = ({ children }: { children: string }) => <bdi>{children}</bdi>;
 

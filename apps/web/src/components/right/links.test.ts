@@ -67,7 +67,7 @@ describe("what a conversation is connected to", () => {
     const { chats } = linksOf(me, items, state, pages);
     expect(chats.map((entry) => [entry.session.id, entry.relation])).toEqual([
       ["docAi", "문서 AI · 강의안.md"],
-      ["peer", "세션 잇기 · 끝남"],
+      ["peer", "대화 잇기 · 끝남"],
       ["helper", "보낸 요청 · 답 받음"],
       ["sender", "받은 요청"],
     ]);

@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { LOGIN_SITES, type AccessMode, type AgentBrowserStatus, type Session } from "@workbench/contracts";
 import { Icon } from "./Icon.tsx";
+import { Select, type SelectOption } from "./ui/Select.tsx";
 import { Popover } from "./Popover.tsx";
 import "../styles/browse.css";
 
@@ -111,12 +112,12 @@ export function BrowserInstall({ status, actions }: { status: AgentBrowserStatus
 /** The WSL sentence is about Windows only (design review m10). */
 const onWindows = () => typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent);
 
+const BROWSER_ENGINES: SelectOption<"lightpanda" | "chromium">[] = [{ value: "lightpanda", label: "빠르게, 화면 없이" }, { value: "chromium", label: "로그인이 필요한 사이트도" }];
+
 export function BrowserEngine({ status, actions }: { status: AgentBrowserStatus; actions: BrowserActions }) {
   if (!actions.engine) return null;
-  return <label className="browser-note">탐색 방식 <select aria-label="탐색 방식" value={status.engine ?? "chromium"} disabled={status.install.state === "installing" || status.window.kind === "login" || (status.window.kind === "agent" && status.window.busy)} onChange={event => actions.engine?.(event.target.value as "lightpanda" | "chromium")}>
-    <option value="lightpanda">빠르게, 화면 없이</option>
-    <option value="chromium">로그인이 필요한 사이트도</option>
-  </select></label>;
+  return <label className="browser-note">탐색 방식 <Select label="탐색 방식" value={status.engine ?? "chromium"} disabled={status.install.state === "installing" || status.window.kind === "login" || (status.window.kind === "agent" && status.window.busy)} onChange={value => actions.engine?.(value)}
+    options={BROWSER_ENGINES} /></label>;
 }
 
 /**
@@ -157,8 +158,8 @@ export function BrowserPill({
       ? "로그인 창이 열려 있습니다."
       : win.kind === "agent"
         ? mine
-          ? `이 세션이 쓰는 중${win.title || host ? ` · ${win.title || host}` : ""}`
-          : `다른 세션${ownerLabel ? `('${ownerLabel}')` : ""}이 쓰는 중`
+          ? `이 대화가 쓰는 중${win.title || host ? ` · ${win.title || host}` : ""}`
+          : `다른 대화${ownerLabel ? `('${ownerLabel}')` : ""}이 쓰는 중`
         : status.engine === "lightpanda" ? "대기 중입니다. AI가 필요할 때 탐색을 시작합니다." : "닫혀 있습니다. 엔진이 처음 쓸 때 열립니다.";
   const toggle = () => (session ? actions.setOn(session, !on) : onDraft(!on));
   return (
@@ -178,7 +179,7 @@ export function BrowserPill({
       <Popover open={open} onClose={close} placement="above" align="left" className="browser-menu">
         <div className="browser-head">
           <span className="browser-title">브라우저</span>
-          <button type="button" role="switch" aria-checked={on} aria-label="이 세션에서 브라우저 쓰기" className={`browser-switch${on ? " on" : ""}`} onClick={toggle} title={on ? "이 세션에서 끄기" : "이 세션에서 켜기"}>
+          <button type="button" role="switch" aria-checked={on} aria-label="이 대화에서 브라우저 쓰기" className={`browser-switch${on ? " on" : ""}`} onClick={toggle} title={on ? "이 대화에서 끄기" : "이 대화에서 켜기"}>
             <span />
           </button>
           <div className="browser-note">{status.engine === "lightpanda" ? "AI가 Lightpanda로 백그라운드에서 탐색합니다. 브라우저 창은 열리지 않습니다." : "AI가 화면에 보이는 Chromium 창을 다룹니다."}</div>

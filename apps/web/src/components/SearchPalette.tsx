@@ -1,3 +1,4 @@
+import { withParticle } from "@workbench/contracts";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ItemIcon, itemKindOf } from "./ItemIcon.tsx";
 import {
@@ -408,7 +409,7 @@ export function SearchPalette({
         if (onOpenView) {
           closeForOpen();
           onOpenView(view.id);
-        } else setNotice(`보기 「${view.name}」로 저장했습니다.`);
+        } else setNotice(`보기 ${withParticle(`「${view.name}」`, "으로/로")} 저장했습니다.`);
       })
       .catch((error: unknown) => setNotice(`보기로 저장하지 못했습니다: ${error instanceof Error ? error.message : String(error)}`));
   };
@@ -508,7 +509,7 @@ export function SearchPalette({
       if (needle) return <div className="palette-preview-empty">찾은 것이 없습니다.</div>;
       return (
         <div className="palette-preview-empty">
-          {content ? "대화·답·계획·문서·볼트 노트의 내용을 찾습니다. Tab으로 범위를 바꿉니다." : "작업·세션·대화 내용·문서·볼트 노트를 찾습니다. Tab으로 범위를 바꾸고, > 로 시작하면 명령입니다."}
+          {content ? "대화·답·계획·문서·볼트 노트의 내용을 찾습니다. Tab으로 범위를 바꿉니다." : "작업·대화 이름과 내용·문서·볼트 노트를 찾습니다. Tab으로 범위를 바꾸고, > 로 시작하면 명령입니다."}
         </div>
       );
     }
@@ -650,7 +651,7 @@ export function SearchPalette({
             onChange={(event) => setQuery(event.target.value)}
             onCompositionStart={() => setComposing(true)}
             onCompositionEnd={() => setComposing(false)}
-            placeholder={content ? "대화·문서·노트 내용 찾기" : "작업, 세션, 대화 내용, 문서, 노트 찾기 · > 명령"}
+            placeholder={content ? "대화·문서·노트 내용 찾기" : "작업, 대화와 그 내용, 문서, 노트 찾기 · > 명령"}
             aria-label="찾을 말"
             aria-controls="palette-results"
           />
@@ -777,7 +778,7 @@ export function SearchPalette({
             ))}
             {needle && first && !first.total && !searching && first.progress?.phase !== "indexing" && !commandMode ? (
               <div className="palette-empty">
-                "{needle}"을(를) {scope === "all" ? "" : `${SCOPE_LABEL[scope]}에서 `}찾지 못했습니다.
+                {withParticle(`"${needle}"`, "을/를")} {scope === "all" ? "" : `${SCOPE_LABEL[scope]}에서 `}찾지 못했습니다.
                 {scope !== "all" && first.counts.all ? ` 다른 범위에 ${first.counts.all}건이 있습니다(Tab).` : ""}
               </div>
             ) : null}

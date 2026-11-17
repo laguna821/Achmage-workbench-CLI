@@ -63,7 +63,10 @@ export class HostAutostart {
         mkdirSync(dirname(file), { recursive: true });
         const environmentLines = this.runner ? Object.entries(environment).map(([key, value]) => `Environment=${JSON.stringify(`${key}=${value}`).replace(/%/g, "%%")}\n`).join("") : "";
         const start = this.runner ? `${unit(this.runner)} --host-service start` : `${unit(process.execPath)} ${unit(this.launcher)}`;
-        writeFileSync(file, `[Unit]\nDescription=Achmage Workbench background tasks\n[Service]\nType=oneshot\nRemainAfterExit=yes\n${environmentLines}ExecStart=${start}\n[Install]\nWantedBy=default.target\n`, { mode: 0o600 });
+        // Still pulled in by default.target: the phone bridge needs the gateway before any window is opened (and a
+        // login without a graphical session has none). After= only orders it behind the graphical session when both
+        // start together; whether or not it has the display then, every GUI child reads it at spawn (gui-env.ts).
+        writeFileSync(file, `[Unit]\nDescription=Achmage Workbench background tasks\nAfter=graphical-session.target\n[Service]\nType=oneshot\nRemainAfterExit=yes\n${environmentLines}ExecStart=${start}\n[Install]\nWantedBy=default.target\n`, { mode: 0o600 });
         await run("systemctl", ["--user", "daemon-reload"], { timeout: 5000 });
         await run("systemctl", ["--user", "enable", `${this.id}.service`], { timeout: 5000 });
       } else if (process.platform === "darwin") {

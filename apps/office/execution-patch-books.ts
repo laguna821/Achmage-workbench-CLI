@@ -58,7 +58,13 @@ export function patchBookExecutions(code: string, id: string, root: string, modu
         const r = context.range;
         if (![r.startRow, r.endRow, r.startColumn, r.endColumn].every(n => Number.isSafeInteger(n) && n >= 0) || r.endRow < r.startRow || r.endColumn < r.startColumn) throw new Error('저장한 셀 범위가 올바르지 않습니다.');
         const restored = await selectWorkbookRange(readContext(), sheet.getSheetId(), r, setMessage);
-        if (!restored.ok) throw new Error(restored.error ?? '원본 셀 선택을 복원하지 못했습니다.');
+        // The executor's workbook has no scrolling view: the original selection helper activates the range and then
+        // fails on scrollToCell ("[redi] … not registered" — every Excel turn from a hidden tab failed). The
+        // selection is what the turn needs; it is made here without the scroll.
+        if (!restored.ok) {
+          try { sheet.getRange(r.startRow, r.startColumn, r.endRow - r.startRow + 1, r.endColumn - r.startColumn + 1).activate(); }
+          catch { throw new Error(restored.error ?? '원본 셀 선택을 복원하지 못했습니다.'); }
+        }
       } else workbook.setActiveSheet(sheet);
       if (context.scope && (typeof context.scope.a1 !== 'string' || context.scope.sheetId !== context.sheetId)) throw new Error('원본 선택 범위의 시트가 일치하지 않습니다.');
       wbBookRequestRef.current = data;

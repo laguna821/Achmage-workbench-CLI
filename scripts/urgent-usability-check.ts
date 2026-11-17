@@ -95,7 +95,7 @@ try {
   await page.getByRole('button', { name: '새 문서 또는 세션 만들기' }).click();
   for (const label of ['새 워드 문서', '새 한글 문서', '새 디자인', 'Claude와 새 대화', 'Codex와 새 대화']) check(`tab + exposes ${label}`, await page.getByRole('menuitem', { name: label, exact: true }).count() === 1);
   await page.getByRole('menuitem', { name: '새 Markdown 문서', exact: true }).click();
-  check('new document defaults to the current project', await page.locator('.new-document-dialog select').first().inputValue() === work.id);
+  check('new document defaults to the current project', await page.locator('.new-document-dialog .ui-select').first().getAttribute('data-value') === work.id);
   await page.locator('.new-document-dialog input[placeholder]').fill('병렬 수작업');
   await page.getByRole('button', { name: '만들고 열기', exact: true }).click();
   await page.locator('.new-document-dialog').waitFor({ state: 'detached' });

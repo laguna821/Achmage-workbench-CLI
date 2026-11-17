@@ -647,9 +647,13 @@ async function handle(message) {
       return reply({ namespaceTools: true, imageGeneration: true, webSearch: true });
     case "mcpServerStatus/list":
       return reply({ data: [], nextCursor: null });
-    case "config/read":
-      return reply({ config: { model: null, model_reasoning_effort: null, approval_policy: "on-request", sandbox_mode: "workspace-write", model_auto_compact_token_limit: 232_000 }, origins: {} });
+    case "config/read": {
+      // FAKE_CODEX_MCP_SERVERS: names of MCP servers its config.toml would carry (the default-off checks).
+      const servers = Object.fromEntries((process.env.FAKE_CODEX_MCP_SERVERS ?? "").split(",").filter(Boolean).map((name) => [name, { command: "fake-mcp" }]));
+      return reply({ config: { model: null, model_reasoning_effort: null, approval_policy: "on-request", sandbox_mode: "workspace-write", model_auto_compact_token_limit: 232_000, ...(Object.keys(servers).length ? { mcp_servers: servers } : {}) }, origins: {} });
+    }
     case "thread/start": {
+      if (process.env.FAKE_ENGINE_ARGS_LOG) appendFileSync(process.env.FAKE_ENGINE_ARGS_LOG, `${JSON.stringify({ engine: "codex", pid: process.pid, method, config: params.config ?? null })}\n`);
       const threadId = `thr_${++counter}`;
       const thread = { approvalPolicy: params.approvalPolicy ?? "on-request", sandbox: params.sandbox ?? "workspace-write", mode: params.sandbox ?? "workspace-write", instructions: params.developerInstructions ?? null, policy: null, cwd: params.cwd ?? "/tmp", used: 11_000, turn: null, browser: browserNote(params.developerInstructions), roots: [] };
       threads.set(threadId, thread);
@@ -665,6 +669,7 @@ async function handle(message) {
       return reply({});
     }
     case "thread/resume": {
+      if (process.env.FAKE_ENGINE_ARGS_LOG) appendFileSync(process.env.FAKE_ENGINE_ARGS_LOG, `${JSON.stringify({ engine: "codex", pid: process.pid, method, config: params.config ?? null })}\n`);
       // Like Codex: developer instructions on resume are not added to the thread.
       const thread = threads.get(params.threadId) ?? { cwd: params.cwd ?? "/tmp", used: 11_000, turn: null, browser: null, roots: [] };
       thread.approvalPolicy = params.approvalPolicy ?? thread.approvalPolicy ?? "on-request";

@@ -200,6 +200,8 @@ export class ChannelService {
         journal: this.options.store.channels,
         log: this.log,
         onStatus: () => this.changed(),
+        // A value the AI asks for is given in a modal (audit #131); without the credential store there is none to offer.
+        ...(this.vault ? { secretForms: this.vault.secretForm } : {}),
         ...this.options.slack,
       });
       this.core.attach(slack);
@@ -287,7 +289,7 @@ export class ChannelService {
 
   private toBinding(binding: Binding): ChannelBinding {
     const { prefs: _prefs, ...shown } = binding;
-    return { ...shown, pointerLabel: this.core.pointerLabel(binding), undelivered: this.core.undelivered(binding.id), uncertain: this.core.uncertain(binding.id) };
+    return { ...shown, pointerLabel: this.core.pointerLabel(binding), confirm: this.core.confirmOn(binding), undelivered: this.core.undelivered(binding.id), uncertain: this.core.uncertain(binding.id) };
   }
 
   state(): ChannelsState {
@@ -498,11 +500,13 @@ export class ChannelService {
       if (input.locked !== undefined && typeof input.locked !== "boolean") throw new HttpError(400, "channel_input", "locked는 true 또는 false여야 합니다.");
       if (input.revoked !== undefined && input.revoked !== true) throw new HttpError(400, "channel_input", "끊은 연결은 되돌릴 수 없습니다. 다시 연결해 주세요.");
       if (input.paused !== undefined && typeof input.paused !== "boolean") throw new HttpError(400, "channel_input", "paused는 true 또는 false여야 합니다.");
+      if (input.confirm !== undefined && typeof input.confirm !== "boolean") throw new HttpError(400, "channel_input", "confirm은 true 또는 false여야 합니다.");
       if (typeof input.paused === "boolean") this.core.pause(id, input.paused);
+      if (typeof input.confirm === "boolean") this.core.setConfirm(id, input.confirm);
       if (input.locked === true) this.core.lock(id);
       if (input.locked === false) this.core.unlock(id);
       if (input.revoked === true) this.core.revoke(id);
-      if (input.paused === undefined && input.locked === undefined && input.revoked === undefined) throw new HttpError(400, "channel_input", "바꿀 것이 없습니다.");
+      if (input.paused === undefined && input.locked === undefined && input.revoked === undefined && input.confirm === undefined) throw new HttpError(400, "channel_input", "바꿀 것이 없습니다.");
       value = this.state();
     } else throw missing();
     sendJson(res, 200, value);

@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterEach, describe, expect } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "./bus.ts";
 import { FindTool, findSessionName, isPlainFindCommand, withFindTool } from "./find-tool.ts";
 import { FIND_HEAD } from "./search.ts";
@@ -74,5 +74,22 @@ describe("workbench-find through the spool", () => {
     await expect(run(command, ["기준"], { env: { ...process.env, WORKBENCH_FIND_SESSION: "", CODEX_THREAD_ID: "" } })).rejects.toMatchObject({ stderr: expect.stringContaining("Workbench 세션 안에서만") });
     // Nothing is left behind in the spool.
     expect(readdirSync(join(tool.spool, findSessionName(claude.id))).filter((file) => !file.endsWith(".tmp"))).toEqual([]);
+  });
+});
+
+describe("workbench-find's spool (A9)", () => {
+  it("looks only at the folders of live conversations whose engine was handed the command", () => {
+    const dir = mkdtempSync(join(tmpdir(), "wb-find-spool-"));
+    dirs.push(dir);
+    const bus = new EventBus();
+    const live = { id: "live", provider: "claude", nativeSessionId: null, archivedAt: null } as unknown as import("@workbench/contracts").Session;
+    const sessions = new Map([["live", live]]);
+    const tool = new FindTool({ dataDir: dir, finder: {} as never, sessions: () => sessions, bus, pollMs: 50 });
+    closers.push(() => tool.close());
+    expect(tool.watched).toEqual([]);
+    tool.engineHooks().sessionEnv(live);
+    expect(tool.watched).toEqual([findSessionName("live")]);
+    bus.publish({ type: "session.upserted", session: { ...live, archivedAt: 1 } });
+    expect(tool.watched).toEqual([]);
   });
 });

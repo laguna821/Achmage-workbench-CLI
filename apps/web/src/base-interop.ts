@@ -104,11 +104,11 @@ export function exportBase(view: HomeView): { source: string; warnings: string[]
   if (view.sort) {
     const property = baseProperty(view.sort.key);
     if (property) standard.sort = [{ property, direction: view.sort.dir.toUpperCase() }];
-    else warnings.push("프로젝트 이름·활동·세션 기준 정렬은 Workbench에서만 복원됩니다.");
+    else warnings.push("프로젝트 이름·활동·대화 기준 정렬은 Workbench에서만 복원됩니다.");
   }
   const fields = view.fields ?? ["stage", "tags"];
   standard.order = [...new Set(["file.name", ...fields.map(baseProperty).filter((item) => item !== null)])];
-  if (fields.some((field) => !baseProperty(field))) warnings.push("세션 수·실행 상태 등의 앱 전용 속성은 Workbench에서만 복원됩니다.");
+  if (fields.some((field) => !baseProperty(field))) warnings.push("대화 수·실행 상태 등의 앱 전용 속성은 Workbench에서만 복원됩니다.");
   if (view.subgroup || Object.keys(view.look.colors).length || view.collapsed.length) warnings.push("하위 묶기·색상·접힘 상태는 Workbench에서 다시 가져올 때 복원됩니다.");
   const projection = canonical({ filters, view: standard });
   const data = { filters, views: [{ ...standard, workbench: { version: 1, view, projection } }] };

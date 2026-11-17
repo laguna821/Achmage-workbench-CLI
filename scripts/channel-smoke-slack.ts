@@ -4,7 +4,8 @@
 // tokens. The same conversations as scripts/channel-smoke.ts drives over Telegram (the Telegram one
 // reads Bot API calls, this one Slack's, so the scenario is written again rather than shared), plus
 // what is Slack's own: an envelope delivered again, a socket dropped in the middle of an event, a
-// refresh, and what was written while the gateway was off. Nothing here contacts Slack.
+// refresh, and what was written while the gateway was off; an answer's markdown as mrkdwn, and a
+// value the AI asks for given in a modal. Nothing here contacts Slack.
 //
 // Usage (from the repository, through ux/run-isolated.sh, after `npm run build -w @workbench/host`):
 //   node scripts/channel-smoke-slack.ts
@@ -337,6 +338,39 @@ try {
   for (const session of (await snapshot()).sessions) oldRan += (await api<{ items: { kind: string; text?: string }[] }>("GET", `/api/sessions/${session.id}/items`)).items.filter((item) => item.kind === "user" && item.text === "이틀 전에 보낸 요청").length;
   check("the cap line: the old one did not run", oldRan === 0, String(oldRan));
 
+  // Answers in mrkdwn (audit #132): the stand-in's sample answer (heading, list, table, code, quote) as Slack shows it.
+  count = texts().length;
+  const raw = fake.texts().length;
+  fake.message("견본 답을 보여 줘");
+  check("mrkdwn: the sample answer arrives", await answered(count, (text) => text.includes("바꾼 점"), 60_000));
+  const sample = fake.texts().slice(raw).find((text) => text.includes("바꾼 점")) ?? "";
+  check("mrkdwn: emphasis as *…*, no markdown stars", sample.includes("*질문을 먼저 세우고, 사례로 내려가는 순서*") && !sample.includes("**"), sample.slice(0, 120));
+  check("mrkdwn: the heading as a bold line, the list as lines", sample.includes("*바꾼 점*\n\n1. 도입부를"));
+  check("mrkdwn: the table as an aligned monospace block", /```\n장 +\| 내용 +\| 시간\n-+\+-+\+-+\n1 +\| 질문: AI가 쓴 글은 누구의 글인가 \| 5분\n/.test(sample));
+  check("mrkdwn: the code block without its language, its content as written", sample.includes('```\nrg -n "루브릭" 강의안.md\n```'));
+  check("mrkdwn: the quote as a > line", sample.includes("\n> 과제 마감을 한 주 늦출지는"));
+
+  // A value given in a Slack modal (audit #131): [비밀 값 입력] → the modal → '받았습니다' → the AI goes on.
+  const PLANTED = "zz-smoke-planted-0131";
+  count = texts().length;
+  fake.message("노션 연구 노트 목록을 정리해 줘. 비밀 필요: need --name 노션키 --kind api-key --site notion.so --fields 키");
+  check("modal: the hand-over offers [비밀 값 입력]", await answered(count, (text) => text.includes("'노션키' API 키가 필요합니다") && text.includes("[비밀 값 입력]"), 60_000) && has("비밀 값 입력"));
+  press("비밀 값 입력");
+  check("modal: it opens with one input", await wait(() => fake.views.length === 1) && (fake.lastView()!.view.blocks as { type: string }[]).filter((block) => block.type === "input").length === 1);
+  const other = fake.submitForm(PLANTED, { as: "U0KIM" });
+  await wait(() => fake.acked(other));
+  check("modal: someone else's submission is refused", JSON.stringify(fake.answers.get(other)).includes("이 입력 창은 이 채팅에 연결된 사람만 쓸 수 있습니다."));
+  const given = fake.submitForm(PLANTED);
+  await wait(() => fake.acked(given));
+  fake.redeliver(given);
+  const took = (text: string) => text.startsWith("'노션키'의 키를 받았습니다. 보관함에 봉인해 두었습니다. 이어서 합니다.");
+  check("modal: '받았습니다' in the chat", await answered(count, took));
+  await wait(() => fake.trail.filter((entry) => entry === `ack ${given}`).length === 2);
+  check("modal: Slack's retry handed over once", textsSince(count).filter(took).length === 1 && fake.answers.get(given) === null);
+  const keptEntries = await api<{ entries: { name: string; held: string }[] }>("GET", "/api/channels/credentials");
+  check("modal: the value is kept sealed", keptEntries.entries.some((entry) => entry.name === "노션키" && entry.held === "sealed"));
+  check("modal: the conversation goes on", await answered(count, (text) => text.includes("workbench-credential: ok"), 90_000));
+
   // Pause and lock, Slack's chat as Telegram's.
   const bindingId = (await state()).bots[0]!.bindings[0]!.id;
   await api("PATCH", `/api/channels/bindings/${bindingId}`, { paused: true });
@@ -354,6 +388,7 @@ try {
   const leaked = all.filter((entry) => { const text = readFileSync(join(entry.parentPath, entry.name), "latin1"); return text.includes(FAKE_BOT_TOKEN) || text.includes(FAKE_APP_TOKEN); }).map((entry) => entry.name);
   check("tokens in no file of the data folder", leaked.length === 0, leaked.join(", "));
   const pairingValue = link.say!.split(" ")[1]!; // the window's value: the bare 연결 used it
+  check("the modal's value in no file of the data folder and no Slack call", !all.some((entry) => readFileSync(join(entry.parentPath, entry.name), "latin1").includes(PLANTED)) && !JSON.stringify(fake.calls).includes(PLANTED));
   check("the pairing value in no file of the data folder", !all.some((entry) => readFileSync(join(entry.parentPath, entry.name), "latin1").includes(pairingValue)));
   const audit = await api<{ rows: { action: string; target: string | null; result: string | null; kind: string }[] }>("GET", "/api/channels/audit?limit=500");
   check("record has no message text", !JSON.stringify(audit.rows).includes("메일함 정리") && !JSON.stringify(audit.rows).includes("2차 심사"));

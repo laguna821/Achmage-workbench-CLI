@@ -1,10 +1,11 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import type { Session } from "@workbench/contracts";
 import type { BrowserEngineHooks } from "./browse.ts";
 import { launcherSource } from "./browse-wrapper.ts";
 import type { EventBus } from "./bus.ts";
 import { findUsage, type Finder } from "./search.ts";
+import { SpoolFolders } from "./spool-folders.ts";
 
 // `workbench-find`: the engines' way to Workbench's records — the same index and syntax as
 // Ctrl+K (search.ts), read only, no model. It works like the agent browser's playwright-cli
@@ -133,8 +134,8 @@ export class FindTool {
   private readonly byName = new Map<string, string>();
   /** Codex thread id -> spool name, as threads.json last had it */
   private threads = new Map<string, string>();
-  private readonly watchers = new Map<string, FSWatcher>();
-  private readonly poll: NodeJS.Timeout;
+  /** Only the folders of live conversations whose engine was handed the command (A9). */
+  private readonly folders: SpoolFolders;
   private readonly unsubscribe: () => void;
 
   constructor(options: FindToolOptions) {
@@ -151,20 +152,20 @@ export class FindTool {
     writeFileSync(script, findWrapperSource(this.root));
     writeFileSync(join(this.bin, "workbench-find"), launcherSource(process.execPath, script), { mode: 0o755 });
     chmodSync(join(this.bin, "workbench-find"), 0o755);
+    // Watchers can miss a file: a slow look as well, over the folders in use only.
+    this.folders = new SpoolFolders(this.spool, { request: /\.req\.json$/, take: (_sessionId, dir, file) => void this.take(basename(dir), file), pollMs: options.pollMs });
     for (const session of options.sessions().values()) this.sessionChanged(session);
     this.writeThreads(true);
     this.unsubscribe = options.bus.subscribe((event) => {
       if (event.type === "session.upserted") this.sessionChanged(event.session);
     });
-    // Watchers can miss a file: a slow look as well.
-    this.poll = setInterval(() => this.tick(), options.pollMs ?? 500);
-    this.poll.unref();
   }
 
   /** A session changed: its name is known, and a Codex thread id goes into threads.json. */
   private sessionChanged(session: Session) {
     const name = findSessionName(session.id);
     this.byName.set(name, session.id);
+    if (session.archivedAt) this.folders.close(name);
     if (session.provider !== "codex" || !session.nativeSessionId || this.threads.get(session.nativeSessionId) === name) return;
     this.threads.set(session.nativeSessionId, name);
     this.writeThreads();
@@ -176,50 +177,15 @@ export class FindTool {
     renameSync(`${this.threadsFile}.tmp`, this.threadsFile);
   }
 
-  /** The session's spool folder, made (and watched) on first use. */
+  /** The session's spool folder, made (and watched) on first use; only these are looked at (A9). */
   private spoolOf(session: Session) {
     const name = findSessionName(session.id);
     this.byName.set(name, session.id);
-    const dir = join(this.spool, name);
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    if (!this.watchers.has(name)) {
-      try {
-        const watcher = watch(dir, { persistent: false }, (_event, file) => {
-          if (file && String(file).endsWith(".req.json")) this.take(name, String(file));
-        });
-        watcher.on("error", () => {
-          watcher.close();
-          this.watchers.delete(name);
-        });
-        this.watchers.set(name, watcher);
-      } catch {
-        // The slow look still finds requests.
-      }
-    }
-    return dir;
+    return this.folders.open(name, session.id);
   }
 
-  private tick() {
-    let names: string[];
-    try {
-      names = readdirSync(this.spool);
-    } catch {
-      return;
-    }
-    const now = Date.now();
-    for (const name of names) {
-      const dir = join(this.spool, name);
-      try {
-        for (const file of readdirSync(dir)) {
-          if (file.endsWith(".req.json")) void this.take(name, file);
-          // Answers nobody picked up (the command was stopped) do not stay.
-          else if (file.endsWith(".res.json") && now - statSync(join(dir, file)).mtimeMs > 10 * 60_000) rmSync(join(dir, file), { force: true });
-        }
-      } catch {
-        // Gone meanwhile.
-      }
-    }
-  }
+  /** For tests: the spool folders looked at. */
+  get watched() { return this.folders.names; }
 
   /** Answer one request file (search.ts `find`), then take it away. */
   private async take(name: string, file: string) {
@@ -269,10 +235,8 @@ export class FindTool {
   }
 
   close() {
-    clearInterval(this.poll);
+    this.folders.stop();
     this.unsubscribe();
-    for (const watcher of this.watchers.values()) watcher.close();
-    this.watchers.clear();
   }
 }
 

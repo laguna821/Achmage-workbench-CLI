@@ -1,6 +1,8 @@
 import type { OfficeHostMessage, OfficePageMessage } from "@workbench/contracts";
 import { encodeHwpSave, type HwpSaveMetadata, type TabSpot } from "../../../packages/contracts/src/hwp.ts";
 import { encodePdfRequest, type PdfRequest, type PdfSaveResult } from "../../../packages/contracts/src/pdf.ts";
+import { createPageRest } from "./page-rest.ts";
+import { onTurnActivity } from "./turn-activity.ts";
 
 // The office page runs on the editors' own origin (apps/host/src/editors.ts). It talks only to the
 // Workbench window that embeds it (the parent frame, on the app's origin) and to the gateway, with
@@ -49,6 +51,9 @@ const host = (() => {
 })();
 
 export function post(message: OfficePageMessage) {
+  // What the editor says about its unsaved edits steers the rest (page-rest.ts): dirty wakes it, clean lets it rest.
+  if (message.type === "office:dirty") pageRest.dirtyHint(message.dirty === true);
+  if (message.type === "office:flushed" && flushHold) { const release = flushHold; flushHold = null; release(); }
   if (message.type === "office:flushed" && localFlush) {
     const pending = localFlush; localFlush = null; window.clearTimeout(pending.timer);
     if (message.revision === null) pending.reject(new Error("문서를 저장하지 못했습니다. 편집 내용은 유지했습니다."));
@@ -70,6 +75,32 @@ export function flushOfficeDocument(): Promise<number> {
   for (const handler of localListeners) handler({ type: "office:flush" });
   return promise;
 }
+
+/**
+ * The page rests while the window says its frame is not on screen (page-rest.ts, A10): installed before
+ * any editor code runs, so every repeating timer and animation frame of the page is under it.
+ */
+export const pageRest = createPageRest();
+pageRest.install(window);
+pageRest.pageVisible(!document.hidden);
+document.addEventListener("visibilitychange", () => pageRest.pageVisible(!document.hidden));
+window.addEventListener("message", (event: MessageEvent) => {
+  if (event.origin !== host || event.source !== window.parent) return;
+  const message = event.data as OfficeHostMessage | null;
+  if (!message || typeof message.type !== "string") return;
+  if (message.type === "office:shown") pageRest.shown(message.shown === true);
+  else pageRest.nudge();
+  // A save asked by the window (flush before a tab change or sleep, keep-copy, rebase) holds the page awake until it answers.
+  if ((message.type === "office:flush" || message.type === "office:keep" || message.type === "office:rebase") && !flushHold) flushHold = pageRest.hold("flush");
+});
+let flushHold: (() => void) | null = null;
+// A document AI turn keeps the page awake, also when its tab is hidden (AI without remount).
+let turnHold: (() => void) | null = null;
+onTurnActivity((event) => {
+  const ends = event.kind === "end" || (event.kind === "observed" && event.turnId === null);
+  if (ends) { turnHold?.(); turnHold = null; }
+  else if (!turnHold) turnHold = pageRest.hold("turn");
+});
 
 export function listen(handler: (message: OfficeHostMessage) => void) {
   localListeners.add(handler);

@@ -20,6 +20,8 @@ type Hooks = {
   update(id: string, patch: Partial<Session>): void;
   lock(id: string, requestId: string, identity: string, action: () => Promise<SendResult>): Promise<SendResult>;
   related?(id: string): Session[];
+  /** 0.5.3: a slot of the resource manager; resolves with its release once there is one (the turn waits here until then). */
+  admit?(sessionId: string, signal?: AbortSignal): (() => void) | Promise<() => void>;
 };
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const id = (value: unknown): value is string => typeof value === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(value);
@@ -75,9 +77,23 @@ export class OfficeSessions {
     const end = this.hooks.items(binding.sessionId).findLast((item) => item.kind === "turnEnd" && item.requestId === requestId(turnId));
     return { turnId, sessionId: binding.sessionId, duplicate, status: end?.kind === "turnEnd" ? end.status : this.runs.has(turnId) ? "running" : "interrupted" };
   }
-  async start(binding: Binding, raw: unknown, references: DocRef[] = [], attachments: OfficeStoredAttachment[] = [], skillContext?: { text: string; skills: OfficeStoredSkill[]; skillReads: OfficeStoredSkill[] }): Promise<OfficeTurnReceipt> {
+  async start(binding: Binding, raw: unknown, references: DocRef[] = [], attachments: OfficeStoredAttachment[] = [], skillContext?: { text: string; skills: OfficeStoredSkill[]; skillReads: OfficeStoredSkill[] }, signal?: AbortSignal): Promise<OfficeTurnReceipt> {
     const input = startOf(raw), key = requestId(input.turnId), identity = hash([binding.sessionId, binding.artifactId, input, ...(references.length ? [references] : []), ...(attachments.length ? [attachments] : []), ...(skillContext ? [skillContext] : [])]);
     let duplicate = false;
+    // 0.5.3: a new 문서 AI turn asks for a slot first and waits here (nothing is recorded yet, so nothing can
+    // start twice); a request already known (a repeated start) and a background helper beside a running
+    // turn of its own conversation do not ask.
+    let release: (() => void) | null = null;
+    const session = this.hooks.session(binding.sessionId);
+    if (this.hooks.admit && !this.store.findRequest(key) && !(input.background && (session.status !== "idle" && session.status !== "error"))) {
+      this.scope(binding.artifactId, binding.sessionId);
+      const slot = this.hooks.admit(binding.sessionId, signal);
+      release = typeof slot === "function" ? slot : await slot;
+    }
+    try { return await this.startAdmitted(binding, input, key, identity, references, attachments, skillContext, () => { duplicate = true; }, () => duplicate); }
+    finally { release?.(); }
+  }
+  private async startAdmitted(binding: Binding, input: OfficeTurnStart, key: string, identity: string, references: DocRef[], attachments: OfficeStoredAttachment[], skillContext: { text: string; skills: OfficeStoredSkill[]; skillReads: OfficeStoredSkill[] } | undefined, markDuplicate: () => void, wasDuplicate: () => boolean): Promise<OfficeTurnReceipt> {
     const result = await this.hooks.lock(binding.sessionId, key, identity, async () => {
       if (this.closed) throw new HttpError(503, "office_closed", "앱을 종료하고 있습니다.");
       this.scope(binding.artifactId, binding.sessionId);
@@ -87,7 +103,7 @@ export class OfficeSessions {
         this.known(binding, input.turnId);
         const running = this.runs.get(input.turnId);
         if (running && running.owner !== binding.owner) throw new HttpError(409, "office_turn_owner", "다른 문서 창에서 이 요청을 실행 중입니다.");
-        duplicate = true; return { duplicate: true, delivery: "turn" };
+        markDuplicate(); return { duplicate: true, delivery: "turn" };
       }
       this.live(binding);
       const session = this.hooks.session(binding.sessionId);
@@ -115,7 +131,7 @@ export class OfficeSessions {
     // A concurrent duplicate passed through SendGate without re-entering the callback.
     const running = this.runs.get(input.turnId);
     if (running && running.owner !== binding.owner) throw new HttpError(409, "office_turn_owner", "다른 문서 창에서 이 요청을 실행 중입니다.");
-    return this.receipt(binding, input.turnId, duplicate || result.duplicate);
+    return this.receipt(binding, input.turnId, wasDuplicate() || result.duplicate);
   }
   requireRun(binding: Binding, turnId: unknown) {
     if (!id(turnId)) return invalid();
@@ -250,10 +266,14 @@ export class OfficeSessions {
     const run = this.runs.get(turnId);
     if (run?.owner === binding.owner && run.sessionId === binding.sessionId) this.stop(turnId, "interrupted", "AI 응답 연결이 끝나 작업을 멈췄습니다.");
   }
-  executorLost(binding: Binding, turnId: string) {
+  /** `early`: the executor exited before it took the turn (it never started the work); `display`: no screen to start it on. */
+  executorLost(binding: Binding, turnId: string, reason?: "early" | "display") {
     const run = this.runs.get(turnId);
-    if (run?.owner === binding.owner && run.sessionId === binding.sessionId && run.artifactId === binding.artifactId)
-      this.stop(turnId, "interrupted", "독립 문서 실행기가 종료되었습니다. 같은 요청을 자동 재실행하지 않았습니다.");
+    if (run?.owner === binding.owner && run.sessionId === binding.sessionId && run.artifactId === binding.artifactId) {
+      if (reason === "display") this.stop(turnId, "failed", "화면에 연결할 수 없어 문서 작업을 시작하지 못했습니다. Workbench 창을 한 번 연 뒤 다시 요청해 주세요.");
+      else if (reason === "early") this.stop(turnId, "failed", "문서 실행기가 시작하자마자 종료되어 작업을 시작하지 못했습니다. 원인은 Workbench 기록에 남겼습니다. 같은 요청을 자동 재실행하지 않았습니다.");
+      else this.stop(turnId, "interrupted", "독립 문서 실행기가 종료되었습니다. 같은 요청을 자동 재실행하지 않았습니다.");
+    }
   }
   history(binding: Binding, before: string | null = null) {
     this.live(binding, false);

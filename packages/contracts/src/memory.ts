@@ -23,4 +23,19 @@ export type AppMemory =
       measure: "pss" | "rss" | "mixed";
       /** When it was read (ms); the gateway reads at most once in 30 s. */
       at: number;
+      /**
+       * The AI engines alive now (0.5.3 B1): one Claude Code process per conversation, one Codex app-server
+       * for all of Codex's; the memory of each process with everything it started (MCP servers, hooks).
+       * `bytes` null: its process could not be told apart on this system. Absent from older gateways.
+       */
+      engines?: EngineMemory[];
     };
+
+export type EngineMemory = {
+  provider: "claude" | "codex";
+  /** The conversations it serves (one for Claude; those loaded in the shared app-server for Codex), with their titles. */
+  sessions: { id: string; title: string }[];
+  bytes: number | null;
+  /** No turn runs and nothing waits on it: "쉬는 엔진 지금 끄기" closes it. */
+  idle: boolean;
+};

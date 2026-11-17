@@ -128,6 +128,27 @@
 .ui-select[data-placeholder] .ui-select-value { color: var(--muted); }
 .ui-select-chevron { flex: 0 0 auto; color: var(--muted); }
 
+/* Where a form's native select used to be (the menus unit): the trigger keeps that field's place in
+   its row — full width in the stacked dialog forms, the same padding as the text fields beside it. */
+:is(.feature-dialog, .voice-panel, .new-document-dialog, .agent-profile-editor, .browser-create-dialog, .schedule-policy, .scm-remote-fields, .view-dialog, .preparation-settings) .ui-select {
+  width: 100%;
+}
+/* Those forms set their fields in the dialog's own type (the native select had `font: inherit`). */
+:is(.voice-panel, .browser-create-dialog, .agent-profile-editor) .ui-select { padding-block: var(--space-xs); font: inherit; }
+/* The dialogs whose fields are drawn at the reading-form size (hig-chat.css: their fields, native selects included). */
+:is(.feature-dialog, .stage-dialog, .linked-dialog, .new-document-dialog, .session-picker, .schedule-dialog, .dropbox-dialog, .office-settings-dialog, .terminal-dialog) .ui-select {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--text-md);
+  font-weight: 400;
+  line-height: inherit;
+}
+.inline-draw .ui-select { flex: 1; height: 32px; }
+.knowledge-destination .ui-select { max-width: 280px; }
+.skill-candidate .ui-select { margin: var(--space-xs) 0; }
+.rule-grid .ui-select, .view-dialog .ui-select, .template-field .ui-select, .settings-select { min-height: 32px; }
+.appearance-panel .settings-select { min-width: 12rem; }
+.done-sound .settings-select { min-width: 10rem; }
+
 @media (pointer: coarse) {
   .ui-menu-item, .ui-select { min-height: 44px; }
 }

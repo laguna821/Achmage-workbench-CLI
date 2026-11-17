@@ -65,7 +65,7 @@ export async function preparationScenario(ctx: Ctx, launch: Omit<LaunchOptions, 
   const terminalList = await ctx.app.api<TerminalList>("GET", "/api/workspaces/" + workspace.id + "/terminals");
   for (const terminal of terminalList.terminals) if (terminal.status === "running") await ctx.app.api("DELETE", "/api/terminals/" + terminal.id);
   await clickText('.pane:not([hidden]) .group-tab [role="tab"]', "환경 준비 검사", true);
-  await open(); await click('[aria-label="환경 준비 종류"] option[value="archive"]');
+  await open(); await click('button[aria-label="환경 준비 종류"]'); await click('.ui-menu-item[data-value="archive"]');
   await click(".preparation-preview-button"); await wd.waitFor(".preparation-preview"); await click(".preparation-apply");
   const failed = await until(async () => (await jobs()).some((job) => job.preview.options.kind === "archive" && job.phase === "failed"));
   await wd.waitFor('.preparation-job[data-phase="failed"]');
@@ -75,7 +75,7 @@ export async function preparationScenario(ctx: Ctx, launch: Omit<LaunchOptions, 
   const blocked = await until(async () => wd.execute<boolean>('return document.body.textContent.includes("보관 명령을 먼저 확인하세요");'));
   ctx.report.check(S, "실패한 보관 명령은 보관 동작을 차단", blocked && (await snapshot()).workspaces!.find((space) => space.id === workspace.id)!.archivedAt === null);
   await click(".workspace-preparation-open"); await wd.waitFor(".preparation-dialog");
-  await click('[aria-label="환경 준비 종류"] option[value="archive"]'); await click('[aria-label="준비 명령 실행"]');
+  await click('button[aria-label="환경 준비 종류"]'); await click('.ui-menu-item[data-value="archive"]'); await click('[aria-label="준비 명령 실행"]');
   await click(".preparation-preview-button"); await wd.waitFor(".preparation-preview"); await click(".preparation-apply");
   const skipped = await until(async () => (await jobs()).some((job) => job.preview.options.kind === "archive" && !job.preview.options.runCommands && job.phase === "complete"));
   await clickText(".preparation-dialog > header button", "닫기"); await click(".workspace-trigger"); await click('[aria-label="환경 feature 보관"]');

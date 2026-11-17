@@ -1,3 +1,4 @@
+import { withParticle } from "@workbench/contracts";
 import { createContext, useContext, useLayoutEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { AGENT_COLUMN_MIN, CHAT_MIN, COLUMN_GAP, besideFit, clampRatio } from "../../companion.ts";
 import { usePhoneLayout } from "../../mobile-layout.ts";
@@ -160,7 +161,7 @@ export function Beside({ chat, content, over, chatMin = CHAT_MIN, contentMin = C
           data-covers-web={laidOver && over === "chat" && covered !== "chat" ? "" : undefined} onKeyDown={escapeBack}
           style={fit?.mode === "beside" ? (fit.chat === null ? { flex: `0 0 ${Math.round(shown * 100)}%` } : { flex: `0 0 ${fit.chat}px` }) : undefined}>
           {replaces && onDismiss ? (
-            <button type="button" className="ghost-button small beside-back" onClick={onDismiss} aria-label={`${backLabel ?? contentLabel}로 돌아가기`}>
+            <button type="button" className="ghost-button small beside-back" onClick={onDismiss} aria-label={`${withParticle(`${backLabel ?? contentLabel}`, "으로/로")} 돌아가기`}>
               <Icon name="chevronLeft" size={16} /><span className="beside-back-name">{backLabel ?? contentLabel}</span>
             </button>
           ) : null}
@@ -168,7 +169,7 @@ export function Beside({ chat, content, over, chatMin = CHAT_MIN, contentMin = C
         </section>
       ) : null}
       {fit?.mode === "beside" ? (
-        <div key="divider" className="beside-divider" role="separator" aria-orientation="vertical" aria-label={`${chatLabel}와 ${contentLabel} 사이`} aria-valuenow={Math.round(shown * 100)} aria-valuemin={20} aria-valuemax={70}
+        <div key="divider" className="beside-divider" role="separator" aria-orientation="vertical" aria-label={`${withParticle(`${chatLabel}`, "와/과")} ${contentLabel} 사이`} aria-valuenow={Math.round(shown * 100)} aria-valuemin={20} aria-valuemax={70}
           tabIndex={0} onPointerDown={drag} onKeyDown={nudge} onDoubleClick={() => onRatio(resetRatio)} title="끌어서 너비 조절 · 두 번 누르면 처음 너비" />
       ) : null}
       {content !== null ? (

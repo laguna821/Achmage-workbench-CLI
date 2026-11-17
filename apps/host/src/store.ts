@@ -3,8 +3,9 @@ import { randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import type { Workspace, WorktreeCreation, TerminalSession, PreparationJob } from "@workbench/contracts";
-import type { Artifact, ArtifactRevision, Folder, Handoff, Proposal, Session, SessionLink, TimelineRevision, TranscriptItem, Work } from "@workbench/contracts";
+import type { Artifact, ArtifactRevision, Folder, Handoff, HistoryEvent, Proposal, Session, SessionLink, TimelineRevision, TranscriptItem, Work } from "@workbench/contracts";
 import type { TurnMark } from "./timeline.ts";
+import { itemEvent, type HistoryCursor, type HistoryQuery, type HistorySource } from "./history.ts";
 import { SearchIndex, documentEntry, documentKey, itemEntries, itemKey, sessionEntry, workEntry, type WorkExtras } from "./search-index.ts";
 import type { HubJournalEntry, RequestOrigin } from "@workbench/contracts";
 import { isRequestOrigin } from "@workbench/contracts";
@@ -22,6 +23,13 @@ import { ChannelStore } from "./channels/store.ts";
 const SEARCH_VERSION = "5-fast-find-prompt-recovery";
 
 export const STORE_SCHEMA_VERSION = 1;
+/** When free pages are given back: at least 8 MiB and a fifth of the file (the owner's had 51 MB free of 78). */
+/** SQLITE_BUSY / SQLITE_LOCKED (another connection or process has the file). */
+export const busyError = (error: unknown) => {
+  const code = Number((error as { errcode?: number })?.errcode) & 0xff;
+  return code === 5 || code === 6 || /database is (locked|busy)|database table is locked/i.test(String((error as Error)?.message ?? ""));
+};
+export const COMPACT_RULE = { minFreeBytes: 8 * 1024 * 1024, minFreeShare: 0.2 } as const;
 export type StoreMigration = { from: number; to: number; backupPath: string | null };
 
 export class Store {
@@ -72,6 +80,10 @@ export class Store {
     try {
     this.db.exec(`
       PRAGMA journal_mode = WAL;
+      -- 0.5.3 (A8): in WAL, NORMAL syncs at checkpoints, not on every commit. A power cut can lose the last
+      -- moments (the last transactions: the end of a transcript, a terminal's last output batch); the database
+      -- stays consistent (WAL is atomic). An application crash loses nothing that was committed.
+      PRAGMA synchronous = NORMAL;
       PRAGMA busy_timeout = 3000;
       BEGIN IMMEDIATE;
       CREATE TABLE IF NOT EXISTS folders (id TEXT PRIMARY KEY, json TEXT NOT NULL);
@@ -115,6 +127,8 @@ export class Store {
       );
       CREATE INDEX IF NOT EXISTS hub_deliveries_recent ON hub_deliveries(created_at DESC);
       CREATE INDEX IF NOT EXISTS hub_deliveries_state ON hub_deliveries(state);
+      -- 활동 › 기록 (history.ts): requests, turn ends and approvals newest first, without reading every item.
+      CREATE INDEX IF NOT EXISTS items_kind_at ON items(json_extract(json, '$.kind'), json_extract(json, '$.at'));
       COMMIT;
     `);
     // Additive, without a schema version: an older gateway names its columns and never reads this one.
@@ -368,8 +382,172 @@ export class Store {
       }));
   }
 
+  /**
+   * 활동 › 기록: each source's newest rows older than the cursor (history.ts merges them). Only projects that
+   * still exist (a deleted project's kept documents wait in 보관함, not here). `filter` narrows in SQL, so a
+   * page of 문제 is a page of problems.
+   */
+  historySources(query: HistoryQuery): { sources: HistorySource[]; applied: (artifactIds: string[]) => Set<string> } {
+    const { before, limit, workId, filter } = query;
+    const at = before?.at ?? Number.MAX_SAFE_INTEGER;
+    const id = before?.id ?? "￿";
+    const work = workId ?? null;
+    const source = <T>(rows: T[], key: (row: T) => HistoryCursor, map: (row: T) => HistoryEvent | null): HistorySource => ({
+      events: rows.map(map).filter((event): event is HistoryEvent => Boolean(event)),
+      last: rows.length >= limit ? key(rows.at(-1)!) : null,
+    });
+    const sources: HistorySource[] = [];
+    // Transcript items: requests, turn ends, approvals and questions; one source per kind, each read newest
+    // first along the index items_kind_at (a page reads about `limit` rows of each kind, not the whole table).
+    const kinds: Record<"user" | "turnEnd" | "approval", string | null> = filter === "attention" ? { user: null, turnEnd: null, approval: "AND json_extract(i.json, '$.decision') IS NULL AND json_extract(s.json, '$.status') = 'awaitingApproval'" }
+      : filter === "done" ? { user: null, turnEnd: "AND json_extract(i.json, '$.status') = 'completed'", approval: null }
+      : filter === "problem" ? { user: null, turnEnd: "AND json_extract(i.json, '$.status') IN ('failed', 'interrupted')", approval: "AND json_extract(i.json, '$.decision') = 'decline'" }
+      : { user: "", turnEnd: "", approval: "" };
+    for (const [kind, narrow] of Object.entries(kinds)) {
+      if (narrow === null) continue;
+      const items = this.db.prepare(
+        `SELECT i.session_id AS session_id, s.work_id AS work_id, i.json AS json, json_extract(s.json, '$.provider') AS provider, json_extract(s.json, '$.status') AS status,
+                json_extract(i.json, '$.at') AS at, 'item:' || i.session_id || ':' || i.item_id AS key
+           FROM items i JOIN sessions s ON s.id = i.session_id JOIN works w ON w.id = s.work_id
+          WHERE json_extract(i.json, '$.kind') = ?5 AND json_extract(i.json, '$.at') <= ?1
+            AND (json_extract(i.json, '$.at') < ?1 OR 'item:' || i.session_id || ':' || i.item_id < ?2)
+            ${narrow} AND (?3 IS NULL OR s.work_id = ?3) AND json_extract(s.json, '$.pageAgent') IS NULL
+          ORDER BY json_extract(i.json, '$.at') DESC, key DESC LIMIT ?4`,
+      ).all(at, id, work, limit, kind);
+      sources.push(source(items, (row) => ({ at: Number(row.at), id: String(row.key) }), (row) => itemEvent({ sessionId: String(row.session_id), workId: String(row.work_id), provider: row.provider === null ? null : String(row.provider), status: row.status === null ? null : String(row.status), item: JSON.parse(String(row.json)) as TranscriptItem })));
+    }
+    if (filter === "attention" || filter === "problem") return { sources, applied: () => new Set() };
+    // Revisions: a document made (1) or revised.
+    const revisions = this.db.prepare(
+      `SELECT * FROM (
+         SELECT r.artifact_id AS artifact_id, a.work_id AS work_id, r.revision AS revision, json_extract(r.json, '$.author') AS author, json_extract(r.json, '$.sessionId') AS session_id,
+                json_extract(a.json, '$.name') AS name, json_extract(r.json, '$.at') AS at, 'rev:' || r.artifact_id || ':' || printf('%09d', r.revision) AS key
+           FROM revisions r JOIN artifacts a ON a.id = r.artifact_id JOIN works w ON w.id = a.work_id
+          WHERE json_extract(a.json, '$.role') IS NULL AND (?3 IS NULL OR a.work_id = ?3))
+        WHERE at < ?1 OR (at = ?1 AND key < ?2)
+        ORDER BY at DESC, key DESC LIMIT ?4`,
+    ).all(at, id, work, limit);
+    sources.push(source(revisions, (row) => ({ at: Number(row.at), id: String(row.key) }), (row) => ({
+      id: String(row.key), kind: Number(row.revision) === 1 ? "doc-created" : "doc-revised", at: Number(row.at), workId: String(row.work_id),
+      sessionId: row.session_id === null ? null : String(row.session_id), artifactId: String(row.artifact_id), itemId: null,
+      name: String(row.name), revision: Number(row.revision), author: row.author === "engine" ? "engine" : row.author === "external" ? "external" : "user",
+    })));
+    // 수정안 applied or discarded (when it was closed).
+    const proposals = this.db.prepare(
+      `SELECT * FROM (
+         SELECT p.id AS proposal_id, p.artifact_id AS artifact_id, a.work_id AS work_id, json_extract(p.json, '$.status') AS status, json_extract(p.json, '$.sessionId') AS session_id,
+                json_extract(p.json, '$.appliedRevision') AS revision, json_extract(a.json, '$.name') AS name, json_extract(p.json, '$.updatedAt') AS at, 'prop:' || p.id AS key
+           FROM proposals p JOIN artifacts a ON a.id = p.artifact_id JOIN works w ON w.id = a.work_id
+          WHERE json_extract(p.json, '$.status') ${filter === "done" ? "= 'applied'" : "IN ('applied', 'discarded')"} AND (?3 IS NULL OR a.work_id = ?3))
+        WHERE at < ?1 OR (at = ?1 AND key < ?2)
+        ORDER BY at DESC, key DESC LIMIT ?4`,
+    ).all(at, id, work, limit);
+    sources.push(source(proposals, (row) => ({ at: Number(row.at), id: String(row.key) }), (row) => ({
+      id: String(row.key), kind: row.status === "applied" ? "proposal-applied" : "proposal-discarded", at: Number(row.at), workId: String(row.work_id),
+      sessionId: row.session_id === null ? null : String(row.session_id), artifactId: String(row.artifact_id), itemId: null, name: String(row.name),
+      ...(row.revision === null ? {} : { revision: Number(row.revision) }),
+    })));
+    const applied = (artifactIds: string[]) => {
+      if (!artifactIds.length) return new Set<string>();
+      const rows = this.db.prepare(
+        `SELECT artifact_id, json_extract(json, '$.appliedRevision') AS revision FROM proposals
+          WHERE artifact_id IN (SELECT value FROM json_each(?)) AND json_extract(json, '$.status') = 'applied'`,
+      ).all(JSON.stringify(artifactIds));
+      return new Set(rows.map((row) => `${String(row.artifact_id)}:${Number(row.revision)}`));
+    };
+    if (filter === "done") return { sources, applied };
+    // Conversations made and archived (a document's or a web tab's AI is part of its document or page).
+    const sessions = this.db.prepare(
+      `SELECT * FROM (
+         SELECT s.id AS session_id, s.work_id AS work_id, json_extract(s.json, '$.provider') AS provider, 'created' AS what, json_extract(s.json, '$.createdAt') AS at, 'conv:' || s.id || ':a' AS key
+           FROM sessions s JOIN works w ON w.id = s.work_id
+          WHERE json_extract(s.json, '$.documentAgent') IS NULL AND json_extract(s.json, '$.pageAgent') IS NULL AND (?3 IS NULL OR s.work_id = ?3)
+         UNION ALL
+         SELECT s.id, s.work_id, json_extract(s.json, '$.provider'), 'archived', json_extract(s.json, '$.archivedAt'), 'conv:' || s.id || ':b'
+           FROM sessions s JOIN works w ON w.id = s.work_id
+          WHERE json_extract(s.json, '$.archivedAt') IS NOT NULL AND json_extract(s.json, '$.documentAgent') IS NULL AND json_extract(s.json, '$.pageAgent') IS NULL AND (?3 IS NULL OR s.work_id = ?3))
+        WHERE at < ?1 OR (at = ?1 AND key < ?2)
+        ORDER BY at DESC, key DESC LIMIT ?4`,
+    ).all(at, id, work, limit);
+    sources.push(source(sessions, (row) => ({ at: Number(row.at), id: String(row.key) }), (row) => ({
+      id: String(row.key), kind: row.what === "archived" ? "session-archived" : "session-created", at: Number(row.at), workId: String(row.work_id),
+      sessionId: String(row.session_id), artifactId: null, itemId: null, provider: row.provider === "claude" || row.provider === "codex" ? row.provider : null,
+    })));
+    // Documents taken out of their project, and the last rename of each (the record keeps only the last).
+    const documents = this.db.prepare(
+      `SELECT * FROM (
+         SELECT a.id AS artifact_id, a.work_id AS work_id, json_extract(a.json, '$.name') AS name, 'removed' AS what, json_extract(a.json, '$.removed.kind') AS removal, NULL AS old,
+                json_extract(a.json, '$.removed.at') AS at, 'doc:' || a.id || ':removed' AS key
+           FROM artifacts a JOIN works w ON w.id = a.work_id
+          WHERE json_extract(a.json, '$.removed.at') IS NOT NULL AND json_extract(a.json, '$.role') IS NULL AND (?3 IS NULL OR a.work_id = ?3)
+         UNION ALL
+         SELECT a.id, a.work_id, json_extract(a.json, '$.renamed.to'), 'renamed', NULL, json_extract(a.json, '$.renamed.from'),
+                json_extract(a.json, '$.renamed.at'), 'doc:' || a.id || ':renamed'
+           FROM artifacts a JOIN works w ON w.id = a.work_id
+          WHERE json_extract(a.json, '$.renamed.at') IS NOT NULL AND json_extract(a.json, '$.role') IS NULL AND (?3 IS NULL OR a.work_id = ?3))
+        WHERE at < ?1 OR (at = ?1 AND key < ?2)
+        ORDER BY at DESC, key DESC LIMIT ?4`,
+    ).all(at, id, work, limit);
+    sources.push(source(documents, (row) => ({ at: Number(row.at), id: String(row.key) }), (row) => ({
+      id: String(row.key), kind: row.what === "removed" ? "doc-removed" : "doc-renamed", at: Number(row.at), workId: String(row.work_id),
+      sessionId: null, artifactId: String(row.artifact_id), itemId: null, name: basename(String(row.name)),
+      ...(row.what === "removed" ? { removal: row.removal === "trash" ? "trash" as const : "unlisted" as const } : { from: basename(String(row.old)) }),
+    })));
+    return { sources, applied };
+  }
+
   close() {
     this.db.close();
+  }
+
+  /**
+   * Give free pages back to the file system (0.5.3, G4), when at least COMPACT_RULE's share and size of the file
+   * is free. The first time converts the file to auto_vacuum=INCREMENTAL with one VACUUM (a full rewrite in one
+   * transaction: a crash in the middle leaves the old file as it was); afterwards an incremental vacuum frees
+   * pages without rewriting. Then the WAL is checkpointed so the file really shrinks. Only from the idle
+   * maintenance (store-maintenance.ts): never while a turn runs, never on a write path.
+   */
+  compact(rule: { minFreeBytes: number; minFreeShare: number } = COMPACT_RULE) {
+    // Another connection or process holding the lock (a search worker, a backup reading the file): skipped
+    // quietly and tried again at the maintenance's next round. No busy wait here (the gateway's event loop would
+    // stand still for busy_timeout), no retry loop, never an error to the person.
+    return this.noBusyWait(() => {
+      this.flushWal();
+      const before = this.diskSettings(), free = before.freePages * before.pageSize, size = before.pageCount * before.pageSize;
+      if (free < rule.minFreeBytes || free < size * rule.minFreeShare) return { compacted: false, busy: false, freeBytes: free, sizeBytes: size };
+      try {
+        if (before.autoVacuum !== 2) { this.db.exec("PRAGMA auto_vacuum = INCREMENTAL"); this.db.exec("VACUUM"); }
+        else this.db.prepare("PRAGMA incremental_vacuum").all();
+      } catch (error) {
+        if (busyError(error)) return { compacted: false, busy: true, freeBytes: free, sizeBytes: size };
+        throw error;
+      }
+      // A reader still on old pages keeps the WAL for now; the file shrinks at a later checkpoint.
+      this.flushWal();
+      const after = this.diskSettings();
+      return { compacted: true, busy: false, freeBytes: free, sizeBytes: size, sizeAfterBytes: after.pageCount * after.pageSize };
+    });
+  }
+
+  /** Run upkeep without waiting on another connection's lock (busy is reported at once); normal writes wait 3 s again after. */
+  noBusyWait<T>(run: () => T): T {
+    this.db.exec("PRAGMA busy_timeout = 0");
+    try { return run(); } finally { this.db.exec("PRAGMA busy_timeout = 3000"); }
+  }
+
+  /** Copy the WAL into the file and truncate it (so a VACUUM's result shows in the file's size). */
+  flushWal() {
+    // With a reader or writer elsewhere, SQLite reports busy in the result (or throws SQLITE_BUSY): nothing to do.
+    try { this.db.prepare("PRAGMA wal_checkpoint(TRUNCATE)").all(); } catch (error) { if (!busyError(error)) throw error; }
+  }
+
+  /** How the file is kept (journal, sync, vacuum mode, pages); for the maintenance and its tests. */
+  diskSettings() {
+    const one = (pragma: string) => Object.values(this.db.prepare(`PRAGMA ${pragma}`).get() ?? {})[0];
+    return {
+      journalMode: String(one("journal_mode")), synchronous: Number(one("synchronous")), autoVacuum: Number(one("auto_vacuum")),
+      pageSize: Number(one("page_size")), pageCount: Number(one("page_count")), freePages: Number(one("freelist_count")),
+    };
   }
 
   folders(): Folder[] {
@@ -405,6 +583,19 @@ export class Store {
     this.db.prepare("INSERT INTO terminal_output (terminal_id, start, end, data) VALUES (?, ?, ?, ?)").run(id, start, start + data.length, data);
     this.db.prepare("DELETE FROM terminal_output WHERE terminal_id=? AND end<=?").run(id, start + data.length - limit);
     return Number(this.db.prepare("SELECT MIN(start) AS first FROM terminal_output WHERE terminal_id=?").get(id)?.first ?? start);
+  }
+  /** A terminal record and its whole journal (an ended terminal past its retention, terminals.ts prune). */
+  deleteTerminal(id: string) {
+    this.db.prepare("DELETE FROM terminal_output WHERE terminal_id=?").run(id);
+    this.db.prepare("DELETE FROM terminals WHERE id=?").run(id);
+  }
+  /** Drop a terminal's journal before byte `start` (the row across it keeps its tail), in the caller's transaction. */
+  trimTerminalOutput(id: string, start: number) {
+    this.db.prepare("DELETE FROM terminal_output WHERE terminal_id=? AND end<=?").run(id, start);
+    const across = this.db.prepare("SELECT start, data FROM terminal_output WHERE terminal_id=? AND start<? ORDER BY start LIMIT 1").get(id, start) as { start: number; data: Uint8Array } | undefined;
+    if (!across) return;
+    this.db.prepare("DELETE FROM terminal_output WHERE terminal_id=? AND start=?").run(id, across.start);
+    this.db.prepare("INSERT INTO terminal_output (terminal_id, start, end, data) VALUES (?, ?, ?, ?)").run(id, start, Number(across.start) + across.data.length, Buffer.from(across.data).subarray(start - Number(across.start)));
   }
   readTerminalOutput(id: string, cursor: number): { start: number; end: number; data: Uint8Array }[] {
     return this.db.prepare("SELECT start,end,data FROM terminal_output WHERE terminal_id=? AND end>? ORDER BY start LIMIT 16").all(id, cursor) as unknown as { start: number; end: number; data: Uint8Array }[];
@@ -483,6 +674,14 @@ export class Store {
       .map((row) => JSON.parse(String(row.json)) as TranscriptItem);
   }
 
+  /** The person's requests of a session only (titles, B3): no need to read and keep its whole transcript. */
+  userItems(sessionId: string): TranscriptItem[] {
+    return this.db
+      .prepare("SELECT json FROM items WHERE session_id = ? AND json_extract(json, '$.kind') = 'user' ORDER BY ord")
+      .all(sessionId)
+      .map((row) => JSON.parse(String(row.json)) as TranscriptItem);
+  }
+
   /** Applied to every item before it is stored or indexed (the credential scrubber, credentials/install.ts). */
   itemFilter: ((item: TranscriptItem) => TranscriptItem) | null = null;
 
@@ -508,6 +707,16 @@ export class Store {
 
   artifacts(): Artifact[] {
     return this.all<Artifact>("SELECT json FROM artifacts");
+  }
+
+  /**
+   * saveArtifact with this one commit synced to disk before it returns (synchronous=FULL for it; the
+   * database otherwise runs NORMAL, which a power cut can undo): a rename's journal, written before
+   * the file moves, must outlive the move.
+   */
+  saveArtifactDurably(artifact: Artifact) {
+    this.db.exec("PRAGMA synchronous = FULL");
+    try { this.saveArtifact(artifact); } finally { this.db.exec("PRAGMA synchronous = NORMAL"); }
   }
 
   saveArtifact(artifact: Artifact) {

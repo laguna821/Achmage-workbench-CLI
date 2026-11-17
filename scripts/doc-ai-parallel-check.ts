@@ -19,6 +19,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { chromium, type Browser, type FrameLocator, type Page } from "playwright-core";
+import { editorFirst } from "./fixtures/editor-first.ts";
 import JSZip from "jszip";
 
 const out = resolve(process.argv[2] ?? "doc-ai-parallel"); mkdirSync(out, { recursive: true });
@@ -100,6 +101,7 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await context.addInitScript(ms => { (window as unknown as { __workbenchTabSleepMs: number }).__workbenchTabSleepMs = ms; }, SLEEP_MS);
   await context.addInitScript(id => localStorage.setItem("workbench.lastWork", id), work.id);
+  await editorFirst(context);
   page = await context.newPage();
   page.on("pageerror", error => errors.push(error.message));
   await page.goto(`${ready.url}/?token=${ready.token}`);

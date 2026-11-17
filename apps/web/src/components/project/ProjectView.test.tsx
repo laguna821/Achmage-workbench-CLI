@@ -492,7 +492,7 @@ describe("a note whose properties no longer read", () => {
     expect(within(block).getAllByRole("button").map((button) => button.textContent)).toEqual(["속성 1", "경로 복사"]);
     fireEvent.click(within(alert).getByRole("button", { name: "비교" }));
     expect(document.querySelector(".diff-view")).not.toBeNull();
-    fireEvent.click(within(alert).getByRole("button", { name: "r3로 되돌리기" }));
+    fireEvent.click(within(alert).getByRole("button", { name: "r3으로 되돌리기" }));
     await waitFor(() => expect(api.revertProjectNoteTo).toHaveBeenCalledWith("w", 3, 4));
   });
 
@@ -849,7 +849,7 @@ describe("one writer, one base, and no typed text dropped", () => {
     const { openMenu } = setup(page);
     const alert = await screen.findByRole("alert");
     expect(within(alert).queryByRole("button", { name: "원문 전체" })).toBeNull();
-    expect(within(alert).getByRole("button", { name: "r3로 되돌리기" })).toBeTruthy();
+    expect(within(alert).getByRole("button", { name: "r3으로 되돌리기" })).toBeTruthy();
     // The readable revision's values are shown, not offered for writing.
     expect(screen.queryByRole("button", { name: /^종류: 강의/ })).toBeNull();
     fireEvent.click(screen.getByText("슬라이드를 다시 짠다."));
@@ -1431,7 +1431,7 @@ describe("a note whose properties do not read offers only the revert (G)", () =>
     page.lastReadable = { revision: 3, author: "external", sessionId: null, at: Date.now(), rows: [row("종류", "list", ["강의"]), row("중요도", "text", ["높음"])], text: `${FM}${BODY}`, current: broken };
     page.events = [
       { id: "request:1", at: Date.now(), kind: "request", text: "발표 순서를 정해 줘", sessionId: "s1", artifactId: null, by: "user" },
-      { id: "link:1", at: Date.now(), kind: "link", text: "세션 잇기 끝", sessionId: "s1", artifactId: null, by: null },
+      { id: "link:1", at: Date.now(), kind: "link", text: "대화 잇기 끝", sessionId: "s1", artifactId: null, by: null },
     ] as ProjectPage["events"];
     const { api, onToast } = setup(page);
     await screen.findByText("발표 순서를 정해 줘");

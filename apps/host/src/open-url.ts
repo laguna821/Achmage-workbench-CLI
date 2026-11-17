@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { win32 } from "node:path";
+import { guiEnvironment } from "./gui-env.ts";
 
 // Opening a web address in the user's browser from the gateway, with each OS's own opener and no
 // shell (an address with "&" must not reach cmd.exe). The gateway runs on the computer where the
@@ -35,7 +36,7 @@ export function openUrl(url: string): Promise<boolean> {
   const { command, args } = openerFor(url);
   return new Promise((resolve) => {
     try {
-      const child = spawn(command, args, { detached: true, stdio: "ignore", windowsHide: true });
+      const child = spawn(command, args, { detached: true, stdio: "ignore", windowsHide: true, env: guiEnvironment() });
       child.once("error", () => resolve(false));
       child.once("spawn", () => {
         child.unref();

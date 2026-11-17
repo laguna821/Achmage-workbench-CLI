@@ -16,7 +16,7 @@ export function NewDirectoryDialog({ api, workspace, onCreated, onClose }: {
     if (pending.current) return;
     const relative = path.trim().replaceAll("\\", "/");
     if (!relative || relative.startsWith("/") || /^[A-Za-z]:/.test(relative) || relative.split("/").some(part => !part || part === "." || part === "..")) {
-      setError("작업공간 안의 상대 경로를 입력해 주세요. 예: 자료 또는 강의/자료"); return;
+      setError("작업 폴더 안의 상대 경로를 입력해 주세요. 예: 자료 또는 강의/자료"); return;
     }
     pending.current = true; setBusy(true); setError("");
     try { const created = await api.createWorkspaceDirectory(workspace.id, relative); onCreated(created); onClose(); }

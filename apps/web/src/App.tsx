@@ -1,7 +1,9 @@
+import { withParticle } from "@workbench/contracts";
 import { DesktopTargetPicker } from "./components/DesktopTargetPicker.tsx";
+import { createShownReporter, SHOWN_CLIENT } from "./engine-shown.ts";
 import { forgetUnread, keepUnread } from "./kept-unread.ts";
 import { MobilePushSettings } from "./components/MobilePushSettings.tsx";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { GLOBAL_LAYOUT, PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type Attachment, type CreateTarget, type DocRef, type DocumentRemovalPlan, type ProjectPick, type Proposal, type Provider, type Session, type SessionStatus, type UiPrefs, type Work, type Workspace } from "@workbench/contracts";
 import { Api, ApiRequestError, readToken } from "./api.ts";
 import { saveBlobAs } from "./mobile-platform.ts";
@@ -17,6 +19,7 @@ import type { AttentionPayload, SequencedEvent } from "@workbench/contracts";
 import { useOfficeControl } from "./office-control.ts";
 import { configureDesign } from "./design.ts";
 import { initialState, isBusy, reducer, sessionsOf } from "./state.ts";
+import { createEventPump } from "./live-events.ts";
 import { becomesActive, lookingChangesState, opensBeside, restoreRefusal, restoredAgentPlan, sessionEntries, sessionRoute } from "./session-route.ts";
 import { applyDrawnPreset, applyPanePreset, type PanePreset } from "./layout-presets.ts";
 import { WorkspaceLayoutTools, PaneStart, WorkLinkDialog } from "./components/WorkspaceLayoutTools.tsx";
@@ -29,6 +32,8 @@ import { OnboardingModelCache } from "./components/onboarding/ModelCache.tsx";
 import type { BrowserActions } from "./components/BrowserPill.tsx";
 import { EditableText } from "./components/EditableText.tsx";
 import { Icon } from "./components/Icon.tsx";
+import { attentionPlace } from "./attention-place.ts";
+import { WindowKeys, readWindowKeysPref, useWindowShell, windowKeysNote, windowKeysShown } from "./components/WindowKeys.tsx";
 import { TopNotice } from "./components/TopNotice.tsx";
 import { EMPTY_NOTICES, asSlot, failure, noticeReducer, type Notify } from "./top-notice.ts";
 import { Wordmark, BrandSymbol, useBrandGreeting } from "./components/BrandMark.tsx";
@@ -37,7 +42,10 @@ import { Sidebar, type PrefsPatch, type SidebarActions } from "./components/Side
 import type { WebRowActions } from "./components/nav/WebRows.tsx";
 import { Rail, type RailPlace } from "./components/nav/Rail.tsx";
 import { TopSearch } from "./components/nav/TopSearch.tsx";
-import { usePhoneWidth } from "./mobile-layout.ts";
+import { compactInput, usePhoneWidth } from "./mobile-layout.ts";
+import { markNewDocument } from "./doc-new.ts";
+import { DoneSounds, SoundLimiter, doneSoundPrefs, soundPlayer } from "./done-sound.ts";
+import { DoneSoundSettings } from "./components/DoneSoundSettings.tsx";
 import { readNavigator, type RailDest } from "./components/nav/model.ts";
 import { STARTS_AT_NOW, litPlace, placePrefix, useListFollows, useNavPlace } from "./components/nav/place.ts";
 import { renameFirst } from "./components/nav/menu-order.ts";
@@ -48,6 +56,7 @@ import { FromMenu } from "./components/nav/dialogs.tsx";
 import type { DocModes } from "./components/note/ConversationHead.tsx";
 import { addShortcuts, readShortcuts, sameShortcut } from "./components/nav/model.ts";
 import { RenameDialog } from "./components/RenameDialog.tsx";
+import { DocRenameDialog } from "./components/docs/DocRenameDialog.tsx";
 import { EDITOR_MIN_WIDTH, documentAttentionSession, type AgentReveal } from "./components/docs/document-modes.ts";
 import { ContextMenu, type MenuEntry, type MenuRequest } from "./components/ContextMenu.tsx";
 import { createActions, creationWorkspace, type CreateAction } from "./create-actions.ts";
@@ -83,6 +92,7 @@ import { Onboarding } from "./components/Onboarding.tsx";
 import { ItemIcon } from "./components/ItemIcon.tsx";
 import { UsageLine } from "./components/UsageCard.tsx";
 import { MemoryReadout, useAppMemory } from "./components/MemoryReadout.tsx";
+import { ResourceLine, ResourceSettingsRows, ResourcesContext } from "./components/ResourceManager.tsx";
 import { readMemoryShown } from "./theme.ts";
 import { LaunchCredit } from "./components/LaunchCredit.tsx";
 import { LicenceList } from "./components/LicenceList.tsx";
@@ -217,7 +227,18 @@ async function quitForUpdate() {
   await invoke("quit_for_update").catch(() => undefined);
 }
 
-async function openExternal(url: string) {
+/**
+ * A Drive document is reopened in the PC's own Office window; anything else opens here. A phone joined
+ * to the PC never asks (its channel refuses the question, and the document did not open at all — the
+ * rig's finding): it opens the document in its own page view.
+ */
+export function driveReopen(api: Api | null | undefined, artifactId: string): Promise<{ handled: boolean; ok?: boolean }> {
+  if (!api) return Promise.resolve({ handled: false });
+  if (api.isRemote === true) return Promise.resolve({ handled: false });
+  return api.request<{ handled: boolean; ok?: boolean }>("POST", "/api/office-drive/reopen", { artifactId });
+}
+
+export async function openExternal(url: string) {
   if (desktopRuntime) {
     const { openUrl } = await import("@tauri-apps/plugin-opener");
     await openUrl(url);
@@ -315,6 +336,18 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   const attentionState = useSyncExternalStore(attentionInbox.subscribe, attentionInbox.getState);
   const stateRef = useRef(state);
   stateRef.current = state;
+  // Perf G1 (live-events.ts): live events are applied once per frame; a conversation not on screen gets its
+  // status only — its items wait aside until its tab is shown (the layout effect after `onScreen` below).
+  const onScreenIds = useRef<ReadonlySet<string>>(new Set());
+  const eventPump = useMemo(() => createEventPump({
+    apply: (events, shown) => dispatch({ type: "events", events, shown }),
+    onAside: (sessionId) => dispatch({ type: "aside", sessionId }),
+    parked: (id) => {
+      const current = stateRef.current, session = current.sessions[id];
+      // A document's or a web page's AI stays live: its column and the drawing waiting for its pictures read it.
+      return Boolean(current.transcripts[id]) && !onScreenIds.current.has(id) && !session?.documentAgent && !session?.pageAgent;
+    },
+  }), []);
   const layoutPersistence = useMemo(() => api ? new LayoutPersistence(api) : null, [api]);
   const [layoutReady, setLayoutReady] = useState(false);
   const [layoutScope, setLayoutScope] = useState(GLOBAL_LAYOUT);
@@ -611,6 +644,9 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   const creatingRequests = useRef(new Map<string, { workId: string; sessionId: string; tabId: string }>());
   const completedTurns = useRef(new CompletionNotifications());
   const tellCompletion = useRef<(event: SequencedEvent) => void>(() => {});
+  // 완료 소리: played by this (main) window's web view, also while it is hidden; one sound per ~1.5 s.
+  const playSound = useRef(soundPlayer());
+  const doneSounds = useRef<DoneSounds | null>(null);
   // "설치" and "로그인" of the engines (onboarding and the connection panel); progress comes as status events.
   const engineActions = useMemo<EngineActions>(
     () => ({
@@ -637,13 +673,15 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
         const snapshot = await api.snapshot();
         if (cancelled) return;
         attentionInbox.snapshot(snapshot);
+        // Events received before this snapshot come first, as they did one dispatch each; what waited aside is reloaded.
+        eventPump.flush(); eventPump.reset();
         dispatch({ type: "snapshot", snapshot });
         stop();
         stop = api.events(
           snapshot.seq,
           (event) => {
             attentionInbox.event(event);
-            dispatch({ type: "event", event });
+            eventPump.push(event);
             tellCompletion.current(event);
             if (event.type === "work.removed") updateLayout(current => {
               let next = current;
@@ -666,6 +704,8 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
               const requestId = event.item.id.slice("artifact:create:".length), origin = creatingRequests.current.get(requestId);
               if (origin && event.sessionId === origin.sessionId) {
                 creatingRequests.current.delete(requestId);
+                // Made for the person a moment ago: it opens in its editor, not 쪽 보기 (doc-default, point a).
+                markNewDocument(event.item.artifactId);
                 const content: PaneContent<View> = { workId: origin.workId, sessionId: origin.sessionId, view: { kind: "document", artifactId: event.item.artifactId, proposalId: null } };
                 const source = layoutRef.current.panes.find((pane) => tabsOf(pane).some((tab) => tab.id === origin.tabId));
                 if (source && layoutRef.current.focus === source.id && activeTab(source).id === origin.tabId) navigateTo(content);
@@ -686,7 +726,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
       cancelled = true;
       stop();
     };
-  }, [api, fail, navigateTo, updateLayout, attentionInbox]);
+  }, [api, fail, navigateTo, updateLayout, attentionInbox, eventPump]);
 
   // Screen preferences: kept by the gateway, edited optimistically, cached for the first frame.
   const [localPrefs, setLocalPrefs] = useState<UiPrefs | null>(null);
@@ -748,7 +788,16 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   const usagePlace = readUsagePlace(prefs.usagePlace);
   // 메모리 표시 (설정 › 화면): the app's memory at the right end of the window's bottom line (old records: on).
   const memoryShown = readMemoryShown(prefs.memoryShown);
-  const memory = useAppMemory(api && memoryShown && !single && !api.isRemote ? api.memory : null);
+  // 창 단추 (설정 › 화면, 0.5.3): 내려놓기 / 전체 화면 / 닫기 at the top bar's right end where the window has no title bar.
+  const windowKeysPref = readWindowKeysPref(prefs.windowKeys);
+  const windowShell = useWindowShell(inDesktop);
+  const [memoryAgain, setMemoryAgain] = useState(0);
+  const memory = useAppMemory(api && memoryShown && !single && !api.isRemote ? api.memory : null, memoryAgain);
+  const closeIdleEngines = useCallback(async () => {
+    const { closed } = await api!.closeIdleEngines();
+    setMemoryAgain((value) => value + 1);
+    return closed;
+  }, [api]);
   const appearance = useMemo(() => readAppearance(prefs.appearance), [prefs.appearance]);
   // The sidebar is where many sessions live: open unless the user closed it (decision 2026-10-28).
   const [expandedEditorTab, setExpandedEditorTab] = useState<string | null>(null);
@@ -1051,6 +1100,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
       },
       queued: {
         send: (session, queuedId) => void api?.sendQueued(session.id, queuedId).catch(fail),
+        runNow: (session, queuedId) => void api?.runNow(session.id, queuedId).catch(fail),
         edit: (session, queuedId, text) => void api?.updateQueued(session.id, queuedId, text).catch(fail),
         cancel: (session, queuedId) => { creatingRequests.current.delete(queuedId); void api?.cancelQueued(session.id, queuedId).catch(fail); },
       },
@@ -1110,7 +1160,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
         new Promise<Session | null>((resolve) => setPicker({ workId: work.id, excludeSessionId: exclude?.id ?? null, resolve })),
       // From a conversation (the note's ⋯, a file just made or opened there): beside that conversation.
       openArtifact: (artifactId: string) => {
-        void api?.request<{ handled: boolean; ok?: boolean }>("POST", "/api/office-drive/reopen", { artifactId }).then(result => {
+        void driveReopen(api, artifactId).then(result => {
           if (!result.handled) { if (!besideRef.current.open(artifactId)) setView({ kind: "document", artifactId, proposalId: null }); }
           else if (!result.ok) throw new Error("Drive 문서를 열지 못했습니다. 연결 상태를 확인해 주세요.");
         }).catch(fail);
@@ -1119,7 +1169,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
       openBeside: (artifactId: string, proposalId?: string) => {
         const show = () => { if (!besideRef.current.open(artifactId, proposalId ?? null)) docTabRef.current(artifactId, proposalId); };
         if (proposalId) { show(); return; }
-        void api?.request<{ handled: boolean; ok?: boolean }>("POST", "/api/office-drive/reopen", { artifactId }).then(result => {
+        void driveReopen(api, artifactId).then(result => {
           if (!result.handled) show();
           else if (!result.ok) throw new Error("Drive 문서를 열지 못했습니다. 연결 상태를 확인해 주세요.");
         }).catch(fail);
@@ -1227,7 +1277,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
       openArtifact: (artifactId, proposalId) => {
         const show = () => docTabRef.current(artifactId, proposalId);
         if (proposalId) { show(); return; }
-        void api?.request<{ handled: boolean; ok?: boolean }>("POST", "/api/office-drive/reopen", { artifactId }).then(result => {
+        void driveReopen(api, artifactId).then(result => {
           if (!result.handled) show();
           else if (!result.ok) throw new Error("Drive 문서를 열지 못했습니다. 연결 상태를 확인해 주세요.");
         }).catch(fail);
@@ -1247,7 +1297,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
           // The same request again, on the latest revision; the old proposal is set aside.
           const { items } = await api.items(session.id);
           const original = items.find((item) => item.kind === "user" && item.id === `user:${proposal.requestId}`);
-          const text = original && original.kind === "user" ? original.text : `${artifact.name}을(를) 최신 판 기준으로 다시 고쳐 주세요.`;
+          const text = original && original.kind === "user" ? original.text : `${withParticle(`${artifact.name}`, "을/를")} 최신 판 기준으로 다시 고쳐 주세요.`;
           await api.discardProposal(proposal.id);
           await api.send(session.id, newRequestId(), text, [{ artifactId: artifact.id, revision: artifact.revision, mode: "edit", selection: null }]);
           setToast(`r${artifact.revision} 기준으로 다시 요청했습니다.`);
@@ -1256,6 +1306,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
         }
       },
       openSession: entries.byId,
+      renameDocument: (artifactId) => setRenamingDoc(stateRef.current.artifacts[artifactId] ?? null),
       resendHandoff: async (handoff) => {
         if (!api) return;
         try {
@@ -1350,9 +1401,17 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   const visibleSessions = [...onScreen].map((id) => state.sessions[id]).filter((session): session is Session => Boolean(session));
   const visibleIds = `${visibleSessions.map((session) => session.id).join(",")}|${panelKey}`;
   const onScreenRef = useRef(onScreen); onScreenRef.current = onScreen;
+  onScreenIds.current = onScreen;
+  // A conversation shown again: what arrived while it was off screen is drawn before this frame is painted.
+  const onScreenKey = [...onScreen].sort().join(",");
+  useLayoutEffect(() => { for (const id of onScreenIds.current) eventPump.unpark(id); }, [onScreenKey, eventPump]);
   const noticeSession = notices.current?.kind === "completion" ? notices.current.completion.id : null;
   const waitingSession = notices.waiting?.kind === "completion" ? notices.waiting.completion.id : null;
   useEffect(() => { showNotice({ type: "seen", onScreen: onScreenRef.current }); }, [visibleIds, noticeSession, waitingSession]);
+  // The gateway closes an idle engine sooner when its conversation is not on screen (A11).
+  const shownReporter = useMemo(() => createShownReporter(async (ids) => { await api?.reportOnScreen?.(SHOWN_CLIENT, ids); }), [api]);
+  useEffect(() => { shownReporter.report(onScreenRef.current); }, [visibleIds, shownReporter]);
+  useEffect(() => { if (state.connected) shownReporter.again(); }, [state.connected, shownReporter]);
   const keptUnread = useRef<string | null>(null);
   useEffect(() => {
     if (keptUnread.current && !visibleSessions.some((session) => session.id === keptUnread.current)) keptUnread.current = null;
@@ -1413,8 +1472,9 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
     };
     // A document's or web tab's AI goes through the one opener: beside its document with its
     // conversation out while live, the read-only conversation itself once archived.
-    if (session.documentAgent || session.pageAgent) entries.openThen(session, shown);
-    else navigateTo({ workId: target.workId, sessionId: target.sessionId, view: target.pageId ? { kind: "browser", pageId: target.pageId } : target.artifactId ? { kind: "document", artifactId: target.artifactId, proposalId: null } : { kind: "work" } }, shown);
+    const place = attentionPlace(target, session);
+    if (place.kind === "agent") entries.openThen(session, shown);
+    else navigateTo({ workId: place.workId, sessionId: place.sessionId, view: place.view }, shown);
   }, [api, attentionInbox, navigateTo, entries]);
   const openingAttention = useRef<string | null>(null);
   useEffect(() => { if (attentionRequest) setPendingAttentionId(attentionRequest.id); }, [attentionRequest]);
@@ -1471,6 +1531,11 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   // is batched into one render. Main and document chats use the same notification path.
   tellCompletion.current = event => {
     const session = event.type === "item.upserted" ? stateRef.current.sessions[event.sessionId] : undefined;
+    // A detached window stays quiet (the main one sounds); a browser on a phone has its own push sound.
+    if (!single && (desktopRuntime || !compactInput())) {
+      doneSounds.current ??= new DoneSounds(new SoundLimiter(kind => { const chosen = doneSoundPrefs(prefsRef.current); playSound.current(chosen[kind], chosen.volume); }));
+      doneSounds.current.take(event, session, doneSoundPrefs(prefsRef.current), { windowShown: !document.hidden && document.hasFocus(), onScreen: onScreenRef.current });
+    }
     const alert = completedTurns.current.take(event, session, session ? stateRef.current.works[session.workId]?.title ?? "" : "", !single && prefsRef.current.notify !== false);
     if (!alert) return;
     // An answer the user is watching arrives with nothing laid over it; any other one says so
@@ -1759,6 +1824,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   const [deletingWork, setDeletingWork] = useState<Work | null>(null);
   /** A document AI being renamed (it has no sidebar row to rename in place). */
   const [renamingSession, setRenamingSession] = useState<Session | null>(null);
+  const [renamingDoc, setRenamingDoc] = useState<Artifact | null>(null);
   const deleteProject = async (owner: Work) => {
     if (!api) return;
     for (const pane of layoutRef.current.panes) for (const tab of tabsOf(pane)) if (tab.workId === owner.id) await leaveGuards.current[tab.id]?.();
@@ -1820,7 +1886,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
         const saved = await api.exportMarkdown(session.id, { target: "work" });
         const name = saved.path?.split(/[\\/]/).slice(-2).join("/") ?? "";
         setToast({
-          text: `${name}(으)로 저장했습니다.`,
+          text: `${withParticle(`${name}`, "으로/로")} 저장했습니다.`,
           action: saved.artifactId ? { label: "열기", run: () => docActions.openArtifact(saved.artifactId!) } : undefined,
         });
       } catch (error) {
@@ -1863,7 +1929,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
 
   const detachSessionWindow = useCallback((session: Session) => {
     if (api?.isRemote) {
-      setToast(failure("원격 호스트의 세션은 새 창으로 열 수 없습니다. 현재 창의 탭이나 나란히 보기를 사용하세요."));
+      setToast(failure("원격 호스트의 대화는 새 창으로 열 수 없습니다. 현재 창의 탭이나 나란히 보기를 사용하세요."));
       return;
     }
     void detachSession(session.id, session.purpose, inDesktop).catch(fail);
@@ -1998,7 +2064,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
             })(),
             onSelect: () => setScheduling(session.id),
           }]),
-          { kind: "item", label: session.muted ? "알림 켜기" : "알림 끄기", icon: "bell", hint: session.muted ? "이 세션은 알리지 않음" : undefined, onSelect: () => void api.updateSession(session.id, { muted: !session.muted }).catch(fail) },
+          { kind: "item", label: session.muted ? "알림 켜기" : "알림 끄기", icon: "bell", hint: session.muted ? "이 대화는 알리지 않음" : undefined, onSelect: () => void api.updateSession(session.id, { muted: !session.muted }).catch(fail) },
           {
             kind: "item",
             label: unseenNow ? "읽음으로 표시" : "읽지 않음으로 표시",
@@ -2014,7 +2080,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
           archived ? null : linked
             ? {
                 kind: "submenu",
-                label: `세션 잇기 ⇄ ${hopsText(linked)}${linked.state === "paused" ? " · 멈춤" : ""}`,
+                label: `대화 잇기 ⇄ ${hopsText(linked)}${linked.state === "paused" ? " · 멈춤" : ""}`,
                 icon: "link",
                 items: [
                   linked.state === "active"
@@ -2100,6 +2166,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
         const artifact = row.artifact;
         const items: MenuEntry[] = [
           { kind: "item", label: "열기", icon: "file", hint: "Enter", onSelect: () => docActions.openArtifact(artifact.id) },
+          { kind: "item", label: "이름 바꾸기", icon: "edit", onSelect: () => setRenamingDoc(artifact) },
           ...(single ? [] : [{ kind: "item" as const, label: "오른쪽에 열기", icon: "columns" as const, hint: "Ctrl+클릭", onSelect: () => panesRef.current.placeItem({ kind: "doc", id: artifact.id }, "right") }]),
           ...(artifact.format === "markdown"
             ? [
@@ -2149,6 +2216,8 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   // asks anything of the person: it is done, or it is refused and the tab stays awake.
   // How many tabs this window has put to sleep (Panes tells it): shown beside the memory readout.
   const [sleepingTabs, setSleepingTabs] = useState(0);
+  // The resource manager's bottom line (0.5.3): only while something runs or waits, or memory is short; not in a remote window.
+  const resourcesShown = Boolean(api && !api.isRemote && state.resources && (state.resources.running.length || state.resources.waiting.length || state.resources.pressure));
   const tabSleep = useMemo<TabSleep<View>>(() => ({
     unsaved: tabUnsaved,
     atWork: (tab) => { const web = sharedBrowser.getState(); return tabAtWork(tab, { sessions: stateRef.current.sessions, proposals: stateRef.current.proposals, pages: web.pages, heldPageIds: web.heldPageIds, pending: web.pending }); },
@@ -2281,7 +2350,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
     sessionPage: (session, target) =>
       void pkmHandle.current?.client
         .sessionPage(session.id, target.id)
-        .then((page) => setToast({ text: `「${target.title}」에 세션 기록 페이지를 만들었습니다: ${page.name}`, action: { label: "열기", run: () => revealPage(page) } }))
+        .then((page) => setToast({ text: `「${target.title}」에 대화 기록 페이지를 만들었습니다: ${page.name}`, action: { label: "열기", run: () => revealPage(page) } }))
         .catch(fail),
     archive,
     openSearch: () => setPaletteOpen("palette"),
@@ -2299,6 +2368,8 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
     },
     openNotifications: () => setAttentionOpen(true),
     openTasks: () => setTaskPanelOpen(true),
+    // 활동 › 기록: a line opens its conversation at that point (as a search hit or a notice does).
+    openSessionAt: (session, itemId) => { openSession(session); setFocusItem({ sessionId: session.id, itemId, nonce: Date.now() }); },
     // The existing home views (HomeModes "프로젝트" board/table, "흐름" calendar), opened in the centre.
     openHomeView: (mode) => { savePrefs({ homeMode: mode }); startNew(null); },
   };
@@ -2319,11 +2390,11 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
           { id: "export-copy", label: "지금 대화를 마크다운으로 복사", icon: "copy" as const, run: () => void exportSession(visibleSession, "text") },
           ...(single || api?.isRemote
             ? []
-            : [{ id: "detach", label: "지금 세션을 새 창으로 떼어 내기", icon: "openNew" as const, run: () => detachSessionWindow(visibleSession) }]),
+            : [{ id: "detach", label: "지금 대화를 새 창으로 떼어 내기", icon: "openNew" as const, run: () => detachSessionWindow(visibleSession) }]),
         ]
       : []),
     visibleLink
-      ? { id: "link-view", label: `주고받은 내용 보기 (세션 잇기 ${hopsText(visibleLink)})`, icon: "link" as const, run: () => linkApi.openView(visibleLink.id) }
+      ? { id: "link-view", label: `주고받은 내용 보기 (대화 잇기 ${hopsText(visibleLink)})`, icon: "link" as const, run: () => linkApi.openView(visibleLink.id) }
       : { id: "link", label: "다른 대화와 잇기… (두 대화가 답을 주고받습니다)", icon: "link" as const, run: () => linkApi.openDialog(visibleSession ? [visibleSession.id] : []) },
     ...(single ? [] : [{ id: "import", label: "다른 곳의 대화 가져오기 (터미널·다른 앱의 Claude Code·Codex)", icon: "restore" as const, run: () => setImportOpen(true) }]),
     { id: "archive", label: "보관함 열기", icon: "archive", run: () => setView({ kind: "archive" }) },
@@ -2436,7 +2507,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
       let fallback = singleLayout<View>({ kind: "new", folderId: null }, null);
       if (workspace && !record) {
         const owner = stateRef.current.works[workspace.workId];
-        if (!owner || workspace.removedAt || workspace.archivedAt) throw new Error("이 작업공간을 열 수 없습니다. 먼저 보관 상태와 폴더를 확인해 주세요.");
+        if (!owner || workspace.removedAt || workspace.archivedAt) throw new Error("이 작업 폴더를 열 수 없습니다. 먼저 보관 상태와 폴더를 확인해 주세요.");
         const candidates = Object.values(stateRef.current.sessions).filter((entry) => entry.workspaceId === workspace.id && !entry.archivedAt).sort((a, b) => b.updatedAt - a.updatedAt);
         const chosen = candidates[0] ?? await api.createSession(owner.id, engine, { workspaceId: workspace.id });
         dispatch({ type: "focus", work: owner, session: chosen });
@@ -2689,7 +2760,8 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   }
 
   const showStart = startScreen;
-  const onboardingUp = Boolean(state.ready && api && (prefs.onboarding !== "done" || onboardingAgain));
+  // The first-run wizard sets up engines on THIS PC; a phone joined to a PC never sees it (M01: it landed there).
+  const onboardingUp = Boolean(state.ready && api && !api.isRemote && (prefs.onboarding !== "done" || onboardingAgain));
   // The Doory attribution, once per launch, on whatever screen the app opens (LaunchCredit; not in a
   // window that holds one conversation — that is a second window of the same launch).
   const launchCredit = single ? null : <LaunchCredit place={`${view.kind}:${JSON.stringify(view)}`} />;
@@ -2742,7 +2814,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
       const presentation = presentations.current.get(at.id);
       return presentation ? <iframe data-office-presentation={at.ownerTabId} title={`${presentation.title || "HTML"} 발표`} src={presentation.url} sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads" allowFullScreen style={{ width: "100%", height: "100%", border: 0, display: "block" }} /> : null;
     }
-    if (at.kind === "terminal") return <Suspense fallback={<LoadingView label="터미널을 여는 중…" shape="work" />}><TerminalView api={api} id={at.terminalId} focused={focused && tabActive} uiState={tabUi} onUiState={uiOf[tabId]} onList={() => { const space = state.workspaces[at.workspaceId]; if (space) setTerminalWorkspace(space); }} /></Suspense>;
+    if (at.kind === "terminal") return <Suspense fallback={<LoadingView label="터미널을 여는 중…" shape="work" />}><TerminalView api={api} id={at.terminalId} focused={focused && tabActive} visible={tabActive && (!narrowPanes || focused)} uiState={tabUi} onUiState={uiOf[tabId]} onList={() => { const space = state.workspaces[at.workspaceId]; if (space) setTerminalWorkspace(space); }} /></Suspense>;
     const closeThisTab = () => updateLayout((current) => closeTab(current, pane.id, tabId, { view: { kind: "new", folderId: null }, workId: null, sessionId: null }));
     /** A web page: in a tab of its own with its AI beside it, or (`hosted`) beside a conversation. */
     const browserView = (pageId: string, hosted?: { onClose: () => void; onWide: () => void; over: boolean; back: string | null }) => (
@@ -2854,7 +2926,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
     }
     if (at.kind === "pkm") return <PkmCenter target={at.target} active={focused && tabActive} onNavigate={target => updateLayout(current => updateTabView(current, tabId, () => ({ kind: "pkm", target })))} />;
     if (at.kind === "archive") return <ArchiveView state={state} onRestore={actions.restore} onOpenSession={openSession} onOpenWork={openWorkNow} onDeleteWork={setDeletingWork}
-      onRestoreDoc={(artifact) => void restoreDocument(artifact.id).then(() => setToast(`「${artifact.name}」을(를) 되돌렸습니다.`)).catch(fail)}
+      onRestoreDoc={(artifact) => void restoreDocument(artifact.id).then(() => setToast(`${withParticle(`「${artifact.name}」`, "을/를")} 되돌렸습니다.`)).catch(fail)}
       onSaveDocElsewhere={(artifact) => void (async () => {
         if (!api) return;
         if (!inDesktop) {
@@ -2866,7 +2938,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
         const path = await pickSavePath(artifact.name);
         if (!path) return;
         const saved = await api.saveDocumentCopy(artifact.id, path);
-        setToast(`「${artifact.name}」을(를) 저장했습니다: ${saved.path}`);
+        setToast(`${withParticle(`「${artifact.name}」`, "을/를")} 저장했습니다: ${saved.path}`);
       })().catch(fail)}
       onPurgeDoc={(artifact) => api ? api.purgeDocument(artifact.id) : Promise.resolve()}
       onClose={() => setView({ kind: "work" })} />;
@@ -2952,7 +3024,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
           }} onLink={() => { closeMenu(); setWorkLinksOpen(true); }} onAdvanced={anchor => {
             const box = anchor.getBoundingClientRect();
             closeMenu();
-            setContextMenu({ x: box.left, y: box.bottom, title: "저장된 작업공간 배치", items: [
+            setContextMenu({ x: box.left, y: box.bottom, title: "저장된 작업 폴더 배치", items: [
               { kind: "item", label: "전체 작업 배치", icon: "grid", onSelect: () => { setPaneFocus(false); void openWorkspaceRef.current(null); } },
               ...Object.values(state.workspaces).filter(space => !space.archivedAt && !space.removedAt && !state.works[space.workId]?.archivedAt).map(space => ({ kind: "item" as const, label: `${state.works[space.workId]?.title ?? "프로젝트"} · ${space.label}`, icon: "folder" as const, onSelect: () => { setPaneFocus(false); void openWorkspaceRef.current(space); } })),
             ] });
@@ -3012,6 +3084,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
       case "general": return <GeneralSection
         startScreen={prefs.startScreen === "last" ? "last" : "home"} onStartScreen={(next) => savePrefs({ startScreen: next })}
         notifications={prefs.notify !== false} onNotifications={(next) => savePrefs({ notify: next })}
+        sound={single ? undefined : <DoneSoundSettings prefs={doneSoundPrefs(prefs)} onChange={savePrefs} preview={playSound.current} />}
         brandMotion={prefs.brandMotion !== false} onBrandMotion={(next) => savePrefs({ brandMotion: next })}
         worksDir={<WorksDirRow api={api} pickFolder={inDesktop ? (start) => pickFolderNative("새 프로젝트 폴더 위치", start) : null} />}
         background={<BackgroundHost api={api} />}
@@ -3024,10 +3097,13 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
           savePrefs({ shortcuts: saved });
         }} />}
         onOnboarding={fromSettings(() => setOnboardingAgain(true))} />;
-      case "screen": return <AppearancePanel target={sheet ?? { provider: focusedProvider, theme: focusedTheme }} onTarget={setSheet} themePref={themePref} onThemePref={(pref) => savePrefs({ theme: pref })} palette={palette} onPalette={pickPalette} uiFont={uiFont} onUiFont={(next) => savePrefs({ uiFont: next })} usagePlace={usagePlace} onUsagePlace={(next) => savePrefs({ usagePlace: next })} memoryShown={memoryShown} onMemoryShown={(next) => savePrefs({ memoryShown: next })} />;
+      case "screen": return <AppearancePanel target={sheet ?? { provider: focusedProvider, theme: focusedTheme }} onTarget={setSheet} themePref={themePref} onThemePref={(pref) => savePrefs({ theme: pref })} palette={palette} onPalette={pickPalette} uiFont={uiFont} onUiFont={(next) => savePrefs({ uiFont: next })} usagePlace={usagePlace} onUsagePlace={(next) => savePrefs({ usagePlace: next })} memoryShown={memoryShown} onMemoryShown={(next) => savePrefs({ memoryShown: next })}
+        windowKeys={windowShell.shell ? { value: windowKeysPref, note: windowKeysNote(windowShell.shell), onChange: (next) => savePrefs({ windowKeys: next }) } : undefined} />;
       case "engines": return <EnginesSection providers={state.providers} connected={state.connected} engineActions={engineActions}
         onRefresh={() => void api.refreshProviders().catch(fail)} browser={state.browser} browserActions={browserActions}
-        onIntegrations={fromSettings(() => setIntegrationsOpen(true))} voice={<OnboardingModelCache api={api} />} />;
+        onIntegrations={fromSettings(() => setIntegrationsOpen(true))} voice={<OnboardingModelCache api={api} />}
+        onPersonalTools={api.isRemote ? undefined : (provider, on) => void api.setPersonalTools(provider, on).catch(fail)}
+        resources={state.resources && !api.isRemote ? <ResourceSettingsRows state={state.resources} onChange={(patch) => void api.setResourceSettings(patch).catch(fail)} /> : null} />;
       case "devices": return <DevicesSection local={!api.isRemote} panel={devicePanel?.()} onConnections={onConnections ? fromSettings(onConnections) : undefined}
         onPush={fromSettings(() => setPushSettingsOpen(true))} onMessenger={api.isRemote ? undefined : () => showSettingsSection("messenger")} />;
       case "messenger": return <PhoneMessenger key={messengerKind ?? "both"} kind={messengerKind ?? undefined} embedded api={api} openExternal={openExternal} copy={copyText} readClipboard={() => navigator.clipboard.readText()} onClose={closeSettings} />;
@@ -3089,6 +3165,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
 
   return (
     <VoiceEnvironment.Provider value={api}>
+    <ResourcesContext.Provider value={state.resources}>
     <AppearanceContext.Provider value={appearanceApi}>
     <UnseenContext.Provider value={unseen}>
     <ShownPanelsContext.Provider value={shownPanels}>
@@ -3145,7 +3222,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
           {/* 찾기 is the bar's search field (centre) and the rail's 찾기; 새로 만들기 stands in while the list is away. */}
           {!sidebarOpen && !single && !editorFocus && !phoneBar ? (
             <>
-              <button type="button" className="ghost-button shell-create" aria-haspopup="menu" aria-label="새로 만들기" title={`새 문서·세션·폴더 (${shortcuts.newWork})`} onClick={event => openCreate.current(event.currentTarget)}><Icon name="plus" size={16} /><span className="shell-label">새로 만들기</span></button>
+              <button type="button" className="ghost-button shell-create" aria-haspopup="menu" aria-label="새로 만들기" title={`새 문서·대화·폴더 (${shortcuts.newWork})`} onClick={event => openCreate.current(event.currentTarget)}><Icon name="plus" size={16} /><span className="shell-label">새로 만들기</span></button>
             </>
           ) : null}
         </div>
@@ -3169,7 +3246,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
             onClick={() => work && view.kind === "work" && !showStart && !single && setEditingTitle(true)}
           >
             {/* 지금 is a place, not a kind of item: its name stands alone (the rail and the page say 지금 too). */}
-            {/* An app page (보관함, 새 작업…) has no kind word: "작업공간" was a developer's word (fix 1). */}
+            {/* An app page (보관함, 새 작업…) has no kind word: "작업 폴더" was a developer's word (fix 1). */}
             {showStart || !["browser", "document", "project", "work", "pkm"].includes(view.kind) ? null : <span className="shell-location-kind">{view.kind === "browser" ? "웹" : view.kind === "document" ? "문서" : view.kind === "project" ? "프로젝트" : view.kind === "work" ? "대화" : "자료"}</span>}
             <span>{title}</span>
           </button>
@@ -3217,6 +3294,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
             <Icon name="sidebarRight" size={18} />
           </button>
           ) : null}
+          {windowShell.shell && windowKeysShown(windowKeysPref, windowShell.shell) ? <WindowKeys shell={windowShell.shell} onAct={windowShell.act} /> : null}
         </div>
       </header>
 
@@ -3253,12 +3331,13 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
       {!state.ready || !layoutReady ? (
         <LoadingView label="불러오는 중…" shape="work" />
       ) : single && !singleSession ? (
-        <main className="loading">이 세션을 찾을 수 없습니다. 보관했거나 지운 세션일 수 있습니다.</main>
+        <main className="loading">이 대화를 찾을 수 없습니다. 보관했거나 지운 대화일 수 있습니다.</main>
       ) : (
         <PaneLayout
           layout={layout}
           drawn={drawn}
           sleep={tabSleep}
+          sleepNow={state.resources?.sleepNow ?? 0}
           onSleeping={setSleepingTabs}
           maximized={editorFocus || paneFocus}
           onMaximize={id => { focusPaneNow(id); setPaneFocus(value => !value); }}
@@ -3289,7 +3368,12 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
           onOpenPage={sharedBrowser.available && !single ? (page) => void openBrowserRef.current(layoutRef.current.focus, { workspaceId: page.workspaceId, workId: page.workId, profileId: page.profileId, url: page.url }) : undefined} />
       ) : null}
       </div>
-      {(usagePlace === "bottom" || memory) && !single ? <UsageLine providers={usagePlace === "bottom" ? state.providers : {}} onRefresh={() => api?.refreshProviders().catch(fail) ?? Promise.resolve()} end={memory ? <MemoryReadout memory={memory} sleeping={sleepingTabs} /> : null} /> : null}
+      {(usagePlace === "bottom" || memory || resourcesShown) && !single ? <UsageLine providers={usagePlace === "bottom" ? state.providers : {}} onRefresh={() => api?.refreshProviders().catch(fail) ?? Promise.resolve()}
+        end={resourcesShown || memory ? <>
+          {resourcesShown ? <ResourceLine state={state.resources} onRunNow={async (sessionId, requestId) => { await api!.runNow(sessionId, requestId); }}
+            onOpen={(sessionId) => { const target = state.sessions[sessionId]; if (target) openSession(target); }} /> : null}
+          {memory ? <MemoryReadout memory={memory} sleeping={sleepingTabs} onCloseIdle={closeIdleEngines} /> : null}
+        </> : null} /> : null}
       {reading && state.artifacts[reading.artifactId] ? (
         <Suspense fallback={null}>
           <Reader api={api} state={state} artifact={state.artifacts[reading.artifactId]!} start={reading.start} onClose={closeReader} />
@@ -3367,6 +3451,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
         onConfirm={async () => unsavedAsk.answer(true)} onClose={() => { unsavedAsk.answer(false); setUnsavedAsk(null); }} /></FromMenu> : null}
       {refusedTrash ? <FromMenu><ConfirmDialog title="휴지통으로 옮길 수 없습니다" tone="primary" lines={[refusedTrash.reason, "목록에서만 빼면 파일은 그대로 둡니다."]} confirmLabel="목록에서 빼기" busyLabel="빼는 중…"
         onConfirm={() => removeDoc(refusedTrash.artifact, "unlisted")} onClose={() => setRefusedTrash(null)} /></FromMenu> : null}
+      {renamingDoc && api ? <FromMenu><DocRenameDialog artifact={renamingDoc} rename={api.renameDocument} notify={setToast} onClose={() => setRenamingDoc(null)} /></FromMenu> : null}
       {renamingSession ? <FromMenu><RenameDialog title="문서 AI 이름 바꾸기" value={renamingSession.purpose} onSave={(purpose) => api ? api.updateSession(renamingSession.id, { purpose }).then(() => undefined) : Promise.resolve()} onClose={() => setRenamingSession(null)} /></FromMenu> : null}
       {deletingWork ? <ProjectDeleteDialog work={deletingWork} sessions={Object.values(state.sessions).filter(session => session.workId === deletingWork.id).length}
         trashedDocuments={Object.values(state.removedArtifacts).filter(artifact => artifact.workId === deletingWork.id && artifact.removed?.kind === "trash").length} onDelete={() => deleteProject(deletingWork)} onClose={() => setDeletingWork(null)} /> : null}
@@ -3435,6 +3520,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
     </ShownPanelsContext.Provider>
     </UnseenContext.Provider>
     </AppearanceContext.Provider>
+    </ResourcesContext.Provider>
     </VoiceEnvironment.Provider>
   );
 }

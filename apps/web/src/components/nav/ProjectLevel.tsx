@@ -1,3 +1,4 @@
+import { withParticle } from "@workbench/contracts";
 import { useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { ItemIcon } from "../ItemIcon.tsx";
 import type { NavSectionId, Work } from "@workbench/contracts";
@@ -80,7 +81,7 @@ export function ProjectLevel({ shared, work, query, setQuery, onBack }: {
       <InsideSection key={id} id={id} label={label} count={rows.length} folded={folded} here={here} lead={lead}
         onFold={() => shared.saveNav({ sections: { ...nav.sections, [id]: !folded } })}
         addLabel={addLabel} addMenu={id !== "chats"} onAdd={add}
-        empty={text ? "찾는 이름이 없습니다." : rows.length ? null : `아직 ${label === "웹" ? "웹 페이지가" : `${label}가`} 없습니다.`}>
+        empty={text ? "찾는 이름이 없습니다." : rows.length ? null : `아직 ${label === "웹" ? "웹 페이지가" : `${withParticle(`${label}`, "이/가")}`} 없습니다.`}>
         {shown.length ? <>{shown.map((row) => <TreeRow key={row.id} row={row} ctx={ctx} />)}<MoreRows what={label === "웹" ? "웹 페이지" : label} hidden={hidden} onShow={() => setAllIn((current) => ({ ...current, [id]: true }))} onKey={(event) => onKey(event, null)} /></> : null}
       </InsideSection>
     );

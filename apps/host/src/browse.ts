@@ -40,6 +40,7 @@ import { daemonRun, daemonSocket, hideDecoded, hideTyped, hostPageOf, SHOWN, typ
 import { HttpError } from "./errors.ts";
 import { contentReason, needlesOf, turn, type Needles } from "./channels/file-scan.ts";
 import { LightpandaBrowser, LightpandaInstall, LIGHTPANDA_HELP } from "./browse-lightpanda.ts";
+import { guiEnvironment } from "./gui-env.ts";
 
 const run = promisify(execFile);
 
@@ -80,7 +81,8 @@ const SIGN_IN_MARKS: { label: string; host: RegExp; names: string[] }[] = [
  * started the gateway (an Electron app's CHROME_DESKTOP would file the window under that app).
  */
 function browserEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, ...extra };
+  // A headed browser window needs the display (gui-env.ts).
+  const env: NodeJS.ProcessEnv = { ...guiEnvironment(process.env), ...extra };
   delete env.CHROME_DESKTOP;
   return env;
 }

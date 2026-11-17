@@ -113,6 +113,8 @@ type Runtime = {
   interrupting: boolean;
   approvals: Map<string, PendingApproval>;
   idleTimer: NodeJS.Timeout | null;
+  /** When it last went idle (its idle timer counts from here). */
+  idleSince: number;
   /** In Claude Code's plan mode ("계획 먼저") until the plan is approved. */
   planning: boolean;
 };
@@ -201,6 +203,9 @@ export function modelsFromInfo(models: ModelInfo[]): ModelOption[] {
   }));
 }
 
+/** How long an idle engine of a conversation that is not on screen stays (A11); on screen it is `idleMs`. */
+export const OFF_SCREEN_IDLE_MS = 150_000;
+
 export class ClaudeAdapter implements ProviderAdapter {
   readonly provider = "claude" as const;
   private current: ProviderStatus = emptyStatus("claude");
@@ -208,6 +213,12 @@ export class ClaudeAdapter implements ProviderAdapter {
   private readonly runtimes = new Map<string, Runtime>();
   private readonly sink: AdapterSink;
   private readonly idleMs: number;
+  /** An idle engine of a conversation not on screen is closed after this (A11). */
+  private readonly offScreenIdleMs: number;
+  /** "내 MCP 서버와 훅 불러오기" (설정 › AI 엔진): off by default in the public build (owner, 2026-11-16). */
+  private readonly personalTools: () => boolean;
+  /** The conversations some window shows now (the window says, `shownChanged`). */
+  private shown: ReadonlySet<string> = new Set();
   private readonly usage = new Map<string, UsageWindow>();
   private initializing: Promise<void> | null = null;
   /** The app is closing: processes it closes do not end their turns here (the next start does). */
@@ -225,10 +236,13 @@ export class ClaudeAdapter implements ProviderAdapter {
 
   constructor(
     sink: AdapterSink,
-    options?: { idleMs?: number; modelCacheFile?: string; attachmentsDir?: string; browser?: BrowserEngineHooks | null; launch?: ClaudeLaunch },
+    options?: { idleMs?: number; offScreenIdleMs?: number; modelCacheFile?: string; attachmentsDir?: string; browser?: BrowserEngineHooks | null; launch?: ClaudeLaunch; personalTools?: () => boolean },
   ) {
     this.sink = sink;
+    this.personalTools = options?.personalTools ?? (() => false);
+    this.current = { ...this.current, personalTools: this.personalTools() };
     this.idleMs = options?.idleMs ?? 10 * 60_000;
+    this.offScreenIdleMs = Math.min(this.idleMs, options?.offScreenIdleMs ?? OFF_SCREEN_IDLE_MS);
     this.modelCache = options?.modelCacheFile ?? null;
     this.attachmentsDir = options?.attachmentsDir ?? null;
     this.browser = options?.browser ?? null;
@@ -553,6 +567,7 @@ export class ClaudeAdapter implements ProviderAdapter {
       interrupting: false,
       approvals: new Map(),
       idleTimer: null,
+      idleSince: Date.now(),
       planning: Boolean(session.plan),
     };
     runtime.children = new ClaudeChildren(session.nativeSessionId, {
@@ -627,11 +642,17 @@ export class ClaudeAdapter implements ProviderAdapter {
         canUseTool,
         includePartialMessages: true,
         settingSources: ["user", "project", "local"],
+        // The person's own MCP servers (user ~/.claude.json, project .mcp.json, plugins) and hooks (settings
+        // files, plugins) start with every conversation process; by default they are not loaded here. The
+        // user settings themselves stay (permissions, model, env, CLAUDE.md, skills); Workbench's own hooks
+        // (context card, vault guard) are SDK callbacks, not settings hooks, and keep running.
+        ...(this.personalTools() ? {} : { strictMcpConfig: true, settings: { disableAllHooks: true } }),
         // The context card (pkm.ts) and the agent browser's instructions, after Claude Code's own.
         systemPrompt: { type: "preset", preset: "claude_code", ...(extras?.append || browser || extraTools ? { append: [extras?.append, browser, extraTools].filter(Boolean).join("\n\n") } : {}) },
         // Never an API key or cloud route left in the gateway's environment: the user's login.
         // The agent browser's playwright-cli is on PATH, and names this session's browser while on.
-        ...this.sdkLaunch({ paths: this.browser?.pathDirs(), extra: this.browser?.sessionEnv(session) }),
+        // WORKBENCH_SESSION: the memory readout tells this conversation's process by it (B1).
+        ...this.sdkLaunch({ paths: this.browser?.pathDirs(), extra: { ...this.browser?.sessionEnv(session), WORKBENCH_SESSION: session.id } }),
       },
     });
     this.runtimes.set(session.id, runtime);
@@ -825,18 +846,61 @@ export class ClaudeAdapter implements ProviderAdapter {
     runtime.query.close();
   }
 
-  /** Close the Claude Code process after inactivity; the next message resumes the session. */
-  private scheduleIdle(runtime: Runtime) {
+  /**
+   * Close the Claude Code process after inactivity; the next message resumes the session. On screen
+   * after `idleMs` (10 min), off screen sooner (A11: `offScreenIdleMs`, 2.5 min) — counted from when it
+   * went idle, so a conversation taken off screen long after its turn closes at once.
+   */
+  private scheduleIdle(runtime: Runtime, since = Date.now()) {
     if (runtime.idleTimer) {
       clearTimeout(runtime.idleTimer);
     }
+    runtime.idleSince = since;
+    const limit = this.shown.has(runtime.sessionId) ? this.idleMs : this.offScreenIdleMs;
     runtime.idleTimer = setTimeout(() => {
+      runtime.idleTimer = null;
       if (!runtime.turnActive && !runtime.children.hasActive() && this.runtimes.get(runtime.sessionId) === runtime) {
         this.runtimes.delete(runtime.sessionId);
         runtime.input.close();
         runtime.query.close();
       }
-    }, this.idleMs);
+    }, Math.max(0, since + limit - Date.now()));
+  }
+
+  private idle(runtime: Runtime) {
+    return !runtime.turnActive && !runtime.children.hasActive() && runtime.approvals.size === 0;
+  }
+
+  /** One Claude Code process per conversation (B1); told apart in the process table by WORKBENCH_SESSION. */
+  engineProcesses() {
+    return [...this.runtimes.values()].map((runtime) => ({ provider: "claude" as const, sessionIds: [runtime.sessionId], pid: null, marker: runtime.sessionId, idle: this.idle(runtime) }));
+  }
+
+  /** The switch changed: the status says so, and idle processes close so the next message starts with it. */
+  personalToolsChanged() {
+    this.publish({ personalTools: this.personalTools() });
+    this.closeIdleEngines();
+  }
+
+  /** "쉬는 엔진 지금 끄기": every idle process closes now; the next message resumes its conversation. */
+  closeIdleEngines() {
+    let closed = 0;
+    for (const runtime of [...this.runtimes.values()]) {
+      if (!this.idle(runtime)) continue;
+      this.closeRuntime(runtime);
+      closed++;
+    }
+    return closed;
+  }
+
+  /** The window says which conversations are on screen: idle engines get the time that goes with it. */
+  shownChanged(shown: ReadonlySet<string>) {
+    const before = this.shown;
+    this.shown = new Set(shown);
+    for (const runtime of this.runtimes.values()) {
+      if (!runtime.idleTimer || before.has(runtime.sessionId) === this.shown.has(runtime.sessionId)) continue;
+      this.scheduleIdle(runtime, runtime.idleSince);
+    }
   }
 
   async send(session: Session & { access: AccessMode; plan?: boolean }, work: Work, text: string, turnKey: string, files: AttachedFile[] = []) {

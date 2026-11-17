@@ -82,4 +82,5 @@ const watchWidth = (changed: () => void) => {
   query?.addEventListener?.("change", changed);
   return () => query?.removeEventListener?.("change", changed);
 };
-export const usePhoneWidth = () => useSyncExternalStore(watchWidth, () => Boolean(widthQuery()?.matches), () => false);
+export const isPhoneWidth = () => Boolean(widthQuery()?.matches);
+export const usePhoneWidth = () => useSyncExternalStore(watchWidth, isPhoneWidth, () => false);

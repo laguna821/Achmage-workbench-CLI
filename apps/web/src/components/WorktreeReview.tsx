@@ -50,7 +50,7 @@ export function WorktreeReview({ api, session, managed = true, onClose, onToast,
         load();
       } else {
         await api.discardWorktree(session.id);
-        onToast("격리 사본을 버렸습니다. 세션은 보관함에 있습니다.");
+        onToast("격리 사본을 버렸습니다. 대화는 보관함에 있습니다.");
         onClose();
       }
     } catch (error) {
@@ -93,7 +93,7 @@ export function WorktreeReview({ api, session, managed = true, onClose, onToast,
           </>
         ) : null}
         <footer className="worktree-foot">
-          <button type="button" className="button danger" onClick={() => setDiscard(true)} disabled={busy || !managed} title={managed ? "격리 사본의 파일을 버리고 세션을 보관합니다. 미병합 커밋은 브랜치에 남습니다." : "연결한 외부 워크트리의 폴더는 삭제하지 않습니다."}>
+          <button type="button" className="button danger" onClick={() => setDiscard(true)} disabled={busy || !managed} title={managed ? "격리 사본의 파일을 버리고 대화를 보관합니다. 미병합 커밋은 브랜치에 남습니다." : "연결한 외부 워크트리의 폴더는 삭제하지 않습니다."}>
             <Icon name="x" size={14} /> 버리기
           </button>
           <span className="worktree-spacer" />
@@ -105,7 +105,7 @@ export function WorktreeReview({ api, session, managed = true, onClose, onToast,
           </button>
         </footer>
         {discard ? <div className="worktree-confirm" role="alertdialog" aria-label="워크트리 삭제 확인">
-          <p><code>{worktree.path}</code> 폴더를 삭제합니다. 커밋하지 않은 변경과 새 파일은 사라집니다. 연결된 세션 기록과 미병합 커밋의 브랜치는 보존합니다.</p>
+          <p><code>{worktree.path}</code> 폴더를 삭제합니다. 커밋하지 않은 변경과 새 파일은 사라집니다. 연결된 대화 기록과 미병합 커밋의 브랜치는 보존합니다.</p>
           <button type="button" className="button" disabled={busy} onClick={() => setDiscard(false)}>취소</button>{" "}<button type="button" className="button danger" disabled={busy} onClick={() => void act("discard")}>폴더 삭제</button>
         </div> : null}
       </div>

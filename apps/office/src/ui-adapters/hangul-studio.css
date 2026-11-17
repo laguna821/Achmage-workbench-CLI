@@ -1,60 +1,84 @@
-/* HWP studio only (chrome.ts adds it for the hangul format). The role map follows Achmage HOP's
-   palette (apps/studio-host/src/styles/achmage-theme.css @ d533eb4, MIT; third_party/hop/LICENSE):
-   the studio's own --ui-* tokens are bound at its root, so every bar, menu, dialog and status
-   surface follows, including ones no selector names. The values are the app's (chrome.css).
-   Paper, ink, caret, selection and the ruler's page band stay the document's in both themes. */
+/* HWP studio only (chrome.ts adds it for the hangul format). The menu row, the icon row, the format row,
+   the ruler and their menus look as Achmage HOP shows them (hop-look, 0.5.3): rhwp studio's own classic
+   geometry and type (the studio's sheets, untouched) under HOP's palette role map
+   (third_party/hop/achmage-theme.css @ d533eb4, MIT; third_party/hop/LICENSE, LICENSE-CMDS). HOP's roles,
+   the chosen colour set's values: HOP's light look is the reference for Atlas Light, and every other set
+   (and dark) fills the same roles from its own tokens (chrome.css). The studio's --ui-* tokens are bound at
+   its root, so every bar, menu, dialog and status surface follows, including ones no selector names.
+   Paper, ink, caret, selection and the ruler's page band stay the document's in both themes.
+   HOP's roles → the set's tokens (scripts/check-hop-sources.mjs checks every role HOP binds is bound here):
+     canvas   (HOP #f7f9fc) = the set's field with 3 % of its accent    | dark: the set's desk (group)
+     surface  (HOP #fff)    = the set's field (bg)
+     raised   (HOP #f0f5fa) = the set's field with 6 % of its accent    | dark: the set's well (hover)
+     border   (HOP #d7e1ec) = the set's line with 8 % of its accent     | dark: the set's line
+     text / muted / action / on-action / danger = the set's text / muted / focus / on-accent / danger
+     selected = action 22 % over surface (dark: over canvas); hover = action 9 % over surface — HOP's own mixes. */
 /* Above the studio's own theme and skin rules (:root[data-theme-skin="flat"]:not(…) is 0,3,0). */
 __WB_ROOT__:root:root {
-  --ui-bg: var(--wb-ui-group);
-  --ui-bg-light: var(--wb-ui-group);
-  --ui-surface: var(--wb-ui-bg);
-  --ui-surface-raised: var(--wb-ui-bg);
-  --ui-surface-muted: var(--wb-ui-hover);
-  --ui-border: var(--wb-ui-line);
-  --ui-border-light: var(--wb-ui-line);
-  --ui-border-subtle: var(--wb-ui-line);
-  --ui-border-strong: var(--wb-ui-line-strong);
+  --wb-hop-canvas: color-mix(in srgb, var(--wb-ui-focus) 3%, var(--wb-ui-bg));
+  --wb-hop-surface: var(--wb-ui-bg);
+  --wb-hop-raised: color-mix(in srgb, var(--wb-ui-focus) 6%, var(--wb-ui-bg));
+  --wb-hop-border: color-mix(in srgb, var(--wb-ui-focus) 8%, var(--wb-ui-line));
+  --wb-hop-selected: color-mix(in srgb, var(--wb-ui-focus) 22%, var(--wb-hop-surface));
+  --wb-hop-hover: color-mix(in srgb, var(--wb-ui-focus) 9%, var(--wb-hop-surface));
+  --ui-bg: var(--wb-hop-canvas);
+  --ui-bg-light: var(--wb-hop-raised);
+  --ui-surface: var(--wb-hop-surface);
+  --ui-surface-raised: var(--wb-hop-raised);
+  --ui-surface-muted: var(--wb-hop-canvas);
+  --ui-border: var(--wb-hop-border);
+  --ui-border-light: var(--wb-hop-border);
+  --ui-border-subtle: var(--wb-hop-border);
+  --ui-border-strong: color-mix(in srgb, var(--wb-hop-border) 70%, var(--wb-ui-muted));
   --ui-text: var(--wb-ui-text);
   --ui-text-secondary: var(--wb-ui-muted);
   --ui-text-muted: var(--wb-ui-muted);
   --ui-text-hint: var(--wb-ui-muted);
   --ui-text-placeholder: var(--wb-ui-muted);
-  --ui-text-disabled: color-mix(in srgb, var(--wb-ui-muted) 60%, var(--wb-ui-bg));
+  --ui-text-disabled: color-mix(in srgb, var(--wb-ui-muted) 60%, var(--wb-hop-surface));
   --ui-text-on-accent: var(--wb-ui-on-accent);
-  --ui-hover: var(--wb-ui-hover);
-  --ui-hover-strong: var(--wb-ui-selected);
-  --ui-active: var(--wb-ui-selected);
-  --ui-selected: var(--wb-ui-selected);
-  --ui-menu-open: var(--wb-ui-selected);
-  --ui-menu-open-border: var(--wb-ui-selected);
-  --ui-toolbar-bg-start: var(--wb-ui-bg);
-  --ui-toolbar-bg-end: var(--wb-ui-bg);
-  --ui-accent-bg: var(--wb-ui-selected);
-  --ui-accent-bg-light: var(--wb-ui-group);
-  --ui-note-bg: var(--wb-ui-group);
-  --ui-note-border: var(--wb-ui-line);
+  --ui-hover: var(--wb-hop-hover);
+  --ui-hover-strong: var(--wb-hop-selected);
+  --ui-active: var(--wb-hop-selected);
+  --ui-selected: var(--wb-hop-selected);
+  --ui-menu-open: var(--wb-ui-focus);
+  --ui-menu-open-border: var(--wb-ui-focus);
+  --ui-toolbar-bg-start: var(--wb-hop-surface);
+  --ui-toolbar-bg-end: var(--wb-hop-raised);
+  --ui-accent-bg: var(--wb-hop-selected);
+  --ui-accent-bg-light: var(--wb-hop-canvas);
+  --ui-note-bg: var(--wb-hop-raised);
+  --ui-note-border: var(--wb-hop-border);
   --ui-note-text: var(--wb-ui-text);
   --ui-link: var(--wb-ui-focus);
   --ui-danger: var(--wb-ui-danger);
   --ui-danger-strong: var(--wb-ui-danger);
-  --ui-focus-soft: color-mix(in srgb, var(--wb-ui-focus) 18%, transparent);
+  --ui-focus-soft: color-mix(in srgb, var(--wb-ui-focus) 20%, transparent);
   --focus-ring: var(--wb-ui-focus);
   --resize-handle: var(--wb-ui-focus);
   --accent-primary: var(--wb-ui-focus);
   --accent-strong: var(--wb-ui-focus);
   --accent-light: var(--wb-ui-focus);
-  --accent-hover: var(--wb-ui-selected);
+  --accent-hover: var(--wb-hop-selected);
   --accent-subtle: var(--wb-ui-muted);
-  --doc-workspace: var(--wb-ui-group);
-  --ruler-bg: var(--wb-ui-group);
+  --doc-workspace: var(--wb-hop-canvas);
+  --ruler-bg: var(--wb-hop-raised);
   --ruler-tick: var(--wb-ui-muted);
   --ruler-text: var(--wb-ui-text);
   --ruler-marker: var(--wb-ui-focus);
   --font-family-ui: var(--wb-ui-font);
   /* Hard-edged: menus and dialogs sit over a page WebKitGTK repaints without compositing (no blur). */
-  --shadow-light: 0 1px 0 var(--wb-ui-line);
-  --shadow-dropdown: 0 2px 0 var(--wb-ui-line);
-  --shadow-dialog: 0 2px 0 var(--wb-ui-line);
+  --shadow-light: 0 1px 0 var(--wb-hop-border);
+  --shadow-dropdown: 0 2px 0 var(--wb-hop-border);
+  --shadow-dialog: 0 2px 0 var(--wb-hop-border);
+}
+/* Dark (HOP's cmds-dark: canvas #0a0a0a, surface #141414, raised #1f1f1f, border #333): the set's desk, field,
+   well and line. Selected over the canvas, as HOP mixes it. */
+__WB_ROOT__[data-wb-office-theme="dark"]:root:root {
+  --wb-hop-canvas: var(--wb-ui-group);
+  --wb-hop-raised: var(--wb-ui-hover);
+  --wb-hop-border: var(--wb-ui-line);
+  --wb-hop-selected: color-mix(in srgb, var(--wb-ui-focus) 22%, var(--wb-hop-canvas));
 }
 /* One AI entry: the editor's own AI dock is the document's 문서 AI, opened and closed by the tab's
    문서 AI button (apps/office/src/hwp-ai-dock.ts). Its own rail is not a second entry: closed, the
@@ -80,15 +104,14 @@ __WB_ROOT__ .hwp-app .ai-dock .ai-rail { display: none; }
   __WB_ROOT__[data-wb-studio-dialog]:not([data-wb-ai-over]) .hwp-app .ai-dock:not(.collapsed) { visibility: hidden; }
 }
 
-/* The open menu title is a quiet selected state, not a filled accent block. */
-__WB_ROOT__ #menu-bar .menu-item.open > .menu-title { color: var(--wb-ui-text); }
-
 /* One theme switch: the app's. The studio's own 테마 / 스킨 submenu (and the line above it) is not offered. */
 __WB_ROOT__ #menu-bar .md-sub:has([data-theme-mode-choice], [data-theme-skin-choice]),
 __WB_ROOT__ #menu-bar .md-sep:has(+ .md-sub [data-theme-mode-choice]) { display: none; }
 
-/* HOP's drawn drop-down (styles/custom-select.css @ d533eb4, MIT), on the app's tokens and sizes.
-   The original select stays in the page as the studio's state holder. */
+/* HOP's drawn drop-down (styles/custom-select.css @ d533eb4, MIT): HOP's geometry and type on the studio's
+   --ui-* tokens (HOP writes the --color-* aliases the studio derives from them) (so on the set's colours, above). The original select stays in the page as the studio's state holder.
+   Workbench's own additions kept: the menu is placed fixed in the viewport (custom-select.ts), a focus ring on
+   the trigger, a ring on the row the arrow keys are on, the chosen row marked apart from it. */
 __WB_ROOT__ .native-select-hidden {
   position: absolute !important;
   inline-size: 1px !important;
@@ -110,46 +133,54 @@ __WB_ROOT__ .custom-select {
   display: inline-flex;
   align-items: stretch;
   min-width: 0;
-  height: 28px;
+  height: 22px;
   padding: 0;
   border: 0;
   background: transparent;
   vertical-align: middle;
-  font-family: var(--wb-ui-font);
-  font-size: 13px;
-  color: var(--wb-ui-text);
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-base);
+  color: var(--ui-text);
 }
 __WB_ROOT__ .custom-select-trigger {
   appearance: none;
   -webkit-appearance: none;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 16px;
+  grid-template-columns: minmax(0, 1fr) 15px;
   align-items: center;
-  gap: 4px;
   width: 100%;
   height: 100%;
   min-height: 0;
   min-width: 0;
-  padding: 0 4px 0 8px;
-  border: 1px solid var(--wb-ui-line);
-  border-radius: var(--wb-ui-radius-key);
-  background: var(--wb-ui-bg);
+  padding: 0 0 0 6px;
+  border: 1px solid var(--ui-border-light);
+  border-radius: var(--radius-sm);
+  background: var(--ui-surface);
   color: inherit;
   font: inherit;
-  line-height: 16px;
+  line-height: 1;
   text-align: left;
   cursor: default;
   box-shadow: none;
 }
 __WB_ROOT__ .custom-select:not(.disabled) .custom-select-trigger:hover,
-__WB_ROOT__ .custom-select.open .custom-select-trigger { border-color: var(--wb-ui-line-strong); background: var(--wb-ui-hover); }
-__WB_ROOT__ .custom-select-trigger:focus-visible { outline: 2px solid var(--wb-ui-focus); outline-offset: 1px; }
+__WB_ROOT__ .custom-select.open .custom-select-trigger { border-color: var(--accent-hover); background: var(--ui-hover); }
+__WB_ROOT__ .custom-select-trigger:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 __WB_ROOT__ .custom-select.disabled { opacity: .5; }
 __WB_ROOT__ .custom-select-text { display: block; min-width: 0; }
 __WB_ROOT__ .custom-select-value { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 __WB_ROOT__ .custom-select-sizer { display: block; height: 0; overflow: hidden; visibility: hidden; }
 __WB_ROOT__ .custom-select-sizer > span { display: block; white-space: nowrap; }
-__WB_ROOT__ .custom-select-arrow { display: inline-flex; align-items: center; justify-content: center; color: var(--wb-ui-muted); font-size: 10px; line-height: 1; }
+__WB_ROOT__ .custom-select-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  border-left: 1px solid var(--ui-border-light);
+  color: var(--ui-text-muted);
+  font-size: var(--font-size-xs);
+  line-height: 1;
+}
 __WB_ROOT__ .custom-select-menu {
   display: none;
   /* Placed in the viewport by custom-select.ts when it opens (fixed, below or above the control). */
@@ -157,48 +188,48 @@ __WB_ROOT__ .custom-select-menu {
   z-index: 12000;
   box-sizing: border-box;
   max-width: min(420px, 90vw);
-  max-height: 280px;
+  max-height: 260px;
   overflow: auto;
-  padding: 4px;
-  border: 1px solid var(--wb-ui-line);
-  border-radius: var(--wb-ui-radius-card);
-  background: var(--wb-ui-bg);
+  padding: 2px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--ui-surface-raised);
   /* No blur: the menu sits over a scrolling page that WebKitGTK repaints without compositing. */
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--wb-ui-text) 8%, transparent);
+  box-shadow: var(--shadow-dropdown);
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-base);
 }
 __WB_ROOT__ .custom-select.open .custom-select-menu { display: block; }
 __WB_ROOT__ .custom-select-option {
   display: block;
   box-sizing: border-box;
   width: 100%;
-  min-height: 28px;
-  padding: 6px 24px 6px 8px;
+  min-height: 20px;
+  padding: 3px 20px 3px 7px;
   border: 0;
-  border-radius: var(--wb-ui-radius-key);
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--wb-ui-text);
+  color: var(--ui-text);
   font: inherit;
   line-height: 16px;
   text-align: left;
   white-space: nowrap;
   cursor: default;
 }
-__WB_ROOT__ .custom-select-option:hover { background: var(--wb-ui-hover); }
+__WB_ROOT__ .custom-select-option:hover { background: var(--ui-hover); }
 /* The row the arrow keys are on (aria-activedescendant): a focus ring, apart from the chosen row's fill. */
-__WB_ROOT__ .custom-select-option.active { box-shadow: inset 0 0 0 2px var(--wb-ui-focus); }
-__WB_ROOT__ .custom-select-option[aria-selected="true"] { background: var(--wb-ui-selected); color: var(--wb-ui-focus); font-weight: 600; }
-__WB_ROOT__ .custom-select-option[aria-disabled="true"] { color: var(--wb-ui-muted); opacity: .6; }
-__WB_ROOT__ .custom-select-group { padding: 8px 8px 4px; color: var(--wb-ui-muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
+__WB_ROOT__ .custom-select-option.active { box-shadow: inset 0 0 0 2px var(--focus-ring); }
+__WB_ROOT__ .custom-select-option[aria-selected="true"] { background: var(--ui-selected); color: var(--ui-text); font-weight: 600; }
+__WB_ROOT__ .custom-select-option[aria-disabled="true"] { color: var(--ui-text-disabled); }
+__WB_ROOT__ .custom-select-group { padding: 5px 8px 2px; color: var(--ui-text-muted); font-size: var(--font-size-xs); font-weight: 600; white-space: nowrap; }
 __WB_ROOT__ #style-bar .custom-select[data-select-id="style-name"] { width: 112px; }
 __WB_ROOT__ #style-bar .custom-select[data-select-id="font-lang"] { width: 76px; }
 __WB_ROOT__ #style-bar .custom-select[data-select-id="font-name"] { width: 180px; }
 __WB_ROOT__ #style-bar .custom-select[data-select-id="linespacing-select"] { width: 78px; }
 /* Inside the style bar's field grid a picker fills its own field and never grows past it. */
 __WB_ROOT__ #style-bar .sb-field-grid .sb-field > .custom-select { width: 100%; max-width: 100%; min-width: 0; }
-/* Style-bar fields are narrow grid cells: a tighter trigger keeps "180 %" and "18.0" whole. */
-__WB_ROOT__ #style-bar .custom-select-trigger { grid-template-columns: minmax(0, 1fr) 10px; gap: 2px; padding: 0 2px 0 6px; }
-__WB_ROOT__ #style-bar .sb-size-group > input.sb-size { padding-inline: 4px; }
-__WB_ROOT__ .dialog-wrap .custom-select { height: 28px; }
+/* Dialogs keep the app's 28 px controls (the generic chrome's recipe there). */
+__WB_ROOT__ .dialog-wrap .custom-select { height: 28px; font-size: var(--wb-ui-text-sm); }
 __WB_ROOT__ .fse-select.custom-select { flex: 1; }
 @media (prefers-reduced-motion: reduce) { __WB_ROOT__ .custom-select-trigger, __WB_ROOT__ .custom-select-option { transition: none; } }
 /* A font substitution, said beside the font control for a few seconds (apps/office/src/hwp-fonts.ts). */
@@ -281,7 +312,7 @@ __WB_ROOT__:root:root .tcp-disabled .dialog-unit { color: var(--ieum-dialog-ink-
    the whole width. */
 @media (min-width: 640px) {
   __WB_ROOT__ .hwp-app { position: relative; }
-  __WB_ROOT__ .hwp-app .hwp-topbar {
+  __WB_ROOT__ .hwp-app .hwp-topbar:not(#wb-none) {
     position: absolute;
     z-index: 5;
     inset-block-start: 0;
@@ -292,8 +323,9 @@ __WB_ROOT__:root:root .tcp-disabled .dialog-unit { color: var(--ieum-dialog-ink-
     gap: 8px;
     padding: 0;
     border: 0;
-    /* over the chrome's own ground rule (chrome.css): the menu row's ground shows through */
-    background: transparent !important;
+    /* the menu row's ground (HOP's canvas role); :not(#wb-none) lifts it over the chrome's own ground rule
+       (chrome.css), whose selector list carries an id */
+    background: var(--wb-hop-canvas) !important;
   }
   __WB_ROOT__ .hwp-app .hwp-topbar .memo-toggle { margin-inline-end: 0; }
 }
@@ -301,12 +333,23 @@ __WB_ROOT__ .hwp-app .hwp-topbar :is(.memo-toggle, .autosave-text) { font-size: 
 __WB_ROOT__ .hwp-app .hwp-topbar .memo-toggle { height: 24px; color: var(--wb-ui-text); }
 __WB_ROOT__ .hwp-app .hwp-topbar .autosave-text { color: var(--wb-ui-muted); }
 
-/* Toolbar icons in one ink: the studio's multicolour sprite (Hancom's icon sheet) is drawn in greys, the
-   glyph icons (¶, ↵, 1., ●, ⇤ …) in the text colour, not the accent. Colour swatches (글자 색, 형광펜) keep
-   their colour: they say which colour a press will apply. */
-__WB_ROOT__ :is(#icon-toolbar, .menu-dropdown, .context-menu, #status-bar) :is(.tb-sprite, .md-icon) { filter: grayscale(1) contrast(1.15); }
-__WB_ROOT__ #icon-toolbar .tb-icon-text,
-__WB_ROOT__ #icon-toolbar :is(.icon-ctrl-mark, .icon-para-mark)::before { color: var(--wb-ui-text); }
+/* The bars' keys are buttons: the UA gives them its own control font (Arial, no Hangul — WebKitGTK and Chromium
+   then fall back to whatever CJK face they find). The app's UI font, as HOP's keys get the system UI font. */
+__WB_ROOT__ :is(#menu-bar, #icon-toolbar, #style-bar, .menu-dropdown, .context-menu, .tb-split-menu, .sb-dropdown-menu, .font-picker-menu) :is(button, input, select) { font-family: var(--font-family-ui); }
+/* Icon labels: HOP's small label under the icon (studio: 10 px, line-height 1.1, secondary ink), one studio step
+   larger (11 px, the studio's --font-size-sm) and a darker ink than the set's muted text: Pretendard at 10 px and
+   the set's muted grey read fainter than HOP's 10 px Malgun Gothic in #526174 (contrast in the report). */
+__WB_ROOT__ #icon-toolbar .tb-label { font-size: var(--font-size-sm); color: color-mix(in srgb, var(--wb-ui-muted) 70%, var(--wb-ui-text)); }
+
+/* HOP's label layer (styles/toolbar-labels.css @ d533eb4, MIT; third_party/hop/toolbar-labels.ts): with 보기 ›
+   도구 상자 라벨 표시 off, the icon row's labels and the format row's group labels go and the icon row is 32 px. */
+__WB_ROOT__[data-toolbar-labels="hidden"] #icon-toolbar .tb-label,
+__WB_ROOT__[data-toolbar-labels="hidden"] #style-bar .sb-ribbon-label { display: none; }
+__WB_ROOT__[data-toolbar-labels="hidden"] #icon-toolbar { height: 32px; min-height: 32px; }
+
+/* Toolbar and menu icons: the studio's own colour icon sheets (light and dark), as HOP shows them — byte-identical
+   to HOP's public/images/icon_small_ko(_dark).svg. The glyph icons (¶ ↵ 1. ● ⇤ ⇥) keep the studio's accent role,
+   which is the set's focus colour above. */
 /* The status line's passing message (what was just opened, saved or found) in the muted text, not the link teal. */
 __WB_ROOT__ #status-bar .stb-message { color: var(--wb-ui-muted); }
 /* Status items keep a gap when the studio hides its dividers in a narrow editor ("1 / 1 쪽", "구역: 1 / 1", "삽입"). */

@@ -155,7 +155,7 @@ describe("files through the Telegram adapter", () => {
     g.engine.finish(sessionId);
     await until(() => g.fake.of("sendDocument").length === 1, 8000);
     expect(g.fake.of("sendDocument")[0]!.file).toMatchObject({ field: "document", name: "일정표.csv", bytes: Buffer.byteLength("주,내용\n1,개강\n") });
-    expect(g.fake.texts().find((text) => text.startsWith("칠판의 일정표를 표로 옮겼습니다."))).toContain("「백업.txt」은(는) 비밀이 들어 있을 수 있어 보내지 않았습니다.");
+    expect(g.fake.texts().find((text) => text.startsWith("칠판의 일정표를 표로 옮겼습니다."))).toContain("「백업.txt」는 비밀이 들어 있을 수 있어 보내지 않았습니다.");
     // The file's address at Telegram (it carries the token) is nowhere in the data folder.
     const files = readdirSync(g.dataDir, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile());
     for (const file of files) expect(readFileSync(join(file.parentPath, file.name), "latin1").includes(FAKE_TOKEN), file.name).toBe(false);
@@ -163,7 +163,7 @@ describe("files through the Telegram adapter", () => {
 });
 
 describe("an upload failing mid-answer through the Telegram adapter (C2)", () => {
-  it.each([["refuse", "「나.txt」은(는) 보내지 못했습니다. PC에서 열어 보세요."], ["busy", "「나.txt」은(는) 전달되지 않았을 수 있습니다. PC에서 확인해 주세요."]] as const)("sends the answer once when an upload answers %s, and names the file that did not go", async (fault, line) => {
+  it.each([["refuse", "「나.txt」는 보내지 못했습니다. PC에서 열어 보세요."], ["busy", "「나.txt」는 전달되지 않았을 수 있습니다. PC에서 확인해 주세요."]] as const)("sends the answer once when an upload answers %s, and names the file that did not go", async (fault, line) => {
     const g = await gateway();
     await g.pair();
     g.fake.message("파일 세 개 만들어 줘");

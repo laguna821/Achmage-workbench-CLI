@@ -33,7 +33,8 @@ it("refreshes browser guidance on resumed enabled threads and when the bound too
   const session = { id: "s", nativeSessionId: "existing", browser: true, access: "full", model: null, effort: null } as Session & { access: "full" };
   const work = { cwd: "/workspace" } as Work;
   await adapter.send(session, work, "Read this page", "r1");
-  expect(request.mock.calls.map(call => call[0]).slice(0, 3)).toEqual(["thread/resume", "thread/inject_items", "turn/start"]);
+  // config/read (0.5.3: which MCP servers the thread turns off by default) is not part of this order.
+  expect(request.mock.calls.map(call => call[0]).filter(method => method !== "config/read").slice(0, 3)).toEqual(["thread/resume", "thread/inject_items", "turn/start"]);
   await adapter.send(session, work, "Continue", "r2");
   expect(request.mock.calls.filter(call => call[0] === "thread/inject_items")).toHaveLength(1);
   guidance = "Updated shared-tab read pagination.";

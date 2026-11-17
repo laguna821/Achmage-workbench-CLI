@@ -1,3 +1,5 @@
+import { Select } from "../ui/Select.tsx";
+import { withParticle } from "@workbench/contracts";
 import { useEffect, useState } from "react";
 import type { Artifact } from "@workbench/contracts";
 import type { OfficeOutputFormat, OfficeOutputPlan } from "../../../../../packages/contracts/src/office-output.ts";
@@ -15,7 +17,7 @@ export function OfficeOutputDialog({ api, artifact, revision, format, defaultNam
     setBusy(true); setError("");
     try {
       const prepared = plan ?? await api.prepareOfficeOutput(artifact.id, revision, path, longJob);
-      if (prepared.format !== kind) throw new Error(`파일 이름의 확장자를 .${kind}(으)로 지정하세요.`);
+      if (prepared.format !== kind) throw new Error(`파일 이름의 확장자를 .${withParticle(`${kind}`, "으로/로")} 지정하세요.`);
       if (prepared.exists && !replace) { setPlan(prepared); return; }
       onChoose({ id: prepared.id, path: prepared.path, format: prepared.format, replace, ...(longJob ? { longJob: true } : {}) });
     } catch (error) { setError(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); }
@@ -24,7 +26,7 @@ export function OfficeOutputDialog({ api, artifact, revision, format, defaultNam
     <form className="stage-dialog office-output-dialog" role="dialog" aria-modal="true" aria-label={format === "pdf" ? "PDF로 저장" : "다른 이름으로 저장"} onSubmit={(event) => { event.preventDefault(); void save(); }}>
       <header className="template-head"><h2>{format === "pdf" ? "PDF로 저장" : "다른 이름으로 저장"}</h2></header>
       <p className="sheet-hint">{longJob ? "결과를 저장할 위치를 선택합니다. 원본 문서는 유지됩니다." : "현재 편집 내용을 저장합니다."}</p>
-      {format === "hwp" || format === "hwpx" ? <label>파일 형식 <select aria-label="저장 형식" value={kind} disabled={busy} onChange={(event) => { const next = event.target.value as "hwp" | "hwpx"; setKind(next); change(path.replace(/\.(hwp|hwpx)$/i, `.${next}`)); }}><option value="hwpx">한글 HWPX</option><option value="hwp">한글 HWP</option></select></label> : null}
+      {format === "hwp" || format === "hwpx" ? <label>파일 형식 <Select<"hwp" | "hwpx"> label="저장 형식" value={kind === "hwp" || kind === "hwpx" ? kind : null} disabled={busy} onChange={(next) => { setKind(next); change(path.replace(/\.(hwp|hwpx)$/i, `.${next}`)); }} options={[{ value: "hwpx", label: "한글 HWPX" }, { value: "hwp", label: "한글 HWP" }]} /></label> : null}
       <label className="column">파일 경로<input className="sheet-input" aria-label="저장할 파일 경로" autoFocus value={path} disabled={busy} onChange={(event) => change(event.target.value)} /></label>
       {"__TAURI_INTERNALS__" in window ? <button type="button" className="button small" disabled={busy} onClick={() => { void import("@tauri-apps/plugin-dialog").then(({ save }) => save({ defaultPath: path, filters: [{ name: kind.toUpperCase(), extensions: [kind] }] })).then((picked) => { if (picked) change(picked); }).catch((error) => setError(String(error))); }}>위치 선택…</button> : null}
       {plan?.exists ? <label className="sheet-hint"><input type="checkbox" checked={replace} onChange={(event) => setReplace(event.target.checked)} /> 기존 파일을 백업한 뒤 바꾸기 ({plan.size.toLocaleString()} 바이트)</label> : null}

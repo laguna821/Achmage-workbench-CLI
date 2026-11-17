@@ -102,3 +102,23 @@ export type DeviceErrorCode =
   | "device_not_found" | "invalid_credential" | "device_expired" | "device_revoked"
   | "permission_denied" | "work_scope_required" | "work_scope_denied"
   | "registry_unavailable" | "registry_limit";
+
+/**
+ * 설정 › 휴대폰과 다른 기기 › 테일스케일로 연결: one state at a time, read from the `tailscale` CLI's own
+ * answers. `ours` = the person's 켜기 stands (until 끄기); `lost` = it stands, and the road is gone now,
+ * with `why` (the serve child's last line, as text) and `retrying` (the gateway tries again by itself).
+ * `command` is the exact argv after `tailscale`: in ready/opening/on the foreground serve the gateway runs
+ * while it runs; in background the command that would remove a leftover background entry (shown, never run).
+ */
+export type TailscaleView = { ours: boolean; lost?: boolean; why?: string; retrying?: boolean } & (
+  | { state: "missing"; downloadUrl: string }
+  | { state: "stopped" | "needs-login"; backend: string }
+  | { state: "no-https"; reason: "name" | "magicdns" | "https"; machine: string; adminUrl: string }
+  | { state: "ready"; address: string; command: string[] }
+  | { state: "opening"; address: string; command: string[] }
+  | { state: "taken"; address: string; by: string }
+  | { state: "background"; address: string; command: string[] }
+  | { state: "funnel"; address: string }
+  | { state: "on"; address: string; command: string[]; seenAt: number | null; listenerOff?: boolean }
+  | { state: "error"; message: string }
+);

@@ -65,7 +65,9 @@ describe("registration (design §4.1)", () => {
     expect(screen.getByText("휴대폰 텔레그램으로 이 PC의 AI에게 일을 시키고 결과를 받습니다.")).toBeTruthy();
     expect(screen.getByText("연결을 켜면, 연결한 텔레그램 계정을 쓸 수 있는 사람은 누구든 이 PC에 확인 없이 무엇이든 시킬 수 있습니다(저장해 둔 로그인과 카드 사용 포함).")).toBeTruthy();
     expect(screen.getByText("주고받는 글, 사진, 파일과 AI의 답은 텔레그램 회사의 서버를 거쳐 그곳에 저장되며, 봇 토큰이 새면 남이 그 대화를 엿보거나 가로챌 수 있습니다.")).toBeTruthy();
-    expect((screen.getByRole("switch", { name: "PC를 켜면 자동으로 시작" }) as HTMLInputElement).checked).toBe(true);
+    // A wish applied when the connection is made, said as one (release re-review 1, next round 2): never the current setting's words.
+    expect((screen.getByRole("switch", { name: "연결을 마치면 PC를 켤 때 자동으로 시작" }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.queryByRole("switch", { name: "PC를 켜면 자동으로 시작" })).toBeNull();
     // Slack is its own row in 설정 › 메신저 (PhoneMessengerTwo.test.tsx), not a choice here; nothing says "one at a time".
     expect(screen.getByRole("button", { name: "텔레그램으로 시작" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Slack/ })).toBeNull();
@@ -157,7 +159,7 @@ describe("registration (design §4.1)", () => {
     f.answers.set("POST /api/channels/telegram/bots", () => { const next = { bots: [bot()] }; f.set(next); return next; });
     f.answers.set("POST /api/channels/telegram/bots/7000000001/pairing", () => ({ link: LINK, qr: QR, expiresAt: Date.now() + 600_000 }));
     await f.mount();
-    await act(async () => { fireEvent.click(screen.getByRole("switch", { name: "PC를 켜면 자동으로 시작" })); });
+    await act(async () => { fireEvent.click(screen.getByRole("switch", { name: "연결을 마치면 PC를 켤 때 자동으로 시작" })); });
     await click("텔레그램으로 시작");
     await click("토큰을 직접 입력");
     await act(async () => { fireEvent.change(screen.getByLabelText("봇 토큰"), { target: { value: TOKEN } }); });

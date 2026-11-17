@@ -4,6 +4,7 @@ import type { State } from "../state.ts";
 import type { Artifact } from "@workbench/contracts";
 import type { KnowledgeHit, KnowledgeLibrary as Library } from "../../../../packages/contracts/src/office-knowledge.ts";
 import { KnowledgeHome } from "./KnowledgeHome.tsx";
+import { Select } from "./ui/Select.tsx";
 import { OfficeSettings } from "./OfficeSettings.tsx";
 import { SkillLibraryDialog } from "./SkillLibraryDialog.tsx";
 import "../styles/knowledge.css";
@@ -44,7 +45,7 @@ export function KnowledgeLibrary({ api, state, workId, theme, visible, onOpen, o
       </form>
       <div className="knowledge-actions"><label>그룹 이름 <input aria-label="그룹 이름" value={group} maxLength={200} onChange={event => setGroup(event.target.value)} list="knowledge-groups" /></label><datalist id="knowledge-groups">{library.groups.map(name => <option key={name} value={name} />)}</datalist><button disabled={busy || !selected.length} onClick={() => void change("group")}>그룹 적용</button><button disabled={busy || !selected.length} onClick={() => void change("remove")}>별표 해제</button></div>
       <form className="knowledge-actions" onSubmit={event => { event.preventDefault(); void run(async () => setHits(await api.knowledgeAction<KnowledgeHit[]>("search", { query, ...(filter === "*" ? {} : { group: filter }) }))); }}>
-        <select aria-label="그룹 보기" value={filter} onChange={event => { setFilter(event.target.value); setHits(null); }}><option value="*">모든 그룹</option><option value="">그룹 없음</option>{library.groups.map(name => <option key={name} value={name}>{name}</option>)}</select>
+        <Select label="그룹 보기" value={filter} onChange={value => { setFilter(value); setHits(null); }} options={[{ value: "*", label: "모든 그룹" }, { value: "", label: "그룹 없음" }, ...library.groups.map(name => ({ value: name, label: name }))]} />
         <input aria-label="지식베이스 검색어" placeholder="파일 이름·본문 검색" maxLength={200} value={query} onChange={event => setQuery(event.target.value)} /><button disabled={busy || !query.trim()}>검색</button><button type="button" onClick={() => setHits(null)}>목록</button>
       </form>
       <div className="knowledge-list" aria-busy={busy}>

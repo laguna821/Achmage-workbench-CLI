@@ -31,6 +31,8 @@ beforeEach(() => {
   Element.prototype.getBoundingClientRect = () => ({ width: 1100, height: 800, top: 0, left: 0, right: 1100, bottom: 800, x: 0, y: 0, toJSON() {} }) as DOMRect;
 });
 afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllGlobals(); Element.prototype.getBoundingClientRect = rect; office.props = null; });
+// These open documents in their editor: the person's choice "편집기로 바로 열기" (the default is 쪽 보기 first since doc-default).
+beforeEach(() => { localStorage.setItem("workbench.docOpen", "editor"); });
 
 const work = { id: "w", title: "강의", cwd: "/w", folderId: null, archivedAt: null } as unknown as Work;
 const chat = { id: "chat", workId: "w", provider: "codex", purpose: "슬라이드 정리", status: "idle", queued: [], archivedAt: null, createdAt: 1, updatedAt: 1 } as unknown as Session;

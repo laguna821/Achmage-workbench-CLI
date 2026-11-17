@@ -4,10 +4,14 @@
 // Chromium, an .hwpx document, its own AI dock, and a STAND-IN engine (a local OpenAI-compatible
 // endpoint — no real model, credential or outside host). Turns: one that only answers; one that
 // edits; one that calls 한글 문서 만들기 (the bundled hallym-kordoc runner really runs); one whose
-// engine dies; one that never answers. Asserts: scrolling works during the turn, the hold line and
+// engine dies; one that never answers; `fill` (doc-default): 한글 문서 만들기 in an EMPTY new document fills it in place. Asserts: scrolling works during the turn, the hold line and
 // 중단, the hold released in each case, the made document opened in its own tab. Frames → outDir.
 // `--executor`: every turn runs in the independent executor (as in the desktop app): a stand-in app
 // binary hands the executor page's address to this script, which opens it in a second page.
+// With the REAL app binary instead of the stand-in (scripts/real-executor-check.ts drives this): WB_CHECK_APP_BIN
+// is the binary (or a wrapper), WB_CHECK_GATEWAY_ENV a JSON object merged into the gateway's environment
+// (null removes a name), WB_CHECK_HOST another gateway bundle (to show the base commit fails). Scenario
+// `noscreen`: no display anywhere — the turn must end with the one true sentence, nothing held.
 // Usage (through ux/run-isolated.sh): node scripts/hwp-ai-check.ts <outDir> [--executor] [--only=a,b]
 import { spawn } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -17,6 +21,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { chromium, type Frame, type Page } from "playwright-core";
+import { editorFirst } from "./fixtures/editor-first.ts";
 
 const args = process.argv.slice(2);
 const outDir = resolve(args.find((arg) => !arg.startsWith("--")) ?? join(tmpdir(), "wb-hwp-ai"));
@@ -62,8 +67,10 @@ const provider = createServer(async (req: IncomingMessage, res: ServerResponse) 
   }
   // make: form → document → answer
   if (step === 0) { await sleep(800); return call("make_hangul_document", { prompt: "공문서 하나 만들어줘" }); }
-  if (step === 1) { await sleep(800); return call("make_hangul_document", { prompt: "공문서 하나 만들어줘", title: "시설 점검 안내", values: { purpose: "시설 점검 일정 안내" }, sections: SECTIONS }); }
-  return answer("hallym-kordoc으로 '시설 점검 안내.hwpx'를 만들어 새 탭에 열었습니다. 공식 양식 미적용 초안이며 제출 부서는 비어 있습니다.");
+  // [채우기] (doc-default, point 2): the same request in an empty new document, under another title.
+  const title = /\[채우기\]/.test(instruction) ? "점검 결과 보고" : "시설 점검 안내";
+  if (step === 1) { await sleep(800); return call("make_hangul_document", { prompt: "공문서 하나 만들어줘", title, values: { purpose: "시설 점검 일정 안내" }, sections: SECTIONS }); }
+  return answer(title === "시설 점검 안내" ? "hallym-kordoc으로 '시설 점검 안내.hwpx'를 만들어 새 탭에 열었습니다. 공식 양식 미적용 초안이며 제출 부서는 비어 있습니다." : "hallym-kordoc으로 만든 공문서를 이 빈 문서에 채웠습니다. 공식 양식 미적용 초안입니다.");
 });
 await new Promise<void>((done) => provider.listen(0, "127.0.0.1", done));
 const providerUrl = `http://127.0.0.1:${(provider.address() as AddressInfo).port}/v1`;
@@ -80,10 +87,17 @@ const executorFile = join(dataDir, "executor-urls.txt");
 const fakeBin = join(dataDir, "fake-app.mjs");
 writeFileSync(fakeBin, `#!${process.execPath}\nimport { appendFileSync } from "node:fs";\nif (process.argv.includes("--office-executor")) { appendFileSync(${JSON.stringify(executorFile)}, process.pid + " " + process.env.WORKBENCH_OFFICE_EXECUTOR_URL + "\\n"); process.stdin.resume(); process.stdin.on("end", () => process.exit(0)); }\n`);
 chmodSync(fakeBin, 0o755);
-const gateway = spawn(process.execPath, [resolve("apps/host/dist/host.mjs")], {
-  env: { ...process.env, WORKBENCH_DATA_DIR: dataDir, WORKBENCH_WEB_DIR: resolve("apps/web/dist"), WORKBENCH_PORT: "0", WORKBENCH_EDITORS_PORT: "0", WORKBENCH_EXIT_ON_STDIN_CLOSE: "1",
+const realBin = executorMode ? process.env.WB_CHECK_APP_BIN || null : null;
+const gatewayEnv = (base: NodeJS.ProcessEnv) => {
+  const out = { ...base };
+  for (const [name, value] of Object.entries(JSON.parse(process.env.WB_CHECK_GATEWAY_ENV || "{}") as Record<string, string | null>)) if (value === null) delete out[name]; else out[name] = value;
+  delete out.WB_CHECK_GATEWAY_ENV; delete out.WB_CHECK_APP_BIN; delete out.WB_CHECK_HOST;
+  return out;
+};
+const gateway = spawn(process.execPath, [resolve(process.env.WB_CHECK_HOST || "apps/host/dist/host.mjs")], {
+  env: gatewayEnv({ ...process.env, WORKBENCH_DATA_DIR: dataDir, WORKBENCH_WEB_DIR: resolve("apps/web/dist"), WORKBENCH_PORT: "0", WORKBENCH_EDITORS_PORT: "0", WORKBENCH_EXIT_ON_STDIN_CLOSE: "1",
     WORKBENCH_CODEX_BIN: resolve("scripts/fixtures/fake-codex.mjs"), WORKBENCH_CLAUDE_BIN: resolve("scripts/fixtures/fake-claude.mjs"), WORKBENCH_HOST_LABEL: "노트북",
-    ...(executorMode ? { WORKBENCH_APP_BIN: fakeBin } : {}) },
+    ...(executorMode ? { WORKBENCH_APP_BIN: realBin ?? fakeBin } : {}) }),
   stdio: ["pipe", "pipe", "pipe"],
 });
 let gatewayLog = ""; gateway.stderr.on("data", (data: Buffer) => { gatewayLog += data.toString(); });
@@ -106,6 +120,7 @@ const artifact = await api<{ id: string }>("POST", `/api/works/${work.id}/artifa
 // ---- the browser ----------------------------------------------------------------------------------
 const browser = await chromium.launch();
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+await editorFirst(context);
 const page = await context.newPage();
 const errors: string[] = [];
 page.on("pageerror", (error) => errors.push(error.message));
@@ -142,7 +157,8 @@ let outer = (await outerHandle.contentFrame())!;
 /** The editor's frame now: an executor turn's end reloads the view (office:execution-refresh). */
 const ofr = async (): Promise<Frame> => {
   if (!outer.isDetached()) return outer;
-  const handle = await page.waitForSelector(".document-view:not([hidden]) iframe.office-frame", { timeout: 30_000 });
+  // The editor on screen (another tab's editor may stay mounted, hidden).
+  const handle = await page.waitForSelector(".document-view iframe.office-frame:visible", { timeout: 30_000 });
   outer = (await handle.contentFrame())!;
   await outer.waitForSelector('.hwp-app[data-phase="ready"]', { timeout: 90_000 }).catch(() => {});
   await outer.waitForSelector(".hwp-app .ai-dock:not(.collapsed) .ai-input-box textarea", { timeout: 20_000 }).catch(() => {});
@@ -210,6 +226,19 @@ if (want("answer")) {
   const scroll = await scrolls(); check("작업 중에도 문서 스크롤", scroll.moved, scroll.detail);
   await shot("02-answer-working");
   check("답 요청 끝 · 붙잡음 풀림", await ended());
+  if (realBin) { const chat = await lastChat(); check("실행기의 답이 대화에 남음(실제 앱 실행기)", /강의계획서입니다/.test(chat ?? ""), chat); }
+}
+
+// ---- 1b. no display anywhere: the turn ends with the one true sentence, within its bound, nothing held ----
+if (only?.includes("noscreen")) {
+  const t0 = Date.now();
+  await send("이 문서가 무엇인지 알려 줘");
+  const said = await waitFor(async () => /화면에 연결할 수 없어/.test(`${await dockStatus()} ${await lastChat()}`), 60_000);
+  const text = `${await dockStatus()} | ${await lastChat()}`;
+  check("화면이 없으면 한 문장으로 끝남(기다림 한도 안)", said, `${Math.round((Date.now() - t0) / 1000)} s · ${text}`);
+  check("\"같은 요청을 자동 재실행하지 않았습니다\"만 남지 않음", !/자동 재실행/.test(text), text);
+  check("화면 없음 · 붙잡음 풀림", await waitFor(async () => !await busy() && !await holdLine(), 20_000));
+  await shot("10-noscreen");
 }
 
 // ---- 2. a turn that edits: held from the first edit, the line and 중단, scrolling still works ------
@@ -275,8 +304,46 @@ if (want("make")) {
   await shot("06-made-open");
 }
 
+// ---- 6. (doc-default, 0.5.2's leftover 4d) 한글 문서 만들기 in an EMPTY untouched new document: it fills THIS document --
+// One new revision, the tab stays (no new tab, no file beside it), the default name 「새 한글」 follows the made title.
+if (want("fill")) {
+  const blank = await api<{ id: string; name: string }>("POST", `/api/works/${work.id}/office-documents`, { format: "hwpx" });
+  const doc = async () => (await api<{ artifacts: { id: string; name: string; revision: number }[] }>("GET", "/api/snapshot")).artifacts.find((entry) => entry.id === blank.id)!;
+  const tabs = () => page.evaluate(() => document.querySelectorAll(".group-tab, [role=tab]").length);
+  // The list column is laid away while a document is edited: bring it back (the top bar's key), then the documents list.
+  if (!await page.$(".nav-docs")) await click('.topbar-left [aria-label="사이드바 열기"], .topbar-left [aria-label="목록 열기"]');
+  await sleep(500);
+  if (!await page.$(".nav-docs")) await click(".nav-rail [data-rail=docs]");
+  await page.waitForSelector(`.nav-docs [data-row-id="${blank.id}"]`, { timeout: 15_000 });
+  await click(`.nav-docs [data-row-id="${blank.id}"]`);
+  await page.waitForFunction((name) => [...document.querySelectorAll(".document-view:not([hidden]) .doc-header")].some((h) => h.textContent?.includes(name)), blank.name.replace(/\.hwpx$/, ""), { timeout: 15_000 });
+  // This document's editor (the first tab's editor stays mounted, hidden).
+  const handle = await page.waitForSelector(`iframe.office-frame[title$="· ${blank.name}"]`, { state: "visible", timeout: 30_000 });
+  outer = (await handle.contentFrame())!;
+  await outer.waitForSelector('.hwp-app[data-phase="ready"]', { timeout: 90_000 });
+  await (await studio()).waitForSelector(".document-page-canvas, canvas", { timeout: 60_000 });
+  await page.evaluate(() => { const toggle = document.querySelector<HTMLElement>(".document-view:not([hidden]) .doc-agent-toggle"); if (toggle?.getAttribute("aria-expanded") !== "true") toggle?.click(); });
+  await outer.waitForSelector(".hwp-app .ai-dock:not(.collapsed) .ai-input-box textarea", { timeout: 20_000 });
+  await sleep(1500);
+  const before = new Set(readdirSync(project)), tabsBefore = await tabs();
+  await shot("11-fill-before");
+  await send("[채우기] 공문서 하나 만들어줘");
+  check("빈 문서 채우기 요청 끝", await ended());
+  const filled = await waitFor(async () => (await doc()).revision === 2, 20_000), after = await doc();
+  check("빈 새 문서가 만든 문서로 채워짐(새 판 하나)", filled, `r${after.revision}`);
+  check("이름이 만든 문서의 제목을 따름(새 문서가 준 이름이었음)", after.name === "점검 결과 보고.hwpx", after.name);
+  const added = readdirSync(project).filter((name) => !before.has(name));
+  check("옆에 새 파일이 생기지 않음(바뀐 이름만)", added.every((name) => name === "점검 결과 보고.hwpx") && !readdirSync(project).includes(blank.name), added.join(", "));
+  check("새 탭이 열리지 않음(탭은 그대로)", await tabs() === tabsBefore, `${tabsBefore} → ${await tabs()}`);
+  const shown = await waitFor(async () => { try { const frame = await studio(); return await frame.evaluate(() => document.querySelectorAll("canvas").length > 0); } catch { return false; } }, 60_000);
+  await sleep(3000);
+  check("채운 문서가 같은 탭의 편집기에 보임", shown);
+  await shot("12-fill-after");
+}
+
 clearInterval(followExecutors);
 writeFileSync(join(outDir, `${tag}-results.json`), JSON.stringify({ results, requests, errors: errors.slice(0, 50) }, null, 2));
+if (realBin) writeFileSync(join(outDir, `${tag}-gateway.log`), gatewayLog.slice(-20_000));
 console.log(`${results.filter((r) => r.ok).length}/${results.length} passed; page errors: ${errors.length}`);
 await browser.close();
 gateway.stdin.end(); provider.close();

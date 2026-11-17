@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { chromium, type Browser, type CDPSession, type Page } from "playwright-core";
+import { editorFirst } from "./fixtures/editor-first.ts";
 
 const out = resolve(process.argv[2]!); mkdirSync(out, { recursive: true });
 const shots = resolve(process.argv[3] ?? out); mkdirSync(shots, { recursive: true });
@@ -85,6 +86,9 @@ try {
   browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await context.addInitScript(ms => { (window as unknown as { __workbenchTabSleepMs: number }).__workbenchTabSleepMs = ms; }, SLEEP_MS);
+  await editorFirst(context);
+  // What the editor pages say about where their view is (office-leftovers point 3), recorded for the report.
+  await context.addInitScript(() => { if (window.top !== window) return; (window as unknown as { __viewPositions: unknown[] }).__viewPositions = []; window.addEventListener("message", (event) => { const data = event.data as { type?: string; position?: unknown }; if (data?.type === "office:view-position") (window as unknown as { __viewPositions: unknown[] }).__viewPositions.push(data.position); }); });
   page = await context.newPage();
   page.on("pageerror", error => errors.push(error.message));
   const cdp: CDPSession = await context.newCDPSession(page);
@@ -114,7 +118,9 @@ try {
   await until(async () => await page!.locator("section.pane").count() > 0);
   await pause(2500);
   // TAB_SLEEP_ONLY=typed: only the save-before-sleep part (a shorter run while working on the rig).
-  const measured = process.env.TAB_SLEEP_ONLY !== "typed";
+  // TAB_SLEEP_ONLY=position: only the woken-position part (office-leftovers point 3).
+  const only = process.env.TAB_SLEEP_ONLY ?? "";
+  const measured = only !== "typed" && only !== "position";
   if (!measured) { await toProject(oneTitle); await until(async () => await page!.getByRole("tab").count() >= docs.length); }
   if (measured) {
   const base = await measure("project 2 on screen, nothing of project 1 shown yet");
@@ -160,6 +166,62 @@ try {
   await page.screenshot({ path: join(shots, "project-1-after-waking.png") });
   writeFileSync(join(out, "memory.json"), JSON.stringify({ sleepMs: SLEEP_MS, rows, perTab, saved: { rssMb: still.rssMb - asleep.rssMb, heapMb: Math.round((still.heapMb - asleep.heapMb) * 10) / 10, nodes: still.mainDocNodes - asleep.mainDocNodes, officeFrames: still.officeFrames - asleep.officeFrames }, revisions: { before, after } }, null, 2));
   }
+  // A woken document comes back where it was (office-leftovers point 3): Markdown scrolled down, Excel on a cell.
+  {
+    const place: Record<string, unknown> = {};
+    const tabs = page.getByRole("tab");
+    const show = async (name: string) => {
+      await tabs.nth((await tabs.allInnerTexts()).findIndex(text => text.includes(name))).click();
+      await page!.locator("section.pane:not([hidden]) iframe.office-frame").waitFor({ timeout: 60_000 });
+    };
+    const inFrame = async <T,>(fn: (arg: string) => T, arg = "") => { const handle = await page!.locator("section.pane:not([hidden]) iframe.office-frame").elementHandle(); const frame = await handle!.contentFrame(); return await frame!.evaluate(fn, arg); };
+    const mdScroller = () => {
+      let best: HTMLElement | null = null, area = 0;
+      for (const el of document.querySelectorAll<HTMLElement>("body *")) {
+        if (el.scrollHeight - el.clientHeight < 8 || !/(auto|scroll)/.test(getComputedStyle(el).overflowY) || !el.querySelector("[contenteditable], .ProseMirror")) continue;
+        const r = el.getBoundingClientRect(); if (r.width * r.height > area) { best = el; area = r.width * r.height; }
+      }
+      return best;
+    };
+    await show("메모.md");
+    await page.frameLocator("section.pane:not([hidden]) iframe.office-frame").locator('[contenteditable="true"]').first().waitFor({ timeout: 60_000 });
+    await pause(2500);
+    place.mdScrolledTo = await inFrame((src) => { const find = new Function(`return (${src})`)() as () => HTMLElement | null; const el = find(); if (!el) return null; el.scrollTop = 900; return Math.round(el.scrollTop); }, mdScroller.toString());
+    await pause(2500);
+    const scrollers = () => [...document.querySelectorAll<HTMLElement>("body *")].filter((el) => el.scrollHeight - el.clientHeight >= 8 && /(auto|scroll)/.test(getComputedStyle(el).overflowY + getComputedStyle(el).overflowX)).map((el) => `${el.tagName.toLowerCase()}.${String(el.className).split(" ")[0]} sh=${el.scrollHeight} ch=${el.clientHeight} st=${el.scrollTop} pm=${Boolean(el.querySelector("[contenteditable], .ProseMirror, .cm-content, iframe"))}`);
+    place.mdScrollersBefore = await inFrame(scrollers);
+    await show("재료.xlsx");
+    await until(async () => Boolean(await inFrame(() => Boolean((window as unknown as { __workbenchUniverAPI?: unknown }).__workbenchUniverAPI))), 60_000).catch(() => undefined);
+    await pause(3000);
+    place.xlsxSet = await inFrame(() => { const api = (window as unknown as { __workbenchUniverAPI?: { getActiveWorkbook(): { getActiveSheet(): { getRange(a: string): { activate(): unknown } }; getActiveRange(): { getA1Notation(): string } | null } } }).__workbenchUniverAPI; const wb = api?.getActiveWorkbook(); wb?.getActiveSheet().getRange("C5").activate(); return wb?.getActiveRange()?.getA1Notation() ?? null; });
+    await pause(2500);
+    place.said = await page.evaluate(() => (window as unknown as { __viewPositions?: unknown[] }).__viewPositions ?? []);
+    const stored = await api("/api/layouts/global") as Record<string, unknown>;
+    const record = (stored.record ?? stored) as Record<string, unknown>;
+    const layout = ((record.layout ?? record) as { panes?: { tabs?: { id: string; ui?: { office?: unknown } }[] }[] });
+    place.kept = Object.fromEntries((layout.panes ?? []).flatMap(pane => pane.tabs ?? []).filter(tab => tab.ui?.office).map(tab => [tab.id, tab.ui!.office]));
+    await page.screenshot({ path: join(shots, "position-before-sleep.png") });
+    // The document's tab is in "편집기에 집중": back to the work screen (the list column) first.
+    const listBack = page.getByRole("button", { name: /작업 화면으로/ }).filter({ visible: true });
+    if (await listBack.count()) { await listBack.first().click(); await pause(600); }
+    await toProject("연구 노트");
+    await until(async () => await page!.locator('section.pane[data-tab="tab-d3"]').count() === 0 && await page!.locator('section.pane[data-tab="tab-d2"]').count() === 0, SLEEP_MS + 120_000).catch(() => { place.stayedAwake = true; });
+    await toProject(oneTitle);
+    await page.locator("section.pane:not([hidden]) iframe.office-frame").waitFor({ timeout: 60_000 });
+    await pause(8000);
+    place.xlsxAfterWaking = await inFrame(() => (window as unknown as { __workbenchUniverAPI?: { getActiveWorkbook(): { getActiveRange(): { getA1Notation(): string } | null } } }).__workbenchUniverAPI?.getActiveWorkbook()?.getActiveRange()?.getA1Notation() ?? null);
+    await page.screenshot({ path: join(shots, "position-xlsx-after-waking.png") });
+    await show("메모.md");
+    await page.frameLocator("section.pane:not([hidden]) iframe.office-frame").locator('[contenteditable="true"]').first().waitFor({ timeout: 60_000 });
+    await pause(5000);
+    place.mdScrollersAfter = await inFrame(scrollers);
+    place.mdAfterWaking = await inFrame((src) => { const find = new Function(`return (${src})`)() as () => HTMLElement | null; const el = find(); return el ? Math.round(el.scrollTop) : null; }, mdScroller.toString());
+    await page.screenshot({ path: join(shots, "position-md-after-waking.png") });
+    writeFileSync(join(out, "position.json"), JSON.stringify(place, null, 2));
+    check("woken Markdown comes back at its scroll", !place.stayedAwake && typeof place.mdScrolledTo === "number" && (place.mdScrolledTo as number) > 0 && Math.abs((place.mdAfterWaking as number) - (place.mdScrolledTo as number)) <= 4, JSON.stringify(place));
+    check("woken Excel comes back on its cell", !place.stayedAwake && place.xlsxSet === "C5" && place.xlsxAfterWaking === "C5", JSON.stringify(place));
+  }
+  if (only !== "position") {
   // Save before sleep, in the real Markdown editor: a sentence is typed, the window goes to project 2 with it unsaved.
   const typed: Record<string, unknown> = {};
   const SENTENCE = "잠들기 전에 쓴 문장";
@@ -232,6 +294,7 @@ try {
   check("Word, woken: the document shows the saved sentence, and nothing was asked", word.shownAfterWaking === true && word.dialogs === 0, JSON.stringify(word));
   await page.screenshot({ path: join(shots, "project-1-word-after-waking.png") });
   writeFileSync(join(out, "typed.json"), JSON.stringify({ markdown: typed, word }, null, 2));
+  }
   check("no browser exceptions", errors.length === 0, errors.join("; "));
 } catch (error) {
   check("tab sleep scenario", false, String(error));

@@ -22,6 +22,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { chromium } from "playwright-core";
+import { editorFirst } from "./fixtures/editor-first.ts";
 import type { Artifact, Attachment, Folder, Proposal, Session, TranscriptItem, Work } from "@workbench/contracts";
 import { makePkmVault } from "./fixtures/pkm-vault.ts";
 import { pagePng } from "./fixtures/png.mjs";
@@ -400,8 +401,23 @@ if (u26) {
   writeFileSync(reviewNote.note.path, reviewNote.note.source.replace(/\n$/, ""));
 }
 
+// Menus unit (--only=menus-): the shared Select where native selects were. A project whose folder is a git
+// repository with two local remotes (bare folders beside it: nothing leaves the machine), for 원격 동기화.
+const menusSet = only?.some((name) => name.startsWith("menus-")) ?? false;
+const menusScm = menusSet ? await (async () => {
+  const repo = dir("menus-scm");
+  const git = (...rest: string[]) => execFileSync("git", ["-C", repo, "-c", "user.name=견본", "-c", "user.email=sample@example.invalid", ...rest], { stdio: "ignore" });
+  git("init", "-q", "-b", "main");
+  writeFileSync(join(repo, "강의안.md"), "# 강의안\n");
+  git("add", "."); git("commit", "-q", "-m", "견본");
+  for (const name of ["origin", "backup"]) { const bare = dir(`menus-${name}.git`); execFileSync("git", ["init", "-q", "--bare", bare], { stdio: "ignore" }); git("remote", "add", name, bare); }
+  const work = await newWork("Git 연습 프로젝트", research.id, repo);
+  const session = await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider: "codex", purpose: "원격 보내기", access: "auto" });
+  return { work, session };
+})() : null;
+
 // Every work unfolded in the sidebar, so their sessions are rows to click.
-const navWorks = [...(papers ? [papers.id] : []), ...(draft ? [draft.workId] : [])];
+const navWorks = [...(papers ? [papers.id] : []), ...(draft ? [draft.workId] : []), ...(menusScm ? [menusScm.work.id] : [])];
 await setPrefs({ tree: { closedFolders: [], openWorks: [lecture.id, review.id, meeting.id, ...navWorks], closedWorks: [], openDocs: [lecture.id, ...navWorks] } });
 
 const seededItems = await items(codex.id);
@@ -2280,6 +2296,35 @@ const RELB_SCREENS: Screen[] = relbSet ? [
   { name: "relb-d-newdoc", steps: [...openSession(codex.id), { js: "__wb.click('.group-tab-new')", wait: "__wb.has('.context-menu-item', '새 문서')" }, { js: "__wb.click('.context-menu-item', '새 문서')", wait: "__wb.has('.context-menu-item', 'Markdown') || __wb.has('[role=menuitem]', 'Markdown')", pause: 300 }, { js: "__wb.click('.context-menu-item, [role=menuitem]', 'Markdown')", wait: "__wb.has('dialog.new-document-dialog[open]')", pause: 300 }], settle: 500, cleanup: closeAnyDialog },
   { name: "relb-d-push", steps: [...openSession(codex.id), ...settingsOpen("devices"), { js: "__wb.click('.settings-row-control .button', '알림 설정')", wait: "__wb.has('dialog.feature-dialog[open]')", pause: 400 }, { js: "__wb.blur()" }], settle: 500, cleanup: closeAnyDialog },
 ] : [];
+// ── Menus unit (--only=menus-): each list open, from the four busiest screens and two small dialogs. ──
+const MENU_OPEN = "__wb.has('.ui-menu[data-state=open] [role=option]')";
+const openList = (trigger: string): Step[] => [{ js: `__wb.click('${trigger}')`, wait: MENU_OPEN, pause: 300 }];
+const closeList: Step = { js: "__wb.has('.ui-menu[data-state=open]') && __wb.key('Escape')", wait: "!__wb.has('.ui-menu[data-state=open]')", pause: 200 };
+const MENUS_SCREENS: Screen[] = menusSet ? [
+  // 이벤트 Hub (설정 › 고급 › 이벤트 받기…): the 자동 실행 규칙 form, its 실행할 작업 list open.
+  { name: "menus-eventhub", steps: [...openSession(codex.id), ...settingsOpen("advanced"), { js: "__wb.click('.settings-row-control .button', '이벤트 받기')", wait: "__wb.has('dialog.feature-dialog[open] button[aria-label=\"실행할 작업\"]')", pause: 400 },
+    { js: "document.querySelector('button[aria-label=\"실행할 작업\"]').scrollIntoView({ block: 'center' })", pause: 200 }, ...openList('button[aria-label="실행할 작업"]')], settle: 500, cleanup: [closeList, ...closeAnyDialog, ...settingsClose] },
+  // 자동 정리 규칙 (볼트 › 보기 메뉴): 문서 형식 open.
+  { name: "menus-rules", steps: [{ js: "__wb.click('.nav-rail [data-rail=\"projects\"]')", wait: "__wb.has('.sidebar[data-rail=\"projects\"]')", pause: 300 }, { js: "[...document.querySelectorAll('.sidebar button')].find((e) => e.textContent.includes('프로젝트 목록'))?.click()", wait: "__wb.has('.views-section .side-tools')", pause: 300 },
+    { js: "__wb.click('.views-section button[aria-label=\"저장한 보기 메뉴\"]')", wait: "__wb.has('.context-menu-item, [role=menuitem]', '자동 정리 규칙')" }, { js: "__wb.click('.context-menu-item, [role=menuitem]', '자동 정리 규칙')", wait: "__wb.has('.rules-dialog')", pause: 300 }, ...openList("#rule-format")],
+    settle: 500, cleanup: [closeList, { js: "__wb.key('Escape'); document.querySelector('.rules-dialog .icon-button[aria-label*=\"닫기\"]')?.click()", wait: "!__wb.has('.rules-dialog')", pause: 200 }] },
+  // 원격 동기화 (Git 변경 검토 › 원격): 받기 chosen, 받는 방법 open.
+  ...(menusScm ? [{ name: "menus-scm-remote", steps: [...openSession(menusScm.session.id), { js: "__wb.click('.workspace-trigger')", wait: "__wb.has('.workspace-scm-open')" }, { js: "__wb.click('.workspace-scm-open')", wait: "__wb.has('.scm-remote-controls')", pause: 300 },
+    { js: "document.querySelector('.scm-remote-controls').open = true", wait: "__wb.has('button[aria-label=\"원격 작업\"]')", pause: 200 }, ...openList('button[aria-label="원격 작업"]'),
+    { js: "__wb.click('.ui-menu[data-state=open] [role=option]', '받기')", wait: "__wb.has('button[aria-label=\"받는 방법\"]')", pause: 300 }, ...openList('button[aria-label="받는 방법"]')], settle: 500,
+    cleanup: [closeList, { js: "[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === '닫기' && b.closest('[role=dialog], dialog'))?.click()", wait: "!__wb.has('.scm-remote-controls')", pause: 200 }] } satisfies Screen] : []),
+  // 새 문서 만들기: 문서 종류 open (the dialog is a modal: the list lives in it and is not cut by its edge).
+  { name: "menus-newdoc", steps: [...openSession(codex.id), { js: "__wb.click('.group-tab-new')", wait: "__wb.has('.context-menu-item', '새 문서')" }, { js: "__wb.click('.context-menu-item', '새 문서')", wait: "__wb.has('.context-menu-item', 'Markdown') || __wb.has('[role=menuitem]', 'Markdown')", pause: 300 },
+    { js: "__wb.click('.context-menu-item, [role=menuitem]', 'Markdown')", wait: "__wb.has('dialog.new-document-dialog[open]')", pause: 300 }, ...openList('dialog.new-document-dialog button[aria-label="문서 종류"]')], settle: 500, cleanup: [closeList, ...closeAnyDialog] },
+  // Two small dialogs whose native list would have run past their edge: 예약 작업 and 새 역할 만들기.
+  { name: "menus-small-schedule", steps: [...openSession(codex.id), { js: `__wb.context('${row(codex.id)}')`, wait: "__wb.has('.context-menu-item', '예약 작업')" }, { js: "__wb.click('.context-menu-item', '예약 작업')", wait: "__wb.has('.schedule-dialog')", pause: 300 },
+    { js: "document.querySelector('button[aria-label=\"호스트가 꺼져 있던 동안\"]')?.scrollIntoView({ block: 'end' })", pause: 200 }, ...openList('button[aria-label="호스트가 꺼져 있던 동안"]')], settle: 500, cleanup: [closeList, ...closeAnyDialog] },
+  { name: "menus-small-profile", steps: [...openSession(codex.id), { js: "if (!__wb.has('.work-view .composer-tools[open]')) __wb.click('.work-view .composer-tools > summary')", wait: "__wb.has('.work-view .agent-profile-picker .plain-select')" },
+    { js: "__wb.click('.work-view .agent-profile-picker .plain-select')", wait: "__wb.has('[role=menuitem]', '새 역할 만들기')" }, { js: "__wb.click('[role=menuitem]', '새 역할 만들기')", wait: "__wb.has('dialog.agent-profile-editor[open]')", pause: 300 },
+    ...openList('dialog.agent-profile-editor button[aria-label="기본 권한"]')], settle: 500,
+    cleanup: [closeList, { js: "document.querySelector('dialog.agent-profile-editor[open] header .icon-button')?.click()", wait: "!__wb.has('dialog.agent-profile-editor[open]')", pause: 200 },
+      { js: "document.querySelectorAll('.composer-tools[open]').forEach((details) => details.removeAttribute('open'))", wait: "!__wb.has('.composer-tools[open]')" }] },
+] : [];
 const RELB_PHONE: Screen[] = relbSet && only!.some((name) => name.startsWith("relb-phone")) ? [
   { name: "relb-phone-devices", viewport: { width: 390, height: 844 }, steps: [...settingsOpen("devices"), scrollTo(".device-steps")], settle: 500, cleanup: settingsClose },
   { name: "relb-phone-tg-1-intro", viewport: { width: 390, height: 844 }, steps: [...settingsOpen("messenger"), toWizardStart, atTop], settle: 500, cleanup: settingsClose },
@@ -2368,7 +2413,7 @@ const REL_A_SCREENS: Screen[] = relA ? [
     { name: `rela-phone-${size}-doc-ai-esc`, viewport, steps: [{ js: "__wb.q('.beside-chat .composer-input, .beside-chat textarea, .beside-chat button')?.focus()" }, { press: "Escape", pause: 500 }, { wait: "!__wb.has('.beside-chat')" }, { probe: "({ ai: __wb.has('.beside-chat'), doc: __wb.has('.document-view .doc-header') })" }], settle: 400 },
   ]),
 ] : [];
-const availableScreens = ptabsSet ? PTABS_SCREENS : relA ? REL_A_SCREENS : relbSet ? (only!.some((name) => name.startsWith("relb-phone")) ? RELB_PHONE : RELB_SCREENS) : fix1Set ? FIX1_SCREENS : rvSet ? RV_SCREENS : ownerSet ? OWNER_SCREENS : phone ? PHONE_SCREENS : c2 ? C2_SCREENS : skin2b ? SKIN2B_SCREENS : skin2d ? SKIN2D_SCREENS : u38 ? U38_SCREENS : u28 ? (args.includes("--native-stub") ? U28_WEB_SCREENS : U28_SCREENS) : higMode ? HIG_SCREENS : args.includes("--motion") ? MOTION_SCREENS : navMode ? NAV_SCREENS : only?.some(name => name.startsWith("completion")) ? COMPLETION_SCREENS : u26 ? U26_SCREENS : m01 ? M01_SCREENS : SCREENS;
+const availableScreens = menusSet ? MENUS_SCREENS : ptabsSet ? PTABS_SCREENS : relA ? REL_A_SCREENS : relbSet ? (only!.some((name) => name.startsWith("relb-phone")) ? RELB_PHONE : RELB_SCREENS) : fix1Set ? FIX1_SCREENS : rvSet ? RV_SCREENS : ownerSet ? OWNER_SCREENS : phone ? PHONE_SCREENS : c2 ? C2_SCREENS : skin2b ? SKIN2B_SCREENS : skin2d ? SKIN2D_SCREENS : u38 ? U38_SCREENS : u28 ? (args.includes("--native-stub") ? U28_WEB_SCREENS : U28_SCREENS) : higMode ? HIG_SCREENS : args.includes("--motion") ? MOTION_SCREENS : navMode ? NAV_SCREENS : only?.some(name => name.startsWith("completion")) ? COMPLETION_SCREENS : u26 ? U26_SCREENS : m01 ? M01_SCREENS : SCREENS;
 const screens = (only ? availableScreens.filter((screen) => only.some((name) => screen.name.includes(name))) : availableScreens)
   // N1: rows are reached through the list column's levels (see __wb.reveal).
   .map((screen) => ({ ...screen, steps: expandSteps(screen.steps), ...(screen.cleanup ? { cleanup: expandSteps(screen.cleanup) } : {}) }));
@@ -2419,6 +2464,7 @@ async function chromiumPass() {
       const page = await browser.newPage({ viewport: VIEWPORT, ...(Number(option("scale")) > 1 ? { deviceScaleFactor: Number(option("scale")) } : {}), ...(phone ? { hasTouch: true, isMobile: true } : {}) });
       // Skin 2 · B: Chromium gets the same stand-in for the desktop's web-page bridge as WebKitGTK (--native-stub).
       if (args.includes("--native-stub")) await page.addInitScript(CHROMIUM_NATIVE_STUB);
+      await editorFirst(page);
       // --no-test-vault-notice: a test gateway is not started by the app, so its vault stays refused and says so in
       // a standing row no person sees in the installed app; frames made for print leave that row out.
       if (args.includes("--no-test-vault-notice")) await page.addInitScript(() => { const add = () => { const style = document.createElement("style"); style.textContent = ".top-notice.vault-problem{display:none!important}"; document.head.append(style); }; if (document.head) add(); else document.addEventListener("DOMContentLoaded", add); });

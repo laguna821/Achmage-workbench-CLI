@@ -11,7 +11,7 @@ export const SEARCH_SCOPES: SearchScope[] = ["all", "project", "session", "docum
 export const SCOPE_LABEL: Record<SearchScope, string> = {
   all: "전체",
   project: "프로젝트",
-  session: "세션",
+  session: "대화",
   document: "문서",
   decision: "결정",
   vault: "볼트",
@@ -23,7 +23,7 @@ export function parseSearchScope(value: string | null | undefined): SearchScope 
   const found = SEARCH_SCOPES.find((scope) => scope === text || SCOPE_LABEL[scope] === text);
   if (found) return found;
   if (text === "work" || text === "works" || text === "작업") return "project";
-  if (text === "sessions" || text === "대화") return "session";
+  if (text === "sessions" || text === "세션") return "session";
   if (text === "documents" || text === "doc" || text === "docs") return "document";
   if (text === "decisions" || text === "질문") return "decision";
   if (text === "note" || text === "notes" || text === "노트") return "vault";
@@ -39,7 +39,7 @@ export type SearchKind = "work" | "session" | "user" | "assistant" | "plan" | "a
 
 export const SEARCH_KIND_LABEL: Record<SearchKind, string> = {
   work: "프로젝트",
-  session: "세션",
+  session: "대화",
   user: "요청",
   assistant: "답",
   plan: "계획",

@@ -82,6 +82,19 @@ export class DocumentRegistry {
     const writer = this.writer(file), execution = this.executions.writer(file);
     return { view: { ...entry.presence }, writer: execution ? this.executionPresence(execution) : writer ? { ...writer.presence } : null, writeToken: entry.token };
   }
+  /**
+   * 이름 바꾸기: the open views of THIS document follow its renamed file (identity `from`, taken before
+   * the move), keeping their mode, write token and unsaved state, so an editor goes on saving under the
+   * new name. Another record's views on the same file are never moved.
+   */
+  moved(artifactId: string, from: string, to: string) {
+    const file = this.file(to);
+    for (const entry of this.views.values()) if (entry.file === from && entry.presence.artifactId === artifactId) entry.file = file;
+  }
+  /** The identity a path has now (before a move: what `moved` gets as `from`). */
+  identity(path: string) {
+    return this.file(path);
+  }
   close(viewId: string, windowId: string) {
     const entry = this.views.get(viewId);
     if (entry?.presence.windowId === windowId) this.views.delete(viewId);
