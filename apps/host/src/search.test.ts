@@ -391,8 +391,8 @@ describe("workbench-find", () => {
     expect(out.code).toBe(0);
     expect(lines[0]).toContain(FIND_HEAD);
     expect(lines[0]).toContain("작업 「안녕」");
-    // The session's own name matches too ("세션"), then the request and the reply.
-    expect(lines.slice(1).every((line) => /^\[안녕 · Codex · 과제 채점 기준표 · \d\d-\d\d \d\d:\d\d · (세션|요청|답)\] /.test(line))).toBe(true);
+    // The conversation's own name matches too ("대화"), then the request and the reply.
+    expect(lines.slice(1).every((line) => /^\[안녕 · Codex · 과제 채점 기준표 · \d\d-\d\d \d\d:\d\d · (대화|요청|답)\] /.test(line))).toBe(true);
     expect(lines).toHaveLength(4);
     const everywhere = (await manager.finder.find(["--all", "채점 기준"], { sessionId: session.id })).stdout;
     expect(everywhere).toContain("[다른 일 · Claude · 다른 세션");
