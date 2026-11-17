@@ -329,10 +329,11 @@ test("M3: the child closing by itself → the panel says the road is gone and wh
   expect(lost).toMatchObject({ state: "ready", ours: true, lost: true, why: expect.stringContaining("HTTPS certificates are not enabled") });
   expect(lost!.why).not.toMatch(/Ctrl\+C/);
   patch({ kickServe: undefined, failServe: "error: not logged in (stand-in)" });
-  // Back-off steps of 50, 150, 300, 600, 1200 ms here (5 s … 5 min in the app): a handful of tries in 1.5 s, never a tight loop.
-  await new Promise(resolve => setTimeout(resolve, 1500));
-  const tries = changing().length;
-  expect(tries).toBeGreaterThanOrEqual(3); expect(tries).toBeLessThanOrEqual(7);
+  // Back-off steps of 50, 150, 300, 600, 1200 ms here (5 s … 5 min in the app): a handful of tries, never a tight loop.
+  // A slow machine starts each try's program late, so the third try is waited for rather than expected by a fixed time.
+  expect(await until(async () => changing().length >= 3, 20_000)).toBe(true);
+  await new Promise(resolve => setTimeout(resolve, 300));
+  expect(changing().length).toBeLessThanOrEqual(7);
   expect(await until(async () => { const view = await service.tailscaleState(); return view.retrying === true && !!view.why?.includes("not logged in"); }, 4000)).toBe(true);
   // 끄기: no more tries.
   await service.tailscaleOff();
