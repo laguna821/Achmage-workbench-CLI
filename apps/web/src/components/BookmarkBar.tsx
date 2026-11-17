@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as Rea
 import { createPortal } from "react-dom";
 import type { BookmarkFolder, BookmarkItem, BookmarkNode } from "@workbench/contracts";
 import type { Api } from "../api.ts";
-import { bookmarkLetter, countBookmarks, findBookmark, fitCount, shortTitle, typedAddress, useBookmarks } from "../bookmarks.ts";
+import { bookmarkLetter, countBookmarks, findBookmark, fitCount, folderTargets, placeOf, shortTitle, typedAddress, useBookmarkIcon, useBookmarks } from "../bookmarks.ts";
+import type { Notify } from "../top-notice.ts";
 import { comboOf } from "../shortcuts.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { ContextMenu, type MenuEntry, type MenuRequest } from "./ContextMenu.tsx";
@@ -12,8 +13,11 @@ import { restoreSurfaceFocus } from "./controls/menu-navigation.ts";
 
 // The bookmark bar of a web tab (bookmarks unit, 0.5.1; the owner: "즐겨찾기가 상단 주소 바로 밑에 즐겨찾기 줄
 // 엣지 브라우저식으로 표시되고 우클릭으로 추가할수도 있게"). One quiet row directly under the address row: items
-// (a letter mark — the app keeps no site icons — and the name, cut), folders as keys that open a menu of
-// their items (folders inside as sub-menus), "»" for what does not fit. The same set in every project.
+// (the site's icon — a letter mark until the gateway has one — and the name, cut), folders as keys that open
+// a menu of their items (folders inside as sub-menus), "»" for what does not fit. The same set in every project.
+// bookmarks2 (0.5.4): an item in a folder's menu has the same menu as one on the bar (right-click, or the
+// menu key on it): 이름 바꾸기 / 주소 고치기 / 옮기기 (up, down, to the bar, into a folder) / 삭제 with
+// 되돌리기; a bar item dragged onto a folder goes into it; the keys also come from a page that has the focus.
 // A click opens the page in THIS web tab; a middle click or Ctrl/⌘-click opens a new web tab. The star at
 // the end of the address field adds the page; right-click adds and edits, as a browser does. No bookmarks
 // yet → no bar. The bar is a toolbar: one Tab stop, arrows move, Enter opens, the menu key opens the menu.
@@ -23,6 +27,18 @@ type Prompt = { title: string; label: string; value: string; submit: string; add
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 /** A page that can be kept: an http(s) address (not the blank new-tab page). */
 const keepable = (url: string | undefined | null): url is string => !!url && /^https?:\/\//i.test(url);
+
+/**
+ * A bookmark's mark: its site's icon once the gateway has one, its first letter until then — in the same
+ * 16 px box, so nothing moves when the icon arrives. In a menu the letter is drawn by CSS (`data-letter`),
+ * so the entry's text stays the name alone.
+ */
+export function SiteMark({ api, node, menu }: { api: Requester; node: BookmarkItem; menu?: boolean }) {
+  const src = useBookmarkIcon(api, node.icon), letter = bookmarkLetter(node.title);
+  return <span className="bookmark-mark" data-letter={menu && !src ? letter : undefined} data-icon={src ? "" : undefined} aria-hidden>
+    {src ? <img src={src} alt="" width={16} height={16} draggable={false} /> : menu ? null : letter}
+  </span>;
+}
 
 /** One line to type: a name or an address (the dialog recipe of RenameDialog). */
 function TextPrompt({ prompt, onClose }: { prompt: Prompt; onClose(): void }) {
@@ -53,17 +69,29 @@ function TextPrompt({ prompt, onClose }: { prompt: Prompt; onClose(): void }) {
  * row. `page`: the page this tab shows; `onOpen(url, newTab)`; `active`: this tab is the one on screen
  * (Ctrl/⌘+D and Ctrl/⌘+Shift+B answer there).
  */
-export function useBookmarkUi({ api, page, onOpen, active }: {
+export type PageChord = "bookmark" | "bookmark-bar";
+export function useBookmarkUi({ api, page, onOpen, active, notify }: {
   api: Requester; page: { url: string; title: string } | null; onOpen(url: string, newTab: boolean): void; active: boolean;
-}): { star: ReactNode; bar: ReactNode } {
+  /** The app's notice (a removal says so there, with 되돌리기). */
+  notify?: Notify;
+}): { star: ReactNode; bar: ReactNode; press(chord: PageChord): void } {
   const [data, client] = useBookmarks(api);
-  const [menu, setMenu] = useState<(MenuRequest & { owner?: string }) | null>(null);
+  const [menu, setMenuState] = useState<(MenuRequest & { owner?: string; serial: number }) | null>(null);
+  const serial = useRef(0);
+  /** Each menu is a new one: it takes the focus afresh. */
+  const setMenu = (request: (MenuRequest & { owner?: string }) | null) => setMenuState(request ? { ...request, serial: ++serial.current } : null);
+  /**
+   * The menu of an entry INSIDE a folder's menu, laid over it (the folder's menu stays open under it, as in a
+   * browser): Esc closes it alone and the focus goes back to that entry; a choice in it closes both.
+   */
+  const [inner, setInnerState] = useState<(MenuRequest & { serial: number }) | null>(null);
+  const setInner = (request: MenuRequest | null) => setInnerState(request ? { ...request, serial: ++serial.current } : null);
   const [prompt, setPrompt] = useState<Prompt | null>(null);
   const [removal, setRemoval] = useState<BookmarkFolder | null>(null);
   const [error, setError] = useState("");
   const [fit, setFit] = useState(Number.MAX_SAFE_INTEGER);
   const [focusAt, setFocusAt] = useState(0);
-  const [dragging, setDragging] = useState<{ id: string; to: number } | null>(null);
+  const [dragging, setDragging] = useState<{ id: string; to: number; into?: string } | null>(null);
   const row = useRef<HTMLDivElement>(null), starKey = useRef<HTMLButtonElement>(null);
   /** Was the choice in a menu made with Ctrl/⌘ held (a new tab)? Read from the click itself. */
   const modified = useRef(false);
@@ -76,7 +104,11 @@ export function useBookmarkUi({ api, page, onOpen, active }: {
   const here = keepable(page?.url) ? page : null;
   const kept = here ? findBookmark(items, here.url) : null;
   const attempt = (action: Promise<unknown>) => { setError(""); void action.catch(reason => setError(message(reason))); };
-  const open = (url: string, newTab: boolean) => onOpen(url, newTab);
+  /** Opening a bookmark is the one moment its site is asked for an icon (when it has none yet). */
+  const open = (url: string, newTab: boolean, node?: BookmarkItem) => {
+    onOpen(url, newTab);
+    if (node && !node.icon) void client.fetchIcon(node.url).catch(() => undefined);
+  };
 
   // How many items fit: every item is laid out (the ones that do not fit are only unseen), so their
   // right edges are always there to measure; "»" takes its width from the row, which is measured again.
@@ -112,31 +144,64 @@ export function useBookmarkUi({ api, page, onOpen, active }: {
   const addHere = () => { if (here && !kept) attempt(client.add({ kind: "item", title: here.title, url: here.url })); };
   const rename = (node: BookmarkNode) => setPrompt({ title: node.kind === "folder" ? "폴더 이름 바꾸기" : "즐겨찾기 이름 바꾸기", label: "이름", value: node.title, submit: "바꾸기", save: title => client.update(node.id, { title }) });
   const readdress = (node: BookmarkItem) => setPrompt({ title: "즐겨찾기 주소 고치기", label: "주소", value: node.url, submit: "고치기", address: true, save: url => client.update(node.id, { url }) });
-  const remove = (node: BookmarkNode) => { if (node.kind === "folder" && node.children.length) setRemoval(node); else attempt(client.remove(node.id)); };
-  const newFolder = () => setPrompt({ title: "폴더 추가", label: "폴더 이름", value: "", submit: "추가", save: title => client.add({ kind: "folder", title }) });
+  /** Removed, and said in the app's notice with 되돌리기 (the node goes back where it was, a folder whole). */
+  const removeNow = async (node: BookmarkNode) => {
+    const at = placeOf(items, node.id);
+    await client.remove(node.id);
+    notify?.({ text: `「${shortTitle(node.title, 30)}」 ${node.kind === "folder" ? "폴더" : "즐겨찾기"}를 지웠습니다.`,
+      action: { label: "되돌리기", run: () => attempt(client.restore(node, at?.parentId ?? null, at?.index ?? 0)) } });
+  };
+  const remove = (node: BookmarkNode) => { if (node.kind === "folder" && node.children.length) setRemoval(node); else attempt(removeNow(node)); };
+  const newFolder = (parentId: string | null = null) => setPrompt({ title: parentId ? "폴더 안에 새 폴더" : "폴더 추가", label: "폴더 이름", value: "", submit: "추가", save: title => client.add(parentId ? { kind: "folder", title, parentId } : { kind: "folder", title }) });
+  const moveTo = (node: BookmarkNode, parentId: string | null, index: number) => attempt(client.move(node.id, parentId, index));
 
-  /** A folder's items as a menu; folders inside it as sub-menus. */
+  /** 옮기기: one place up / down (left / right on the bar), to the bar, into another folder. */
+  const moveEntries = (node: BookmarkNode): MenuEntry[] => {
+    const at = placeOf(items, node.id);
+    if (!at) return [{ kind: "label", label: "이미 지운 즐겨찾기입니다." }];
+    const onBar = at.parentId === null;
+    const targets = folderTargets(items, node.id).filter(target => target.folder.id !== at.parentId);
+    return [
+      { kind: "item", label: onBar ? "왼쪽으로" : "위로", icon: onBar ? "chevronLeft" : "chevronUp", disabled: at.index === 0, disabledReason: onBar ? "맨 앞에 있습니다." : "맨 위에 있습니다.", onSelect: () => moveTo(node, at.parentId, at.index - 1) },
+      { kind: "item", label: onBar ? "오른쪽으로" : "아래로", icon: onBar ? "chevronRight" : "chevronDown", disabled: at.index >= at.siblings - 1, disabledReason: onBar ? "맨 끝에 있습니다." : "맨 아래에 있습니다.", onSelect: () => moveTo(node, at.parentId, at.index + 1) },
+      ...(!onBar || targets.length ? [{ kind: "separator" } as MenuEntry] : []),
+      ...(!onBar ? [{ kind: "item", label: "즐겨찾기 줄로", icon: "star", onSelect: () => moveTo(node, null, items.length) } as MenuEntry] : []),
+      ...targets.map((target): MenuEntry => ({ kind: "item", label: target.path, icon: "folder", onSelect: () => moveTo(node, target.folder.id, target.folder.children.length) })),
+    ];
+  };
+
+  /** An entry inside a folder's menu has its own menu (right-click, or the menu key on it), as a bar item does. */
+  const closingBoth = (entries: MenuEntry[]): MenuEntry[] => entries.map(entry => entry.kind === "item" ? { ...entry, onSelect: () => { setMenu(null); entry.onSelect(); } }
+    : entry.kind === "submenu" ? { ...entry, items: closingBoth(entry.items) } : entry);
+  const nested = (node: BookmarkNode) => (x: number, y: number) => { const request = itemRequest(node, x, y); setInner({ ...request, items: closingBoth(request.items) }); };
+  /** A folder's items as a menu (each with its site's mark); folders inside it as sub-menus. */
   const folderEntries = (nodes: BookmarkNode[]): MenuEntry[] => nodes.length ? nodes.map((node): MenuEntry => node.kind === "folder"
-    ? { kind: "submenu", label: shortTitle(node.title, 40), icon: "folder", items: folderEntries(node.children) }
-    : { kind: "item", label: shortTitle(node.title, 40), onSelect: () => open(node.url, modified.current) }) : [{ kind: "label", label: "비어 있음" }];
+    ? { kind: "submenu", label: shortTitle(node.title, 40), icon: "folder", items: folderEntries(node.children), onContext: nested(node) }
+    : { kind: "item", label: shortTitle(node.title, 40), leading: <SiteMark api={api} node={node} menu />, onSelect: () => open(node.url, modified.current, node), onContext: nested(node) }) : [{ kind: "label", label: "비어 있음" }];
   const under = (element: Element) => { const box = element.getBoundingClientRect(); return { x: box.left, y: box.bottom + 2 }; };
-  const openFolder = (node: BookmarkFolder, anchor: Element) => setMenu({ ...under(anchor), title: node.title, items: folderEntries(node.children), owner: node.id });
-  const openRest = (anchor: Element) => setMenu({ ...under(anchor), title: "나머지 즐겨찾기", items: folderEntries(items.slice(visible)), owner: "rest" });
-  const itemMenu = (node: BookmarkNode, x: number, y: number) => setMenu({ x, y, title: node.title, items: node.kind === "item" ? [
-    { kind: "item", label: "새 탭에서 열기", icon: "openNew", onSelect: () => open(node.url, true) },
-    { kind: "separator" },
-    { kind: "item", label: "이름 바꾸기", icon: "edit", onSelect: () => rename(node) },
-    { kind: "item", label: "주소 고치기", icon: "link", onSelect: () => readdress(node) },
-    { kind: "separator" },
-    { kind: "item", label: "삭제", icon: "trash", danger: true, onSelect: () => remove(node) },
-  ] : [
-    { kind: "item", label: "이름 바꾸기", icon: "edit", onSelect: () => rename(node) },
-    { kind: "separator" },
-    { kind: "item", label: "삭제", icon: "trash", danger: true, onSelect: () => remove(node) },
-  ] });
+  const openFolder = (node: BookmarkFolder, anchor: HTMLElement) => { setMenu({ ...under(anchor), title: node.title, items: folderEntries(node.children), owner: node.id }); };
+  const openRest = (anchor: HTMLElement) => { setMenu({ ...under(anchor), title: "나머지 즐겨찾기", items: folderEntries(items.slice(visible)), owner: "rest" }); };
+  const itemMenu = (node: BookmarkNode, x: number, y: number) => setMenu(itemRequest(node, x, y));
+  function itemRequest(node: BookmarkNode, x: number, y: number): MenuRequest {
+    return { x, y, title: node.title, items: node.kind === "item" ? [
+      { kind: "item", label: "새 탭에서 열기", icon: "openNew", onSelect: () => open(node.url, true, node) },
+      { kind: "separator" },
+      { kind: "item", label: "이름 바꾸기", icon: "edit", onSelect: () => rename(node) },
+      { kind: "item", label: "주소 고치기", icon: "link", onSelect: () => readdress(node) },
+      { kind: "submenu", label: "옮기기", icon: "swap", items: moveEntries(node) },
+      { kind: "separator" },
+      { kind: "item", label: "삭제", icon: "trash", danger: true, onSelect: () => remove(node) },
+    ] : [
+      { kind: "item", label: "이름 바꾸기", icon: "edit", onSelect: () => rename(node) },
+      { kind: "item", label: "폴더 안에 새 폴더", icon: "folder", onSelect: () => newFolder(node.id) },
+      { kind: "submenu", label: "옮기기", icon: "swap", items: moveEntries(node) },
+      { kind: "separator" },
+      { kind: "item", label: "삭제", icon: "trash", danger: true, onSelect: () => remove(node) },
+    ] };
+  }
   const barMenu = (x: number, y: number) => setMenu({ x, y, title: "즐겨찾기 줄", items: [
     { kind: "item", label: "이 페이지를 즐겨찾기에 추가", icon: "star", disabled: !here || Boolean(kept), disabledReason: kept ? "이미 즐겨찾기에 있습니다." : "열려 있는 웹 페이지가 없습니다.", onSelect: addHere },
-    { kind: "item", label: "폴더 추가", icon: "folder", onSelect: newFolder },
+    { kind: "item", label: "폴더 추가", icon: "folder", onSelect: () => newFolder() },
   ] });
   /** The star, and Ctrl/⌘+D: add this page; a page already kept offers 이름 바꾸기 / 삭제. */
   const star = () => {
@@ -150,6 +215,9 @@ export function useBookmarkUi({ api, page, onOpen, active }: {
   };
   const starAction = useRef(star); starAction.current = star;
   const toggleBar = useRef(() => undefined as void); toggleBar.current = () => { if (data) attempt(client.showBar(!data.showBar)); };
+
+  /** The same two keys pressed while the web page itself has the focus (the native view forwards them). */
+  const press = (chord: PageChord) => { if (chord === "bookmark") starAction.current(); else toggleBar.current(); };
 
   // Ctrl/⌘+D and Ctrl/⌘+Shift+B, where this web tab is on screen. With two web tabs side by side the
   // one the keys were pressed in answers; pressed with nothing focused, the first one does (never both).
@@ -188,7 +256,7 @@ export function useBookmarkUi({ api, page, onOpen, active }: {
     } else if (event.key === "Home") { event.preventDefault(); focusKey(0); }
     else if (event.key === "End") { event.preventDefault(); focusKey(stops - 1); }
     else if (node && (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey))) { event.preventDefault(); const at = under(event.currentTarget); itemMenu(node, at.x, at.y); }
-    else if (node?.kind === "folder" && event.key === "ArrowDown") { event.preventDefault(); openFolder(node, event.currentTarget); }
+    else if (node?.kind === "folder" && event.key === "ArrowDown") { event.preventDefault(); openFolder(node, event.currentTarget as HTMLElement); }
   };
 
   // Dragging an item along the bar (pointer events, as the tab strip): it moves once the hand has
@@ -203,6 +271,9 @@ export function useBookmarkUi({ api, page, onOpen, active }: {
     if (!state || (!state.moved && Math.abs(event.clientX - state.x) < 6)) return;
     state.moved = true;
     const keys = Array.from(row.current?.querySelectorAll<HTMLElement>("[data-bookmark]") ?? []).slice(0, visible);
+    // Over the middle of a folder key: into that folder (at its end).
+    const folder = keys.find(key => { const box = key.getBoundingClientRect(); return key.dataset.kind === "folder" && key.dataset.bookmark !== state.id && event.clientX > box.left + box.width / 4 && event.clientX < box.right - box.width / 4; });
+    if (folder) { setDragging({ id: state.id, to: -1, into: folder.dataset.bookmark }); return; }
     let to = keys.findIndex(key => { const box = key.getBoundingClientRect(); return event.clientX < box.left + box.width / 2; });
     if (to < 0) to = keys.length;
     // The place among the others once this one has left its own.
@@ -215,12 +286,14 @@ export function useBookmarkUi({ api, page, onOpen, active }: {
     const target = dragging; setDragging(null);
     if (!state?.moved) return;
     dragged.current = true;
-    if (commit && target && target.to !== state.from) attempt(client.move(state.id, null, target.to));
+    if (commit && target?.into) attempt(client.move(state.id, target.into, Number.MAX_SAFE_INTEGER));
+    else if (commit && target && target.to !== state.from) attempt(client.move(state.id, null, target.to));
   };
 
   /** Where the dragged item would land: a rule before that item, or after the last one. */
   const from = dragging ? items.findIndex(entry => entry.id === dragging.id) : -1;
   const dropMark = (index: number) => {
+    if (dragging?.into) return items[index]?.id === dragging.into ? "into" : undefined;
     if (!dragging || index === from || index >= visible) return undefined;
     const at = index > from ? index - 1 : index, last = visible - (from >= 0 && from < visible ? 1 : 0) - 1;
     return at === dragging.to ? "before" : dragging.to > last && at === last ? "after" : undefined;
@@ -234,11 +307,12 @@ export function useBookmarkUi({ api, page, onOpen, active }: {
   </button>;
 
   const layers = <>
-    {menu ? <ContextMenu request={menu} onClose={() => setMenu(null)} /> : null}
+    {menu ? <ContextMenu key={menu.serial} request={menu} onClose={() => { setMenu(null); setInner(null); }} /> : null}
+    {menu && inner ? <ContextMenu key={inner.serial} request={inner} onClose={() => setInner(null)} /> : null}
     {prompt ? <TextPrompt prompt={prompt} onClose={() => setPrompt(null)} /> : null}
     {removal ? <ConfirmDialog title="폴더 삭제" confirmLabel="삭제" busyLabel="지우는 중…"
-      lines={[`「${removal.title}」 폴더와 그 안의 즐겨찾기 ${countBookmarks(removal.children).items}개를 지웁니다. 되돌릴 수 없습니다.`]}
-      onConfirm={() => client.remove(removal.id)} onClose={() => setRemoval(null)} /> : null}
+      lines={[`「${removal.title}」 폴더와 그 안의 즐겨찾기 ${countBookmarks(removal.children).items}개를 지웁니다.${notify ? " 지운 뒤 알림의 되돌리기로 되살릴 수 있습니다." : ""}`]}
+      onConfirm={() => removeNow(removal)} onClose={() => setRemoval(null)} /> : null}
   </>;
 
   const bar = <>
@@ -257,11 +331,11 @@ export function useBookmarkUi({ api, page, onOpen, active }: {
             onMouseDown={event => { if (event.button === 1) event.preventDefault(); }}
             onClick={event => {
               if (dragged.current) { dragged.current = false; return; }
-              if (folder) openFolder(node, event.currentTarget); else open(node.url, event.ctrlKey || event.metaKey);
+              if (folder) openFolder(node, event.currentTarget); else open(node.url, event.ctrlKey || event.metaKey, node);
             }}
-            onAuxClick={event => { if (event.button === 1 && !folder) { event.preventDefault(); open(node.url, true); } }}
+            onAuxClick={event => { if (event.button === 1 && !folder) { event.preventDefault(); open(node.url, true, node); } }}
             onContextMenu={event => { event.preventDefault(); itemMenu(node, event.clientX, event.clientY); }}>
-            {folder ? <ItemIcon kind="folder" size={16} /> : <span className="bookmark-mark" aria-hidden>{bookmarkLetter(node.title)}</span>}
+            {folder ? <ItemIcon kind="folder" size={16} /> : <SiteMark api={api} node={node} />}
             <span className="bookmark-title">{shortTitle(node.title)}</span>
           </button>;
         })}
@@ -272,5 +346,5 @@ export function useBookmarkUi({ api, page, onOpen, active }: {
     {error ? <p role="alert" className="browser-error">{error}</p> : null}
     {typeof document === "undefined" ? null : createPortal(layers, document.body)}
   </>;
-  return { star: starNode, bar };
+  return { star: starNode, bar, press };
 }

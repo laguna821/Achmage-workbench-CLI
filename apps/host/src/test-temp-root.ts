@@ -14,6 +14,9 @@ import { removeTempDirs } from "./test-temp.ts";
 // The resource manager (0.5.3) of every test gateway reads a stand-in machine with room for many turns, so a
 // full run under memory pressure does not make unrelated tests wait in its line (tests of the manager give their own).
 process.env.WORKBENCH_MACHINE ??= JSON.stringify({ totalBytes: 64 * 2 ** 30, availableBytes: 48 * 2 ** 30, cores: 16 });
+// 0.5.4: test gateways start their stand-in engines as before, never in scopes of the user's systemd (a test of
+// the scopes asks for them itself).
+process.env.WORKBENCH_ENGINE_SCOPE ??= "off";
 
 // WB_TEST_TMP_ROOT=0 turns it off (to measure what the suites leave without it).
 const on = process.env.WB_TEST_TMP_ROOT !== "0";

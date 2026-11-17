@@ -936,7 +936,7 @@ button.flow-day-colhead:hover {
   --c-ink: var(--danger);
 }
 
-@media (max-width: 720px) {
+@container work-pane (max-width: 720px) {
   .flow-cal {
     --gutter: 40px;
   }

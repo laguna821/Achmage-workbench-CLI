@@ -922,6 +922,24 @@ export type OfficeViewPosition = {
   firstColumn?: number;
   zoom?: number;
 };
+/** The document an office page edits (office:init); the editor pool's office:swap carries the same fields. */
+export type OfficeInitMessage = {
+  type: "office:init";
+  token: string;
+  sessionId: string | null;
+  artifact: { id: string; name: string; path: string; revision: number; sha256: string };
+  readOnly: boolean;
+  theme: "light" | "dark";
+  /** Reopen unsaved edits kept from an earlier visit (false when the user chose the latest revision). */
+  recover: boolean;
+  /** Where the view was when the tab last showed it (a woken or reopened tab comes back there): restored once after opening; never touches the content. */
+  view?: OfficeViewPosition;
+  /** A single native CLI export, using the original renderer's File-menu action. */
+  headlessExport?: { outPath: string; format: "pdf" | "html" | "docx" };
+  /** An independently owned original renderer attaches to this admitted turn. */
+  execution?: { turnId: string; images?: { base64: string; mime: string }[]; referenceSnapshot?: string };
+};
+
 export type OfficeHostMessage =
   | { type: "office:execute"; instruction: string; state: import("./office-execution.ts").OfficeExecutionState }
   | import("./pdf-notes.ts").PdfNoteReply
@@ -941,22 +959,7 @@ export type OfficeHostMessage =
   | import("./office-output.ts").OfficeOutputResult
   | import("./office-markdown.ts").OfficeMarkdownReply
   | import("./office-references.ts").OfficeReferenceResult
-  | {
-      type: "office:init";
-      token: string;
-      sessionId: string | null;
-      artifact: { id: string; name: string; path: string; revision: number; sha256: string };
-      readOnly: boolean;
-      theme: "light" | "dark";
-      /** Reopen unsaved edits kept from an earlier visit (false when the user chose the latest revision). */
-      recover: boolean;
-      /** Where the view was when the tab last showed it (a woken or reopened tab comes back there): restored once after opening; never touches the content. */
-      view?: OfficeViewPosition;
-      /** A single native CLI export, using the original renderer's File-menu action. */
-      headlessExport?: { outPath: string; format: "pdf" | "html" | "docx" };
-      /** An independently owned original renderer attaches to this admitted turn. */
-      execution?: { turnId: string; images?: { base64: string; mime: string }[]; referenceSnapshot?: string };
-    }
+  | OfficeInitMessage
   /** `palette`: the app's 색 조합 for that mode — the id of an Atlas set (absent = Workbench); the editors' chrome mirrors it (ui-adapters/chrome.css). */
   | { type: "office:theme"; theme: "light" | "dark"; palette?: string }
   | { type: "office:show-commands" }
@@ -981,6 +984,18 @@ export type OfficeHostMessage =
   | { type: "office:rebase"; revision: number }
   /** Leaving with edits that cannot be saved now (a conflict): keep them for the next visit. */
   | { type: "office:keep" }
+  /**
+   * The editor pool (0.5.4, apps/web/src/editor-pool.ts): this page's document is about to give its frame to another
+   * document of the same kind. Unsaved edits are kept as the editor's own serialised copy (the recovery copy) first;
+   * answered by `office:parked` — `ok: false` (a turn or a copy running, the copy not written): the frame is not given away.
+   */
+  | { type: "office:park" }
+  /**
+   * The editor pool: open THIS document in the running editor in place of the one it shows (asked only of a page that said
+   * `office:swap-ready`, and only after its `office:parked` said ok). The fields are those of `office:init`; `epoch` is
+   * answered first by `office:swapped`, before anything the page says about the new document.
+   */
+  | (Omit<OfficeInitMessage, "type" | "headlessExport" | "execution"> & { type: "office:swap"; epoch: number })
   /** The desktop clipboard's picture the page asked for (null: none), read by the window for the focused editor. */
   | { type: "office:clipboard-picture"; picture: { bytes: ArrayBuffer; type: string } | null };
 
@@ -990,6 +1005,14 @@ export type OfficePageMessage =
   | { type: "office:execution-refresh" }
   /** This editor can take a new revision in place (office:replace); without it a new revision reopens the page. */
   | { type: "office:replace-ready" }
+  /** The editor pool: this page can open another document of its kind in place (office:park, office:swap). */
+  | { type: "office:swap-ready" }
+  /** The answer to office:park: `ok` — nothing unsaved, or its recovery copy is written; the frame may be given away. */
+  | { type: "office:parked"; ok: boolean }
+  /** The FIRST answer to office:swap (every later message is about the new document). `ok: false`: the page keeps its document. */
+  | { type: "office:swapped"; epoch: number; ok: boolean }
+  /** The swapped-in document could not be opened in place: the window opens this page again for it (its kept copy still kept). */
+  | { type: "office:swap-failed" }
   /** A 문서 AI turn runs live in this page (not in the executor) — its page must outlive its tab's closing — or no longer. */
   | { type: "office:live-turn"; running: boolean }
   /** The answer to office:replace (after its office:opened when ok). `dirty`: it had unsaved edits and kept them; `failed`: reopen the page. */

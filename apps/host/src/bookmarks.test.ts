@@ -81,6 +81,53 @@ describe("the app's bookmarks", () => {
     expect(marks.clear()).toEqual({ showBar: false, items: [] });
   });
 
+  it("inside a folder (bookmarks2): rename, new address, up / down, to another folder, to the bar, a folder made there, removed", () => {
+    const marks = store();
+    marks.add({ kind: "item", title: "바깥", url: "https://out.example/" });
+    marks.add({ kind: "folder", title: "수업" });
+    marks.add({ kind: "folder", title: "자료" });
+    const lesson = id(marks.view(), "수업");
+    for (const [name, host] of [["하나", "one"], ["둘", "two"], ["셋", "three"]]) marks.add({ kind: "item", title: name!, url: `https://${host}.example/`, parentId: lesson });
+    let view = marks.update(id(marks.view(), "둘"), { title: "둘째" });
+    view = marks.update(id(view, "셋"), { url: "https://third.example/" });
+    // Up / down: the place in the same folder once it has left its own.
+    view = marks.move(id(view, "셋"), lesson, 0);
+    view = marks.move(id(view, "하나"), lesson, 2);
+    expect(outline(view.items)).toEqual(["바깥 → https://out.example/", "수업/", "  셋 → https://third.example/", "  둘째 → https://two.example/", "  하나 → https://one.example/", "자료/"]);
+    view = marks.move(id(view, "둘째"), id(view, "자료"), 0);
+    view = marks.move(id(view, "셋"), null, 1);
+    view = marks.add({ kind: "folder", title: "안쪽 폴더", parentId: id(view, "자료") });
+    view = marks.update(id(view, "안쪽 폴더"), { title: "논문" });
+    expect(outline(view.items)).toEqual(["바깥 → https://out.example/", "셋 → https://third.example/", "수업/", "  하나 → https://one.example/", "자료/", "  둘째 → https://two.example/", "  논문/"]);
+    view = marks.remove(id(view, "하나"));
+    expect(outline(view.items)).toEqual(["바깥 → https://out.example/", "셋 → https://third.example/", "수업/", "자료/", "  둘째 → https://two.example/", "  논문/"]);
+  });
+
+  it("되돌리기 puts a removed node back at its place (a folder whole); its folder gone → the bar's end; ids in use get new ones", () => {
+    const marks = store();
+    marks.add({ kind: "folder", title: "수업" });
+    const lesson = id(marks.view(), "수업");
+    marks.add({ kind: "item", title: "가", url: "https://a.example/", parentId: lesson });
+    marks.add({ kind: "item", title: "나", url: "https://b.example/", parentId: lesson });
+    const removed = marks.view().items[0]!.kind === "folder" ? (marks.view().items[0] as { children: BookmarkNode[] }).children[1]! : null;
+    marks.remove(removed!.id);
+    let view = marks.restore(removed, lesson, 1);
+    expect(outline(view.items)).toEqual(["수업/", "  가 → https://a.example/", "  나 → https://b.example/"]);
+    expect(id(view, "나")).toBe(removed!.id);
+    const whole = view.items[0]!;
+    marks.remove(lesson);
+    view = marks.restore(whole, null, 0);
+    expect(view.items[0]).toEqual(whole);
+    // Its folder is gone meanwhile: on the bar's end.
+    marks.add({ kind: "item", title: "끝", url: "https://end.example/" });
+    view = marks.restore({ id: "x1", kind: "item", title: "고아", url: "https://orphan.example/" }, "nowhere", 0);
+    expect(view.items.map((node) => node.title)).toEqual(["수업", "끝", "고아"]);
+    // The same node twice: the second gets a new id.
+    view = marks.restore({ id: "x1", kind: "item", title: "고아", url: "https://orphan.example/" }, null, 0);
+    expect(view.items[0]!.id).not.toBe("x1");
+    expect(refusal(() => marks.restore({ kind: "item", url: "javascript:alert(1)" }, null, 0))).toBe("bookmark_restore");
+  });
+
   it("keeps everything across a restart, written whole (no half file, no stray temporary file)", () => {
     const dir = tempDir("wb-bookmarks-"), file = join(dir, "bookmarks.json");
     const first = new BookmarkStore(file);

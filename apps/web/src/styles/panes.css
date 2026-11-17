@@ -332,3 +332,8 @@
 .pane-divider.moving::after,
 .pane-divider:focus-visible::after { width: 2px; background: var(--chrome-accent); }
 .pane-divider.vertical:is(:hover, .moving, :focus-visible)::after { width: auto; height: 2px; }
+
+/* The editor pool (EditorPoolLayer.tsx): the frames shared by the documents of one kind, laid over their tab's slot.
+   After the sections, before the dividers; the layer itself takes no pointer, a frame on screen does. */
+.editor-pool { position: absolute; inset: 0; pointer-events: none; }
+.editor-pool > iframe.pooled { position: absolute; pointer-events: auto; background: transparent; }

@@ -361,9 +361,12 @@ export function NowRow({
   openRight,
   extraClass = "",
   meta,
+  detail,
 }: {
   session: Session;
   label: string;
+  /** 0.5.4 (활동): what this running or waiting turn is doing now ("12분째 · 380 MB", "2번째"), quiet at the row's end in place of the state word its group already says. */
+  detail?: string;
   /** N1: the conversation's project, quiet at the row's end. */
   meta?: string;
   current: boolean;
@@ -393,14 +396,14 @@ export function NowRow({
         event.stopPropagation();
         onMenu(event.clientX, event.clientY);
       }}
-      title={`${label}${meta ? `\n${meta}` : ""}${said ? `\n${said.word}` : ""}`}
-      aria-label={`${label}${said ? `, ${said.word}` : ""}${meta ? `, ${meta}` : ""}`}
+      title={`${label}${meta ? `\n${meta}` : ""}${said ? `\n${said.word}` : ""}${detail ? `\n${detail}` : ""}`}
+      aria-label={`${label}${said ? `, ${said.word}` : ""}${detail ? `, ${detail}` : ""}${meta ? `, ${meta}` : ""}`}
     >
       <StateMark state={said} />
       <span className="side-row-label">{label}</span>
       <span className="side-row-trail">
         <LinkBadge sessionId={session.id} />
-        {said ? <span className={`row-state tone-${said.tone}`}>{said.word}</span> : null}
+        {detail ? <span className="nav-owner now-detail">{detail}</span> : said ? <span className={`row-state tone-${said.tone}`}>{said.word}</span> : null}
       </span>
     </button>
   );

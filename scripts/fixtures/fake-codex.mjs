@@ -537,6 +537,8 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
   // "받은 글 보여줘": the request exactly as the gateway handed it over (what changed before it, the
   // pins…). Not just "받은 글": every linked-session reply says "받은 글 N자를 읽었습니다".
   if (text.includes("받은 글 보여줘")) told(`받은 글:\n${text}\n\n`);
+  // 0.5.4 (Slack smoke): a table too wide for a messenger's monospace block.
+  if (text.includes("넓은 표")) told(`| 이름 | 설명 |\n|---|---|\n| 가 | ${"아주 긴 설명 ".repeat(8).trim()} |\n\n`);
   // "노트에 적어: <path>": a line appended to that file, reported as Codex reports a file change.
   const noteTarget = /노트에 적어: ([^\n]+)/.exec(text)?.[1]?.trim();
   if (noteTarget) {

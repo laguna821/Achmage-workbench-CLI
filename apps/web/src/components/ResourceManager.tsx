@@ -1,5 +1,5 @@
 import { createContext, useId, useState } from "react";
-import type { QueuedMessage, ResourceSettings, ResourceState, Session } from "@workbench/contracts";
+import type { QueuedMessage, ResourceRunning, ResourceSettings, ResourceState, Session } from "@workbench/contracts";
 import { SettingsRow, SettingsSwitch } from "./SettingsSheet.tsx";
 import { Segmented } from "./ui/Hig.tsx";
 import { Select } from "./ui/Select.tsx";
@@ -10,6 +10,34 @@ import { Select } from "./ui/Select.tsx";
 
 const MB = 1024 * 1024, GB = 1024 * MB;
 const size = (bytes: number) => (bytes >= GB ? `${(bytes / GB).toFixed(1)} GB` : `${Math.round(bytes / MB)} MB`);
+const capLabel = (bytes: number | null) => (bytes ? `${Math.round(bytes / GB)} GB` : "끔");
+
+/** 0.5.4: what a running turn says in 활동 and the bottom line's list: "12분째 · 380 MB". */
+export function runningWords(turn: ResourceRunning, now: number, short = false): string {
+  const parts: string[] = [];
+  if (turn.since !== null) {
+    const minutes = Math.floor(Math.max(0, now - turn.since) / 60_000);
+    parts.push(minutes < 1 ? "방금 시작" : minutes < 60 ? `${minutes}분째` : `${Math.floor(minutes / 60)}시간${minutes % 60 ? ` ${minutes % 60}분` : ""}째`);
+  }
+  if (turn.bytes !== null) parts.push(size(turn.bytes));
+  // The bottom line's list is narrow and its pressure line already says why: there, two words.
+  if (turn.relieved) parts.push(short ? "다음 요청 대기" : "메모리가 부족해 다음 요청은 기다립니다");
+  return parts.length ? parts.join(" · ") : "실행 중";
+}
+
+/** 0.5.4: the pressure line, naming each rung of the ladder reached. */
+export function pressureWords(stage: ResourceState["stage"]): string {
+  const done = stage >= 3 ? " 쉬는 엔진을 끄고 보이지 않는 탭을 쉬게 했습니다." : stage === 2 ? " 쉬는 엔진을 껐습니다." : "";
+  const last = stage >= 4 ? " 급하지 않은 작업 하나가 메모리를 돌려주고, 그 대화의 다음 요청은 기다립니다." : "";
+  return `메모리가 부족해 새 작업을 잠시 멈췄습니다.${done}${last}`;
+}
+
+const CAP_HINT: Record<ResourceState["capSupport"], string> = {
+  enforced: "대화마다 엔진을 따로 묶어, 상한을 넘으면 그 대화의 엔진만 멈춥니다. 새로 시작하는 대화 엔진부터 적용됩니다. Codex 대화는 엔진 하나를 함께 써서 대화마다 걸 수 없습니다.",
+  advised: "권장값입니다. 이 컴퓨터(Windows·macOS)에서는 앱이 대화마다 메모리 상한을 강제하지 못합니다.",
+  unavailable: "이 컴퓨터에서는 상한을 걸 수 없습니다.",
+  checking: "이 컴퓨터에서 상한을 걸 수 있는지 확인하고 있습니다.",
+};
 
 /** "이 컴퓨터에서는 약 N개까지 편하게 돌릴 수 있습니다 (어림)". */
 export const comfortLine = (state: ResourceState) => `이 컴퓨터에서는 약 ${state.estimate.comfortable}개까지 편하게 돌릴 수 있습니다 (어림)`;
@@ -44,6 +72,10 @@ export function ResourceSettingsRows({ state, onChange }: { state: ResourceState
           {note ? <p className="settings-note">{note}</p> : null}
         </details>
       </>} />
+    <SettingsRow className="resource-cap" label={state.capSupport === "advised" ? "대화당 메모리 상한 (권장값)" : "대화당 메모리 상한"} hint={CAP_HINT[state.capSupport]}
+      control={state.capSupport === "enforced" || state.capSupport === "advised"
+        ? <Select<number> label="대화당 메모리 상한" value={settings.cap ?? 0} options={state.capChoices.map((value) => ({ value: value ?? 0, label: capLabel(value) }))} onChange={(value) => onChange({ cap: value || null })} />
+        : undefined} />
     <SettingsRow className="resource-background" label="뒤에서 도는 작업은 천천히" hint="화면에 없는 대화의 AI 엔진은 창보다 낮은 우선순위로 돌려, 보고 있는 화면이 느려지지 않게 합니다."
       control={<SettingsSwitch label="뒤에서 도는 작업은 천천히" checked={settings.background} onChange={(background) => onChange({ background })} />} />
   </>;
@@ -69,7 +101,7 @@ export function waitingWords(state: ResourceState | null, session: Session, entr
  * "실행 4 · 대기 3" at the window's bottom line, beside the memory readout — only while something runs or
  * waits (or memory is short). A click opens the list: what runs, what waits and why, 지금 바로 실행 per row.
  */
-export function ResourceLine({ state, onRunNow, onOpen }: { state: ResourceState | null; onRunNow: (sessionId: string, requestId: string) => Promise<void>; onOpen?: (sessionId: string) => void }) {
+export function ResourceLine({ state, onRunNow, onOpen, now = Date.now }: { state: ResourceState | null; onRunNow: (sessionId: string, requestId: string) => Promise<void>; onOpen?: (sessionId: string) => void; now?: () => number }) {
   const [open, setOpen] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
   const id = useId();
@@ -84,9 +116,9 @@ export function ResourceLine({ state, onRunNow, onOpen }: { state: ResourceState
       {open ? (
         <div id={id} role="group" aria-label="동시에 돌리는 작업" className="popover popover-above popover-right memory-pop resource-pop">
           <p className="memory-note">한 번에 {state.limit}개까지 · {state.settings.mode === "auto" ? "자동" : "직접 정함"}</p>
-          {state.pressure ? <p className="memory-note resource-pressure" role="status">메모리가 부족해 새 작업을 잠시 멈췄습니다. 쉬는 엔진을 끄고 보이지 않는 탭을 쉬게 했습니다.</p> : null}
+          {state.pressure ? <p className="memory-note resource-pressure" role="status">{pressureWords(state.stage || 1)}</p> : null}
           {state.running.length ? <dl className="memory-parts resource-rows" aria-label="실행 중">
-            {state.running.map((turn) => <div key={turn.sessionId}><dt>{onOpen ? <button type="button" className="text-button" onClick={() => { onOpen(turn.sessionId); close(); }}>{turn.title}</button> : turn.title}</dt><dd>{turn.forced ? "바로 실행" : "실행 중"}</dd></div>)}
+            {state.running.map((turn) => <div key={turn.sessionId}><dt>{onOpen ? <button type="button" className="text-button" onClick={() => { onOpen(turn.sessionId); close(); }}>{turn.title}</button> : turn.title}</dt><dd>{turn.forced ? "바로 실행 · " : ""}{runningWords(turn, now(), true)}</dd></div>)}
           </dl> : null}
           {state.waiting.length ? <>
             {state.reason ? <p className="memory-note">{state.reason}</p> : null}

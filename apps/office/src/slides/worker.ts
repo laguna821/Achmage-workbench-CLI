@@ -52,6 +52,16 @@ async function handle(call: WorkerCall): Promise<{ value: unknown; unhandled?: b
       registerSlidesIpc();
       registerSlideImageIpc();
       return { value: true };
+    case "token":
+      setFontToken(call.token);
+      return { value: true };
+    case "close-previous": {
+      // The editor pool opened another deck in this page: the one before (its session, its working copy) is let go.
+      for (const id of [...sessions.keys()]) if (id !== viewId) sessions.delete(id);
+      const sweep = (dir: string) => { for (const entry of vfs.list(dir)) { const at = `${dir}/${entry.name}`; if (entry.directory) { sweep(at); vfs.removeDir(at); } else if (at !== path) vfs.remove(at); } };
+      sweep("/document");
+      return { value: true };
+    }
     case "open": {
       path = `/document/${call.generation ? `g${call.generation}/` : ""}${call.name.replace(/[\\/]/g, "_")}`;
       vfs.write(path, new Uint8Array(call.bytes));

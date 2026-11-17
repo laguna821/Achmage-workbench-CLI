@@ -212,7 +212,9 @@ try {
     if (id !== "main") await page!.locator(`.pane[data-pane-active="true"][data-tab="${id}"]`).waitFor();
     else await wait(1000);
   };
-  const frameHandle = async () => (await activePane().locator("iframe.office-frame").elementHandle({ timeout: 60_000 }))!;
+  // The editor of the focused pane: its own iframe, or the editor pool's frame laid over its tab (Word, 0.5.4).
+  const shownEditor = () => page!.locator('.pane[data-pane-active="true"] iframe.office-frame, .editor-pool iframe.office-frame[data-pool-shown="true"][data-pane-active="true"]');
+  const frameHandle = async () => (await shownEditor().elementHandle({ timeout: 60_000 }))!;
   const frame = async (): Promise<Frame> => (await (await frameHandle()).contentFrame())!;
   const headKey = () => activePane().locator(".doc-header-right .doc-agent-toggle");
   const readySelector: Record<string, string> = { docx: '.tiptap[contenteditable="true"]', pptx: ".slide-list .thumb-num", xlsx: "#univer-container canvas", pdf: ".app-content canvas, .app-content .page", md: ".app-content .tiptap, .app-content .ProseMirror", html: ".app-content" };
@@ -235,7 +237,7 @@ try {
   /** Mark the frame element and its page, to tell later whether either was recreated. */
   const probe = async () => { await (await frameHandle()).evaluate((el) => { (el as HTMLElement).dataset.probe = "same"; }); await (await frame()).evaluate(() => { (window as unknown as { __probe: number }).__probe = 1; }); };
   const sameFrame = async () => {
-    const element = await activePane().locator("iframe.office-frame").getAttribute("data-probe").catch(() => null);
+    const element = await shownEditor().getAttribute("data-probe").catch(() => null);
     const editor = await (await frame()).evaluate(() => (window as unknown as { __probe?: number }).__probe === 1).catch(() => false);
     return { element: element === "same", editor };
   };
@@ -442,7 +444,7 @@ try {
       const end = await waitFor(async () => endedAt.has(marker), 10_000) ? endedAt.get(marker)! : Date.now();
       const shown = await waitFor(() => visible[format]!(marker, count), 30_000);
       const ms = Date.now() - end;
-      if (!shown) console.log("debug", JSON.stringify(await (await frame()).evaluate(() => ({ tail: (document.querySelector(".tiptap")?.textContent ?? "").slice(-120), blocks: document.querySelector(".tiptap")?.childElementCount }))), await activePane().locator("iframe.office-frame").getAttribute("data-revision"));
+      if (!shown) console.log("debug", JSON.stringify(await (await frame()).evaluate(() => ({ tail: (document.querySelector(".tiptap")?.textContent ?? "").slice(-120), blocks: document.querySelector(".tiptap")?.childElementCount }))), await shownEditor().getAttribute("data-revision"));
       await wait(1500);
       const same = await sameFrame();
       const topAfter = await (await frame()).evaluate((s) => document.querySelector<HTMLElement>(s)?.scrollTop ?? null, scroller).catch(() => null);
@@ -495,7 +497,7 @@ try {
       await wait(1500);
       const keptSection = page!.locator(`section[data-tab-kept="closed"][data-tab="${tabId}"]`);
       const keptNow = await keptSection.count() === 1 && await page!.locator(`.group-tab[data-tab-id="${tabId}"]`).count() === 0;
-      const keptSame = await keptSection.locator("iframe.office-frame").getAttribute("data-probe").catch(() => null) === "same";
+      const keptSame = await page!.locator(`section[data-tab-kept="closed"][data-tab="${tabId}"] iframe.office-frame, .editor-pool iframe.office-frame[data-tab="${tabId}"]`).getAttribute("data-probe").catch(() => null) === "same";
       check(`${format} tab closed mid-turn: the tab is gone, its editor kept off screen (same frame)`, keptNow && keptSame, JSON.stringify({ keptNow, keptSame }));
       // The row says the document's AI is at work.
       if (!await page!.locator(`.sidebar [data-row-id="${docs[format]!.id}"]`).count()) await page!.locator(`.sidebar [data-row-id="${work.id}"]`).click().catch(() => {});

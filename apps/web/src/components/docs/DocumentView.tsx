@@ -1421,7 +1421,7 @@ export default function DocumentView({
       ) : null}
       <div className="doc-body" ref={bodyRef} inert={!lease.canWrite && everWriter.current && Boolean(design || officeEditing)}>
         {officeEditing && everWriter.current ? (
-          <OfficeEditor ref={officeRef} api={api} artifact={artifact} access={lease.access()} sessionId={lease.registration?.view.sessionId ?? null} hidden={Boolean(compare || viewing)} onStatus={setOfficeStatus} onAiPanel={onEditorAi} onPageDrawn={() => setEditorDrawn(true)} viewPosition={uiState?.office} onViewPosition={(office) => onUiState?.({ office })} onReload={onEditorReload} onNotice={onToast} onWarning={onHangulWarning} onCopied={onOpenArtifact} onPresent={onPresent}
+          <OfficeEditor ref={officeRef} api={api} artifact={artifact} access={lease.access()} sessionId={lease.registration?.view.sessionId ?? null} hidden={Boolean(compare || viewing)} covered={coverShown} onStatus={setOfficeStatus} onAiPanel={onEditorAi} onPageDrawn={() => setEditorDrawn(true)} viewPosition={uiState?.office} onViewPosition={(office) => onUiState?.({ office })} onReload={onEditorReload} onNotice={onToast} onWarning={onHangulWarning} onCopied={onOpenArtifact} onPresent={onPresent}
             onPrepareAi={(revision) => lease.sync(false, revision)} onAiSettings={onAiSettings}
             onNewSession={async (revision) => {
               await lease.sync(false, revision);

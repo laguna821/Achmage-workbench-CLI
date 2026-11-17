@@ -3,24 +3,26 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ResourceState, Session } from "@workbench/contracts";
 import { rowState } from "../row-state.ts";
-import { ResourceLine, ResourceSettingsRows, ResourcesContext } from "./ResourceManager.tsx";
+import { ResourceLine, ResourceSettingsRows, ResourcesContext, pressureWords, runningWords } from "./ResourceManager.tsx";
 import { QueuedList } from "./WorkView.tsx";
 
 afterEach(cleanup);
 
 const GB = 1024 ** 3, MB = 1024 ** 2;
+const NOW = 1_800_000_000_000;
 const state = (patch: Partial<ResourceState> = {}): ResourceState => ({
-  settings: { mode: "auto", manual: 4, background: true }, maxLimit: 32, limit: 4,
+  settings: { mode: "auto", manual: 4, background: true, cap: null }, maxLimit: 32, limit: 4,
   running: [
-    { sessionId: "a", title: "강의계획서", forced: false, kind: "conversation" },
-    { sessionId: "b", title: "보고서", forced: true, kind: "conversation" },
+    { sessionId: "a", title: "강의계획서", forced: false, kind: "conversation", since: NOW - 12 * 60_000, bytes: 380 * MB },
+    { sessionId: "b", title: "보고서", forced: true, kind: "conversation", since: NOW - 30_000, bytes: null },
   ],
   waiting: [
     { sessionId: "c", requestId: "rc", title: "회의록", position: 1, at: 1, kind: "conversation", phone: false },
     { sessionId: "d", requestId: null, title: "예산표", position: 2, at: 2, kind: "document", phone: false },
     { sessionId: "e", requestId: "re", title: "자료 조사", position: 3, at: 3, kind: "conversation", phone: true },
   ],
-  reason: "지금 동시에 4개까지 돌리고 있습니다", pressure: false, sleepNow: 0,
+  reason: "지금 동시에 4개까지 돌리고 있습니다", pressure: false, sleepNow: 0, stage: 0,
+  capSupport: "enforced", capChoices: [null, 1 * GB, 2 * GB, 4 * GB],
   estimate: { comfortable: 12, totalBytes: 16 * GB, otherBytes: 10.6 * GB, costBytes: 450 * MB, learned: false, reading: "exact" },
   ...patch,
 });
@@ -40,21 +42,63 @@ describe("설정 › AI 엔진 › 동시에 돌리는 작업", () => {
     expect(onChange).toHaveBeenCalledWith({ background: false });
   });
   it("직접 shows the number; a learned cost has no 기본값 note; a rough reading says so", () => {
-    render(<ResourceSettingsRows state={state({ settings: { mode: "manual", manual: 3, background: true }, estimate: { ...state().estimate, learned: true, reading: "rough" } })} onChange={() => undefined} />);
+    render(<ResourceSettingsRows state={state({ settings: { mode: "manual", manual: 3, background: true, cap: null }, estimate: { ...state().estimate, learned: true, reading: "rough" } })} onChange={() => undefined} />);
     expect(screen.getByRole("button", { name: /한 번에 돌릴 작업 수/ }).textContent).toContain("3개");
     expect(screen.getByText("작업 하나가 쓰는 평균").nextElementSibling?.textContent).toBe("450 MB");
     expect(screen.getByText(/적게 알려 주어/)).toBeTruthy();
   });
 });
 
+describe("설정 › AI 엔진 › 대화당 메모리 상한 (0.5.4)", () => {
+  it("off by default; the sizes to choose; on Linux with scopes it says what it does", () => {
+    const onChange = vi.fn();
+    render(<ResourceSettingsRows state={state()} onChange={onChange} />);
+    const select = screen.getByRole("button", { name: /대화당 메모리 상한/ });
+    expect(select.textContent).toContain("끔");
+    expect(screen.getByText(/상한을 넘으면 그 대화의 엔진만 멈춥니다/)).toBeTruthy();
+    expect(screen.getByText(/Codex 대화는 엔진 하나를 함께 써서/)).toBeTruthy();
+    fireEvent.click(select);
+    fireEvent.click(screen.getByRole("option", { name: "2 GB" }));
+    expect(onChange).toHaveBeenCalledWith({ cap: 2 * GB });
+  });
+  it("where it cannot be enforced it says so, in the product's words, and offers no control that pretends", () => {
+    render(<ResourceSettingsRows state={state({ capSupport: "unavailable" })} onChange={() => undefined} />);
+    expect(screen.getByText("이 컴퓨터에서는 상한을 걸 수 없습니다.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /대화당 메모리 상한/ })).toBeNull();
+  });
+  it("Windows and macOS: a recommended value only, said so", () => {
+    render(<ResourceSettingsRows state={state({ capSupport: "advised", settings: { ...state().settings, cap: 2 * GB } })} onChange={() => undefined} />);
+    expect(screen.getByRole("button", { name: /대화당 메모리 상한/ }).textContent).toContain("2 GB");
+    expect(screen.getByText("대화당 메모리 상한 (권장값)")).toBeTruthy();
+    expect(screen.getByText(/강제하지 못합니다/)).toBeTruthy();
+  });
+});
+
+describe("what a running turn says (0.5.4)", () => {
+  it("how long it has run and what its engine holds; just started; given memory back", () => {
+    expect(runningWords(state().running[0]!, NOW)).toBe("12분째 · 380 MB");
+    expect(runningWords(state().running[1]!, NOW)).toBe("방금 시작");
+    expect(runningWords({ ...state().running[0]!, since: NOW - 75 * 60_000 }, NOW)).toBe("1시간 15분째 · 380 MB");
+    expect(runningWords({ ...state().running[0]!, relieved: true }, NOW)).toBe("12분째 · 380 MB · 메모리가 부족해 다음 요청은 기다립니다");
+    expect(runningWords({ ...state().running[0]!, since: null, bytes: null }, NOW)).toBe("실행 중");
+    expect(runningWords({ ...state().running[0]!, relieved: true }, NOW, true)).toBe("12분째 · 380 MB · 다음 요청 대기");
+  });
+  it("the pressure line names each rung reached", () => {
+    expect(pressureWords(1)).toBe("메모리가 부족해 새 작업을 잠시 멈췄습니다.");
+    expect(pressureWords(3)).toBe("메모리가 부족해 새 작업을 잠시 멈췄습니다. 쉬는 엔진을 끄고 보이지 않는 탭을 쉬게 했습니다.");
+    expect(pressureWords(4)).toMatch(/급하지 않은 작업 하나가 메모리를 돌려주고, 그 대화의 다음 요청은 기다립니다\.$/);
+  });
+});
+
 describe("the bottom line", () => {
   it("'실행 2 · 대기 3', a click opens the list with the reason and 지금 바로 실행 per waiting conversation", async () => {
     const runNow = vi.fn(async () => undefined);
-    render(<ResourceLine state={state()} onRunNow={runNow} />);
+    render(<ResourceLine state={state()} onRunNow={runNow} now={() => NOW} />);
     const key = screen.getByRole("button", { name: "실행 2 · 대기 3" });
     fireEvent.click(key);
     expect(screen.getByText("지금 동시에 4개까지 돌리고 있습니다")).toBeTruthy();
-    expect(screen.getByText("바로 실행")).toBeTruthy();
+    expect(screen.getByText("바로 실행 · 방금 시작")).toBeTruthy();
+    expect(screen.getByText("12분째 · 380 MB")).toBeTruthy();
     const keys = screen.getAllByRole("button", { name: "지금 바로 실행" });
     // The document's AI waits in its editor: no key for it.
     expect(keys).toHaveLength(2);
@@ -66,7 +110,7 @@ describe("the bottom line", () => {
     const { container } = render(<ResourceLine state={state({ running: [], waiting: [], reason: null })} onRunNow={async () => undefined} />);
     expect(container.textContent).toBe("");
     cleanup();
-    render(<ResourceLine state={state({ running: [], waiting: [], pressure: true })} onRunNow={async () => undefined} />);
+    render(<ResourceLine state={state({ running: [], waiting: [], pressure: true, stage: 1 })} onRunNow={async () => undefined} />);
     fireEvent.click(screen.getByRole("button", { name: "실행 0 · 메모리 부족" }));
     expect(screen.getByText(/메모리가 부족해 새 작업을 잠시 멈췄습니다/)).toBeTruthy();
   });

@@ -1,4 +1,5 @@
 import { withParticle } from "@workbench/contracts";
+import { recentFramesFor, warmTabsFor } from "./editor-pool.ts";
 import { DesktopTargetPicker } from "./components/DesktopTargetPicker.tsx";
 import { createShownReporter, SHOWN_CLIENT } from "./engine-shown.ts";
 import { forgetUnread, keepUnread } from "./kept-unread.ts";
@@ -112,7 +113,7 @@ import { LinkContext, hopsText, linkOfSession, useLinkApi } from "./links.ts";
 import { Beside, useBesideRoom } from "./components/companion/Beside.tsx";
 import { heldPageMayClose } from "./held-page.ts";
 import { projectChoiceMoves, useOverlayKeep } from "./overlay-keep.ts";
-import { besideOf, isCompanion, readMinimum, oneViewPerDocument, upgradeStoredLayout, viewDocument, viewPage, viewsOfDocument, viewsOfPage, withoutCompanion, type Companion } from "./companion.ts";
+import { BESIDE_SHARE, besideOf, besideRatioKey, isCompanion, readBesideRatio, readMinimum, oneViewPerDocument, upgradeStoredLayout, viewDocument, viewPage, viewsOfDocument, viewsOfPage, withoutCompanion, type Companion } from "./companion.ts";
 import { createDesk, settleLayout } from "./companion-desk.ts";
 import { MoveQuestion } from "./components/companion/MoveQuestion.tsx";
 import { keepPosition, keptPosition, modeDocument, modeOf, readingPosition, restorePosition, reviewProposal, useWorkModeKeys, type ModeProps, type ReadingPosition, type WorkMode } from "./workmodes.ts";
@@ -744,6 +745,19 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   const scopes = useMemo(() => stripScopes(layout, scopeWorkId, everyProject), [layout, scopeWorkId, everyProject]);
   /** The layout as drawn: only the panes of the window's project (the others stay mounted, as a tab behind another is). */
   const drawn = useMemo(() => drawnLayout(layout, everyProject), [layout, everyProject]);
+  // Warm at restore (editor pool, guarantee 8): once the gateway's state is in, per pooled kind with open tabs, the tab of
+  // it shown last is mounted behind so its editor starts; decided once per window, nothing else is warmed.
+  const warmTabs = useRef<string[] | null>(null);
+  const docTabIds = layout.panes.flatMap((pane) => tabsOf(pane).map((tab) => viewDocument(tab.view))).filter((id): id is string => Boolean(id));
+  // Decided once the documents of the open tabs are known (their kinds).
+  // Memory short (the resource manager's pressure): nothing is warmed.
+  if (warmTabs.current === null && layoutReady && state.connected && !state.resources?.pressure && docTabIds.every((id) => state.artifacts[id])) {
+    const front = new Set(drawn.panes.map((pane) => activeTab(pane).id));
+    warmTabs.current = warmTabsFor(layout.panes.flatMap((pane) => tabsOf(pane).map((tab) => {
+      const artifactId = viewDocument(tab.view), recency = (pane.recentTabIds ?? []).indexOf(tab.id);
+      return { id: tab.id, format: artifactId ? state.artifacts[artifactId]?.format : undefined, onScreen: front.has(tab.id), recency: recency < 0 ? 999 : recency };
+    })));
+  }
   useEffect(() => { updateLayout((current) => followScope(current, everyProject)); }, [everyProject, updateLayout]);
   useEffect(() => {
     if (state.ready) localStorage.setItem(PREFS_CACHE_KEY, JSON.stringify(state.prefs));
@@ -2827,6 +2841,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
         }}
         onNew={target => setNewBrowser({ ...target, paneId: pane.id })}
         onOpenUrl={url => { const page = sharedBrowser.getState().pages.find(page => page.pageId === pageId); void openBrowserRef.current(pane.id, { workspaceId: page?.workspaceId, profileId: page?.profileId, url }); }}
+        onNotify={setToast}
         onClosed={hosted ? () => updateLayout((current) => withoutCompanion(current, tabId)) : closeThisTab} onOpenSession={openSession} onLeaveGuard={guardOf[tabId]}
         onSessionMenu={(agent, x, y) => {
           const request = menuFor({ type: "session", id: agent.id, depth: 0, session: agent, work: state.works[agent.workId] }, x, y);
@@ -3007,9 +3022,10 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
         over="content"
         // A document is read beside the conversation: the read view's minimum, else it lies over.
         contentMin={besideDoc ? readMinimum(besideDoc.format) : undefined}
-        ratio={typeof prefs.splitRatio === "number" ? prefs.splitRatio : 0.45}
-        onRatio={(ratio) => savePrefs({ splitRatio: ratio })}
-        resetRatio={0.45}
+        // Its width is this window's (the main window and a session's own window apart), kept in the preferences.
+        ratio={readBesideRatio(prefs, single ? "window" : "main")}
+        onRatio={(ratio) => savePrefs({ [besideRatioKey(single ? "window" : "main")]: ratio })}
+        resetRatio={BESIDE_SHARE}
         chatLabel="대화"
         contentLabel={beside?.kind === "browser" ? "웹 페이지" : "문서"}
         onCovered={(covered) => setCoveredTabs((current) => (Boolean(current[tabId]) === covered ? current : { ...current, [tabId]: covered }))}
@@ -3336,8 +3352,10 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
         <PaneLayout
           layout={layout}
           drawn={drawn}
+          warm={warmTabs.current ?? undefined}
           sleep={tabSleep}
           sleepNow={state.resources?.sleepNow ?? 0}
+          recentFrames={recentFramesFor(state.resources && !api?.isRemote ? { pressure: state.resources.pressure, budgetBytes: state.resources.estimate.totalBytes - state.resources.estimate.otherBytes } : null)}
           onSleeping={setSleepingTabs}
           maximized={editorFocus || paneFocus}
           onMaximize={id => { focusPaneNow(id); setPaneFocus(value => !value); }}

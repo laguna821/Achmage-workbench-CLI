@@ -258,6 +258,9 @@
 
 @media (width < 60rem) {
   .sidebar { max-width: min(320px, calc(100% - 48px)); }
+}
+/* A pane's tab strip: tabs narrow with the pane. */
+@container work-pane (width < 60rem) {
   .group-tabs .group-tab { max-width: 200px; }
 }
 @media (pointer: coarse) {

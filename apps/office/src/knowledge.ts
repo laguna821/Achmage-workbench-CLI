@@ -5,7 +5,7 @@ export function knowledgeNavigation(session: string | null) {
   const pending = new Map<string, { done(error?: string): void }>();
   listen(message => {
     if (message.type === "office:knowledge-result") pending.get(message.requestId)?.done(message.error);
-    if (message.type === "office:grant" && message.sessionId !== session) {
+    if ((message.type === "office:grant" || message.type === "office:swap") && message.sessionId !== session) {
       session = message.sessionId;
       for (const call of pending.values()) call.done("선택한 대화가 바뀌었습니다.");
     }

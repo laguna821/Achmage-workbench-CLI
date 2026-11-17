@@ -58,6 +58,11 @@ async fn evaluate(view: Webview, expression: String) -> Result<Value, String> {
 fn api_expression(expression: &str) -> String {
     format!("(()=>{{try{{const api=window.__ACHMAGE_PAGE__;if(!api)return {{error:'PAGE_NOT_READY'}};return {expression};}}catch(error){{return {{error:String(error.message||error)}};}}}})()")
 }
+/// The bookmark keys a page's script took while the page had the keyboard (shared_browser.js `keys`):
+/// only the two known names, at most four.
+fn forwarded_keys(value: &Value) -> Vec<String> {
+    value["keys"].as_array().map(|keys| keys.iter().filter_map(Value::as_str).filter(|key| matches!(*key, "bookmark" | "bookmark-bar")).take(4).map(str::to_string).collect()).unwrap_or_default()
+}
 fn current(app: &tauri::AppHandle, id: &str) -> Result<Page, String> {
     app.state::<SharedBrowser>().pages.lock().unwrap().get(id).cloned().ok_or_else(|| "웹 페이지가 닫혔습니다.".into())
 }
@@ -328,15 +333,23 @@ pub async fn shared_browser(app: tauri::AppHandle, webview: Webview, command: Va
         }
         "list" => {
             let pages: Vec<Page> = app.state::<SharedBrowser>().pages.lock().unwrap().values().cloned().collect();
+            let mut keys: HashMap<String, Vec<String>> = HashMap::new();
             for page in pages {
                 if let Some(view) = app.get_webview(&label(&page.page_id)) {
                     // User input happens only on a visible page. Hidden pages keep the actual DOM/run.
                     if page.visible && !page.loading {
-                        if let Ok(value) = evaluate(view, api_expression(&format!("api.state({})", json!(page.control)))).await { update_control(&app, &page.page_id, &value); }
+                        if let Ok(value) = evaluate(view, api_expression(&format!("api.state({})", json!(page.control)))).await {
+                            update_control(&app, &page.page_id, &value);
+                            let pressed = forwarded_keys(&value);
+                            if !pressed.is_empty() { keys.insert(page.page_id.clone(), pressed); }
+                        }
                     }
                 } else { app.state::<SharedBrowser>().pages.lock().unwrap().remove(&page.page_id); }
             }
-            Ok(json!(app.state::<SharedBrowser>().pages.lock().unwrap().values().cloned().collect::<Vec<_>>()))
+            // Keys go out with this one listing only (they are not kept on the page record).
+            let mut listed: Vec<Value> = app.state::<SharedBrowser>().pages.lock().unwrap().values().map(|page| json!(page)).collect();
+            for entry in listed.iter_mut() { if let Some(pressed) = entry["pageId"].as_str().and_then(|id| keys.remove(id)) { entry["keys"] = json!(pressed); } }
+            Ok(Value::Array(listed))
         }
         "present" => {
             let placements = command["pages"].as_array().ok_or("웹 페이지 위치가 올바르지 않습니다.")?;
@@ -359,5 +372,19 @@ pub async fn shared_browser(app: tauri::AppHandle, webview: Webview, command: Va
             Ok(Value::Null)
         }
         _ => Err("지원하지 않는 브라우저 요청입니다.".into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_the_bookmark_keys_are_forwarded() {
+        assert_eq!(forwarded_keys(&json!({"keys":["bookmark","bookmark-bar"]})), vec!["bookmark", "bookmark-bar"]);
+        assert_eq!(forwarded_keys(&json!({"keys":["reload","bookmark",3,null,{"x":1}]})), vec!["bookmark"]);
+        assert_eq!(forwarded_keys(&json!({"keys":["bookmark","bookmark","bookmark","bookmark","bookmark","bookmark"]})).len(), 4);
+        assert!(forwarded_keys(&json!({"keys":"bookmark"})).is_empty());
+        assert!(forwarded_keys(&json!({"url":"https://a.example/"})).is_empty());
     }
 }

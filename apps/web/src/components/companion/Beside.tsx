@@ -1,6 +1,6 @@
 import { withParticle } from "@workbench/contracts";
 import { createContext, useContext, useLayoutEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { AGENT_COLUMN_MIN, CHAT_MIN, COLUMN_GAP, besideFit, clampRatio } from "../../companion.ts";
+import { AGENT_COLUMN_MIN, CHAT_MIN, COLUMN_GAP, RATIO_MAX, RATIO_MIN, besideFit, clampRatio } from "../../companion.ts";
 import { usePhoneLayout } from "../../mobile-layout.ts";
 import { Icon } from "../Icon.tsx";
 import "../../styles/companion.css";
@@ -109,8 +109,13 @@ export function Beside({ chat, content, over, chatMin = CHAT_MIN, contentMin = C
     return () => tellCovered.current?.(false);
   }, [chatCovered]);
 
+  // The handle works as the panes' own dividers do (Panes.tsx): held and moved, the width follows
+  // the pointer and is kept when let go; a cancelled hold (the pointer taken away, the window left)
+  // keeps the width it had. While held, the whole window shows the resize pointer and selects no text.
   const drag = (event: ReactPointerEvent) => {
+    if (event.button !== 0) return;
     event.preventDefault();
+    (event.currentTarget as HTMLElement).focus();
     const box = host.current?.getBoundingClientRect();
     if (!box || box.width <= COLUMN_GAP) return;
     let latest = shown;
@@ -118,20 +123,30 @@ export function Beside({ chat, content, over, chatMin = CHAT_MIN, contentMin = C
       latest = clampRatio((move.clientX - box.left) / (box.width - COLUMN_GAP));
       setLive(latest);
     };
-    const onUp = () => {
+    const finish = (save: boolean) => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      window.removeEventListener("blur", onCancel);
+      document.documentElement.classList.remove("pane-resizing");
       setLive(null);
-      onRatio(latest);
+      if (save) onRatio(latest);
     };
+    const onUp = () => finish(true), onCancel = () => finish(false);
+    document.documentElement.classList.add("pane-resizing");
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    window.addEventListener("blur", onCancel);
   };
+  // ←/→ move it (Shift: further), Home/End to its bounds, Enter back to where it started — the panes' dividers' keys.
   const nudge = (event: ReactKeyboardEvent) => {
-    const step = event.key === "ArrowLeft" ? -0.02 : event.key === "ArrowRight" ? 0.02 : 0;
-    if (!step) return;
+    const step = event.shiftKey ? 0.1 : 0.02;
+    const next = event.key === "ArrowLeft" ? shown - step : event.key === "ArrowRight" ? shown + step
+      : event.key === "Home" ? RATIO_MIN : event.key === "End" ? RATIO_MAX : event.key === "Enter" ? resetRatio : null;
+    if (next === null) return;
     event.preventDefault();
-    onRatio(clampRatio(shown + step));
+    onRatio(clampRatio(next));
   };
 
   // On a phone Esc in the AI goes back to the document, as its back key does (unless something inside used it).
@@ -169,7 +184,7 @@ export function Beside({ chat, content, over, chatMin = CHAT_MIN, contentMin = C
         </section>
       ) : null}
       {fit?.mode === "beside" ? (
-        <div key="divider" className="beside-divider" role="separator" aria-orientation="vertical" aria-label={`${withParticle(`${chatLabel}`, "와/과")} ${contentLabel} 사이`} aria-valuenow={Math.round(shown * 100)} aria-valuemin={20} aria-valuemax={70}
+        <div key="divider" className="beside-divider" role="separator" aria-orientation="vertical" aria-label={`${withParticle(`${chatLabel}`, "와/과")} ${contentLabel} 사이`} aria-valuenow={Math.round(shown * 100)} aria-valuemin={Math.round(RATIO_MIN * 100)} aria-valuemax={Math.round(RATIO_MAX * 100)}
           tabIndex={0} onPointerDown={drag} onKeyDown={nudge} onDoubleClick={() => onRatio(resetRatio)} title="끌어서 너비 조절 · 두 번 누르면 처음 너비" />
       ) : null}
       {content !== null ? (

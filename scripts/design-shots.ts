@@ -416,6 +416,21 @@ const menusScm = menusSet ? await (async () => {
   return { work, session };
 })() : null;
 
+// Pane responsiveness (--only=pane-): up to nine conversations of one project, one per pane (the lecture's
+// two seeded ones and seven more with one short turn each), so 4, 6 and 9 panes each show a conversation.
+const paneSet = only?.some((name) => name.startsWith("pane-")) ?? false;
+const paneSessions: Session[] = paneSet ? await (async () => {
+  const extra: Session[] = [];
+  for (const purpose of ["1주차 복습", "퀴즈 문항", "읽기 자료", "토론 질문", "과제 피드백", "출석 정리", "다음 주 준비"]) {
+    const added = await api<Session>("POST", `/api/works/${lecture.id}/sessions`, { provider: "codex", purpose, access: "auto" });
+    await send(added.id, `${purpose}를 세 줄로 정리해 줘.`);
+    await until(async () => (await session(added.id)).status !== "idle", 3000);
+    await idle(added.id);
+    extra.push(added);
+  }
+  return [codex, claude, ...extra];
+})() : [];
+
 // Every work unfolded in the sidebar, so their sessions are rows to click.
 const navWorks = [...(papers ? [papers.id] : []), ...(draft ? [draft.workId] : []), ...(menusScm ? [menusScm.work.id] : [])];
 await setPrefs({ tree: { closedFolders: [], openWorks: [lecture.id, review.id, meeting.id, ...navWorks], closedWorks: [], openDocs: [lecture.id, ...navWorks] } });
@@ -522,6 +537,70 @@ const PRELUDE = `
 
 // Design invariants (docs/design/DESIGN.md): each is an expression giving { ok, detail }.
 const INVARIANTS = {
+  // Pane responsiveness (#7, #138): in every pane on screen nothing is drawn past the pane's edge (cut by
+  // it) unless a part inside the pane clips or scrolls it on purpose; no part of a pane shows a horizontal
+  // scroll bar; every conversation's send key is on screen inside its pane, and its engine is reachable
+  // (in the bar, or in the composer's ⋯ / 도구). The detail lists each pane: width, folded or not.
+  "칸 안에 다 들어감": `(() => {
+    const panes = [...document.querySelectorAll(".panes > .pane:not([hidden])")];
+    if (!panes.length) return { ok: false, detail: "no panes" };
+    const shown = (el) => el.getClientRects().length > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility({ checkVisibilityCSS: true, visibilityProperty: true }));
+    const name = (el) => el.tagName.toLowerCase() + (el.classList.length ? "." + [...el.classList].slice(0, 2).join(".") : "") + (el.getAttribute("aria-label") ? "[" + el.getAttribute("aria-label").slice(0, 16) + "]" : "");
+    const problems = [], seen = [];
+    panes.forEach((pane, index) => {
+      const box = pane.getBoundingClientRect(), tag = (index + 1) + ":" + Math.round(box.width);
+      const inside = (r) => r.left >= box.left - 1 && r.right <= box.right + 1;
+      let cut = 0;
+      for (const el of pane.querySelectorAll("*")) {
+        const r = el.getBoundingClientRect();
+        if (!r.width || !r.height || inside(r) || !shown(el)) continue;
+        if (getComputedStyle(el).position === "fixed") continue;
+        let clipped = false;
+        for (let at = el.parentElement; at && at !== pane; at = at.parentElement) if (getComputedStyle(at).overflowX !== "visible" && inside(at.getBoundingClientRect())) { clipped = true; break; }
+        if (clipped) continue;
+        if (cut++ < 3) problems.push(tag + " 넘침 " + name(el) + " " + Math.round(r.left - box.left) + "…" + Math.round(r.right - box.left));
+      }
+      for (const el of [pane, ...pane.querySelectorAll("*")]) {
+        const style = getComputedStyle(el);
+        if (!["auto", "scroll"].includes(style.overflowX) || style.scrollbarWidth === "none" || !shown(el)) continue;
+        if (el.scrollWidth > el.clientWidth + 1) problems.push(tag + " 가로 스크롤 " + name(el) + " " + el.scrollWidth + ">" + el.clientWidth);
+      }
+      for (const view of pane.querySelectorAll(".work-view")) {
+        if (!shown(view)) continue;
+        const send = view.querySelector(".composer-right .primary");
+        const r = send && send.getBoundingClientRect();
+        if (!send || !shown(send) || !inside(r) || r.top < box.top - 1 || r.bottom > box.bottom + 1) problems.push(tag + " 보내기 키 안 보임");
+        const folded = Boolean(view.querySelector(".composer-left .composer-tools"));
+        const engine = folded || Boolean(view.querySelector(".composer-right > :not(.primary):not(.stop-secondary)"));
+        if (!engine) problems.push(tag + " 엔진 못 찾음");
+        seen.push(tag + (view.querySelector(".note-head") && shown(view.querySelector(".note-head")) ? "" : " 머리접힘") + (folded ? " ⋯" : ""));
+      }
+      if (!pane.querySelector(".work-view")) seen.push(tag + " " + (pane.querySelector(".document-view, .browser-view, .start-view, .pane-start") ? name(pane.querySelector(".document-view, .browser-view, .start-view, .pane-start")) : "?"));
+    });
+    return { ok: problems.length === 0, detail: (problems.length ? problems.slice(0, 8).join(" | ") + " ‖ " : "") + "칸 " + seen.join(", ") + " · 창 " + innerWidth + "x" + innerHeight };
+  })()`,
+  // 0.5.4: a pane too short for the full input (data-short) keeps its conversation readable: in every pane
+  // that is not focused, at least 120 px of the conversation (four lines of an answer; a 220 px pane, the
+  // smallest, with the full input kept about 37) are on screen between its head and its input. The detail lists
+  // each pane: its height, short or not, the conversation's visible px and lines of an answer.
+  "짧은 칸에도 대화가 보임": `(() => {
+    const panes = [...document.querySelectorAll(".panes > .pane:not([hidden])")];
+    if (!panes.length) return { ok: false, detail: "no panes" };
+    const problems = [], seen = [];
+    panes.forEach((pane, index) => {
+      const view = pane.querySelector(".work-view"), list = view && view.querySelector(".transcript");
+      if (!list) return;
+      const box = pane.getBoundingClientRect(), r = list.getBoundingClientRect(), input = view.querySelector(".composer-area");
+      const bottom = Math.min(r.bottom, box.bottom, input ? input.getBoundingClientRect().top : Infinity);
+      const visible = Math.max(0, Math.round(bottom - Math.max(r.top, box.top)));
+      const text = view.querySelector(".transcript .turn-answer .markdown, .transcript .markdown");
+      const line = (text && parseFloat(getComputedStyle(text).lineHeight)) || 30;
+      const focused = pane.dataset.paneActive === "true";
+      seen.push((index + 1) + ":" + Math.round(box.height) + (pane.dataset.short ? " 짧음" : "") + (focused ? " 초점" : "") + " " + visible + "px≈" + (visible / line).toFixed(1) + "줄");
+      if (!focused && visible < 120) problems.push((index + 1) + " 대화 " + visible + "px");
+    });
+    return { ok: problems.length === 0, detail: (problems.length ? problems.join(" | ") + " ‖ " : "") + "칸 " + seen.join(", ") + " · 창 " + innerWidth + "x" + innerHeight };
+  })()`,
   // Release unit A: a document's AI never lies over its document on a desktop — beside it (no overlap,
   // the document's head whole), or one at a time with the pane's two-way key.
   "문서 AI는 문서를 가리지 않음": `(() => {
@@ -1989,9 +2068,9 @@ const webTab: Step[] = [
   ...openSession(codex.id), ...closeBeside,
   // The web tab an earlier scene opened is used again (one page, one tab).
   { js: "if (__wb.has('.group-tab > button:not(.group-tab-close)', '루브릭')) __wb.click('.group-tab > button:not(.group-tab-close)', '루브릭')", pause: 400 },
-  { js: "if (!__wb.has('.browser-view')) __wb.click('.pane[data-pane-active=\"true\"] .group-tab-new')", wait: "__wb.has('.browser-view') || __wb.has('.context-menu-item, [role=menuitem]', '새 웹 탭')" },
+  { js: "if (!__wb.has('.browser-view')) __wb.click('.pane[data-pane-active=\"true\"] .group-tab-new')", wait: "__wb.has('.browser-view') || __wb.has('.context-menu-item, [role=menuitem]', '새 웹')" },
   // Once only (a step may be run again while its wait settles): one page, one tab.
-  { js: "if (!__wb.has('.browser-view') && !window.__u28web) { window.__u28web = true; __wb.click('.context-menu-item, [role=menuitem]', '새 웹 탭'); }", wait: "__wb.has('.browser-view .browser-search input, .browser-view .browser-ask')" },
+  { js: "if (!__wb.has('.browser-view') && !window.__u28web) { window.__u28web = true; __wb.click('.context-menu-item, [role=menuitem]', '새 웹'); }", wait: "__wb.has('.browser-view .browser-search input, .browser-view .browser-ask')" },
   { js: `if (__wb.has('.browser-view .browser-search input') && !window.__u28url) { window.__u28url = true; __wb.type('.browser-view .browser-search input', '${WEB_URL}'); __wb.q('.browser-view .browser-search').requestSubmit(); }`, wait: "__wb.has('.browser-view .browser-ask')", pause: 600 },
 ];
 const U28_WEB_SCREENS: Screen[] = [
@@ -2276,6 +2355,8 @@ const RELB_SCREENS: Screen[] = relbSet ? [
   { name: "relb-s-devices-link", steps: [...openSession(codex.id), ...settingsOpen("devices"), { js: "__wb.click('.device-step .button', '링크 만들기')", wait: "__wb.has('.host-connection-offer')", pause: 300 }, scrollTo(".host-connection-offer")], settle: 500, cleanup: settingsClose },
   // Fix round 1: 설정 › 문서 도구's row for the editors' own AI 도우미 (I7); 받는 주소 as a two-choice control (copy list).
   { name: "relb-s-documents-editor-ai", steps: [...openSession(codex.id), ...settingsOpen("documents"), { js: "__wb.blur(); [...document.querySelectorAll('.settings-row-label')].find((label) => label.textContent.includes('편집기 안 AI 도우미'))?.scrollIntoView({ block: 'center' })", pause: 400 }], settle: 500, cleanup: settingsClose },
+  // The editor pool (0.5.4): 「같은 종류 문서는 편집기 함께 쓰기」 under 문서를 열 때.
+  { name: "relb-s-documents-editor-pool", steps: [...openSession(codex.id), ...settingsOpen("documents"), { js: "__wb.blur(); [...document.querySelectorAll('.settings-row-label')].find((label) => label.textContent.includes('편집기 함께 쓰기'))?.scrollIntoView({ block: 'center' })", pause: 400 }], settle: 500, cleanup: settingsClose },
   { name: "relb-s-devices-address", steps: [...openSession(codex.id), ...settingsOpen("devices"), { js: "const d = document.querySelector('.host-connection-network'); if (d) d.open = true", pause: 300 }, scrollTo(".host-connection-network")], settle: 500, cleanup: settingsClose },
   { name: "relb-s-devices-rows", steps: [...openSession(codex.id), ...settingsOpen("devices"), scrollTo("#devices-title")], settle: 500, cleanup: settingsClose },
   { name: "relb-tg-1-intro", steps: [...openSession(codex.id), ...settingsOpen("messenger"), toWizardStart, { wait: "__wb.has('.phone-messenger .pm-intro')" }, atTop], settle: 500, cleanup: settingsClose },
@@ -2413,7 +2494,44 @@ const REL_A_SCREENS: Screen[] = relA ? [
     { name: `rela-phone-${size}-doc-ai-esc`, viewport, steps: [{ js: "__wb.q('.beside-chat .composer-input, .beside-chat textarea, .beside-chat button')?.focus()" }, { press: "Escape", pause: 500 }, { wait: "!__wb.has('.beside-chat')" }, { probe: "({ ai: __wb.has('.beside-chat'), doc: __wb.has('.document-view .doc-header') })" }], settle: 400 },
   ]),
 ] : [];
-const availableScreens = menusSet ? MENUS_SCREENS : ptabsSet ? PTABS_SCREENS : relA ? REL_A_SCREENS : relbSet ? (only!.some((name) => name.startsWith("relb-phone")) ? RELB_PHONE : RELB_SCREENS) : fix1Set ? FIX1_SCREENS : rvSet ? RV_SCREENS : ownerSet ? OWNER_SCREENS : phone ? PHONE_SCREENS : c2 ? C2_SCREENS : skin2b ? SKIN2B_SCREENS : skin2d ? SKIN2D_SCREENS : u38 ? U38_SCREENS : u28 ? (args.includes("--native-stub") ? U28_WEB_SCREENS : U28_SCREENS) : higMode ? HIG_SCREENS : args.includes("--motion") ? MOTION_SCREENS : navMode ? NAV_SCREENS : only?.some(name => name.startsWith("completion")) ? COMPLETION_SCREENS : u26 ? U26_SCREENS : m01 ? M01_SCREENS : SCREENS;
+// Pane responsiveness (--only=pane-; ux/briefs/pane-responsive-brief.md): 1, 2, 4, 6 and 9 panes, each with
+// a conversation, at 1440×900 and 2560×1440; each frame asserts "칸 안에 다 들어감". 6 panes are two columns
+// of three (no preset: the 2-pane grid's panes split downwards). With --native-stub: the web page beside a
+// conversation at its handle's three keyed widths (Home 20 %, Enter 45 %, End 70 %).
+const PANES_ON = ".panes > .pane:not([hidden])";
+// Panes in reading order (top to bottom, left to right): the DOM order is the order they were made in.
+const paneAt = (index: number) => `[...document.querySelectorAll('${PANES_ON}')].map((p) => [p, p.getBoundingClientRect()]).sort(([, a], [, b]) => Math.round(a.top - b.top) || Math.round(a.left - b.left)).map(([p]) => p)[${index}]`;
+// Every tab a scene opened is closed (one at a time, until only the home tab is left).
+const closeAllTabs: Step = { wait: "!__wb.has('.group-tab-close') || (__wb.click('.group-tab-close') && false)", pause: 300 };
+// The first conversation is opened before the preset (a preset keeps it in a pane; after every tab is closed it
+// would apply to 지금, and the next row opened would take its project's own single pane). Then each further
+// conversation goes into the first empty pane in reading order (marked until it is focused; the pane's element is
+// redrawn when it takes a conversation, so the wait counts the conversations on screen).
+const emptyPane = `[...document.querySelectorAll('${PANES_ON}')].map((p) => [p, p.getBoundingClientRect()]).sort(([, a], [, b]) => Math.round(a.top - b.top) || Math.round(a.left - b.left)).map(([p]) => p).find((p) => !p.querySelector('.work-view'))`;
+// (Without --only=pane- there are no pane conversations: the step is never used then.)
+const openFirst: Step = { js: paneSessions[0] ? `__wb.click('${row(paneSessions[0].id)}')` : "", wait: `__wb.has('${PANES_ON} .work-view .composer-right')`, pause: 150 };
+const fillPanes = (count: number, from = 1): Step[] => paneSessions.slice(from, count).flatMap((entry, at) => [
+  { js: `const p = ${emptyPane}; p.dataset.shotFill = '${from + at}'; p.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))`, wait: `document.querySelector('[data-shot-fill="${from + at}"]')?.dataset.paneActive === 'true'` },
+  { js: `__wb.click('${row(entry.id)}')`, wait: `document.querySelectorAll('${PANES_ON} .work-view .composer-right').length === ${from + at + 1}`, pause: 150 },
+]);
+const sixPanes: Step[] = [...gridSteps(2), ...([[0, 3], [1, 4], [2, 5], [3, 6]] as const).map(([index, count]) => ({
+  js: `${paneAt(index)}.querySelector('.pane-head [aria-label="아래로 분할"]').click()`, wait: `document.querySelectorAll('${PANES_ON}').length === ${count}`, pause: 150,
+}))];
+const PANE_SCREENS: Screen[] = paneSet ? [
+  ...(args.includes("--native-stub") ? [] : ([1, 2, 4, 6, 9] as const).flatMap((count) => ([[1440, 900], [2560, 1440]] as const).map(([width, height]) => ({
+    name: `pane-${count}-${width}`, viewport: { width, height }, settle: 900,
+    steps: [closeAllTabs, ...gridSteps(1), closeAllTabs, openFirst, ...(count === 6 ? sixPanes : gridSteps(count)), ...fillPanes(count), { js: "__wb.blur()", pause: 300 }, { assert: "칸 안에 다 들어감" }, ...(count === 6 ? [{ assert: "짧은 칸에도 대화가 보임" as const }] : [])],
+  } satisfies Screen)))),
+  ...(args.includes("--native-stub") ? ([["20", "Home"], ["45", "Enter"], ["70", "End"]] as const).map(([share, key]) => ({
+    name: `pane-beside-${share}`, viewport: { width: 1440, height: 900 }, settle: 900,
+    // The page's AI (asked from the page) ties the page to the conversation: only then is it under 연결.
+    steps: [...gridSteps(1), ...webTab, { js: "if (!__wb.has('.agent-column')) __wb.click('.browser-view .browser-ask')", wait: "__wb.has('.agent-column .composer-input')", pause: 400 }, ...openSession(codex.id), ...openRight, { js: "__wb.click('.right-sidebar [role=tab]', '연결')", wait: "__wb.has('.right-link', '루브릭')", pause: 300 },
+      { js: "if (!__wb.has('.browser-view[data-hosted]')) __wb.click('.right-link', '루브릭')", wait: "__wb.has('.browser-view[data-hosted]') && __wb.has('.beside-divider')", pause: 600 }, ...closeRight,
+      { js: `document.querySelector('.beside-divider').focus(); __wb.key('${key}')`, wait: `document.querySelector('.beside-divider')?.getAttribute('aria-valuenow') === '${share}'`, pause: 500 },
+      { js: standIn }, { js: "__wb.blur()" }, { probe: BESIDE_PROBE }, { assert: "칸 안에 다 들어감" }],
+  } satisfies Screen)) : []),
+] : [];
+const availableScreens = paneSet ? PANE_SCREENS : menusSet ? MENUS_SCREENS : ptabsSet ? PTABS_SCREENS : relA ? REL_A_SCREENS : relbSet ? (only!.some((name) => name.startsWith("relb-phone")) ? RELB_PHONE : RELB_SCREENS) : fix1Set ? FIX1_SCREENS : rvSet ? RV_SCREENS : ownerSet ? OWNER_SCREENS : phone ? PHONE_SCREENS : c2 ? C2_SCREENS : skin2b ? SKIN2B_SCREENS : skin2d ? SKIN2D_SCREENS : u38 ? U38_SCREENS : u28 ? (args.includes("--native-stub") ? U28_WEB_SCREENS : U28_SCREENS) : higMode ? HIG_SCREENS : args.includes("--motion") ? MOTION_SCREENS : navMode ? NAV_SCREENS : only?.some(name => name.startsWith("completion")) ? COMPLETION_SCREENS : u26 ? U26_SCREENS : m01 ? M01_SCREENS : SCREENS;
 const screens = (only ? availableScreens.filter((screen) => only.some((name) => screen.name.includes(name))) : availableScreens)
   // N1: rows are reached through the list column's levels (see __wb.reveal).
   .map((screen) => ({ ...screen, steps: expandSteps(screen.steps), ...(screen.cleanup ? { cleanup: expandSteps(screen.cleanup) } : {}) }));

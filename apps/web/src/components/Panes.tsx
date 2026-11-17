@@ -4,9 +4,12 @@ import { paneDrag, useDropArea, usePaneDrag, usePaneDragSlice } from "../panedra
 import { stripDropIndex } from "../tab-drop.ts";
 import { Icon } from "./Icon.tsx";
 import { Select } from "./ui/Select.tsx";
+import { paneShort } from "../pane-width.ts";
 import { activeTab, contentKey, setTabIdReuse, tabsOf } from "../tabs.ts";
 import { SleepTab, TabClosed, heldAwake, keptOnClose, onKeptOnClose, sleepPlan, tabSleepAfter } from "../tab-sleep.ts";
 import { fadeIn, returnTo, revealFrom } from "../flip.ts";
+import { EditorPoolContext, EditorPoolLayer, usePoolSurface } from "./EditorPoolLayer.tsx";
+import { markWarmTabs } from "../editor-pool.ts";
 import "../styles/panes.css";
 
 /** `unseen`: an answer arrived there while it was off screen. */
@@ -28,8 +31,12 @@ export const PRESSURE_SLEEP_MS = 30_000;
 export const PRESSURE_SOON_MS = 10 * 60_000;
 
 /** The tree determines geometry; editors retain the same parent and React key when moved. */
-export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, maximized = false, onMaximize, onPresent, onResize, onFocus, onClose, onMove, onSplit, onDrop, head, scope, effectOf, render, onNarrow, tabBar, minWidthOf, foot, sleep, sleepNow = 0, onSleeping }: {
+export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, recentFrames = 2, warm, maximized = false, onMaximize, onPresent, onResize, onFocus, onClose, onMove, onSplit, onDrop, head, scope, effectOf, render, onNarrow, tabBar, minWidthOf, foot, sleep, sleepNow = 0, onSleeping }: {
   layout: Layout<V>; enabled: boolean;
+  /** The editor pool's recent frames per kind (editor-pool.ts recentFramesFor: 2 with room, fewer when memory is short). */
+  recentFrames?: number;
+  /** Tabs mounted behind once, at restore, to warm their kind's editor (editor-pool.ts warmTabsFor). */
+  warm?: string[];
   /**
    * Given: a view that has been off screen for ten minutes is unmounted (its tab stays; shown again, it is mounted
    * again), by tab-sleep.ts `sleepPlan`. Not given: a view stays mounted until its tab closes.
@@ -78,12 +85,27 @@ export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, maximized = 
   onNarrow?: (narrow: boolean) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
+  // The editor pool of this window surface (editor-pool.ts): documents of one kind share their editor frames.
+  const pool = usePoolSurface();
+  // `workbench.pool.recent` (the rigs' knob) sets N outright.
+  useEffect(() => {
+    let forced: string | null = null;
+    try { forced = localStorage.getItem("workbench.pool.recent"); } catch { /* storage unavailable */ }
+    pool.pool.setRecent(forced !== null && Number.isFinite(Number(forced)) ? Number(forced) : recentFrames);
+  }, [pool, recentFrames]);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [live, setLive] = useState<{ id: string; ratio: number } | null>(null);
   const cancelResize = useRef<(() => void) | null>(null);
   const mountedTabs = useRef(new Set<string>());
   const shown = drawnPanes ?? layout, onScreen = new Set(shown.panes.map((pane) => pane.id));
   for (const pane of shown.panes) mountedTabs.current.add(activeTab(pane).id);
+  // Warm at restore: mounted behind once (they sleep as any hidden tab does).
+  const warmedOnce = useRef(false);
+  if (warm && !warmedOnce.current) {
+    warmedOnce.current = true; markWarmTabs(warm);
+    const open = new Set(layout.panes.flatMap(tabsOf).map((tab) => tab.id));
+    for (const id of warm) if (open.has(id)) mountedTabs.current.add(id);
+  }
   // Tab sleep: when each tab was last on screen — now for those in front, and for those that have just left.
   const rest = useRef({ shownAt: new Map<string, number>(), askedAt: new Map<string, number>(), front: new Set<string>(), asleep: new Set<string>() });
   {
@@ -252,7 +274,7 @@ export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, maximized = 
     window.addEventListener("pointercancel", cancel); window.addEventListener("blur", cancel);
   };
   const takesFocus = (target: EventTarget | null) => !(target instanceof Element && target.closest(".pane-head-tools,.pane-narrow"));
-  return <div ref={host} data-grid={layout.grid} data-dense={layout.grid && !collapsed ? "true" : undefined} className={`panes recursive${split && !narrow ? " two" : ""}${narrow ? " narrow" : ""}`}>
+  return <EditorPoolContext.Provider value={pool}><div ref={host} data-grid={layout.grid} data-dense={layout.grid && !collapsed ? "true" : undefined} className={`panes recursive${split && !narrow ? " two" : ""}${narrow ? " narrow" : ""}`}>
     {[...layout.panes.flatMap((group) => tabsOf(group).filter((tab) => mountedTabs.current.has(tab.id)).map((tab) => ({ group, tab, closed: false }))),
       ...[...lingering.current.values()].map((entry) => ({ ...entry, closed: true }))].sort((a, b) => a.tab.id.localeCompare(b.tab.id)).map(({ group, tab, closed }) => {
       const pane = { ...group, view: tab.view, workId: tab.workId, sessionId: tab.sessionId };
@@ -269,6 +291,7 @@ export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, maximized = 
       const next = shown.panes[(shown.panes.findIndex((entry) => entry.id === group.id) + 1) % shown.panes.length]!;
       return <section key={tab.id} className={`pane look-scope${focused ? " focused" : ""}`} data-pane={pane.id} data-tab={tab.id} data-tab-active={active ? "true" : "false"} data-pane-active={focused ? "true" : "false"}
         data-theme={look.theme} data-bubble={look.bubble} data-frame={look.frame ? "on" : "off"} data-glow={look.glow}
+        data-short={paneShort((boxes[pane.id] ?? whole).height) ? "true" : undefined}
         style={{ ...look.style, ...(boxes[pane.id] ?? whole) }} hidden={!active || (collapsed && !focused)} aria-label={split ? `${title.title} 칸` : undefined}
         onPointerDownCapture={(event) => takesFocus(event.target) && onFocus(pane.id)} onFocusCapture={(event) => takesFocus(event.target) && onFocus(pane.id)}>
         {split ? <header className="pane-head" title={title.hint ?? title.title} onMouseDown={(event) => {
@@ -294,6 +317,7 @@ export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, maximized = 
         <SleepTab.Provider value={tab.id}><TabClosed.Provider value={false}>{render(pane, { focused, split, tabId: tab.id, active })}</TabClosed.Provider></SleepTab.Provider>
       </section>;
     })}
+    <EditorPoolLayer surface={pool} />
     {split && !collapsed ? geometry.dividers.map((divider) => {
       const vertical = divider.axis === "vertical", { left, top, width, height } = divider;
       return <div key={divider.id} className={`pane-divider${vertical ? " vertical" : ""}${live?.id === divider.id ? " moving" : ""}`} style={{ left, top, width, height }}
@@ -309,7 +333,7 @@ export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, maximized = 
     }) : null}
     {enabled ? <><DropPreview boxes={boxes} effectOf={effectOf} panes={layout.panes} /><DragGhost /></> : null}
     {foot}
-  </div>;
+  </div></EditorPoolContext.Provider>;
 }
 
 /**

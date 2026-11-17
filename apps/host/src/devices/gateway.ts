@@ -260,6 +260,6 @@ export class DeviceGateway {
       }).catch(() => { socket.close(1011, "connection failure"); stop(); });
     });
     socket.on("close", stop); socket.on("error", stop);
-    await sendProtectedServerInfo(socket as PaseoProtectedSocket, { serverId: manager.snapshot().hostId, hostname: manager.snapshot().hostLabel, version: "0.5.3" });
+    await sendProtectedServerInfo(socket as PaseoProtectedSocket, { serverId: manager.snapshot().hostId, hostname: manager.snapshot().hostLabel, version: "0.5.4" });
   };
 }

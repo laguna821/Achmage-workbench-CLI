@@ -206,6 +206,12 @@ const indentOf = (space: string) => Math.min(4, Math.floor(space.replace(/\t/g, 
  */
 export type TableStyle = "lines" | "pre";
 export const TABLE_COLUMNS = 60;
+/**
+ * 0.5.4: the one line that stands where a table too wide for the monospace block was, when the whole
+ * answer goes with the message as a `.md` file (`wide: "file"`; Slack's answers, core.ts outgoing).
+ */
+export const TABLE_IN_FILE = "표는 붙인 파일에 있습니다.";
+export type ReadOptions = { tables?: TableStyle; wide?: "file" };
 
 /** How many monospace columns a text takes: wide (Hangul, CJK, full-width forms, emoji) characters two. */
 export function columns(text: string): number {
@@ -230,7 +236,17 @@ function tableBlock(rows: string[][]): string | null {
 }
 
 /** Markdown as a person reads it: the text, and the marks over it. Never throws. */
-export function readable(markdown: string, options: { tables?: TableStyle } = {}): { text: string; marks: Mark[] } {
+export function readable(markdown: string, options: ReadOptions = {}): { text: string; marks: Mark[] } {
+  return read(markdown, options).shown;
+}
+
+/** Whether the markdown holds a table too wide for the monospace block (TABLE_COLUMNS), outside code blocks. */
+export function hasWideTable(markdown: string): boolean {
+  return read(markdown, { tables: "pre" }).wide > 0;
+}
+
+function read(markdown: string, options: ReadOptions): { shown: { text: string; marks: Mark[] }; wide: number } {
+  let wide = 0;
   const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
   const out = new Out();
   let first = true;
@@ -260,6 +276,12 @@ export function readable(markdown: string, options: { tables?: TableStyle } = {}
       const block = options.tables === "pre" ? tableBlock([header, ...lines.slice(at + 2, end).map(cells)]) : null;
       if (block) {
         line(() => { const start = out.text.length; out.add(block); out.mark("pre", start); });
+        at = end - 1;
+        continue;
+      }
+      if (options.tables === "pre") wide += 1;
+      if (options.tables === "pre" && options.wide === "file") {
+        line(() => out.add(TABLE_IN_FILE));
         at = end - 1;
         continue;
       }
@@ -313,8 +335,8 @@ export function readable(markdown: string, options: { tables?: TableStyle } = {}
     line(() => span(current));
   }
   // Nothing it could show (an empty fence, a lone heading sign): the text as written.
-  if (!out.text.trim() && markdown.trim()) return { text: markdown, marks: [] };
-  return settle(out.text, out.marks);
+  if (!out.text.trim() && markdown.trim()) return { shown: { text: markdown, marks: [] }, wide };
+  return { shown: settle(out.text, out.marks), wide };
 }
 
 /**
@@ -437,7 +459,7 @@ export function splitRich(text: string, marks: Mark[], limit: number): { text: s
  * a value the markup had split is still caught; then the text goes plain, with it hidden. A link's
  * address and a code block's language leave too, so they are read as well.
  */
-export function formatted(markdown: string, scrub: (text: string) => string, options: { tables?: TableStyle } = {}): { text: string; marks?: Mark[] } {
+export function formatted(markdown: string, scrub: (text: string) => string, options: ReadOptions = {}): { text: string; marks?: Mark[] } {
   const { text, marks } = readable(markdown, options);
   const seen = scrub(text);
   // Something was hidden: the text goes plain, with each link's address written out (not dropped) and read again.

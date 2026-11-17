@@ -119,3 +119,37 @@ it("a split pane's head adds no state word beside its tabs; the strip's overflow
   expect(rendered.container.querySelector(".pane-status")).toBeNull();
   expect(rendered.container.textContent).not.toContain("확인 필요");
 });
+
+it("0.5.4: a pane too short for the full input is marked short by its own height, a tall one is not (window size plays no part)", () => {
+  // jsdom has no layout: the panes' host says its size (a 1440×900 window's work area).
+  Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => 1380 });
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get: () => 840 });
+  try {
+    const props = {
+      enabled: true, onResize: () => {}, onFocus: () => {}, onClose: () => {}, onMove: () => {}, onSplit: () => {}, onDrop: () => {},
+      head: (pane: { view: string }) => ({ title: pane.view, icon: null, item: null }),
+      scope: () => ({ theme: "light", bubble: "none", frame: false, glow: "none", style: {} }), effectOf: () => "split" as const,
+      render: (pane: { view: string }) => <p>{pane.view}</p>,
+    };
+    const view = (name: string) => ({ view: name, workId: "w1", sessionId: null });
+    let layout = splitPane(singleLayout("v1", "w1"), "a", "right", view("v2"), null);
+    const two = render(<PaneLayout {...props} layout={layout} />);
+    const shortOnes = () => [...document.querySelectorAll<HTMLElement>(".panes > .pane:not([hidden])")].map((pane) => pane.dataset.short ?? "no");
+    expect(shortOnes()).toEqual(["no", "no"]);
+    two.unmount();
+    const [left, right] = layout.panes.map((pane) => pane.id) as [string, string];
+    // Each column split downwards twice: three rows in each.
+    const below = (target: string, name: string) => { const before = new Set(layout.panes.map((pane) => pane.id)); layout = splitPane(layout, target, "bottom", view(name), null); return layout.panes.find((pane) => !before.has(pane.id))!.id; };
+    below(below(left, "v3"), "v5");
+    below(below(right, "v4"), "v6");
+    render(<PaneLayout {...props} layout={layout} />);
+    // Splitting halves a pane: here rows of 384 px (full input) and 220 px (short, the smallest a pane gets), each by its own box.
+    const panes = [...document.querySelectorAll<HTMLElement>(".panes > .pane:not([hidden])")];
+    expect(panes).toHaveLength(6);
+    expect(panes.map((pane) => [parseFloat(pane.style.height), pane.dataset.short ?? "no"]).sort()).toEqual([[220, "true"], [220, "true"], [220, "true"], [220, "true"], [384, "no"], [384, "no"]]);
+  } finally {
+    // Back to the element's own (inherited) measure.
+    delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
+    delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
+  }
+});

@@ -195,7 +195,23 @@ export function besideFit({ width, chatMin, contentMin, ratio, was }: { width: n
   return { mode: "beside", chat: Math.max(chatMin, Math.min(room - contentMin, Math.round(room * ratio))) };
 }
 
-export const clampRatio = (ratio: number) => Math.min(0.7, Math.max(0.2, ratio));
+/** The conversation's share of a 곁 화면's width: its bounds (the handle's aria-valuemin / -max). */
+export const RATIO_MIN = 0.2, RATIO_MAX = 0.7;
+export const clampRatio = (ratio: number) => Math.min(RATIO_MAX, Math.max(RATIO_MIN, ratio));
+
+/** The share a conversation and its document or web page start from (and a double press goes back to). */
+export const BESIDE_SHARE = 0.45;
+/**
+ * Where a window keeps the width of what is beside its conversations: in the preferences, per
+ * window as the right sidebar's width is (the main window, a session's own window apart). A
+ * session's window that has none yet starts from the main window's.
+ */
+export const besideRatioKey = (scope: "main" | "window") => (scope === "window" ? "splitRatioWindow" : "splitRatio");
+export function readBesideRatio(prefs: Record<string, unknown>, scope: "main" | "window"): number {
+  const valid = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+  const own = prefs[besideRatioKey(scope)], main = prefs[besideRatioKey("main")];
+  return clampRatio(valid(own) ? own : valid(main) ? main : BESIDE_SHARE);
+}
 
 // ── what the main conversation is told of its documents' and pages' AIs ──────────────────────
 

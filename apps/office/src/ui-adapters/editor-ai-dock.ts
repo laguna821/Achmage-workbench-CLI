@@ -90,6 +90,8 @@ export function installEditorAiDock(doc: Document, { post }: { post(message: Edi
       }
     },
     put(text: string) { pending = text; apply(); report(true); },
+    /** Report as a dock drawn a moment ago (the editor pool opened another document in this page): never as the person's change. */
+    again() { shown = null; requested = null; last = ""; report(true); },
     dispose() {
       observer.disconnect();
       view.clearTimeout(retry);

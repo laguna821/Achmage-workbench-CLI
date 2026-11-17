@@ -43,6 +43,7 @@ import { emptyStatus, type AdapterSink, type AttachedFile, type CodexLaunch, typ
 import { isImage, mentionFiles } from "../attachments.ts";
 import type { BrowserEngineHooks } from "../browse.ts";
 import { CodexChildren } from "./codex-children.ts";
+import { spawnEngine } from "../resources/engine-scope.ts";
 
 const CLIENT_VERSION = "0.1.0";
 
@@ -349,9 +350,13 @@ export class CodexAdapter implements ProviderAdapter {
         throw new Error("codex를 찾지 못했습니다.");
       }
       this.publish({ installed: true, binary: binary.path, binarySource: binary.source, origin: binary.origin, version: binary.version, billingVars: billingVarsIn(), error: null });
+      // On Linux with user scopes the app-server starts in a scope of its own (resources/engine-scope.ts): an
+      // OOM kill ends it, not the app. It serves every Codex conversation, so no per-conversation cap here.
       const rpc = new CodexRpc({
         binary: binary.command,
         prefixArgs: binary.args,
+        // Behind the fail-safe (a start that fails through the wrapper is started plainly, once).
+        spawn: (command, args, options) => spawnEngine(command, args, options, "codex", false),
         // The agent browser's playwright-cli on PATH; commands find their session by CODEX_THREAD_ID.
         env: launchEnv(binary, { paths: this.browser?.pathDirs() }),
         onNotification: (notification) => this.onNotification(notification),

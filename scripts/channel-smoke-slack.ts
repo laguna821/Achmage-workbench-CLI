@@ -350,6 +350,15 @@ try {
   check("mrkdwn: the code block without its language, its content as written", sample.includes('```\nrg -n "루브릭" 강의안.md\n```'));
   check("mrkdwn: the quote as a > line", sample.includes("\n> 과제 마감을 한 주 늦출지는"));
 
+  // 0.5.4: a table too wide for a monospace block goes with the whole answer as a .md file; one line says so where it was.
+  // The stand-in engine answers "넓은 표" with a table wider than 60 columns (scripts/fixtures/fake-claude.mjs).
+  count = texts().length;
+  const sharedBefore = fake.shared.length;
+  fake.message("넓은 표로 정리해 줘");
+  check("wide table: one line where the table was", await answered(count, (text) => text.includes("표는 붙인 파일에 있습니다."), 60_000), textsSince(count).join(" | ").slice(0, 300));
+  check("wide table: its rows are not in the message", !textsSince(count).some((text) => text.includes("아주 긴 설명")));
+  check("wide table: the whole answer as .md", await wait(() => fake.shared.slice(sharedBefore).some((entry) => entry.name.endsWith(" 답.md"))), sharedNames().join(", "));
+
   // A value given in a Slack modal (audit #131): [비밀 값 입력] → the modal → '받았습니다' → the AI goes on.
   const PLANTED = "zz-smoke-planted-0131";
   count = texts().length;

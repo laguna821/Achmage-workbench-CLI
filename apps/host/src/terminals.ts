@@ -71,6 +71,8 @@ export class Terminals {
   private stopping = false;
   /** Output read from the worker and not yet in the journal; it ends at the record's `outputEnd`. */
   private readonly pending = new Map<string, { chunks: Buffer[]; size: number }>();
+  /** The output bounds of each record as stored: the rows in the journal (0.5.4). In memory `outputEnd` runs ahead by the waiting output. */
+  private readonly stored = new Map<string, { outputStart: number; outputEnd: number }>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly flushMs: number;
   private readonly store: Store;
@@ -80,35 +82,54 @@ export class Terminals {
   constructor(store: Store, spaces: Workspaces, binary = gatewayOnly("WORKBENCH_PTY_BIN") ?? "", options: TerminalsOptions = {}) {
     this.store = store; this.spaces = spaces; this.binary = binary; this.memory = options.availableMemory ?? availableMemory; this.flushMs = options.outputFlushMs ?? TERMINAL_OUTPUT_BATCH.flushMs;
     for (const entry of store.terminals()) {
-      this.records.set(entry.id, entry);
+      this.records.set(entry.id, entry); this.stored.set(entry.id, { outputStart: entry.outputStart, outputEnd: entry.outputEnd });
       if (active(entry.status)) this.save({ ...entry, status: "interrupted", pid: null, error: "호스트가 재시작되어 이전 터미널 실행은 이어지지 않습니다. 출력 기록을 확인하고 새 터미널을 열어 주세요." });
     }
   }
   private save(entry: TerminalSession) {
     const next = { ...entry, updatedAt: Date.now() };
     this.records.set(next.id, next);
-    if (!this.pending.has(next.id)) { this.store.saveTerminal(next); return next; }
-    this.store.transaction(() => { this.writePending(next.id); this.store.saveTerminal(this.records.get(next.id)!); });
+    this.persist([next.id]);
     return this.records.get(next.id)!;
   }
-  /** Waiting output into the journal (the caller saves the record in the same transaction). */
-  private writePending(id: string) {
-    const waiting = this.pending.get(id), entry = this.records.get(id);
-    if (!waiting || !entry) return;
-    this.pending.delete(id);
-    const start = this.store.appendTerminalOutput(id, entry.outputEnd - waiting.size, Buffer.concat(waiting.chunks, waiting.size), OUTPUT_LIMIT);
-    this.records.set(id, { ...entry, outputStart: start });
+  /**
+   * The only way a record reaches the database. Its outputStart / outputEnd are the bounds of the rows already
+   * stored (`stored`) unless this same transaction writes the waiting output, in which case they become the new
+   * rows' bounds. So the stored record never claims output that is not stored, and no row lies past it: a crash
+   * at any moment leaves the two agreeing. The waiting output leaves memory only once its transaction committed
+   * (a failed write keeps it for the next flush).
+   */
+  private persist(ids: string[]) {
+    const bounds = new Map<string, { outputStart: number; outputEnd: number }>();
+    this.store.transaction(() => {
+      for (const id of ids) {
+        const entry = this.records.get(id);
+        if (!entry) continue;
+        const waiting = this.pending.get(id);
+        let next = this.stored.get(id) ?? { outputStart: 0, outputEnd: 0 };
+        if (waiting) {
+          const start = entry.outputEnd - waiting.size;
+          next = { outputStart: this.store.appendTerminalOutput(id, start, Buffer.concat(waiting.chunks, waiting.size), OUTPUT_LIMIT), outputEnd: entry.outputEnd };
+        }
+        this.store.saveTerminal({ ...entry, ...next });
+        bounds.set(id, next);
+      }
+    });
+    for (const [id, next] of bounds) {
+      this.stored.set(id, next);
+      if (!this.pending.delete(id)) continue;
+      const entry = this.records.get(id);
+      if (entry) this.records.set(id, { ...entry, outputStart: next.outputStart });
+    }
   }
   /** Write one terminal's waiting output and its record now. */
   private flushOutput(id: string) {
-    if (!this.pending.has(id)) return;
-    this.store.transaction(() => { this.writePending(id); this.store.saveTerminal(this.records.get(id)!); });
+    if (this.pending.has(id)) this.persist([id]);
   }
   /** Every terminal's waiting output (the batch timer; shutdown). */
   flushAll() {
     if (this.flushTimer) { clearTimeout(this.flushTimer); this.flushTimer = null; }
-    if (!this.pending.size) return;
-    this.store.transaction(() => { for (const id of [...this.pending.keys()]) { this.writePending(id); this.store.saveTerminal(this.records.get(id)!); } });
+    if (this.pending.size) this.persist([...this.pending.keys()]);
   }
   get(id: string) { const entry = this.records.get(id); if (!entry) throw new HttpError(404, "terminal_missing", "터미널 기록을 찾지 못했습니다."); return entry; }
   list(workspaceId: string): TerminalList {
@@ -121,7 +142,7 @@ export class Terminals {
   }
   has(id: string) { return this.records.has(id); }
   forgetWork(workId: string) {
-    for (const [id, entry] of this.records) if (entry.workId === workId && !this.live.has(id)) this.records.delete(id);
+    for (const [id, entry] of this.records) if (entry.workId === workId && !this.live.has(id)) { this.records.delete(id); this.stored.delete(id); }
   }
   create(workspaceId: string, request: CreateTerminalRequest, internal: { cwd?: string; environment?: Record<string, string>; color?: string } = {}) {
     if (!request || typeof request.requestId !== "string" || !/^[\w-]{1,100}$/.test(request.requestId)) throw new HttpError(400, "terminal_request", "터미널 요청 ID가 필요합니다.");
@@ -220,7 +241,7 @@ export class Terminals {
       for (const entry of ended) if (!shown.has(entry.id)) gone.push(entry.id);
     }
     if (gone.length) this.store.transaction(() => { for (const id of gone) this.store.deleteTerminal(id); });
-    for (const id of gone) this.records.delete(id);
+    for (const id of gone) { this.records.delete(id); this.stored.delete(id); }
     for (const entry of [...this.records.values()]) if (!active(entry.status) && !this.live.has(entry.id)) this.keepTail(entry.id);
     return gone.length;
   }
@@ -228,11 +249,12 @@ export class Terminals {
   private keepTail(id: string) {
     this.flushOutput(id);
     const entry = this.records.get(id);
-    if (!entry || active(entry.status) || entry.outputEnd - entry.outputStart <= TERMINAL_SCROLLBACK.journalEnded) return;
+    if (!entry || active(entry.status) || this.pending.has(id) || entry.outputEnd - entry.outputStart <= TERMINAL_SCROLLBACK.journalEnded) return;
     const start = entry.outputEnd - TERMINAL_SCROLLBACK.journalEnded;
     const next = { ...entry, outputStart: start, updatedAt: Date.now() };
+    // Nothing is waiting here (flushed above), so the record's end is the stored end.
     this.store.transaction(() => { this.store.trimTerminalOutput(id, start); this.store.saveTerminal(next); });
-    this.records.set(id, next);
+    this.records.set(id, next); this.stored.set(id, { outputStart: start, outputEnd: next.outputEnd });
   }
   private write(id: string, message: unknown) {
     const entry = this.get(id), running = this.live.get(id);

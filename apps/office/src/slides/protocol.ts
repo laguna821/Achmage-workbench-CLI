@@ -4,6 +4,10 @@
 export type WorkerRequest =
   | { type: "mcp"; command: "ready" | "read_deck" | "apply_slide_ops" | "deck_withholds"; payload?: unknown }
   | { type: "init"; token: string }
+  /** The editor pool opened another document in this page: its token reads the fonts from now on. */
+  | { type: "token"; token: string }
+  /** The editor pool: the deck before is gone from this page (its working copy is let go). */
+  | { type: "close-previous" }
   /** Open a document (its bytes) as the page's view. */
   /** `generation`: a later revision opened in the same page (in place) gets its own path, so nothing of the earlier deck is reused. */
   | { type: "open"; name: string; bytes: ArrayBuffer; generation?: number }

@@ -28,7 +28,13 @@ button.note-prop { cursor: pointer; }
 
 /* ── Turns ─────────────────────────────────────────────────────────────── */
 .transcript .turn { display: flex; flex-direction: column; gap: var(--space-md); padding-block: var(--space-lg) var(--space-xs); }
-.transcript .note-head + .turn { padding-top: var(--space-xs); }
+/* The light view (0.5.4): a turn's content sits in one box of its own (a woken static turn's root); it lays out as if it were not there. */
+.transcript .turn-inner { display: contents; }
+/* A static turn keeps its "이 요청 전으로" key while the engine works; it is not there for a person meanwhile (as in a live turn). */
+.transcript-wrap[data-forks-off] .turn[data-static] .fork-button { display: none; }
+.transcript .note-head + .turn, .transcript .note-head + .turn-group > .turn:first-child { padding-top: var(--space-xs); }
+/* Turns come in groups that enter the page at once (Transcript); a group lays out as if it were not there. */
+.transcript .turn-group { display: contents; }
 .transcript .turn-body { display: flex; flex-direction: column; gap: var(--space-md); }
 .transcript .turn-answer { min-width: 0; }
 .transcript .turn-end { display: inline-flex; align-items: center; gap: var(--space-2xs); align-self: flex-start; min-height: 20px; color: var(--muted); font: 400 var(--text-sm)/20px var(--font-ui); font-variant-numeric: tabular-nums; }
@@ -125,9 +131,9 @@ button.note-prop { cursor: pointer; }
 .raw-note-text { margin: 0 0 32px; padding: 0; color: var(--text); font: 400 var(--text-sm)/1.7 var(--font-outlier); white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 2; user-select: text; }
 
 /* ── Dense grids, narrow panes, touch, reduced motion ──────────────────── */
-.panes[data-dense] .note-head { display: none; }
-.panes[data-dense] .turn-pin-inner { min-height: 28px; padding: var(--space-2xs) var(--space-sm); }
-@media (max-width: 743px) {
+:is(.panes[data-dense], .pane[data-short]) .note-head { display: none; }
+:is(.panes[data-dense], .pane[data-short]) .turn-pin-inner { min-height: 28px; padding: var(--space-2xs) var(--space-sm); }
+@container work-pane (max-width: 743px) {
   .note-head { padding-top: 20px; }
   .note-title, .note-title-edit { font-size: var(--fs-title); line-height: 32px; }
   .note-kind { margin-top: 6px; }

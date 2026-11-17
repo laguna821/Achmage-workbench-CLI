@@ -4,8 +4,11 @@
 .beside { position: relative; display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; height: 100%; }
 .beside-chat, .beside-content { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .beside-chat { flex: 1 1 0; }
+/* Beside a web page or document the conversation has its column, not the pane: the column is the pane-level
+   container then (same name), so its head, turns and input take their narrow forms at a narrow column. */
+.beside:not([data-fit="single"]) > .beside-chat { container-type: inline-size; container-name: work-pane; }
 /* The document AI beside a page is a side column: its title one step down (23px), as it fit on one line before the 28px head. */
-@media (min-width: 744px) { .beside-chat .note-title, .beside-chat .note-title-edit { font-size: var(--text-xl); line-height: 32px; } }
+@container work-pane (min-width: 744px) { .beside-chat .note-title, .beside-chat .note-title-edit { font-size: var(--text-xl); line-height: 32px; } }
 .beside-content { flex: 1 1 0; }
 .beside-chat > main, .beside-content > main, .beside-content > section { flex: 1 1 auto; min-width: 0; min-height: 0; }
 

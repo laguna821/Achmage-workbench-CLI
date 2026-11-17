@@ -122,7 +122,8 @@ try {
     await page!.locator(`.pane[data-pane-active="true"] .group-tab[data-tab-id="${id}"] [role="tab"]`).click();
     await page!.locator(`.pane[data-pane-active="true"][data-tab="${id}"]`).waitFor();
   };
-  const frameOf = (): FrameLocator => activePane().frameLocator("iframe.office-frame");
+  // Its own iframe, or the editor pool's frame laid over the focused pane's tab (Word, 0.5.4).
+  const frameOf = (): FrameLocator => page!.frameLocator('.pane[data-pane-active="true"] iframe.office-frame, .editor-pool iframe.office-frame[data-pool-shown="true"][data-pane-active="true"]');
   const headKey = () => activePane().locator(".doc-header-right .doc-agent-toggle");
   const panel = async (open: boolean) => {
     if (((await headKey().getAttribute("aria-expanded")) === "true") !== open) await headKey().click();

@@ -224,40 +224,46 @@
 .palette .palette-input:focus-within { box-shadow: inset 0 -2px var(--accent); }
 .transcript .markdown pre code { font-size: var(--text-sm); line-height: 1.6; }
 
-/* In a dense project grid, keep the response visible. Focusing the input reveals its tools. */
-.panes[data-dense] .group-tabs { min-height: 32px; }
-.panes[data-dense] .group-tab { min-height: 28px; }
-.panes[data-dense] .pane-start { padding: var(--space-sm); gap: var(--space-xs); }
-.panes[data-dense] .pane-start p { display: none; }
-.panes[data-dense] .pane-start-projects button { padding-block: var(--space-2xs); }
-.panes[data-dense] .pane-start-projects button { min-height: 28px; }
+/* In a dense project grid, and in a pane too short for the full input (0.5.4: `data-short`, Panes.tsx by the
+   pane's own height, pane-width.ts PANE_SHORT_HEIGHT), keep the response visible. Focusing the input reveals its tools;
+   the head stays compact. */
+:is(.panes[data-dense], .pane[data-short]) .group-tabs { min-height: 32px; }
+:is(.panes[data-dense], .pane[data-short]) .group-tab { min-height: 28px; }
+:is(.panes[data-dense], .pane[data-short]) .pane-start { padding: var(--space-sm); gap: var(--space-xs); }
+:is(.panes[data-dense], .pane[data-short]) .pane-start p { display: none; }
+:is(.panes[data-dense], .pane[data-short]) .pane-start-projects button { padding-block: var(--space-2xs); }
+:is(.panes[data-dense], .pane[data-short]) .pane-start-projects button { min-height: 28px; }
 .transcript :is(.message-page,.message-keep,.ref-role) { min-width: 28px; min-height: 28px; }
 .transcript .button.primary kbd { color: inherit; background: transparent; }
 .transcript .button.primary kbd { font-weight: 600; opacity: 1; }
 
 .topbar .brand { min-width: 28px; }
-.panes[data-dense] .composer-area.column { padding: var(--space-2xs) var(--space-xs) var(--space-xs); }
-.panes[data-dense] .composer-area .footer-line { display: none; }
-.panes[data-dense] .hig-composer:not(:focus-within) { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2xs); align-items: end; padding: var(--space-xs); }
-.panes[data-dense] .hig-composer:not(:focus-within) .composer-input { min-height: 28px; max-height: 36px; font-size: var(--text-sm); line-height: 1.6; }
-.panes[data-dense] .hig-composer:not(:focus-within) .composer-bar { margin: 0; }
-.panes[data-dense] .hig-composer:not(:focus-within) .composer-left,
-.panes[data-dense] .hig-composer:not(:focus-within) .composer-right > :not(.primary):not(.stop-secondary),
-.panes[data-dense] .hig-composer:not(:focus-within) .composer-status { display: none; }
-.panes[data-dense] .hig-composer:not(:focus-within) :is(.composer-header,.composer-file-problem) { grid-column: 1 / -1; }
-.panes[data-dense] .transcript .transcript-inner { padding: var(--space-sm); }
+:is(.panes[data-dense], .pane[data-short]) .composer-area.column { padding: var(--space-2xs) var(--space-xs) var(--space-xs); }
+:is(.panes[data-dense], .pane[data-short]) .composer-area .footer-line { display: none; }
+:is(.panes[data-dense], .pane[data-short]) .hig-composer:not(:focus-within) { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2xs); align-items: end; padding: var(--space-xs); }
+:is(.panes[data-dense], .pane[data-short]) .hig-composer:not(:focus-within) .composer-input { min-height: 28px; max-height: 36px; font-size: var(--text-sm); line-height: 1.6; }
+:is(.panes[data-dense], .pane[data-short]) .hig-composer:not(:focus-within) .composer-bar { margin: 0; }
+:is(.panes[data-dense], .pane[data-short]) .hig-composer:not(:focus-within) .composer-left,
+:is(.panes[data-dense], .pane[data-short]) .hig-composer:not(:focus-within) .composer-right > :not(.primary):not(.stop-secondary),
+:is(.panes[data-dense], .pane[data-short]) .hig-composer:not(:focus-within) .composer-status { display: none; }
+:is(.panes[data-dense], .pane[data-short]) .hig-composer:not(:focus-within) :is(.composer-header,.composer-file-problem) { grid-column: 1 / -1; }
+:is(.panes[data-dense], .pane[data-short]) .transcript .transcript-inner { padding: var(--space-sm); }
 /* Splitting a workspace changes its available width, not the person's reading size. */
-@media (max-width: 743px) {
+/* The conversation's column and its input follow the PANE's width: a 420 px pane in a wide window gets them too. */
+@container work-pane (max-width: 743px) {
   .transcript .transcript-inner, .composer-area.column { padding-inline: var(--space-md); }
   .work-view > .composer-area.column { padding-right: calc(var(--space-md) + var(--transcript-gutter, 0px)); }
   .hig-composer { padding: var(--space-sm) var(--space-xs) var(--space-xs); }
   .hig-composer .composer-bar { gap: var(--space-2xs); }
   .hig-composer .composer-left { flex: 1 1 auto; min-width: 0; }
   .hig-composer .composer-right { flex: 0 0 auto; justify-content: flex-end; }
-  .hig-composer .composer-tools-panel { max-width: calc(100vw - 48px); max-height: 50dvh; overflow: auto; }
+  .hig-composer .composer-tools-panel { max-width: calc(100cqi - 48px); max-height: 50dvh; overflow: auto; }
   .transcript .approval-actions .approval-trust { flex-basis: 100%; margin: 0; justify-content: flex-start; }
   .hig-composer .composer-status > span:last-child { display: none; }
   .hig-composer .voice-panel { padding: var(--space-md); }
+}
+/* The palette is the window's (a dialog over every pane). */
+@media (max-width: 743px) {
   .palette.fast-find { width: calc(100% - 16px); height: calc(100dvh - 16px); border-radius: var(--radius-card); }
   .palette .palette-input { padding: var(--space-xs) var(--space-sm); }
   .palette .palette-preview { padding: var(--space-sm); }

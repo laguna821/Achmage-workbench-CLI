@@ -34,6 +34,7 @@ import { isImage, mentionFiles } from "../attachments.ts";
 import type { BrowserEngineHooks } from "../browse.ts";
 import { MODEL_CACHE_TTL, modelCacheKey, readModelCache } from "./model-cache.ts";
 import { ClaudeChildren } from "./claude-children.ts";
+import { engineScope, spawnEngine } from "../resources/engine-scope.ts";
 
 const run = promisify(execFile);
 
@@ -352,8 +353,28 @@ export class ClaudeAdapter implements ProviderAdapter {
     }
   }
 
-  /** How the Agent SDK starts this engine: a native binary, or a JavaScript entry on the gateway's Node. */
-  private sdkLaunch(options: { paths?: string[]; extra?: Record<string, string> } = {}) {
+  /**
+   * How the Agent SDK starts this engine: a native binary, or a JavaScript entry on the gateway's Node.
+   * `scope`: a conversation's engine — on Linux with user scopes it starts in a scope of its own, with the
+   * per-conversation memory cap when one is set (resources/engine-scope.ts); elsewhere exactly as before.
+   */
+  private sdkLaunch(options: { paths?: string[]; extra?: Record<string, string>; scope?: string } = {}) {
+    const base = this.sdkLaunchBase(options);
+    const label = options.scope;
+    if (!label || !engineScope.enabled) return base;
+    const binary = this.binary!;
+    const inner = "spawnClaudeCodeProcess" in base;
+    return {
+      ...base,
+      // Decided at each start: after the fail-safe turned wrapping off, engines start plainly again.
+      spawnClaudeCodeProcess: (spawnOptions: SpawnOptions) => {
+        const target = inner ? { command: process.execPath, args: [...binary.args, ...spawnOptions.args] } : { command: spawnOptions.command, args: spawnOptions.args };
+        return spawnEngine(target.command, target.args, { cwd: spawnOptions.cwd, env: spawnOptions.env, signal: spawnOptions.signal }, label, true) as unknown as SpawnedProcess;
+      },
+    };
+  }
+
+  private sdkLaunchBase(options: { paths?: string[]; extra?: Record<string, string> } = {}) {
     const binary = this.binary!;
     const env = launchEnv(binary, { paths: options.paths, extra: { CLAUDE_AGENT_SDK_CLIENT_APP: "achmage-workbench/0.1", ...options.extra } });
     const strings = Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
@@ -652,7 +673,7 @@ export class ClaudeAdapter implements ProviderAdapter {
         // Never an API key or cloud route left in the gateway's environment: the user's login.
         // The agent browser's playwright-cli is on PATH, and names this session's browser while on.
         // WORKBENCH_SESSION: the memory readout tells this conversation's process by it (B1).
-        ...this.sdkLaunch({ paths: this.browser?.pathDirs(), extra: { ...this.browser?.sessionEnv(session), WORKBENCH_SESSION: session.id } }),
+        ...this.sdkLaunch({ paths: this.browser?.pathDirs(), extra: { ...this.browser?.sessionEnv(session), WORKBENCH_SESSION: session.id }, scope: session.id }),
       },
     });
     this.runtimes.set(session.id, runtime);

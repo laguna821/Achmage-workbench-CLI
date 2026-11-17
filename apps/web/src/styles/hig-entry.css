@@ -110,7 +110,7 @@
 
 /* ── Widths: 1440 and 1280 as drawn; under 1000 the head stacks its switch under the title;
    in a narrow pane (two panes, a phone) the gutters close and the entries' cells stack ─────── */
-@media (max-width: 743px) {
+@container work-pane (max-width: 743px) {
   .start-view.with-board { --home-gutter: var(--space-md); }
   .home-head { padding-block: var(--space-lg) var(--space-md); }
 }

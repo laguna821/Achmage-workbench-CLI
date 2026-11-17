@@ -123,4 +123,39 @@ describe("a web tab's bookmark bar", () => {
       await waitFor(() => expect(placed()).toEqual({ pageId: "p", x: 0, y: 52, width: 1000, height: 700, visible: true }));
     } finally { stop(); }
   });
+
+  it("Ctrl/⌘+D and Ctrl/⌘+Shift+B pressed inside the page reach the tab: the native listing hands them over once, and they never go to the gateway", async () => {
+    // The page script took the keys (shared_browser.js); the next native listing carries them as `keys`.
+    let pressed: string[] = [];
+    const nativeSide = vi.fn(async (command: BrowserNativeCommand) => { if (command.kind !== "list") return undefined; const keys = pressed; pressed = []; return [{ ...native, keys }]; });
+    const polled: unknown[] = [];
+    const endpoint = { poll: vi.fn(async (input: { pages: unknown[] }) => { polled.push(...input.pages); return { pages: [pageOf()], profiles: [{ id: "default", name: "기본", createdAt: 1 }], jobs: [], closedPageIds: [], closedPages: [] }; }) };
+    const browser = new SharedBrowser(endpoint as never, nativeSide as never, "driver");
+    const { api, request } = apiWith([]);
+    await act(async () => { show(browser, api); });
+    await act(async () => { await browser.poll(); });
+    pressed = ["bookmark"];
+    await act(async () => { await browser.poll(); });
+    expect(request.mock.calls.filter(call => call[0] !== "GET")).toEqual([["POST", "/api/bookmarks", { kind: "item", title: "평가 루브릭 안내", url: "https://ctl.example.ac.kr/guide" }]]);
+    // Handed over once: the next listing does not repeat it.
+    await act(async () => { await browser.poll(); });
+    expect(request.mock.calls.filter(call => call[0] !== "GET")).toHaveLength(1);
+    pressed = ["bookmark-bar", "reload"];
+    await act(async () => { await browser.poll(); });
+    expect(request.mock.calls.filter(call => call[0] !== "GET").at(-1)).toEqual(["PUT", "/api/bookmarks/bar", { show: false }]);
+    expect(request.mock.calls.filter(call => call[0] !== "GET")).toHaveLength(2);
+    expect(polled.length).toBeGreaterThan(0);
+    for (const page of polled) expect(page).not.toHaveProperty("keys");
+  });
+
+  it("a page not on screen does not answer the keys pressed in it", async () => {
+    const nativeSide = vi.fn(async (command: BrowserNativeCommand) => command.kind === "list" ? [{ ...native, keys: ["bookmark"] }] : undefined);
+    const endpoint = { poll: vi.fn(async () => ({ pages: [pageOf()], profiles: [], jobs: [], closedPageIds: [], closedPages: [] })) };
+    const browser = new SharedBrowser(endpoint as never, nativeSide as never, "driver");
+    const { api, request } = apiWith([]);
+    await act(async () => { show(browser, api, { visible: false }); });
+    await act(async () => { await browser.poll(); });
+    await act(async () => { await browser.poll(); });
+    expect(request.mock.calls.filter(call => call[0] !== "GET")).toEqual([]);
+  });
 });

@@ -30,6 +30,8 @@ export type CodexRpcOptions = {
   onNotification: (notification: RpcNotification) => void;
   onServerRequest: (request: RpcServerRequest) => void;
   onExit: (code: number | null, stderrTail: string) => void;
+  /** How the app-server is started (default: child_process.spawn). The gateway passes its engine-scope starter. */
+  spawn?: (command: string, args: string[], options: { cwd?: string; env?: NodeJS.ProcessEnv }) => ChildProcessWithoutNullStreams;
 };
 
 export class CodexRpc {
@@ -53,12 +55,10 @@ export class CodexRpc {
   }
 
   start() {
-    const child = spawn(this.options.binary, [...(this.options.prefixArgs ?? []), "app-server", ...(this.options.args ?? [])], {
-      env: this.options.env ?? process.env,
-      cwd: this.options.cwd,
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-    });
+    const args = [...(this.options.prefixArgs ?? []), "app-server", ...(this.options.args ?? [])];
+    const child = this.options.spawn
+      ? this.options.spawn(this.options.binary, args, { env: this.options.env ?? process.env, cwd: this.options.cwd })
+      : spawn(this.options.binary, args, { env: this.options.env ?? process.env, cwd: this.options.cwd, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
     this.child = child;
     createInterface({ input: child.stdout }).on("line", (line) => this.handleLine(line));
     child.stderr.on("data", (chunk: Buffer) => {

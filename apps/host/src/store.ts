@@ -604,8 +604,9 @@ export class Store {
     this.db.prepare("INSERT INTO worktree_creations (id, work_id, json) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET json=excluded.json").run(job.id, job.workId, JSON.stringify(job));
   }
 
-  /** Additive data migrations commit together or leave all original rows intact. */
+  /** Additive data migrations commit together or leave all original rows intact. Inside another transaction: part of it. */
   transaction<T>(run: () => T): T {
+    if (this.db.isTransaction) return run();
     this.db.exec("BEGIN IMMEDIATE");
     try {
       const result = run();

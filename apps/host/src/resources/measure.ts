@@ -1,4 +1,5 @@
 import { constants, freemem, getPriority, setPriority, totalmem, availableParallelism, cpus } from "node:os";
+import { readFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { parseLinuxRss, parseLinuxStat, type EngineSource } from "../app-memory.ts";
 import { availableMemory } from "../terminals.ts";
@@ -16,11 +17,12 @@ export type Reading = "exact" | "close" | "rough";
 export const readingFor = (platform: string): Reading => (platform === "linux" ? "exact" : platform === "win32" ? "close" : "rough");
 
 export function machineFacts(): MachineFacts {
-  // A stand-in machine for test gateways and rigs (never set by the app).
+  // A stand-in machine for test gateways and rigs (never set by the app). "@<file>": read from that file at each
+  // reading, so a rig can change what memory is free while the gateway runs (the pressure ladder, 0.5.4).
   const standIn = process.env.WORKBENCH_MACHINE;
   if (standIn) {
     try {
-      const facts = JSON.parse(standIn) as MachineFacts;
+      const facts = JSON.parse(standIn.startsWith("@") ? readFileSync(standIn.slice(1), "utf8") : standIn) as MachineFacts;
       if ([facts.totalBytes, facts.availableBytes, facts.cores].every((value) => typeof value === "number" && value > 0)) return facts;
     } catch { /* not a stand-in: the real readings */ }
   }

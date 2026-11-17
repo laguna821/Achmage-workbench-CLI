@@ -107,6 +107,7 @@ import { handoffError, heldNotice, provenanceOf, restartTurnEnd, stampTurnEnd } 
 import { Finder, type SearchOptions } from "./search.ts";
 import { EngineInstaller } from "./engine-install.ts";
 import { ResourceManager, type ResourceOptions } from "./resources/manager.ts";
+import { ItemBatch, mayWait } from "./item-batch.ts";
 
 export { HttpError };
 
@@ -336,6 +337,10 @@ export class SessionManager {
   private readonly sessions = new Map<string, Session>();
   private readonly transcripts = new Map<string, TranscriptItem[]>();
   private readonly dirtyItems = new Map<string, Set<string>>();
+  /** 0.5.4: steps of conversations running out of sight, written together (item-batch.ts). */
+  private readonly itemBatch = new ItemBatch((entries) => this.writeItems(entries));
+  /** Shutting down: every item is written at once from here on. */
+  private closing = false;
   /** When each cached transcript was last used (B3: idle ones leave the cache). */
   private readonly transcriptTouched = new Map<string, number>();
   private transcriptSweep: NodeJS.Timeout | null = null;
@@ -575,7 +580,7 @@ export class SessionManager {
       item: (id, item) => this.sink.upsertItem(id, item),
       update: (id, patch) => this.sink.updateSession(id, patch),
       lock: (id, key, identity, action) => this.sendGate.run(id, key, identity, action),
-      admit: (id, signal) => this.resources.waitDocument(id, signal),
+      admit: (id, signal, request) => this.resources.waitDocument(id, signal, request),
       related: (id) => {
         const parent = this.requireSession(id);
         return [...this.sessions.values()].filter((entry) => entry.documentAgent && !entry.archivedAt && entry.workId === parent.workId && entry.workspaceId === parent.workspaceId);
@@ -787,8 +792,9 @@ export class SessionManager {
           if (media.length) item = { ...item, media };
         }
       }
+      const stored = items.some((entry) => entry.id === item.id);
       this.transcripts.set(sessionId, applyItemEvent(items, { type: "item.upserted", sessionId, item }));
-      this.store.saveItem(sessionId, item);
+      this.persistItem(sessionId, item, stored);
       this.bus.publish({ type: "item.upserted", sessionId, item: this.scrubber ? this.scrubber.live(`${sessionId}\u0000${item.id}`, incoming, item) : item });
       if (item.kind === "turnEnd") this.releaseLive(sessionId);
       if (item.kind === "assistant" && !item.streaming && item.text.trim()) {
@@ -996,6 +1002,25 @@ export class SessionManager {
     // Requests left waiting when the app closed are not sent on their own after a restart — except those
     // that waited only for a free slot (0.5.3): they still wait, in order, and start as slots free.
     for (const session of this.sessions.values()) this.holdQueued(session.id, true);
+    this.recoverWaitingDocuments();
+  }
+
+  /**
+   * 0.5.4: 문서 AI requests that waited for a slot when the gateway stopped. Their editor ran them itself and is gone
+   * with the old gateway, so they cannot start by themselves: each is kept in its conversation's list of waiting
+   * requests (held, with its document), said once, to be sent from there or dropped — never lost, never run twice.
+   */
+  private recoverWaitingDocuments() {
+    for (const waiting of this.resources.takeWaitingDocuments()) {
+      const session = this.sessions.get(waiting.sessionId);
+      const id = `document-${waiting.turnId}`;
+      if (!session || session.archivedAt || session.queued.some((entry) => entry.id === id) || this.store.findRequest(`office:${waiting.turnId}`)) continue;
+      let refs: DocRef[] = [];
+      try { const artifact = this.documents.get(waiting.artifactId); refs = [{ artifactId: artifact.id, revision: artifact.revision, mode: "edit" }]; } catch { /* the document is gone: the words stay */ }
+      this.saveSession({ ...session, queued: [...session.queued, { id, text: waiting.text, refs, create: null, at: waiting.at, held: true, draft: true }] });
+      this.sink.upsertItem(session.id, { kind: "notice", id: `document-waited:${waiting.turnId}`, level: "info", at: Date.now(),
+        text: "앱이 다시 시작되어, 차례를 기다리던 문서 AI 요청을 입력창 위 목록에 남겨 두었습니다. 여기서 보내거나 고치거나 지울 수 있습니다." });
+    }
   }
 
   /** Keep every waiting request of a session until the user sends it; the number newly kept. `slotsWait`: requests waiting for a slot stay in the line. */
@@ -3113,6 +3138,7 @@ export class SessionManager {
   }
 
   async shutdown() {
+    this.closing = true;
     if (this.transcriptSweep) { clearInterval(this.transcriptSweep); this.transcriptSweep = null; }
     this.sharedBrowser.shutdown();
     this.notifications.close();
@@ -3135,6 +3161,8 @@ export class SessionManager {
     await Promise.all([...this.adapters.values()].map((adapter) => adapter.shutdown()));
     await this.options.browse?.shutdown();
     await this.skillLibrary.shutdown();
+    // What the engines said while stopping (written at once since `closing`) and their last streamed pieces.
+    this.flush();
   }
 
   /** Automatic titles follow the requests (no model call); see titles.ts. */
@@ -3210,7 +3238,7 @@ export class SessionManager {
     for (const sessionId of [...this.transcripts.keys()]) {
       const status = this.sessions.get(sessionId)?.status;
       if (status && status !== "idle" && status !== "error") continue;
-      if (this.dirtyItems.has(sessionId)) continue;
+      if (this.dirtyItems.has(sessionId) || this.itemBatch.has(sessionId)) continue;
       if (now - (this.transcriptTouched.get(sessionId) ?? 0) < TRANSCRIPT_IDLE_MS) continue;
       this.transcripts.delete(sessionId);
       this.transcriptTouched.delete(sessionId);
@@ -3237,12 +3265,34 @@ export class SessionManager {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
+    // What the batch holds first (an item is inserted before its streamed pieces update it), then the pieces:
+    // one transaction (0.5.4; each item was a commit of its own before).
+    const entries = this.itemBatch.take();
     for (const [sessionId, ids] of this.dirtyItems) {
       for (const item of this.loadItems(sessionId)) {
-        if (ids.has(item.id)) this.store.saveItem(sessionId, item);
+        if (ids.has(item.id)) entries.push([sessionId, item]);
       }
     }
     this.dirtyItems.clear();
+    if (entries.length) this.writeItems(entries);
+  }
+
+  /**
+   * An item to the database (0.5.4, item-batch.ts). Waits in the batch only when its conversation is running and
+   * out of sight of the windows attached (with none attached, visibility is unknown: nothing waits) and the item
+   * is a newer version of one already stored that is still in progress; everything else is written at once,
+   * after what its conversation has waiting (order kept).
+   */
+  private persistItem(sessionId: string, item: TranscriptItem, stored: boolean) {
+    const session = this.sessions.get(sessionId);
+    const hidden = !this.closing && this.shownBy.size > 0 && Boolean(session) && session!.status !== "idle" && session!.status !== "error" && !this.shownNow().has(sessionId);
+    if (hidden && mayWait(item, stored)) { this.itemBatch.add(sessionId, item); return; }
+    if (!this.itemBatch.has(sessionId)) { this.store.saveItem(sessionId, item); return; }
+    this.writeItems([...this.itemBatch.takeSession(sessionId), [sessionId, item]]);
+  }
+
+  private writeItems(entries: [string, TranscriptItem][]) {
+    this.store.transaction(() => { for (const [sessionId, item] of entries) this.store.saveItem(sessionId, item); });
   }
 
   private saveWork(work: Work) {

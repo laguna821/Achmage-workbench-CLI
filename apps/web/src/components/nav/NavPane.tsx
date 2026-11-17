@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useContext, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { Folder, NavSectionId, NavShortcut } from "@workbench/contracts";
 import { folderHidden, nowSessions, workHidden } from "../../tree.ts";
 import { EditableText } from "../EditableText.tsx";
@@ -10,6 +10,7 @@ import { NowRow } from "./rows.tsx";
 import type { NavShared } from "./shared.ts";
 import { StateMark } from "../StateMark.tsx";
 import { ROW_STATES } from "../../row-state.ts";
+import { ResourcesContext, runningWords } from "../ResourceManager.tsx";
 
 // Sections the list column shares (N1): 지금 (in 활동), 바로가기 and 태그 (in level 1), each head
 // folding to its line and staying so (prefs `navigator.sections`). 홈 became the rail's 지금, the
@@ -60,9 +61,24 @@ function folderIcon(folder: Folder, open: boolean): IconName {
 export function NowSection({ shared }: { shared: NavShared }) {
   const { state, actions, visibleSessionId } = shared;
   const now = nowSessions(state, visibleSessionId);
+  // 0.5.4: each running turn says how long it has run and what its engine holds; each one waiting in the line its place and why.
+  const resources = useContext(ResourcesContext);
+  const clock = Date.now();
+  const turnOf = new Map((resources?.running ?? []).map((turn) => [turn.sessionId, turn]));
+  const placeOf = new Map((resources?.waiting ?? []).map((entry) => [entry.sessionId, entry]));
+  const waiting = [...placeOf.values()].flatMap((entry) => {
+    const session = state.sessions[entry.sessionId];
+    return session && !now.running.includes(session) && !now.attention.includes(session) && !now.unseen.includes(session) ? [session] : [];
+  });
+  const detail = (key: string, id: string) => {
+    if (key === "running") { const turn = turnOf.get(id); return turn ? runningWords(turn, clock) : undefined; }
+    if (key === "waiting") { const place = placeOf.get(id); return place ? `${place.position}번째` : undefined; }
+    return undefined;
+  };
   const groups = [
     { key: "attention", label: "확인 필요", sessions: now.attention },
     { key: "running", label: "진행 중", sessions: now.running },
+    { key: "waiting", label: "대기 중", sessions: waiting },
     { key: "unseen", label: "새 답", sessions: now.unseen },
   ].filter((group) => group.sessions.length);
   if (!groups.length) return null;
@@ -76,7 +92,7 @@ export function NowSection({ shared }: { shared: NavShared }) {
         : groups.map((group) => (
             <div key={group.key} className={`now-group now-${group.key}`}>
               <div className="now-group-label">
-                <StateMark state={ROW_STATES[group.key === "attention" ? "attention" : group.key === "running" ? "running" : "unseen"]} size={14} />
+                <StateMark state={ROW_STATES[group.key === "attention" ? "attention" : group.key === "running" ? "running" : group.key === "waiting" ? "waiting" : "unseen"]} size={14} />
                 {group.label} <span className="count">{group.sessions.length}</span>
               </div>
               {/* Home lists these in full (the entries and the ledger): beside it the sidebar keeps only the counts. */}
@@ -85,7 +101,8 @@ export function NowSection({ shared }: { shared: NavShared }) {
                   key={session.id}
                   session={session}
                   label={session.purpose}
-                  meta={state.works[session.workId]?.title}
+                  meta={[state.works[session.workId]?.title, group.key === "waiting" ? resources?.reason : null].filter(Boolean).join(" · ") || undefined}
+                  detail={detail(group.key, session.id)}
                   current={session.id === visibleSessionId}
                   look={shared.lookOf(session.provider)}
                   onOpen={() => actions.openSession(session)}

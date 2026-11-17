@@ -169,6 +169,32 @@ describe("what the AI made comes back", () => {
     expect(readdirSync(join(kit.dataDir, "channels", "outgoing"))).toEqual([]);
   });
 
+  it("0.5.4 Slack: a table too wide for a monospace block sends the whole answer as a .md file, one line where the table was; a narrow one stays a block", async () => {
+    const wideTable = `| 이름 | 설명 |\n|---|---|\n| 가 | ${"아주 긴 설명 ".repeat(8)} |`;
+    const body = `표로 정리했습니다.\n\n${wideTable}\n\n끝.`;
+    const slack = await startKit();
+    Object.defineProperty(slack.adapter, "tables", { value: "pre" });
+    await pair(slack);
+    const { answer } = await turn(slack, body);
+    expect(answer.out.text).toBe("표로 정리했습니다.\n\n표는 붙인 파일에 있습니다.\n\n끝.");
+    const file = slack.adapter.uploads.find((entry) => entry.name.endsWith(".md"))!;
+    expect(file.bytes.toString("utf8")).toBe(body);
+    expect(readdirSync(join(slack.dataDir, "channels", "outgoing"))).toEqual([]);
+    // A narrow table: the block, no file.
+    const narrow = await turn(slack, "| 장 | 내용 |\n|---|---|\n| 1 | 질문 |");
+    expect(narrow.answer.out.text).toBe("장 | 내용\n---+-----\n1  | 질문");
+    expect(narrow.answer.out.marks).toEqual([expect.objectContaining({ type: "pre" })]);
+    expect(narrow.answer.out.files ?? []).toEqual([]);
+  });
+
+  it("0.5.4 Telegram: the same wide table stays bullet lines and sends no file", async () => {
+    const kit = await startKit();
+    await pair(kit);
+    const { answer } = await turn(kit, `| 이름 | 설명 |\n|---|---|\n| 가 | ${"아주 긴 설명 ".repeat(8)} |`);
+    expect(answer.out.text).toMatch(/^이름 · 설명\n• 가 · 아주 긴 설명/);
+    expect(answer.out.files ?? []).toEqual([]);
+  });
+
   it("hides secrets in the long answer's file and in the names of the files it sends", async () => {
     const kit = await startKit();
     await pair(kit);

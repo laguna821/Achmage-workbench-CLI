@@ -12,6 +12,7 @@ import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
 import { createDocsOutput } from "./docs-output.ts";
 import { knowledgeNavigation } from "./knowledge.ts";
 import { installMcp, originalMcp } from "./mcp.ts";
+import { installSwap, swapInProgress } from "./swap.ts";
 
 // IeumOffice's Word editor inside Workbench. The editor itself (vendor/ieumoffice/apps/docs,
 // unchanged) reads and writes .docx in the page; this file stands in for its Electron preload:
@@ -26,7 +27,8 @@ const gateway = new Gateway(init.token);
 const events = new Events();
 const ai = createOfficeAi(init, gateway, events);
 const preferences = await createOfficePreferences(init, gateway, (channel, value) => events.emit(({ "app:ai-panel-prefs-changed": "aiPanelPrefsChanged", "app:auto-save-default-changed": "autoSaveDefaultChanged", "app:document-theme-changed": "documentThemeChanged", "app:author-name-changed": "authorNameChanged" } as Record<string, string>)[channel] ?? channel, value), legacyOfficePanel("workbench.office.ai-panel"));
-const artifactId = init.artifact.id;
+/** The document this page edits now: the editor pool may open another one in place (swap.ts), so it is read each time. */
+const docId = () => init.artifact.id;
 /** `revision`: the revision the editor's content is based on (a save must name it). `kept`: a recovery copy exists. */
 const state = { revision: init.artifact.revision, theme: init.theme, dirty: false, kept: false };
 connectOfficeUi(init, "word", command => events.emit("menuCommand", command), theme => {
@@ -55,14 +57,14 @@ document.documentElement.dataset.workbenchTheme = state.theme;
 
 /** The revision as the editor wants a file (a one-shot URL to its bytes), or unsaved edits kept from an earlier visit. */
 async function openResult() {
-  let kept = init.recover && !init.readOnly ? await recovery.get(artifactId).catch(() => undefined) : undefined;
+  let kept = init.recover && !init.readOnly ? await recovery.get(docId()).catch(() => undefined) : undefined;
   if (kept && kept.baseRevision > init.artifact.revision) kept = undefined;
-  if (!kept && !init.readOnly) await recovery.drop(artifactId).catch(() => undefined);
+  if (!kept && !init.readOnly) await recovery.drop(docId()).catch(() => undefined);
   if (kept) {
     state.revision = kept.baseRevision;
     state.kept = true;
   }
-  const bytes = kept ? kept.bytes : await gateway.raw(artifactId, state.revision);
+  const bytes = kept ? kept.bytes : await gateway.raw(docId(), state.revision);
   post({ type: "office:opened", revision: state.revision, recovered: Boolean(kept) });
   return {
     path: init.artifact.path,
@@ -80,44 +82,54 @@ async function openResult() {
  * open), so 되돌리기 goes through the revision list (replace-in-place.ts).
  */
 const editorScroll = () => document.querySelector<HTMLElement>(".editor-scroll");
-function contentSwapped(timeoutMs = 15_000) {
+function contentSwapped(timeoutMs = 15_000, quietMs = 300) {
   return new Promise<void>((resolve, reject) => {
     const target = () => document.querySelector(".editor-scroll .ProseMirror");
     let quiet: number | undefined, seen = false;
     const finish = (error?: Error) => { observer.disconnect(); window.clearTimeout(quiet); window.clearTimeout(limit); if (error) reject(error); else resolve(); };
-    const observer = new MutationObserver(() => { seen = true; window.clearTimeout(quiet); quiet = window.setTimeout(() => finish(), 300); });
+    const observer = new MutationObserver(() => { seen = true; window.clearTimeout(quiet); quiet = window.setTimeout(() => finish(), quietMs); });
     observer.observe(document.querySelector(".editor-scroll") ?? document.body, { childList: true, subtree: true, characterData: true });
     const limit = window.setTimeout(() => (seen && target() ? finish() : finish(new Error("문서를 바꾸지 못했습니다."))), timeoutMs);
   });
 }
 let viewPlace: ReturnType<typeof installViewPosition> | null = null;
+/** The tab keeps where the page was scrolled; a woken tab (or a document swapped in) opens there (office-leftovers point 3). */
+function placeView() {
+  if (init.execution || init.headlessExport) return;
+  viewPlace?.dispose();
+  viewPlace = installViewPosition({
+    read: () => { const scroll = document.querySelector(".editor-scroll .ProseMirror") ? readScroll(editorScroll()) : undefined; return scroll ? { scroll } : null; },
+    restore: (position) => Boolean(document.querySelector(".editor-scroll .ProseMirror")) && restoreScroll(editorScroll(), position.scroll),
+  }, { initial: init.view, shown: () => pageRest.onScreen() && window.innerHeight > 0, post: (position) => post({ type: "office:view-position", position }) });
+}
 async function replaceInPlace(revision: number) {
   const place = viewPlace?.last();
   if (init.readOnly || !document.querySelector(".editor-scroll .ProseMirror")) throw new Error("편집기가 아직 준비되지 않았습니다.");
   const release = pageRest.hold("replace");
   try {
-    const bytes = await gateway.raw(artifactId, revision);
+    const bytes = await gateway.raw(docId(), revision);
     const swapped = contentSwapped();
     await keepScroll(editorScroll, async () => {
       events.emit("openDocx", { path: init.artifact.path, name: init.artifact.name, dataUrl: URL.createObjectURL(new Blob([bytes], { type: DOCX })), hash: init.artifact.sha256, recovered: false });
       await swapped;
     });
     state.revision = revision;
-    if (state.kept) { state.kept = false; void recovery.drop(artifactId).catch(() => undefined); }
+    if (state.kept) { state.kept = false; void recovery.drop(docId()).catch(() => undefined); }
     // A hidden tab's page cannot set its scroll while it is not laid out: the place comes back when it is shown.
     viewPlace?.again(place);
   } finally { release(); }
 }
 
 async function save(data: ArrayBuffer) {
+  if (swapInProgress()) return { ok: false, error: "다른 문서를 여는 중입니다. 잠시 뒤 저장해 주세요." };
   if (officeCopyBusy()) return { ok: false, error: "사본 저장을 마친 뒤 저장해 주세요." };
   if (init.readOnly) return { ok: false, error: "이 판은 읽기 전용입니다." };
   try {
-    const saved = await gateway.saveBytes(artifactId, state.revision, data);
+    const saved = await gateway.saveBytes(docId(), state.revision, data);
     state.revision = saved.revision;
     if (state.kept) {
       state.kept = false;
-      void recovery.drop(artifactId).catch(() => undefined);
+      void recovery.drop(docId()).catch(() => undefined);
     }
     post({ type: "office:saved", revision: saved.revision });
     return { ok: true };
@@ -133,6 +145,8 @@ async function save(data: ArrayBuffer) {
   }
 }
 
+/** The editor has answered a dirty check at least once (state.dirty is its word, not the start value). */
+let dirtyReported = false;
 /** Ask the editor whether it has unsaved changes (its close check), for the Workbench header. */
 const dirtyWaiters: ((dirty: boolean) => void)[] = [];
 function askDirty(): Promise<boolean> {
@@ -144,6 +158,8 @@ function askDirty(): Promise<boolean> {
   });
 }
 
+/** Recovery copies written for the document shown (the editor pool's park checks one was written). */
+let keptWrites = 0;
 /** A recovery copy right away (edits that could not be saved, when leaving the document). */
 function keepNow(): Promise<void> {
   if (init.readOnly || !events.has("writeRecoveryNow")) return Promise.resolve();
@@ -175,6 +191,31 @@ async function rebase(revision: number) {
   state.revision = revision;
   await flush();
 }
+
+/** The editor pool's hold on this page (swap.ts): park the document shown, open another in place. */
+const swapEditor = {
+  dirty: askDirty,
+  lastDirty: () => (dirtyReported ? state.dirty : null),
+  async keep() {
+    // Where the view is goes to the tab before the frame is given away.
+    viewPlace?.flush();
+    const before = keptWrites;
+    await keepNow();
+    return keptWrites > before;
+  },
+  busy: () => officeCopyBusy() || closeSaveAnswer !== null || mcpCopy !== null || copyTurn !== null,
+  async open() {
+    // The old document's place is said no more: the new one's comes back first (installViewPosition restores before it reports).
+    viewPlace?.dispose(); viewPlace = null;
+    Object.assign(state, { revision: init.artifact.revision, dirty: false, kept: false }); dirtyReported = false;
+    const result = await openResult();
+    // The new document is shown as soon as its text is in (the page picture covers it until then); its layout may still settle.
+    const swapped = contentSwapped(15_000, 80);
+    events.emit("openDocx", result);
+    await swapped.catch(() => undefined);
+    placeView();
+  },
+};
 
 listen((message) => {
   if (message.type === "office:export-pdf") events.emit("menuCommand", "export-pdf");
@@ -214,11 +255,9 @@ const desktop = stubBridge(
     getRecentFiles: async () => [],
     consumePendingOpenDocx: async () => (pendingOpen ??= openResult().then((result) => {
       if (!init.readOnly && !init.execution && !init.headlessExport) installInPlaceReplace({ dirty: askDirty, replace: replaceInPlace });
-      // The tab keeps where the page was scrolled; a woken tab opens there (office-leftovers point 3).
-      if (!init.execution && !init.headlessExport) viewPlace = installViewPosition({
-        read: () => { const scroll = document.querySelector(".editor-scroll .ProseMirror") ? readScroll(editorScroll()) : undefined; return scroll ? { scroll } : null; },
-        restore: (position) => Boolean(document.querySelector(".editor-scroll .ProseMirror")) && restoreScroll(editorScroll(), position.scroll),
-      }, { initial: init.view, shown: () => pageRest.onScreen() && window.innerHeight > 0, post: (position) => post({ type: "office:view-position", position }) });
+      placeView();
+      // The editor pool (swap.ts): this running editor may open the other Word documents of the window in place.
+      if (!init.readOnly && !init.execution && !init.headlessExport) installSwap(init, gateway, ai, swapEditor);
       return result;
     })),
     consumeNewBlankDoc: async () => false,
@@ -247,10 +286,12 @@ const desktop = stubBridge(
     },
     // The editor's crash-recovery copy (every 30 s while dirty): kept in the browser until saved.
     writeRecoveryCopy: async (_path: string | null, data: ArrayBuffer) => {
-      if (init.readOnly) return { ok: false };
+      // While another document is being opened in place the editor still shows this one: nothing is written then.
+      if (init.readOnly || swapInProgress()) return { ok: false };
       try {
-        await recovery.put(artifactId, { baseRevision: state.revision, bytes: data, at: Date.now() });
-        state.kept = true;
+        const id = docId(), base = state.revision;
+        await recovery.put(id, { baseRevision: base, bytes: data, at: Date.now() });
+        if (id === docId()) { state.kept = true; keptWrites += 1; }
         return { ok: true };
       } catch {
         return { ok: false, failed: true };
@@ -259,13 +300,15 @@ const desktop = stubBridge(
     onWriteRecoveryNow: events.on("writeRecoveryNow"),
     onCloseCheck: events.on("closeCheck"),
     reportCloseCheck: (report: { dirty: boolean }) => {
-      state.dirty = report.dirty;
+      // Mid-swap the answer is about the document going out: said to nobody.
+      if (swapInProgress()) { for (const resolve of dirtyWaiters.splice(0)) resolve(report.dirty); return; }
+      state.dirty = report.dirty; dirtyReported = true;
       post({ type: "office:dirty", dirty: report.dirty });
       for (const resolve of dirtyWaiters.splice(0)) resolve(report.dirty);
       // Edits undone back to the saved revision: the kept copy has nothing left to recover.
       if (!report.dirty && state.kept) {
         state.kept = false;
-        void recovery.drop(artifactId).catch(() => undefined);
+        void recovery.drop(docId()).catch(() => undefined);
       }
     },
     onCloseSaveRequest: events.on("closeSaveRequest"),

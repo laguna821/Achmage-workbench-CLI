@@ -21,6 +21,7 @@ import type { OfficeOutputPlan } from "../../../packages/contracts/src/office-ou
 import { stampPdfLinks } from "./pdf-output-links.ts";
 import { watchSlideDrawn } from "./slide-drawn.ts";
 import { installViewPosition, readScroll, restoreScroll } from "./view-position.ts";
+import { installSwap, swapInProgress } from "./swap.ts";
 
 // IeumOffice's slides editor inside Workbench. Its screen (vendor/ieumoffice/apps/slides renderer)
 // and its window API (the preload) are used unchanged; its editing code — pptx parsing, layout,
@@ -32,8 +33,9 @@ const init = await handshake();
 const headless = headlessExport(init);
 const gateway = new Gateway(init.token);
 const ai = mountOfficeAi(init, gateway);
-const artifactId = init.artifact.id;
-const styles = createSlideStyles(gateway, artifactId);
+/** The document this page edits now: the editor pool may open another one in place (swap.ts), so it is read each time. */
+const docId = () => init.artifact.id;
+const styles = createSlideStyles(gateway, docId);
 /** `revision`: what the editor's deck is based on (a save must name it). */
 const state = { revision: init.artifact.revision, theme: init.theme, conflict: false, kept: false };
 connectOfficeUi(init, "slides", command => dispatch("slides:menu", [command]), theme => {
@@ -228,17 +230,18 @@ useTransport({ invoke: officeAiTransport(ai, dispatch, (channel, args) => styles
 
 // ── saving ───────────────────────────────────────────────────────────────
 async function save(auto: boolean) {
+  if (swapInProgress()) return { ok: false, error: "다른 문서를 여는 중입니다. 잠시 뒤 저장해 주세요." };
   if (officeCopyBusy()) return { ok: false, error: "사본 저장을 마친 뒤 저장해 주세요." };
   if (state.conflict) return { ok: false, reason: "external-modified" };
   const result = await value<{ ok?: boolean; error?: string } | null>({ type: "invoke", channel: "slides:save", args: [auto] });
   if (!result?.ok) return result;
   const bytes = await value<ArrayBuffer>({ type: "saved-bytes" });
   try {
-    const saved = await gateway.saveBytes(artifactId, state.revision, bytes);
+    const saved = await gateway.saveBytes(docId(), state.revision, bytes);
     state.revision = saved.revision;
     if (state.kept) {
       state.kept = false;
-      void recovery.drop(artifactId).catch(() => undefined);
+      void recovery.drop(docId()).catch(() => undefined);
     }
     post({ type: "office:saved", revision: saved.revision });
     return result;
@@ -257,13 +260,19 @@ async function save(auto: boolean) {
 }
 
 const isDirty = () => value<boolean>({ type: "dirty" }).catch(() => false);
+/** What the deck last said about unsaved edits (null: nothing yet for this deck), for the editor pool's park. */
+let lastDirty: boolean | null = null;
 
 /** A recovery copy right away (edits that could not be saved, or every 30 s while unsaved). */
-async function keepNow() {
+async function keepNow(): Promise<boolean> {
+  // While another document is opened in place the deck is the one going out: nothing is written then.
+  if (swapInProgress()) return false;
+  const id = docId(), base = state.revision;
   const bytes = await value<ArrayBuffer | null>({ type: "snapshot" }).catch(() => null);
-  if (!bytes) return;
-  await recovery.put(artifactId, { baseRevision: state.revision, bytes, at: Date.now() }).catch(() => undefined);
-  state.kept = true;
+  if (!bytes || id !== docId()) return false;
+  const ok = await recovery.put(id, { baseRevision: base, bytes, at: Date.now() }).then(() => true, () => false);
+  if (ok) state.kept = true;
+  return ok;
 }
 
 /** Save now through the editor's own save path (its close-save request); edits that could not be saved are kept. */
@@ -376,21 +385,22 @@ window.addEventListener(
 
 // The Workbench header shows whether there are unsaved edits (it keeps only changes); a copy is kept while there are.
 window.setInterval(() => {
-  void isDirty().then((dirty) => post({ type: "office:dirty", dirty }));
+  // Mid-swap the answer would be about the deck going out: said to nobody.
+  void isDirty().then((dirty) => { if (!swapInProgress()) { lastDirty = dirty; post({ type: "office:dirty", dirty }); } });
 }, 2000);
 window.setInterval(() => {
   void isDirty().then((dirty) => (dirty ? keepNow() : undefined));
 }, 30_000);
 
 // ── open the document, then the editor ──────────────────────────────────
-let kept = init.recover && !init.readOnly ? await recovery.get(artifactId).catch(() => undefined) : undefined;
+let kept = init.recover && !init.readOnly ? await recovery.get(docId()).catch(() => undefined) : undefined;
 if (kept && kept.baseRevision > init.artifact.revision) kept = undefined;
-if (!kept && !init.readOnly) await recovery.drop(artifactId).catch(() => undefined);
+if (!kept && !init.readOnly) await recovery.drop(docId()).catch(() => undefined);
 if (kept) {
   state.revision = kept.baseRevision;
   state.kept = true;
 }
-const bytes = kept ? kept.bytes : await gateway.raw(artifactId, state.revision);
+const bytes = kept ? kept.bytes : await gateway.raw(docId(), state.revision);
 await value({ type: "init", token: init.token });
 await value({ type: "open", name: init.artifact.name, bytes }, [bytes]);
 post({ type: "office:opened", revision: state.revision, recovered: Boolean(kept) });
@@ -424,13 +434,13 @@ async function replaceInPlace(revision: number) {
     const thumbs = () => [...document.querySelectorAll<HTMLElement>(".slide-list .thumb")];
     const shown = Math.max(0, thumbs().findIndex((thumb) => thumb.classList.contains("active")));
     const list = document.querySelector<HTMLElement>(".slide-list"), listTop = list?.scrollTop ?? 0;
-    const bytes = await gateway.raw(artifactId, revision);
+    const bytes = await gateway.raw(docId(), revision);
     await value({ type: "open", name: init.artifact.name, bytes, generation: ++openGeneration }, [bytes]);
     const opened = await value<{ slides: unknown[] } | null>({ type: "invoke", channel: "slides:consume-pending-open", args: [1280] });
     if (!opened) throw new Error("새 판을 열지 못했습니다.");
     dispatch("slides:opened", [opened]);
     state.revision = revision; state.conflict = false;
-    if (state.kept) { state.kept = false; void recovery.drop(artifactId).catch(() => undefined); }
+    if (state.kept) { state.kept = false; void recovery.drop(docId()).catch(() => undefined); }
     // The renderer starts at the first slide: the one that was on screen comes back (or the last one there is).
     const end = Date.now() + 3000;
     while (Date.now() < end && thumbs().length !== opened.slides.length) await new Promise((resolve) => setTimeout(resolve, 30));
@@ -442,10 +452,13 @@ async function replaceInPlace(revision: number) {
 if (!init.readOnly && !init.execution && !init.headlessExport) installInPlaceReplace({ dirty: isDirty, replace: replaceInPlace });
 // The tab keeps the slide on screen and the slide list's scroll; a woken tab opens there (office-leftovers point 3).
 // The slide is shown again the way a person does it (its thumbnail clicked), as replaceInPlace does.
-if (!init.execution && !init.headlessExport) {
+let viewPlace: ReturnType<typeof installViewPosition> | null = null;
+function placeView() {
+  if (init.execution || init.headlessExport) return;
+  viewPlace?.dispose();
   const thumbs = () => [...document.querySelectorAll<HTMLElement>(".slide-list .thumb")];
   const list = () => document.querySelector<HTMLElement>(".slide-list");
-  installViewPosition({
+  viewPlace = installViewPosition({
     read: () => {
       const all = thumbs();
       if (!all.length || document.querySelector(".start-booting")) return null;
@@ -460,3 +473,36 @@ if (!init.execution && !init.headlessExport) {
     },
   }, { initial: init.view, shown: () => pageRest.onScreen() && window.innerHeight > 0, post: (position) => post({ type: "office:view-position", position }) });
 }
+placeView();
+
+/** The editor pool's hold on this page (swap.ts): park the deck shown, open another one in place. */
+if (!init.readOnly && !init.execution && !init.headlessExport) installSwap(init, gateway, ai, {
+  dirty: isDirty,
+  lastDirty: () => lastDirty,
+  async keep() { viewPlace?.flush(); return keepNow(); },
+  busy: () => officeCopyBusy() || closeSaveAnswer !== null || mcpCopy !== null,
+  async open() {
+    viewPlace?.dispose(); viewPlace = null;
+    Object.assign(state, { revision: init.artifact.revision, conflict: false, kept: false }); lastDirty = null;
+    let kept = init.recover ? await recovery.get(docId()).catch(() => undefined) : undefined;
+    if (kept && kept.baseRevision > init.artifact.revision) kept = undefined;
+    if (!kept) await recovery.drop(docId()).catch(() => undefined);
+    if (kept) { state.revision = kept.baseRevision; state.kept = true; }
+    const bytes = kept ? kept.bytes : await gateway.raw(docId(), state.revision);
+    await value({ type: "token", token: init.token });
+    const thumbs = () => document.querySelectorAll(".slide-list .thumb").length;
+    await value({ type: "open", name: init.artifact.name, bytes, generation: ++openGeneration }, [bytes]);
+    const opened = await value<{ slides: unknown[] } | null>({ type: "invoke", channel: "slides:consume-pending-open", args: [1280] });
+    if (!opened) throw new Error("문서를 열지 못했습니다.");
+    // Recovered edits are unsaved edits (the worker opened them as a clean deck).
+    if (kept) await value({ type: "mark-dirty" });
+    dispatch("slides:opened", [opened]);
+    void value({ type: "close-previous" }).catch(() => undefined);
+    post({ type: "office:opened", revision: state.revision, recovered: Boolean(kept) });
+    const end = Date.now() + 3000;
+    while (Date.now() < end && thumbs() !== opened.slides.length) await new Promise((resolve) => setTimeout(resolve, 30));
+    placeView();
+    // The window's page picture leaves when this deck's slide is drawn at its fitted place.
+    watchSlideDrawn(document, window, () => post({ type: "office:page-drawn" }));
+  },
+});

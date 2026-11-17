@@ -1693,6 +1693,10 @@ kbd {
   .brand-compact {
     display: block;
   }
+}
+
+/* The reading column's sides follow its pane, not the window. */
+@container work-pane (max-width: 720px) {
   .column {
     padding: 0 14px;
   }

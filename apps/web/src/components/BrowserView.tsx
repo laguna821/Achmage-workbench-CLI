@@ -16,6 +16,7 @@ import { Composer } from "./Composer.tsx";
 import { readDraft, writeDraft } from "../draft.ts";
 import { BrowserTools } from "./BrowserTools.tsx";
 import { useBookmarkUi } from "./BookmarkBar.tsx";
+import type { Notify } from "../top-notice.ts";
 import { useShownPanel } from "../completion-notifications.ts";
 import { QueuedList, type WorkActions } from "./WorkView.tsx";
 import { AgentColumn } from "./companion/AgentColumn.tsx";
@@ -118,12 +119,14 @@ export function NewBrowserDialog({ browser, workspaces, target, onOpen, onClose 
   </dialog>;
 }
 
-export function BrowserView({ browser, api, state, pageId, visible, parentSessionId, actions, onNew, onOpenUrl, onStart, onClosed, engine = "codex", onLeaveGuard, onTranscript, onOpenSession, onSessionMenu, hosted, focusItem, onFocusDone }: {
+export function BrowserView({ browser, api, state, pageId, visible, parentSessionId, actions, onNew, onOpenUrl, onNotify, onStart, onClosed, engine = "codex", onLeaveGuard, onTranscript, onOpenSession, onSessionMenu, hosted, focusItem, onFocusDone }: {
   browser: SharedBrowser; api: Api; state: State; pageId: string; visible: boolean; parentSessionId: string | null;
   onStart?: (text: string, provider: Provider, choice: ModelChoice) => Promise<boolean>; engine?: Provider;
   actions: WorkActions; onNew: (target: NewTarget) => void; onClosed: () => void;
   /** A bookmark opened in a new web tab of this page's project (middle click, Ctrl/⌘-click, 새 탭에서 열기). */
   onOpenUrl?: (url: string) => void;
+  /** The app's notice (a bookmark's removal is said there, with 되돌리기). */
+  onNotify?: Notify;
   onLeaveGuard?: (guard: ((reason?: "close" | "discard") => Promise<void>) | null) => void;
   onTranscript: (sessionId: string, transcript: Conversation) => void; onOpenSession: (session: Session) => void;
   /** This page's AI's own actions (rename, archive, mute…), from its conversation's head. */
@@ -220,11 +223,15 @@ export function BrowserView({ browser, api, state, pageId, visible, parentSessio
   };
   const clone = () => onNew({ workspaceId: page?.workspaceId, profileId: page?.profileId, url: page?.url });
   // The bookmark bar under the address row and the star in the address field (BookmarkBar.tsx).
-  const marks = useBookmarkUi({ api, active: visible, page: page && !blank ? { url: page.url, title: page.title } : null, onOpen: (url, newTab) => {
+  const marks = useBookmarkUi({ api, active: visible, notify: onNotify, page: page && !blank ? { url: page.url, title: page.title } : null, onOpen: (url, newTab) => {
     if (!newTab) void run(() => humanAction({ kind: "navigate", url }));
     else if (onOpenUrl) onOpenUrl(url);
     else onNew({ workspaceId: page?.workspaceId, profileId: page?.profileId, url });
   } });
+  // Ctrl/⌘+D and Ctrl/⌘+Shift+B pressed while the page itself has the keyboard: the native view keeps those
+  // keys from the app, so its page script takes them and the driver hands them over here (browser-state.ts).
+  const pressed = useRef(marks.press); pressed.current = marks.press;
+  useEffect(() => browser.onPageKeys?.(pageId, key => { if (visible) pressed.current(key); }), [browser, pageId, visible]);
   if (!browser.available) return <div className="browser-unavailable"><h2>웹 탭</h2><p>공유 브라우저는 데스크톱 기본 창에서 사용할 수 있습니다. 기본 창에서 이 웹 탭을 열어 주세요.</p></div>;
   const pageMain = <section className="browser-view" aria-label="공유 웹 탭" data-hosted={hosted ? "" : undefined}>
     <div className="browser-toolbar">

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { BookmarkSource } from "@workbench/contracts";
+import type { BookmarkItem, BookmarkNode, BookmarkSource } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import { bookmarksOf, countBookmarks, useBookmarks } from "../bookmarks.ts";
 import { SettingsGroup, SettingsRow, SettingsSwitch } from "./SettingsSheet.tsx";
@@ -57,12 +57,21 @@ export function BookmarkImportStep({ api }: { api?: Requester }) {
   </>;
 }
 
-/** 설정 › 일반 › 웹 즐겨찾기: 즐겨찾기 줄 보이기, the same import keys, 모두 지우기 behind a confirmation. */
+/** The items whose site has no icon yet. */
+const withoutIcon = (nodes: BookmarkNode[]): BookmarkItem[] => nodes.flatMap(node => node.kind === "folder" ? withoutIcon(node.children) : node.icon ? [] : [node]);
+export const ICONS_HINT = "즐겨찾기를 열면 그 사이트의 아이콘을 가져옵니다. 아이콘 가져오기는 아이콘이 없는 사이트마다 한 번씩 연결합니다.";
+
+/** 설정 › 일반 › 웹 즐겨찾기: 즐겨찾기 줄 보이기, the same import keys, 사이트 아이콘, 모두 지우기 behind a confirmation. */
 export function BookmarkSettings({ api }: { api: Requester }) {
   const [data, client] = useBookmarks(api);
   const { looking, ways, busy, said, run } = useBookmarkImport(api);
   const [asking, setAsking] = useState(false), [clearing, setClearing] = useState(false), [error, setError] = useState("");
-  const total = countBookmarks(data?.items ?? []);
+  const [fetching, setFetching] = useState(false), [iconsSaid, setIconsSaid] = useState<{ text: string; error: boolean } | null>(null);
+  const total = countBookmarks(data?.items ?? []), bare = withoutIcon(data?.items ?? []).length;
+  const fetchIcons = () => {
+    setFetching(true); setIconsSaid(null);
+    void client.fetchAllIcons().then(result => setIconsSaid({ text: result.message, error: false }), reason => setIconsSaid({ text: message(reason), error: true })).finally(() => setFetching(false));
+  };
   const act = (action: Promise<unknown>) => { setError(""); return action.catch(reason => setError(message(reason))); };
   return <SettingsGroup title="웹 즐겨찾기">
     <SettingsRow label="즐겨찾기 줄 보이기" hint="웹 탭의 주소 바로 아래에 즐겨찾기를 한 줄로 보여 줍니다. Ctrl+Shift+B로도 켜고 끕니다."
@@ -74,6 +83,9 @@ export function BookmarkSettings({ api }: { api: Requester }) {
         </div> : null}
         {said ? <p className={`settings-note${said.error ? " warn" : ""}`} role={said.error ? "alert" : "status"}>{said.text}</p> : null}
       </> : undefined} />
+    <SettingsRow label="사이트 아이콘" hint={`${total.items ? `아이콘이 없는 즐겨찾기 ${bare}개. ` : ""}${ICONS_HINT}`}
+      control={<button type="button" className="button small" aria-busy={fetching || undefined} disabled={fetching || !bare} onClick={fetchIcons}>{fetching ? "가져오는 중…" : "아이콘 가져오기"}</button>}
+      detail={iconsSaid ? <p className={`settings-note${iconsSaid.error ? " warn" : ""}`} role={iconsSaid.error ? "alert" : "status"}>{iconsSaid.text}</p> : undefined} />
     <SettingsRow label="즐겨찾기 모두 지우기" hint={total.items || total.folders ? `지금 즐겨찾기 ${total.items}개, 폴더 ${total.folders}개가 있습니다.` : "지금은 즐겨찾기가 없습니다."}
       control={asking ? undefined : <button type="button" className="button small danger" disabled={!total.items && !total.folders} onClick={() => setAsking(true)}>모두 지우기</button>}
       detail={asking || error ? <>

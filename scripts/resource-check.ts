@@ -23,6 +23,9 @@ const shots = process.argv.includes("--shots");
 const dataDir = mkdtempSync(join(tmpdir(), "wb-resource-check-"));
 const holds = join(dataDir, "holds"); mkdirSync(holds, { recursive: true });
 const release = (name: string) => writeFileSync(join(holds, name), "");
+const machine = join(dataDir, "machine.json");
+const setMachine = (availableBytes: number) => writeFileSync(machine, JSON.stringify({ totalBytes: 8 * 2 ** 30, availableBytes, cores: 8 }));
+setMachine(6 * 2 ** 30);
 const results: boolean[] = [];
 const check = (name: string, ok: boolean, detail = "") => { results.push(ok); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`); };
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
@@ -62,8 +65,9 @@ async function startGateway() {
       WORKBENCH_TELEGRAM_API: tg.url,
       WORKBENCH_SECRET_BIN: resolve("scripts/fixtures/fake-secret.mjs"), FAKE_SECRET_OFF: join(dataDir, "keyring-off"),
       FAKE_ENGINE_STATE: join(dataDir, "fake-engine-state"), FAKE_ENGINE_HOLD_DIR: holds,
-      // A roomy stand-in machine: the limit below is the person's 직접 number, not this computer's memory.
-      WORKBENCH_MACHINE: JSON.stringify({ totalBytes: 16 * 2 ** 30, availableBytes: 10 * 2 ** 30, cores: 8 }),
+      // A roomy stand-in machine: the limit below is the person's 직접 number, not this computer's memory. Read from a
+      // file at each reading, so step 6b can make memory short while the gateway runs (0.5.4).
+      WORKBENCH_MACHINE: `@${machine}`,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -184,6 +188,44 @@ try {
   check("phone: its answer comes back", await said(from, (text) => text.split("\n")[0] === reportHead && text.length > 40), tgTexts().slice(from).map((text) => text.split("\n")[0]).join(" | "));
   await sleep(1_500);
   check("…exactly once", tgTexts().filter((text) => text.split("\n")[0] === reportHead).length === 1);
+  // 6b (0.5.4). Memory runs short while two turns run: the ladder climbs one rung at a time — nothing new starts, idle
+  // engines close, the window is asked to sleep its tabs, the least urgent turn gives memory back — and comes down
+  // when memory is back; what waited starts by itself. Engines run in scopes of their own with the cap (Linux).
+  await api("/api/resources/settings", "PUT", { mode: "manual", manual: 4, cap: 2 ** 30 });
+  check("ladder: nothing runs before it starts", await wait(async () => (await resources()).running.length === 0 && (await resources()).waiting.length === 0, 60_000), JSON.stringify(await resources()));
+  const sleepBefore = (await resources()).sleepNow;
+  // A new conversation: its engine starts after the cap is set (an engine already running keeps the scope it started with).
+  const capped = await api<Session>(`/api/works/${work.id}/sessions`, "POST", { provider: "claude", purpose: "상한 확인" });
+  await send(capped.id, "l1", "자료 정리해 줘 [[hold:l1]]");
+  await send(sessions[1]!.id, "l2", "표 만들어 줘 [[hold:l2]]");
+  check("ladder: two turns run", await wait(async () => (await resources()).running.length === 2));
+  const support = (await resources()).capSupport;
+  if (support === "enforced") {
+    // The engine of l1's conversation: its own scope, the cap as its memory.max, taken before the gateway.
+    const { readdirSync, readFileSync } = await import("node:fs");
+    const scoped = await wait(() => readdirSync("/proc").filter((pid) => /^\d+$/.test(pid)).some((pid) => {
+      try {
+        if (!readFileSync(`/proc/${pid}/environ`, "utf8").split("\0").includes(`WORKBENCH_SESSION=${capped.id}`)) return false;
+        const cgroup = /^0::(\/.*)$/m.exec(readFileSync(`/proc/${pid}/cgroup`, "utf8"))?.[1] ?? "";
+        return /\/workbench-engine-[^/]+\.scope$/.test(cgroup) && readFileSync(`/sys/fs/cgroup${cgroup}/memory.max`, "utf8").trim() === String(2 ** 30);
+      } catch { return false; }
+    }), 15_000);
+    check("cap: the conversation's engine runs in its own scope with memory.max = 1 GB", scoped);
+  } else console.log(`(cap: this computer says "${support}" — the scope check is skipped)`);
+  setMachine(300 * 2 ** 20);
+  const l3 = await send(sessions[2]!.id, "l3", "요약해 줘");
+  check("ladder rung 1: memory short → a new request waits, the reason in words", l3.waitingFor === "slot" && (await resources()).reason === "메모리가 부족해 잠시 기다립니다", JSON.stringify(l3));
+  const rungs: number[] = [];
+  const climbed = await wait(async () => { const now = (await resources()).stage; if (rungs.at(-1) !== now) rungs.push(now); return now === 4; }, 60_000);
+  check("ladder: climbs one rung at a time, 1 → 2 → 3 → 4", climbed && JSON.stringify(rungs) === JSON.stringify([1, 2, 3, 4]), rungs.join("→"));
+  const top = await resources();
+  check("ladder rung 3: the window was asked once to sleep its tabs", top.sleepNow === sleepBefore + 1, `${sleepBefore} → ${top.sleepNow}`);
+  check("ladder rung 4: one running turn (not on screen) gives memory back, its next request waits", top.running.filter((turn) => turn.relieved).length === 1, JSON.stringify(top.running));
+  setMachine(6 * 2 ** 30);
+  check("ladder: memory back → calm, and l3 starts by itself", await wait(async () => (await resources()).stage === 0 && (await users(sessions[2]!.id)).includes("l3"), 30_000));
+  release("l1"); release("l2");
+  check("ladder: l1 and l2 end", await wait(async () => (await resources()).running.length <= 1, 30_000));
+  await api("/api/resources/settings", "PUT", { cap: null });
   // 7. Frames (last: a window on screen puts its conversation first in the line, so it would change the order above).
   if (shots) {
     await api("/api/resources/settings", "PUT", { mode: "manual", manual: 2 });
@@ -207,17 +249,36 @@ try {
         await page.locator(".settings-nav [data-section=engines]").click();
         await page.locator(".resource-limit").waitFor();
         await page.locator(".resource-why summary").click();
-        await page.locator(".resource-limit").scrollIntoViewIfNeeded();
+        await page.locator(".resource-cap").scrollIntoViewIfNeeded();
         await sleep(300);
       });
+      // 0.5.4: 활동 › 지금 — each running turn's time and memory, each waiting conversation's place and reason.
+      for (const size of theme === "light" ? [{ width: 1440, height: 900 }, { width: 1000, height: 800 }] : [{ width: 1440, height: 900 }]) {
+        await frame("activity-now", theme, size, sessions[0]!, async (page) => {
+          await page.locator(".nav-rail [data-rail=activity]").click();
+          await page.locator(".side-now .now-detail").first().waitFor();
+          await sleep(500);
+        });
+      }
     }
+    // 0.5.4: the bottom line's list under memory pressure (rung 4 reached), then memory back.
+    setMachine(300 * 2 ** 20);
+    check("frames: the ladder reaches rung 4", await wait(async () => (await resources()).stage === 4, 60_000));
+    for (const theme of ["light", "dark"] as const) {
+      await frame("bottom-line-pressure", theme, { width: 1440, height: 900 }, sessions[0]!, async (page) => {
+        await page.locator(".resource-line-text").click();
+        await page.locator(".resource-pop .resource-pressure").waitFor();
+        await sleep(500);
+      });
+    }
+    setMachine(6 * 2 ** 30);
   }
 
   writeFileSync(join(out, "phone-telegram.txt"), tgTexts().map((text, index) => `--- ${index + 1}\n${text}`).join("\n"));
 } catch (error) {
   check("the rig ran to the end", false, error instanceof Error ? error.message : String(error));
 } finally {
-  for (const name of ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "f1", "f2", "f3", "f4"]) release(name);
+  for (const name of ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "l1", "l2", "f1", "f2", "f3", "f4"]) release(name);
   await (browser as import("playwright-core").Browser | null)?.close();
   await stopGateway();
   await tg.stop?.();

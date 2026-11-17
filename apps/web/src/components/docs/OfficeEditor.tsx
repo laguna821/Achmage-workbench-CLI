@@ -1,6 +1,9 @@
 import { withParticle } from "@workbench/contracts";
-import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { TabClosed, useKeepOnClose } from "../../tab-sleep.ts";
+import { forwardRef, useContext, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { EditorPoolContext } from "../EditorPoolLayer.tsx";
+import { isWarmTab, poolKindOf, type HolderPort } from "../../editor-pool.ts";
+import { SleepTab, TabClosed, useKeepOnClose } from "../../tab-sleep.ts";
 import { takeDiscarded } from "../../discarded-edits.ts";
 import { failure, type Notify } from "../../top-notice.ts";
 import type { Artifact, DocumentAccess, EditorGrant, OfficePageMessage, OfficeViewPosition } from "@workbench/contracts";
@@ -87,13 +90,46 @@ export const OfficeEditor = forwardRef<
     onPageDrawn?(): void;
     /** Where the view was when the tab last showed it: a page opened again gets it in its init (office-leftovers point 3). */
     viewPosition?: OfficeViewPosition;
+    /** The page picture is shown over the editor (doc-cover): a pooled frame, drawn above the tab, is transparent meanwhile. */
+    covered?: boolean;
     /** The page says where its view is now: the tab keeps it. */
     onViewPosition?(position: OfficeViewPosition): void;
     /** The Hangul safety net's warnings (a save that may have lost something, or went unchecked): the document's notice line keeps them. Without it they go to `onNotice`. */
     onWarning?(warning: string): void; onCopied?(artifactId: string, scope?: Pick<Artifact, "workId" | "workspaceId"> & { preserveSource?: boolean }): void; onPresent?(value: OfficePresentation): void; onPrepareAi(revision: number): Promise<void>; onNewSession(revision: number): Promise<string>; onAiSettings(): void }
->(function OfficeEditor({ api, artifact, access, sessionId, hidden = false, onStatus, onAiPanel, onReload, onNotice, onWarning, onCopied, onPresent, onPrepareAi, onNewSession, onAiSettings, onPageDrawn, viewPosition, onViewPosition }, ref) {
+>(function OfficeEditor({ api, artifact, access, sessionId, hidden = false, onStatus, onAiPanel, onReload, onNotice, onWarning, onCopied, onPresent, onPrepareAi, onNewSession, onAiSettings, onPageDrawn, viewPosition, onViewPosition, covered = false }, ref) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [generation, setGeneration] = useState(0);
+  // The editor pool (editor-pool.ts): a Word document inside PaneLayout has no iframe of its own. It leaves a slot where the
+  // frame was, and the pool lays a shared frame over it while the document is on screen (EditorPoolLayer.tsx). Elsewhere
+  // (no pool around it, or a kind not pooled) the per-tab iframe below, as before.
+  const surface = useContext(EditorPoolContext);
+  const [poolKind] = useState(() => (surface ? poolKindOf(artifact.format) : null));
+  const pooled = Boolean(surface && poolKind);
+  const slot = useRef<HTMLDivElement>(null);
+  /** Mounted behind at restore to warm its kind (until it is first shown). */
+  const sleepTab = useContext(SleepTab);
+  const [warmTab] = useState(() => isWarmTab(sleepTab));
+  const everVisible = useRef(false);
+  const [holderId] = useState(() => `holder-${crypto.randomUUID()}`);
+  type Attached = { id: string; mode: "fresh" | "swap"; epoch: number };
+  /** The pool's frame this document holds now (null: none — its state is kept by the tab, the page picture shows). */
+  const attached = useRef<Attached | null>(null);
+  const [attachedNow, setAttachedNow] = useState<Attached | null>(null);
+  /** The page's messages are about this document: a fresh page — at once; a swapped one — after its office:swapped. */
+  const accepting = useRef(false);
+  /** The swapped-in document is drawn (the page said office:swap-ready after the swap): until then the frame is transparent. */
+  const swapDone = useRef(true);
+  const [, poolTick] = useState(0);
+  const parkWaiter = useRef<((ok: boolean) => void) | null>(null);
+  /** A save, a command or a conflict needs the editor while the document is off screen: it gets a frame back meanwhile. */
+  const needed = useRef(0);
+  const readyWaiters = useRef<(() => void)[]>([]);
+  /** Edits this tab parked: their return through the recovery copy is no "되살렸습니다" news. */
+  const parkedEdits = useRef(false);
+  const attachedOnce = useRef(false);
+  const epochs = useRef(0);
+  /** The anchor in the tab: the slot for a pooled editor, else its own iframe. */
+  const anchor = (): HTMLElement | null => (pooled ? slot.current : frame.current);
   // Each opening of the page gets its own grant (a token for this document only).
   const [grant, setGrant] = useState<{ generation: number; value: EditorGrant } | { generation: number; error: string } | null>(null);
   const opened = useRef<EditorGrant | null>(null);
@@ -158,7 +194,7 @@ export const OfficeEditor = forwardRef<
   const latest = useRef(artifact);
   latest.current = artifact;
 
-  const theme = () => (frame.current?.closest("[data-theme]")?.getAttribute("data-theme") === "dark" ? "dark" : "light");
+  const theme = () => (anchor()?.closest("[data-theme]")?.getAttribute("data-theme") === "dark" ? "dark" : "light");
   // The app's 색 조합 (theme.ts sets the chosen light and dark sets on <html>): the editors' chrome mirrors the set of this pane's mode.
   const themeMessage = () => { const mode = theme(), palette = paletteOf(mode); return { type: "office:theme" as const, theme: mode, ...(palette ? { palette } : {}) }; };
   const update = (patch: Partial<Omit<OfficeStatus, "changed" | "same">>) => {
@@ -168,8 +204,13 @@ export const OfficeEditor = forwardRef<
     const same = next.dirty && verifies && compared.current === "equal";
     status.current = { ...next, changed: next.dirty && !same, same };
     if (frame.current) frame.current.dataset.revision = String(status.current.revision ?? "");
+    if (pooled && slot.current) slot.current.dataset.revision = String(status.current.revision ?? "");
     handlers.current.onStatus(status.current);
+    if (pooled) { readyCheck(); surface!.pool.update(); }
   };
+  /** The document is open in a frame of the pool, and the page speaks of it. */
+  const frameReady = () => !pooled || Boolean(attached.current && accepting.current && swapDone.current && status.current.revision !== null);
+  const readyCheck = () => { if (frameReady()) for (const resolve of readyWaiters.current.splice(0)) resolve(); };
   // The editor's text against the saved revision's, asked after a hint that it may have changed
   // (never on a clock). Equal takes the unsaved mark back; anything else — different, busy, not
   // ready, no answer, a saved text that cannot be read — leaves or puts back the editor's report.
@@ -231,6 +272,8 @@ export const OfficeEditor = forwardRef<
   const closedTab = useContext(TabClosed);
   /** Open the latest revision: in the running editor when it can (same frame, view kept), else the page again. */
   const openLatest = () => {
+    // Parked in the pool: nothing is shown to replace; the next frame it gets opens the latest revision.
+    if (pooled && !attached.current) return;
     const shown = status.current.revision, revision = latest.current.revision;
     if (replaceable.current && shown !== null) {
       if (replacing.current !== null && replacing.current >= revision) return;
@@ -252,14 +295,35 @@ export const OfficeEditor = forwardRef<
   const send = (value: unknown) => {
     if (opened.current) frame.current?.contentWindow?.postMessage(value, opened.current.origin);
   };
+  /** The document as the page is told it (office:init, or the pool's office:swap). */
+  const initFields = () => {
+    const doc = latest.current, grantNow = opened.current!;
+    // Its unsaved edits were dropped by the person (저장하지 않고 옮기기): the editor must not
+    // restore its own recovery copy of them; recover: false makes it drop that copy.
+    const dropped = takeDiscarded(doc.id);
+    const fields = {
+      token: grantNow.token,
+      sessionId: grantNow.sessionId,
+      artifact: { id: doc.id, name: doc.name, path: doc.path, revision: doc.revision, sha256: doc.sha256 },
+      readOnly: false,
+      theme: theme(),
+      recover: recover.current && !dropped,
+      ...(viewRef.current ? { view: viewRef.current } : {}),
+    };
+    recover.current = true;
+    return fields;
+  };
   // Whether the frame is on screen (A10): a hidden editor rests — its repeating timers and animation
   // frames wait until it is shown again (apps/office/src/page-rest.ts). Hidden = its pane or tab is not
   // shown, the view is covered (`hidden`), or the app window itself is hidden.
   const onScreen = useRef(true), intersecting = useRef(true);
-  const observed = useRef<{ element: HTMLIFrameElement; stop(): void } | null>(null);
+  const observed = useRef<{ element: HTMLElement; stop(): void } | null>(null);
   const tellShown = (force = false) => {
-    const element = frame.current;
-    const next = Boolean(element) && !hidden && document.visibilityState !== "hidden" && intersecting.current;
+    const element = pooled ? (attached.current ? slot.current : null) : frame.current;
+    // A warm editor (mounted behind at restore) boots awake until its document is open, then rests like any hidden one.
+    const warming = pooled && warmTab && Boolean(attached.current) && status.current.revision === null && !everVisible.current;
+    if (pooled && visibleNow()) everVisible.current = true;
+    const next = warming || (Boolean(element) && !hidden && document.visibilityState !== "hidden" && intersecting.current && (!pooled || visibleNow()));
     if (next === onScreen.current && !force) return;
     onScreen.current = next;
     send({ type: "office:shown", shown: next });
@@ -267,7 +331,7 @@ export const OfficeEditor = forwardRef<
   const tellShownRef = useRef(tellShown);
   tellShownRef.current = tellShown;
   useEffect(() => {
-    const element = frame.current;
+    const element = anchor();
     if (observed.current?.element === element) { tellShownRef.current(); return; }
     observed.current?.stop();
     observed.current = null;
@@ -734,8 +798,19 @@ export const OfficeEditor = forwardRef<
     const onMessage = (event: MessageEvent) => {
       if (!opened.current || event.origin !== opened.current.origin || event.source !== frame.current?.contentWindow) return;
       const message = event.data as OfficePageMessage;
+      // A frame of the pool just given to this document still speaks of the one before until it answers the swap.
+      if (pooled && !accepting.current) {
+        if (message.type === "office:swapped" && message.epoch === attached.current?.epoch) {
+          if (message.ok) { accepting.current = true; tellShownRef.current(true); }
+          else { const id = attached.current.id; letGo(); surface!.pool.refused(id, holderId); }
+          return;
+        }
+        // The page was opened again (a reload, a crash): it is a new page, told this document.
+        if (message.type !== "office:ready") return;
+        accepting.current = true; swapDone.current = true; poolTick((value) => value + 1);
+      }
       // Whatever else the editor does (its AI, an output, a note) may have changed its text.
-      if (!["office:mcp-result", "office:control-result", "office:dirty", "office:saved", "office:opened", "office:ready", "office:page-drawn", "office:view-position"].includes(message.type)) hint.current();
+      if (!["office:mcp-result", "office:control-result", "office:dirty", "office:saved", "office:opened", "office:ready", "office:page-drawn", "office:view-position", "office:swap-ready", "office:parked", "office:swapped", "office:swap-failed"].includes(message.type)) hint.current();
       switch (message.type) {
         case "office:skills": void skillsHandler.current(message); break;
         case "office:wiki": void wikiHandler.current(message); break;
@@ -782,21 +857,7 @@ export const OfficeEditor = forwardRef<
           mcpWaiters.current.get(message.requestId)?.(message.reply);
           break;
         case "office:ready": {
-          const doc = latest.current;
-          // Its unsaved edits were dropped by the person (저장하지 않고 옮기기): the editor must not
-          // restore its own recovery copy of them; recover: false makes it drop that copy.
-          const dropped = takeDiscarded(doc.id);
-          send({
-            type: "office:init",
-            token: opened.current.token,
-            sessionId: opened.current.sessionId,
-            artifact: { id: doc.id, name: doc.name, path: doc.path, revision: doc.revision, sha256: doc.sha256 },
-            readOnly: false,
-            theme: theme(),
-            recover: recover.current && !dropped,
-            ...(viewRef.current ? { view: viewRef.current } : {}),
-          });
-          recover.current = true;
+          send({ type: "office:init", ...initFields() });
           // A page starts shown: one opened behind another tab is told at once that it rests.
           onScreen.current = true;
           tellShownRef.current();
@@ -818,11 +879,14 @@ export const OfficeEditor = forwardRef<
             // Edits recovered on opening are unsaved work: nothing to compare.
             compared.current = message.recovered ? "different" : "none";
             update({ revision: message.revision, dirty: message.recovered, conflict: null });
-            if (message.recovered) handlers.current.onNotice("저장하지 않았던 편집을 되살렸습니다.");
+            // Edits this tab parked in the pool come back as they left: no news.
+            if (message.recovered && !parkedEdits.current) handlers.current.onNotice("저장하지 않았던 편집을 되살렸습니다.");
           }
           // The artifact may advance while this frame is opening. Its revision effect
           // already ran with shown=null; reconcile again with the actual opened revision.
+          parkedEdits.current = false;
           reconcile();
+          if (warmTab) tellShownRef.current();
           break;
         case "office:view-position":
           handlers.current.onViewPosition?.(message.position);
@@ -864,6 +928,20 @@ export const OfficeEditor = forwardRef<
         case "office:replace-ready":
           replaceable.current = true;
           reconcile();
+          break;
+        case "office:swap-ready":
+          if (pooled && attached.current) {
+            surface!.pool.swappable(attached.current.id);
+            if (!swapDone.current) { swapDone.current = true; poolTick((value) => value + 1); readyCheck(); }
+          }
+          break;
+        case "office:parked":
+          parkWaiter.current?.(message.ok);
+          break;
+        case "office:swap-failed":
+          // Opened again in its frame as a new page (the kept copy of its edits is opened from there).
+          update({ revision: null });
+          setGeneration((value) => value + 1);
           break;
         case "office:replace-result":
           replacing.current = null;
@@ -913,17 +991,159 @@ export const OfficeEditor = forwardRef<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+
+  // ── The editor pool (editor-pool.ts): this document's side ───────────────────────────────────────────────────────────
+  const liveTurnNow = useRef(false); liveTurnNow.current = liveTurn;
+  const dialogsOpen = useRef(false); dialogsOpen.current = Boolean(referencePicker || output || imageOutput || notePath || skillsOpen);
+  /** On screen: its slot is laid out (its tab in front, its pane shown) and no comparison or older revision is over it. */
+  const visibleNow = () => { const element = slot.current; return Boolean(element?.isConnected && element.getClientRects().length > 0) && !hidden; };
+  /** It must keep its frame now, even off screen: the page holds something that a park would cut or that only it has. */
+  const pinnedNow = () => liveTurnNow.current || hidden || aiBusy.current || outputBusy.current || blockingOutputs() || copied.current.size > 0
+    || waiters.current.length > 0 || mcpWaiters.current.size > 0 || controlWaiters.current.size > 0 || Boolean(status.current.conflict)
+    || needed.current > 0 || dialogsOpen.current || comparing.current || (attached.current !== null && !frameReady());
+  /** Where the frame is drawn: over the slot, transparent under the page picture or while the swap opens the document. */
+  const placeFrame = () => {
+    const holding = attached.current, host = surface?.host, element = slot.current;
+    if (!pooled || !holding) return;
+    let box: { left: number; top: number; width: number; height: number } | null = null;
+    if (host && element && element.getClientRects().length) {
+      const outer = host.getBoundingClientRect(), inner = element.getBoundingClientRect();
+      box = { left: inner.left - outer.left, top: inner.top - outer.top, width: inner.width, height: inner.height };
+    }
+    const pane = element?.closest<HTMLElement>(".pane");
+    surface!.place(holding.id, { box, shown: visibleNow(), covered: covered || !swapDone.current, tab: pane?.dataset.tab, paneActive: pane?.dataset.paneActive === "true" });
+  };
+  const placeRef = useRef(placeFrame); placeRef.current = placeFrame;
+  useLayoutEffect(() => { placeRef.current(); });
+  const letGo = () => {
+    const holding = attached.current;
+    if (!holding) return;
+    attached.current = null; accepting.current = false; frame.current = null; swapDone.current = true;
+    unwatch.current?.(); unwatch.current = null;
+    surface?.handlers(holding.id, null);
+    setAttachedNow(null);
+  };
+  const unwatch = useRef<(() => void) | null>(null);
+  const attach = (frameId: string, mode: "fresh" | "swap") => {
+    const holding = { id: frameId, mode, epoch: (epochs.current += 1) };
+    attached.current = holding;
+    accepting.current = mode === "fresh"; swapDone.current = mode === "fresh";
+    frame.current = surface!.element(frameId);
+    unwatch.current?.();
+    unwatch.current = surface!.watch(frameId, (element) => { if (attached.current?.id === frameId) frame.current = element; });
+    surface!.handlers(frameId, {
+      // The editor took focus: its pane is the focused one, as when the iframe was inside it.
+      focus: () => slot.current?.dispatchEvent(new FocusEvent("focusin", { bubbles: true })),
+      leave: () => hint.current(),
+    });
+    replaceable.current = false; replacing.current = null;
+    // A new page for the tab (its dock drawn afresh, its picture over it until the document is drawn).
+    if (attachedOnce.current) handlers.current.onReload?.();
+    attachedOnce.current = true;
+    onScreen.current = false;
+    update({ revision: null });
+    setAttachedNow(holding);
+  };
+  const attachRef = useRef(attach); attachRef.current = attach;
+  const letGoRef = useRef(letGo); letGoRef.current = letGo;
+  /** office:park: the page keeps this document's state (its unsaved edits as the recovery copy) and may be given away. */
+  const park = () => new Promise<boolean>((resolve) => {
+    if (pinnedNow() || !attached.current) { resolve(false); return; }
+    const dirty = status.current.dirty;
+    const finish = (ok: boolean) => { window.clearTimeout(timer); if (parkWaiter.current === finish) parkWaiter.current = null; if (ok && dirty) parkedEdits.current = true; resolve(ok); };
+    const timer = window.setTimeout(() => finish(false), 20_000);
+    parkWaiter.current?.(false);
+    parkWaiter.current = finish;
+    send({ type: "office:park" });
+  });
+  const parkRef = useRef(park); parkRef.current = park;
+  const pinnedRef = useRef(pinnedNow); pinnedRef.current = pinnedNow;
+  const visibleRef = useRef(visibleNow); visibleRef.current = visibleNow;
+  useEffect(() => {
+    if (!pooled) return;
+    const port: HolderPort = {
+      id: holderId, kind: poolKind!, doc: latest.current.id,
+      visible: () => visibleRef.current() || needed.current > 0,
+      pinned: () => pinnedRef.current(),
+      dirty: () => status.current.dirty,
+      warm: () => warmTab && !attachedOnce.current,
+      park: () => parkRef.current(),
+      attach: (frameId, mode) => attachRef.current(frameId, mode),
+      detach: () => letGoRef.current(),
+    };
+    const off = surface!.pool.register(port);
+    // Shown, hidden, moved, resized: the pool decides again and the frame follows the slot.
+    const element = slot.current, pane = element?.closest(".pane");
+    let shown = visibleRef.current();
+    const look = () => {
+      placeRef.current();
+      const now = visibleRef.current();
+      if (now !== shown) { shown = now; surface!.pool.update(); tellShownRef.current(); }
+    };
+    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(look);
+    if (element) resize?.observe(element);
+    if (surface!.host) resize?.observe(surface!.host);
+    const mutations = typeof MutationObserver === "undefined" || !pane ? null : new MutationObserver(look);
+    if (pane) mutations?.observe(pane, { attributes: true, attributeFilter: ["hidden", "style", "class", "data-pane-active"] });
+    window.addEventListener("resize", look);
+    return () => { resize?.disconnect(); mutations?.disconnect(); window.removeEventListener("resize", look); unwatch.current?.(); off(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Pinned or not changes with these: the pool looks again (a turn's end lets an extra frame go).
+  useEffect(() => { if (pooled) surface!.pool.update(); }, [pooled, surface, liveTurn, hidden, Boolean(referencePicker || output || imageOutput || notePath || skillsOpen)]);
+  // A fresh frame (or the page opened again: a new generation) is given the editor's page address once the grant is there.
+  const loaded = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pooled || !attachedNow || !current || !("value" in current)) return;
+    const key = `${attachedNow.epoch}:${generation}`;
+    if (loaded.current === key) return;
+    // A running page given to this document: it is opened by office:swap (below), not by an address.
+    if (attachedNow.mode === "swap" && !loaded.current?.startsWith(`${attachedNow.epoch}:`)) { loaded.current = key; return; }
+    // A new frame, or the page opened again in place (다시 열기, a reload after a failed replace): a new page there.
+    loaded.current = key; accepting.current = true; swapDone.current = true;
+    surface!.load(attachedNow.id, `${current.value.url}?a=${latest.current.id}&g=${generation}&host=${encodeURIComponent(location.origin)}`, frameTitle());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pooled, attachedNow, current, generation]);
+  // A running page of the pool: told to open this document in place, once per attachment.
+  const swapSent = useRef(0);
+  useEffect(() => {
+    if (!pooled || !attachedNow || attachedNow.mode !== "swap" || swapSent.current === attachedNow.epoch || !opened.current) return;
+    swapSent.current = attachedNow.epoch;
+    send({ type: "office:swap", epoch: attachedNow.epoch, ...initFields() });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pooled, attachedNow, current]);
+  useEffect(() => () => { parkWaiter.current?.(false); for (const resolve of readyWaiters.current.splice(0)) resolve(); }, []);
+  /**
+   * The editor itself is needed while the document is off screen and parked (closing its tab with unsaved edits, an AI
+   * tool's command on it): it gets a frame back meanwhile (opened from its kept copy, behind its tab), and lets go after.
+   */
+  const withFrame = async <T,>(work: () => Promise<T>, unavailable: () => T): Promise<T> => {
+    if (frameReady()) return work();
+    needed.current += 1; surface!.pool.update();
+    try {
+      const ready = await new Promise<boolean>((resolve) => {
+        const timer = window.setTimeout(() => { readyWaiters.current = readyWaiters.current.filter((entry) => entry !== done); resolve(false); }, 90_000);
+        const done = () => { window.clearTimeout(timer); resolve(frameReady()); };
+        readyWaiters.current.push(done);
+        readyCheck();
+      });
+      return ready ? await work() : unavailable();
+    } finally { needed.current -= 1; surface!.pool.update(); }
+  };
+  const frameTitle = () => `${artifact.format === "pptx" ? "PPT" : artifact.format === "xlsx" ? "엑셀" : artifact.format === "hwp" || artifact.format === "hwpx" ? "한글" : artifact.format === "epub" ? "전자책" : artifact.format === "xmind" ? "마인드맵" : artifact.format === "pdf" ? "PDF" : artifact.format === "markdown" ? "Markdown" : artifact.format === "html" ? "HTML" : "워드"} 편집기 · ${artifact.name}`;
+
   // The initial render waits for a grant and has no iframe. Attach after it mounts, and keep
   // the same frame/lease when the pane's theme changes or an overlay temporarily hides it.
   useEffect(() => {
-    if (!frame.current || !opened.current) return;
+    const element = anchor();
+    if (!element || !opened.current) return;
     const notify = () => send(themeMessage());
     const observer = new MutationObserver(notify);
-    for (let scope: HTMLElement | null = frame.current.parentElement; scope; scope = scope.parentElement) observer.observe(scope, { attributes: true, attributeFilter: ["data-theme", "data-palette-light", "data-palette-dark"] });
+    for (let scope: HTMLElement | null = element.parentElement; scope; scope = scope.parentElement) observer.observe(scope, { attributes: true, attributeFilter: ["data-theme", "data-palette-light", "data-palette-dark"] });
     notify();
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [artifact.id, generation, Boolean(opened.current)]);
+  }, [artifact.id, generation, Boolean(opened.current), attachedNow?.epoch]);
 
   // A revision made elsewhere (an applied AI proposal, a revert): open it when nothing here is unsaved.
   useEffect(() => {
@@ -936,6 +1156,69 @@ export const OfficeEditor = forwardRef<
     for (const resolve of [...mcpWaiters.current.values()]) resolve({ status: "error", error: { reason: "closed", message: "문서 창이 바뀌어 명령의 완료를 확인하지 못했습니다." } });
   }, [artifact.id, generation]);
 
+  const runMcp = (request: OfficeMcpRequest): Promise<OfficeMcpReply> => {
+    if (status.current.revision === null) return Promise.resolve({ status: "not_ready" });
+    if (request.kind !== "status" && (aiBusy.current || outputBusy.current || blockingOutputs())) return Promise.resolve({ status: "error", error: { reason: "busy", message: "이 문서에서 실행 중인 AI·저장 작업을 마친 뒤 다시 요청해 주세요." } });
+    return new Promise(resolve => {
+      const requestId = crypto.randomUUID();
+      const plan = request.kind === "save" ? request.plan : undefined;
+      if (plan) outputPlans.current.set(plan.id, { ...plan, preparationId: requestId });
+      const timer = window.setTimeout(() => finish({ status: "error", error: { reason: "timeout", message: "문서 명령 응답을 확인하지 못했습니다. 현재 내용을 확인해 주세요." } }), request.kind === "status" ? 1500 : 120_000);
+      const finish = (reply: OfficeMcpReply) => {
+        window.clearTimeout(timer); mcpWaiters.current.delete(requestId); if (plan) outputPlans.current.delete(plan.id);
+        if (request.kind === "status" && reply.status === "ok") {
+          const pane = anchor()?.closest(".pane");
+          reply = { ...reply, result: { value: { ...(reply.result.value as object), active: pane?.getAttribute("data-tab-active") === "true" && pane?.getAttribute("data-pane-active") === "true" } } };
+        }
+        resolve(reply);
+      };
+      mcpWaiters.current.set(requestId, finish);
+      send({ type: "office:mcp", requestId, request });
+    });
+  };
+  const runControl = (request: RendererControlRequest): Promise<RendererControlReply> => {
+    if (status.current.revision === null) return Promise.resolve({ status: "not_ready" });
+    return new Promise(resolve => {
+      const requestId = crypto.randomUUID();
+      const timer = window.setTimeout(() => finish({ status: "not_ready" }), 1500);
+      const finish = (reply: RendererControlReply) => { window.clearTimeout(timer); controlWaiters.current.delete(requestId); resolve(reply); };
+      controlWaiters.current.set(requestId, finish);
+      send({ type: "office:control", requestId, request });
+    });
+  };
+
+  const flushNow = (): Promise<number | null> => {
+    if (outputBusy.current || blockingOutputs() || copied.current.size) return Promise.resolve(null);
+    if (status.current.conflict) return Promise.resolve(null);
+    // Not opened yet: nothing can have been edited.
+    if (status.current.revision === null) return Promise.resolve(latest.current.revision);
+    const flushed = waitFlushed();
+    send({ type: "office:flush" });
+    return flushed;
+  };
+  const rebaseNow = (revision: number): Promise<number | null> => {
+    if (outputBusy.current || blockingOutputs() || copied.current.size) return Promise.resolve(null);
+    const flushed = waitFlushed();
+    send({ type: "office:rebase", revision });
+    return flushed;
+  };
+  const leaveNow = async (): Promise<number | null> => {
+    if (outputBusy.current || blockingOutputs() || copied.current.size) throw new Error("사본 저장을 마치거나 취소한 뒤 이동해 주세요.");
+    if (status.current.revision === null) return null;
+    if (status.current.conflict) throw new Error("문서의 저장 충돌을 해결한 뒤 이동해 주세요. 편집 내용은 현재 탭에 있습니다.");
+    const done = waitFlushed();
+    leavingNow.current = true;
+    send({ type: "office:flush" });
+    const revision = await done;
+    // Staying after all (the save did not finish): the view keeps its own notice line.
+    if (revision === null || status.current.dirty) leavingNow.current = false;
+    if (revision === null || status.current.dirty) throw new Error("문서 저장을 확인하지 못해 이동하지 않았습니다. 현재 탭에서 저장을 다시 시도해 주세요.");
+    // The save is done. If the view stays after all (an AI's save request, a flush before a reference is
+    // sent), later warnings belong to its own notice line again — not shown twice (re-review 1).
+    setTimeout(() => { leavingNow.current = false; }, 1500);
+    return revision;
+  };
+
   useImperativeHandle(ref, () => ({
     showCommands() {
       if (status.current.revision !== null) send({ type: "office:show-commands" });
@@ -947,34 +1230,16 @@ export const OfficeEditor = forwardRef<
       send({ type: "office:ai-draft-set", draft });
     },
     mcp(request) {
-      if (status.current.revision === null) return Promise.resolve({ status: "not_ready" });
-      if (request.kind !== "status" && (aiBusy.current || outputBusy.current || blockingOutputs())) return Promise.resolve({ status: "error", error: { reason: "busy", message: "이 문서에서 실행 중인 AI·저장 작업을 마친 뒤 다시 요청해 주세요." } });
-      return new Promise(resolve => {
-        const requestId = crypto.randomUUID();
-        const plan = request.kind === "save" ? request.plan : undefined;
-        if (plan) outputPlans.current.set(plan.id, { ...plan, preparationId: requestId });
-        const timer = window.setTimeout(() => finish({ status: "error", error: { reason: "timeout", message: "문서 명령 응답을 확인하지 못했습니다. 현재 내용을 확인해 주세요." } }), request.kind === "status" ? 1500 : 120_000);
-        const finish = (reply: OfficeMcpReply) => {
-          window.clearTimeout(timer); mcpWaiters.current.delete(requestId); if (plan) outputPlans.current.delete(plan.id);
-          if (request.kind === "status" && reply.status === "ok") {
-            const pane = frame.current?.closest(".pane");
-            reply = { ...reply, result: { value: { ...(reply.result.value as object), active: pane?.getAttribute("data-tab-active") === "true" && pane?.getAttribute("data-pane-active") === "true" } } };
-          }
-          resolve(reply);
-        };
-        mcpWaiters.current.set(requestId, finish);
-        send({ type: "office:mcp", requestId, request });
-      });
+      if (pooled && !frameReady()) {
+        // Parked in the pool: its state is the tab's — said without a frame; a command gets one back first.
+        if (request.kind === "status" && !attached.current) return Promise.resolve({ status: "ok", result: { value: { dirty: status.current.dirty, active: false } } });
+        if (!attached.current || request.kind !== "status") return withFrame(() => runMcp(request), () => ({ status: "not_ready" as const }));
+      }
+      return runMcp(request);
     },
     control(request) {
-      if (status.current.revision === null) return Promise.resolve({ status: "not_ready" });
-      return new Promise(resolve => {
-        const requestId = crypto.randomUUID();
-        const timer = window.setTimeout(() => finish({ status: "not_ready" }), 1500);
-        const finish = (reply: RendererControlReply) => { window.clearTimeout(timer); controlWaiters.current.delete(requestId); resolve(reply); };
-        controlWaiters.current.set(requestId, finish);
-        send({ type: "office:control", requestId, request });
-      });
+      if (pooled && !frameReady()) return withFrame(() => runControl(request), () => ({ status: "not_ready" as const }));
+      return runControl(request);
     },
     exportPdf() {
       if (status.current.revision === null || outputBusy.current || outputPlans.current.size) {
@@ -1007,35 +1272,26 @@ export const OfficeEditor = forwardRef<
       send({ type: "office:export-images" });
     },
     flush() {
-      if (outputBusy.current || blockingOutputs() || copied.current.size) return Promise.resolve(null);
-      if (status.current.conflict) return Promise.resolve(null);
-      // Not opened yet: nothing can have been edited.
-      if (status.current.revision === null) return Promise.resolve(latest.current.revision);
-      const flushed = waitFlushed();
-      send({ type: "office:flush" });
-      return flushed;
+      if (pooled && !frameReady()) {
+        if (status.current.conflict) return Promise.resolve(null);
+        // Nothing unsaved (parked, or being opened): what it would open is the latest revision.
+        if (!status.current.dirty) return Promise.resolve(latest.current.revision);
+        // Unsaved edits parked in the pool: the editor saves them, in a frame it gets back meanwhile.
+        return withFrame(() => flushNow(), () => null);
+      }
+      return flushNow();
     },
     rebase(revision) {
-      if (outputBusy.current || blockingOutputs() || copied.current.size) return Promise.resolve(null);
-      const flushed = waitFlushed();
-      send({ type: "office:rebase", revision });
-      return flushed;
+      if (pooled && !frameReady()) return withFrame(() => rebaseNow(revision), () => null);
+      return rebaseNow(revision);
     },
     async leave() {
-      if (outputBusy.current || blockingOutputs() || copied.current.size) throw new Error("사본 저장을 마치거나 취소한 뒤 이동해 주세요.");
-      if (status.current.revision === null) return null;
-      if (status.current.conflict) throw new Error("문서의 저장 충돌을 해결한 뒤 이동해 주세요. 편집 내용은 현재 탭에 있습니다.");
-      const done = waitFlushed();
-      leavingNow.current = true;
-      send({ type: "office:flush" });
-      const revision = await done;
-      // Staying after all (the save did not finish): the view keeps its own notice line.
-      if (revision === null || status.current.dirty) leavingNow.current = false;
-      if (revision === null || status.current.dirty) throw new Error("문서 저장을 확인하지 못해 이동하지 않았습니다. 현재 탭에서 저장을 다시 시도해 주세요.");
-      // The save is done. If the view stays after all (an AI's save request, a flush before a reference is
-      // sent), later warnings belong to its own notice line again — not shown twice (re-review 1).
-      setTimeout(() => { leavingNow.current = false; }, 1500);
-      return revision;
+      if (pooled && !frameReady()) {
+        if (status.current.conflict) throw new Error("문서의 저장 충돌을 해결한 뒤 이동해 주세요. 편집 내용은 현재 탭에 있습니다.");
+        if (!status.current.dirty) return attached.current ? null : latest.current.revision;
+        return withFrame(() => leaveNow(), () => { throw new Error("문서 저장을 확인하지 못해 이동하지 않았습니다. 현재 탭에서 저장을 다시 시도해 주세요."); });
+      }
+      return leaveNow();
     },
     reload() {
       recover.current = false;
@@ -1046,6 +1302,27 @@ export const OfficeEditor = forwardRef<
     },
   }));
 
+  const dialogs = <>
+    {notePath ? <PdfNoteDialog initialPath={notePath.initialPath} onChoose={notePath.choose} /> : null}
+    {skillsOpen ? <SkillLibraryDialog api={api} scope={{ workId: artifact.workId, ...(artifact.workspaceId ? { workspaceId: artifact.workspaceId } : {}), ...(sessionId ? { sessionId } : {}) }} onClose={() => { setSkillsOpen(false); send({ type: "office:skills-changed" }); }} /> : null}
+    {referencePicker ? <OfficeReferencePicker {...referencePicker} /> : null}
+    {output ? <OfficeOutputDialog key={outputRequest.current} api={api} artifact={artifact} revision={output.revision} format={output.format} defaultName={output.defaultName} longJob={output.longJob} onChoose={output.choose} onCancel={() => output.choose(null)} /> : null}
+    {imageOutput ? <OfficeImageOutputDialog initialPath={artifact.path.replace(/[^\\/]+$/, "")} embedded={imageOutput.embedded} onChoose={imageOutput.choose} /> : null}
+  </>;
+  if (pooled) {
+    const failed = current && "error" in current ? current.error : null;
+    const waiting: ReactNode = failed ? <div className="column empty-hint office-frame-error">
+      편집기를 열지 못했습니다: {failed}{" "}
+      <button type="button" className="link" onClick={() => setGeneration((value) => value + 1)}>다시 열기</button>
+    </div> : !frameReady() ? <div className="column empty-hint">편집기를 여는 중…</div> : null;
+    return (<>
+      {/* Drawn above the pool's frames (a dialog inside the tab would be under the editor laid over it). */}
+      {surface!.over ? createPortal(dialogs, surface!.over) : dialogs}
+      <div ref={slot} className="design-frame office-slot" data-pool-kind={poolKind!} data-pool-frame={attachedNow?.id ?? ""} style={hidden ? { display: "none" } : undefined}
+        // The pointer leaving the editor: the person is done there for now, so its text is compared.
+        onPointerLeave={() => hint.current()}>{waiting}</div>
+    </>);
+  }
   if (current && "error" in current) {
     return (
       <div className="column empty-hint office-frame-error">
@@ -1058,11 +1335,7 @@ export const OfficeEditor = forwardRef<
   }
   if (!opened.current) return hidden ? null : <div className="column empty-hint">편집기를 여는 중…</div>;
   return (<>
-    {notePath ? <PdfNoteDialog initialPath={notePath.initialPath} onChoose={notePath.choose} /> : null}
-    {skillsOpen ? <SkillLibraryDialog api={api} scope={{ workId: artifact.workId, ...(artifact.workspaceId ? { workspaceId: artifact.workspaceId } : {}), ...(sessionId ? { sessionId } : {}) }} onClose={() => { setSkillsOpen(false); send({ type: "office:skills-changed" }); }} /> : null}
-    {referencePicker ? <OfficeReferencePicker {...referencePicker} /> : null}
-    {output ? <OfficeOutputDialog key={outputRequest.current} api={api} artifact={artifact} revision={output.revision} format={output.format} defaultName={output.defaultName} longJob={output.longJob} onChoose={output.choose} onCancel={() => output.choose(null)} /> : null}
-    {imageOutput ? <OfficeImageOutputDialog initialPath={artifact.path.replace(/[^\\/]+$/, "")} embedded={imageOutput.embedded} onChoose={imageOutput.choose} /> : null}
+    {dialogs}
     <iframe
       key={`${artifact.id}:${generation}`}
       ref={frame}
@@ -1073,7 +1346,7 @@ export const OfficeEditor = forwardRef<
       style={hidden ? { display: "none" } : undefined}
       allow="fullscreen; clipboard-read; clipboard-write"
       src={`${opened.current.url}?a=${artifact.id}&g=${generation}&host=${encodeURIComponent(location.origin)}`}
-      title={`${artifact.format === "pptx" ? "PPT" : artifact.format === "xlsx" ? "엑셀" : artifact.format === "hwp" || artifact.format === "hwpx" ? "한글" : artifact.format === "epub" ? "전자책" : artifact.format === "xmind" ? "마인드맵" : artifact.format === "pdf" ? "PDF" : artifact.format === "markdown" ? "Markdown" : artifact.format === "html" ? "HTML" : "워드"} 편집기 · ${artifact.name}`}
+      title={frameTitle()}
     />
   </>);
 });

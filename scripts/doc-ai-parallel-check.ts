@@ -119,7 +119,8 @@ try {
     await page!.locator(`.pane[data-pane-active="true"][data-tab="${id}"]`).waitFor();
   };
   const editorFrame = async (): Promise<FrameLocator> => {
-    const frame = activePane().frameLocator("iframe.office-frame");
+    // Its own iframe, or the editor pool's frame laid over the focused pane's tab (Word, 0.5.4).
+    const frame = page!.frameLocator('.pane[data-pane-active="true"] iframe.office-frame, .editor-pool iframe.office-frame[data-pool-shown="true"][data-pane-active="true"]');
     await frame.locator('.tiptap[contenteditable="true"]').waitFor({ timeout: 60_000 });
     return frame;
   };

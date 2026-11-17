@@ -1013,9 +1013,9 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (method === "GET" && path === "/api/resources") return sendJson(res, 200, manager.resources.state());
       if (method === "PUT" && path === "/api/resources/settings") {
         const body = await readJson(req, 4_000);
-        if ((body.mode !== undefined && body.mode !== "auto" && body.mode !== "manual") || (body.manual !== undefined && typeof body.manual !== "number") || (body.background !== undefined && typeof body.background !== "boolean"))
+        if ((body.mode !== undefined && body.mode !== "auto" && body.mode !== "manual") || (body.manual !== undefined && typeof body.manual !== "number") || (body.background !== undefined && typeof body.background !== "boolean") || (body.cap !== undefined && body.cap !== null && typeof body.cap !== "number"))
           throw new HttpError(400, "resource_settings", "동시에 돌리는 작업 설정이 올바르지 않습니다.");
-        return sendJson(res, 200, manager.resources.updateSettings({ ...(body.mode !== undefined ? { mode: body.mode as "auto" | "manual" } : {}), ...(typeof body.manual === "number" ? { manual: body.manual } : {}), ...(typeof body.background === "boolean" ? { background: body.background } : {}) }));
+        return sendJson(res, 200, manager.resources.updateSettings({ ...(body.mode !== undefined ? { mode: body.mode as "auto" | "manual" } : {}), ...(typeof body.manual === "number" ? { manual: body.manual } : {}), ...(typeof body.background === "boolean" ? { background: body.background } : {}), ...(body.cap !== undefined ? { cap: body.cap as number | null } : {}) }));
       }
       if (method === "POST" && path === "/api/resources/run-now") {
         const body = await readJson(req, 4_000);

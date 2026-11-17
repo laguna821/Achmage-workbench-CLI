@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PROTOCOL_HEADER, protocolHeader } from "@workbench/contracts";
+import { recordWindow } from "../app-memory.ts";
 import { attachHost, startHost, stopOwnedHost, prepareHostUpdate, prepareRollback } from "./lifecycle.ts";
 
 const dataDir = process.env.WORKBENCH_DATA_DIR ?? join(process.env.XDG_DATA_HOME ?? join(homedir(), ".local/share"), "achmage-workbench");
@@ -42,6 +43,8 @@ try {
   } else if (action === "start" || action === "attach" || action === "status") {
     if (process.argv.includes("--desktop")) {
       if (!connection) throw Error("연결할 호스트가 없습니다.");
+      // The shell runs this command: its parent is the window, which the memory readout looks for (app-memory.ts).
+      recordWindow(dataDir, process.ppid);
       // This protocol is read from a private pipe by the shell, never from service.log.
       console.log(`WORKBENCH_READY ${JSON.stringify(connection)}`);
     } else {

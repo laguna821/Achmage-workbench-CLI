@@ -13,7 +13,7 @@ import type { Store } from "../store.ts";
 import { CONFIRM_OFF, CONFIRM_ON, ChannelComfort, REMOTE_LINE, confirmOn, engineFacts, engineSentence, footerOn, footerWords, renameConversation, statusWords } from "./comfort.ts";
 import { needlesOf, withheld, type HoldReason } from "./file-scan.ts";
 import { blockedReason, mimeOf, previewed, turnFiles, type BlockRules, type OutFile } from "./files.ts";
-import { answerFile, closeFence, formatted } from "./format.ts";
+import { answerFile, closeFence, formatted, hasWideTable } from "./format.ts";
 import { hangulPicture, pictureCode, pictureSvg, type PictureResult } from "./hangul-picture-run.ts";
 import type { ChannelLog } from "./log.ts";
 import { ChannelMenu, MODE_LABEL, noteSentence, planSentence, type MenuAct, type MenuButton, type Screen } from "./menu.ts";
@@ -74,7 +74,8 @@ const HELD: Record<HoldReason, string> = {
 };
 /** A first page: a file (with why it is not the PNG it should be), a note for the chat, or nothing. */
 /** What goes with an answer, what is said about it, what to remove after, and first pages that fell back to SVG (why). */
-type Going = { files: OutFile[]; notes: string[]; temp: string[]; blocked: number; fallbacks: string[]; secret?: HoldReason[] };
+/** `tablesInFile`: the answer went as a file because a table in it is too wide for the chat (0.5.4): the message says so where the table was. */
+type Going = { files: OutFile[]; notes: string[]; temp: string[]; blocked: number; fallbacks: string[]; secret?: HoldReason[]; tablesInFile?: boolean };
 type Preview = string | null | { path: string | null; fallback?: string; note?: string };
 
 const MINUTE = 60_000, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
@@ -130,7 +131,7 @@ type PairingState = {
 type ButtonSpec = { label: string; kind: string; data?: unknown; set?: string; itemId?: string; ttl?: number };
 /** `group.itemId`: all buttons belong to this one question (an approval: 허용 and 거절 end together). */
 /** `markdown`: the text is an engine's markdown (shown formatted); `tail`: the channel's own words under it, always plain. */
-type Message = { text: string; buttons?: ButtonSpec[][]; group?: { sessionId: string; itemId?: string }; silent?: boolean; webApp?: Out["webApp"]; files?: OutFile[]; markdown?: boolean; tail?: string; head?: string };
+type Message = { text: string; buttons?: ButtonSpec[][]; group?: { sessionId: string; itemId?: string }; silent?: boolean; webApp?: Out["webApp"]; files?: OutFile[]; markdown?: boolean; tail?: string; head?: string; tablesInFile?: boolean };
 export type ChannelMessage = Message;
 
 /**
@@ -1712,10 +1713,14 @@ export class ChannelCore {
       return false;
     });
     const found = await withheld(made, stored.length ? needlesOf(stored) : null, stopped);
-    if (final.turn.long !== null) {
+    // A table too wide for the chat's monospace block (Slack, 0.5.4) sends the whole answer as the file too,
+    // the way a long answer goes; the message keeps one line where the table was (format.ts TABLE_IN_FILE).
+    result.tablesInFile = adapter.tables === "pre" && !!final.message.markdown && hasWideTable(final.message.text);
+    const whole = final.turn.long ?? (result.tablesInFile ? takeChoices(final.turn.answer).text.trim() : null);
+    if (whole !== null) {
       const dir = mkdtempSync(join(this.folder("outgoing"), "answer-"));
       const name = `${cutAt(this.log.scrub(session.purpose).replace(/[\\/:*?"<>|]/g, "-"), 60)} 답.md`;
-      writeFileSync(join(dir, "answer.md"), answerFile(final.turn.long, (text) => this.log.scrub(text)), { mode: 0o600 });
+      writeFileSync(join(dir, "answer.md"), answerFile(whole, (text) => this.log.scrub(text)), { mode: 0o600 });
       result.files.push({ path: join(dir, "answer.md"), name, mime: "text/markdown" });
       result.temp.push(dir);
     }
@@ -1861,7 +1866,7 @@ export class ChannelCore {
     if (this.gateOf(binding.id) !== "open") return null;
     if (!this.channels.owe(key, { bindingId: binding.id, ...owner }) && this.channels.outbox(key)?.state !== "pending") return null;
     const { rows, tokens } = this.buttons(binding, message, key);
-    const messageId = await this.attempt(adapter, this.chatOf(binding), key, { text: message.text, ...(rows.length ? { buttons: rows } : {}), ...(message.silent ? { silent: true } : {}), ...(message.webApp ? { webApp: message.webApp } : {}), ...(message.files?.length ? { files: message.files } : {}), ...(message.markdown ? { markdown: true } : {}), ...(message.tail ? { tail: message.tail } : {}), ...(message.head ? { head: message.head } : {}) }, { bindingId: binding.id, kind: "work" });
+    const messageId = await this.attempt(adapter, this.chatOf(binding), key, { text: message.text, ...(rows.length ? { buttons: rows } : {}), ...(message.silent ? { silent: true } : {}), ...(message.webApp ? { webApp: message.webApp } : {}), ...(message.files?.length ? { files: message.files } : {}), ...(message.markdown ? { markdown: true } : {}), ...(message.tail ? { tail: message.tail } : {}), ...(message.head ? { head: message.head } : {}), ...(message.tablesInFile ? { tablesInFile: true } : {}) }, { bindingId: binding.id, kind: "work" });
     if (messageId && tokens.length) this.channels.setButtonMessage(tokens, messageId);
     return messageId;
   }
@@ -1878,11 +1883,12 @@ export class ChannelCore {
 
   /** What leaves the PC: text and button labels with the secrets hidden. */
   private scrubbed(out: Out, adapter?: ChannelAdapter): Out {
-    const { markdown, tail = "", head, ...rest } = out;
+    const { markdown, tail = "", head, tablesInFile, ...rest } = out;
     // Redacted first, then made readable; formatted() reads the readable text again (comfort of unit 14).
     // The channel's own lines go after it as plain text: never inside the answer's code block.
     // A table as the messenger shows it best (Slack: a monospace block when it fits).
-    const made = markdown ? formatted(this.log.scrub(out.text), (value) => this.log.scrub(value), adapter?.tables ? { tables: adapter.tables } : {}) : { text: this.log.scrub(`${out.text}${tail}`) };
+    // A table too wide for it, when the whole answer goes as a file with the message: one line where it was.
+    const made = markdown ? formatted(this.log.scrub(out.text), (value) => this.log.scrub(value), adapter?.tables ? { tables: adapter.tables, ...(tablesInFile ? { wide: "file" as const } : {}) } : {}) : { text: this.log.scrub(`${out.text}${tail}`) };
     // The channel's own head line (where a handed-over answer is from) goes before it, plain; the marks move with the text.
     const top = head ? `${this.log.scrub(head)}\n\n` : "";
     const body: { text: string; marks?: Mark[] } = top ? { text: `${top}${made.text}`, ...("marks" in made && made.marks ? { marks: made.marks.map((mark) => ({ ...mark, offset: mark.offset + top.length })) } : {}) } : made;
@@ -2148,7 +2154,7 @@ export class ChannelCore {
         const footer = final.label === "끝남" && final.turn && footerOn(binding, this.footer) ? footerWords(this.manager, session, final.endId, final.turn.startedAt) : "";
         const lines = [...going.notes, ...(footer ? (going.notes.length ? ["", footer] : [footer]) : [])];
         const tail = `${final.message.tail ?? ""}${lines.length ? `\n\n${lines.join("\n")}` : ""}`;
-        messageId = await this.attempt(adapter, this.chatOf(binding), row.key, { text: final.message.text, ...(final.message.head ? { head: final.message.head } : {}), ...(tail ? { tail } : {}), ...(rows.length ? { buttons: rows } : {}), ...(going.files.length ? { files: going.files } : {}), ...(final.message.markdown ? { markdown: true } : {}) }, { bindingId: binding.id, kind: "work" });
+        messageId = await this.attempt(adapter, this.chatOf(binding), row.key, { text: final.message.text, ...(final.message.head ? { head: final.message.head } : {}), ...(tail ? { tail } : {}), ...(rows.length ? { buttons: rows } : {}), ...(going.files.length ? { files: going.files } : {}), ...(final.message.markdown ? { markdown: true } : {}), ...(going.tablesInFile ? { tablesInFile: true } : {}) }, { bindingId: binding.id, kind: "work" });
       } finally {
         for (const path of going.temp) rmSync(path, { recursive: true, force: true });
       }
@@ -2333,7 +2339,7 @@ export class ChannelCore {
             going = await this.outgoing(adapter, session, final, going, () => (this.stoppedAt.get(binding.id) ?? 0) > since);
             const key = `resend:${event.token}`;
             const tail = `${final.message.tail ?? ""}${going.notes.length ? `\n\n${going.notes.join("\n")}` : ""}`;
-            const sent = await this.say(adapter, binding, key, { ...final.message, ...(tail ? { tail } : {}), ...(going.files.length ? { files: going.files } : {}) });
+            const sent = await this.say(adapter, binding, key, { ...final.message, ...(tail ? { tail } : {}), ...(going.files.length ? { files: going.files } : {}), ...(going.tablesInFile ? { tablesInFile: true } : {}) });
             const unsent = this.unsent.get(key) ?? [];
             this.unsent.delete(key);
             if (sent && unsent.length) await this.sayUnsent(adapter, binding, key, unsent);

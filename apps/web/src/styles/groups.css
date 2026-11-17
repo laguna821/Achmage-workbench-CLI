@@ -928,7 +928,7 @@
   }
 }
 
-@media (max-width: 720px) {
+@container work-pane (max-width: 720px) {
   .view-tools {
     margin-left: 0;
     justify-content: flex-start;

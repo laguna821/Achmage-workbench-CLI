@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Icon, type IconName } from "./Icon.tsx";
 import { lookStyle, NEUTRAL_LOOK, useAppearance } from "../appearance.ts";
 import { menuItems, moveMenuFocus, restoreSurfaceFocus } from "./controls/menu-navigation.ts";
@@ -8,14 +8,20 @@ import { layerOwns } from "./ui/layers.ts";
 // Opens at the pointer and stays inside the window; works fully from the keyboard (↑↓ move,
 // → opens a submenu, ← closes it, Enter chooses, Esc closes).
 
+/**
+ * `leading`: a picture in the icon's place (a bookmark's site icon). `onContext`: the entry has a menu of its
+ * own (right-click, or the menu key / Shift+F10 on it) — opened at that point; this menu closes for it.
+ */
+type EntryExtras = { leading?: ReactNode; onContext?: (x: number, y: number) => void };
 export type MenuEntry =
-  | { kind: "item"; label: string; icon?: IconName; hint?: string; danger?: boolean; disabled?: boolean; disabledReason?: string; checked?: boolean; onSelect: () => void }
-  | { kind: "submenu"; label: string; icon?: IconName; items: MenuEntry[]; disabled?: boolean; disabledReason?: string }
+  | ({ kind: "item"; label: string; icon?: IconName; hint?: string; danger?: boolean; disabled?: boolean; disabledReason?: string; checked?: boolean; onSelect: () => void } & EntryExtras)
+  | ({ kind: "submenu"; label: string; icon?: IconName; items: MenuEntry[]; disabled?: boolean; disabledReason?: string } & EntryExtras)
   | { kind: "separator" }
   | { kind: "label"; label: string };
 
 export type MenuRequest = { x: number; y: number; title?: string; items: MenuEntry[] };
 
+const entryMenu = (entry: MenuEntry | undefined) => entry && (entry.kind === "item" || entry.kind === "submenu") && !entry.disabled ? entry.onContext : undefined;
 const selectable = (entry: MenuEntry) => (entry.kind === "item" || entry.kind === "submenu") && !entry.disabled;
 
 function MenuList({
@@ -99,6 +105,10 @@ function MenuList({
           if (moveMenuFocus(event.currentTarget, event.key)) { /* shared menu navigation */ }
           else if (event.key === "ArrowRight" && active >= 0 && items[active]?.kind === "submenu") openSubmenu(active);
           else if (event.key === "ArrowLeft" && onBack) onBack();
+          else if ((event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) && active >= 0 && entryMenu(items[active])) {
+            const row = ref.current?.querySelector<HTMLElement>(`[data-menu-index="${active}"]`)?.getBoundingClientRect();
+            entryMenu(items[active])!(row?.left ?? x, row?.bottom ?? y);
+          }
           else if (event.key === "Enter" || event.key === " ") {
             if (active >= 0) choose(active);
           } else if (event.key === "Escape") onClose();
@@ -136,8 +146,9 @@ function MenuList({
                 else setOpen(null);
               }}
               onClick={() => choose(index)}
+              onContextMenu={entry.onContext && !entry.disabled ? (event) => { event.preventDefault(); event.stopPropagation(); entry.onContext!(event.clientX, event.clientY); } : undefined}
             >
-              <span className="context-menu-icon">{entry.icon ? <Icon name={entry.icon} size={16} /> : entry.kind === "item" && entry.checked ? <Icon name="check" size={16} /> : null}</span>
+              <span className="context-menu-icon">{entry.leading ? entry.leading : entry.icon ? <Icon name={entry.icon} size={16} /> : entry.kind === "item" && entry.checked ? <Icon name="check" size={16} /> : null}</span>
               <span className="context-menu-text">{entry.label}{entry.disabled ? <small className="menu-disabled-reason" id={reasonId}>{entry.disabledReason ?? "지금은 사용할 수 없습니다."}</small> : null}</span>
               {entry.kind === "item" && entry.checked && entry.icon ? <Icon name="check" size={14} /> : null}
               {entry.kind === "item" && entry.hint ? <span className="context-menu-hint">{entry.hint}</span> : null}

@@ -25,6 +25,19 @@
     else if (control.owner !== 'human') control = { generation: control.generation + 1, owner: 'human' };
   };
   for (const name of ['pointerdown', 'keydown', 'wheel']) window.addEventListener(name, human, { capture: true, passive: true });
+  // The app's bookmark keys, Ctrl/⌘+D and Ctrl/⌘+Shift+B, while this page has the keyboard: the native view
+  // keeps key events from the app, so they are taken here (the page's own use of them loses, as in a browser)
+  // and handed over with the next state read (`keys`). Read by the physical key, so a Korean input mode works.
+  let keys = [];
+  window.addEventListener('keydown', event => {
+    if (!event.isTrusted || event.repeat || event.isComposing || event.altKey || event.ctrlKey === event.metaKey) return;
+    const chord = event.code === 'KeyD' && !event.shiftKey ? 'bookmark' : event.code === 'KeyB' && event.shiftKey ? 'bookmark-bar' : null;
+    if (!chord) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    keys = [...keys, { chord, at: Date.now() }].slice(-4);
+  }, { capture: true });
+  // Keys older than two seconds are dropped rather than acted on late (a page still loading is not read).
+  const takeKeys = () => { const now = Date.now(), taken = keys.filter(entry => now - entry.at < 2000).map(entry => entry.chord); keys = []; return taken; };
   const refFor = el => {
     if (!names.has(el)) { const name = `e${nextRef++}`; names.set(el, name); refs.set(name, el); }
     return names.get(el);
@@ -99,7 +112,7 @@
     return { control };
   };
   Object.defineProperty(window, '__ACHMAGE_PAGE__', { value: Object.freeze({
-    state: wanted => { refreshDocument(); return { control: bind(wanted), interactionAt, ...metadata() }; },
+    state: wanted => { refreshDocument(); return { control: bind(wanted), interactionAt, keys: takeKeys(), ...metadata() }; },
     run: (action, wanted, expectedNonce) => {
       refreshDocument();
       try { const result = run(action, wanted, expectedNonce); refreshDocument(); return { ...result, ...metadata() }; }

@@ -24,6 +24,12 @@ export type AppMemory =
       /** When it was read (ms); the gateway reads at most once in 30 s. */
       at: number;
       /**
+       * macOS (0.5.4): the web view's page processes are not in the sum — WKWebView's are started by the
+       * system (launchd), and `ps` cannot tell which app they draw for. The window's part is then the app's
+       * own process (with its launcher). Absent elsewhere.
+       */
+      pagesLeftOut?: true;
+      /**
        * The AI engines alive now (0.5.3 B1): one Claude Code process per conversation, one Codex app-server
        * for all of Codex's; the memory of each process with everything it started (MCP servers, hooks).
        * `bytes` null: its process could not be told apart on this system. Absent from older gateways.

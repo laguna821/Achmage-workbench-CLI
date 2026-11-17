@@ -15,6 +15,14 @@ const partSize = (bytes: number) => (bytes >= GB ? gigabytes(bytes) : `${Math.ro
 export const MEMORY_REFRESH_MS = 30_000;
 
 /**
+ * Said with the parts when the numbers are resident sets (macOS `ps`, Windows' working set) rather than
+ * Linux's proportional shares, and when the web view's page processes could not be counted (macOS) — so a
+ * number that differs from the system's own monitor is not taken for a wrong one (0.5.4).
+ */
+export const RSS_NOTE = "실제 사용(RSS) 기준: 여러 프로세스가 함께 쓰는 메모리는 프로세스마다 셉니다";
+export const PAGES_NOTE = "macOS에서는 웹 화면을 그리는 프로세스가 빠져 있어 창은 실제보다 작게 나옵니다";
+
+/**
  * The app's memory for the readout: read every 30 s while the window is visible and has the focus, and
  * not at all while it is hidden (a window in sight without the focus reads once, so the line is not empty).
  * Null — nothing to show — while it is turned off (`read` null), when the gateway does not know, and
@@ -104,6 +112,8 @@ export function MemoryReadout({ memory, sleeping, onCloseIdle }: { memory: Known
             <div><dt>AI 엔진과 도구</dt><dd>{partSize(memory.toolsBytes)}</dd></div>
             <div><dt>게이트웨이</dt><dd>{partSize(memory.gatewayBytes)}</dd></div>
           </dl>
+          {memory.measure === "rss" ? <p className="memory-note">{RSS_NOTE}</p> : null}
+          {memory.pagesLeftOut ? <p className="memory-note">{PAGES_NOTE}</p> : null}
           {interactive ? <>
             <dl className="memory-parts memory-engines" aria-label="AI 엔진">
               {engines.map((engine) => <div key={`${engine.provider}:${engine.sessions.map((session) => session.id).join(",")}`}><dt>{engineLabel(engine)}</dt><dd>{engine.bytes === null ? "—" : partSize(engine.bytes)}</dd></div>)}

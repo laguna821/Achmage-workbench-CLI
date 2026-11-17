@@ -53,6 +53,8 @@ export type Out = {
   tail?: string;
   /** The core's own plain line before the text (where a handed-over answer is from); adapters never see it. */
   head?: string;
+  /** The whole answer is attached as a file: a table too wide for the chat becomes one line saying so (format.ts TABLE_IN_FILE); adapters never see it. */
+  tablesInFile?: boolean;
 };
 /** `continues`: the stretch goes on in the next part of a text cut into several messages. */
 export type Mark = { type: "bold" | "italic" | "strike" | "code" | "pre" | "link" | "quote"; offset: number; length: number; url?: string; language?: string; continues?: boolean };

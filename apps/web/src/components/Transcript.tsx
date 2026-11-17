@@ -1,9 +1,11 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { hydrateRoot, type Root } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import type { State } from "../state.ts";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import { REMARK_BASE } from "../markdown/plugins.ts";
-import { PROVIDER_LABEL, turnEndText, type MessageMedia, type Provider, type TranscriptItem } from "@workbench/contracts";
-import { FileCard, HandoffCard, ProposalCard, RefChips, useDocs } from "./DocCards.tsx";
+import { PROVIDER_LABEL, isOfficeFormat, turnEndText, type MessageMedia, type Provider, type TranscriptItem } from "@workbench/contracts";
+import { DocContext, FileCard, HandoffCard, ProposalCard, RefChips, useDocs, type DocActions } from "./DocCards.tsx";
 import { CREATE_LABEL } from "@workbench/contracts";
 import { Icon, type IconName } from "./Icon.tsx";
 import { EngineMark } from "./EngineMark.tsx";
@@ -17,12 +19,15 @@ import { ImageCard } from "./ImageGen.tsx";
 import { LinkEndCard, LinkHopBadge, LinkRequestText } from "./LinkCards.tsx";
 import { NoteChips } from "./pkm/NoteChips.tsx";
 import { MessageActions } from "./pkm/MessageActions.tsx";
-import { RequestText } from "./note/RequestText.tsx";
+import { PkmContext, useOptionalPkm, type PkmApi } from "./pkm/PkmContext.tsx";
+import { AppearanceContext, type AppearanceApi } from "../appearance.ts";
+import { FOLD_LINES, RequestText, requestLines } from "./note/RequestText.tsx";
 import { captureReadingAnchor, nearTranscriptEnd, readingAnchorTop, type ChatPosition, type ReadingAnchor } from "../conversation/reading-anchor.ts";
 import { firstLine, registerNoteTarget, setReadingAt } from "../conversation/outline.ts";
 import { approvalKeyApplies } from "../conversation/approval-keys.ts";
 import { useStreamingText } from "../streaming-text.ts";
-import { drawFrom, earlierFrom, reachFrom, slideFrom } from "../conversation/turn-window.ts";
+import { TURN_STEP, drawFrom, earlierFrom, reachFrom, slideFrom } from "../conversation/turn-window.ts";
+import { WAKE_EVENTS, inUse, lightView, looksAsMarkup, registerWake, staticMarkup, staticTurnStats, turnKey, wakeTarget } from "../conversation/static-turns.ts";
 
 const DRAWN = diagramComponents();
 const STREAMING = diagramComponents(true);
@@ -516,13 +521,13 @@ const sameBlocks = (a: Block[], b: Block[]) => a.length === b.length && a.every(
 /** The same turn as far as drawing goes: the same items in the same places (applyItemEvent keeps unchanged items as they are). */
 const sameTurn = (a: Turn, b: Turn) => a === b || (a.id === b.id && a.index === b.index && a.user === b.user && a.end === b.end && sameBlocks(a.blocks, b.blocks) && sameBlocks(a.after, b.after));
 
-/** One turn of the conversation, memoised (A1): a key typed, a token of another turn, or an event elsewhere does not redraw it. */
-const TurnSection = memo(function TurnSection({ turn, ctx, waiting, reveal, onFork, onOpenSession, register }: {
-  turn: Turn; ctx: TurnContext; waiting: boolean; reveal: number; onFork?: (itemId: string) => void; onOpenSession: (sessionId: string) => void;
-  register: (turnId: string, element: HTMLElement | null) => void;
-}) {
+type TurnProps = { turn: Turn; ctx: TurnContext; waiting: boolean; reveal: number; onFork?: (itemId: string) => void; onOpenSession: (sessionId: string) => void };
+type Register = (turnId: string, element: HTMLElement | null) => void;
+
+/** What a turn holds inside its section: the request, the work and answers, the end line, a linked session's end card. */
+function TurnContent({ turn, ctx, waiting, reveal, onFork, onOpenSession }: TurnProps) {
   return (
-    <section className="turn" ref={(element) => register(turn.id, element)}>
+    <>
       {turn.user ? <RequestBlock index={turn.index} user={turn.user} reveal={reveal} onFork={onFork} onOpenSession={onOpenSession} /> : null}
       <div className="turn-body">
         {turn.blocks.map((block) => renderBlock(block, ctx))}
@@ -550,9 +555,174 @@ const TurnSection = memo(function TurnSection({ turn, ctx, waiting, reveal, onFo
         </div>
       ) : null}
       {turn.after.map((block) => renderBlock(block, ctx))}
+    </>
+  );
+}
+
+/** One turn of the conversation, memoised (A1): a key typed, a token of another turn, or an event elsewhere does not redraw it. */
+const TurnSection = memo(function TurnSection({ register, ...props }: TurnProps & { register: Register }) {
+  const id = props.turn.id;
+  const ref = useCallback((element: HTMLElement | null) => register(id, element), [register, id]);
+  return (
+    <section className="turn" ref={ref}>
+      {/* The light view hydrates a static turn into this element (a root's container must not be the main tree's own). */}
+      <div className="turn-inner">
+        <TurnContent {...props} />
+      </div>
     </section>
   );
 }, (a, b) => a.ctx === b.ctx && a.waiting === b.waiting && a.reveal === b.reveal && a.onFork === b.onFork && a.onOpenSession === b.onOpenSession && a.register === b.register && sameTurn(a.turn, b.turn));
+
+// ── The light conversation view (0.5.4, perf-audit C2): a finished turn as static markup (conversation/static-turns.ts) ──
+
+/** The contexts a turn's components read, handed to its own root when it is drawn statically or woken. Stable objects that read the latest values. */
+type TurnEnv = { docs: { state: State; actions: DocActions }; pkm: PkmApi | null; appearance: AppearanceApi | null; pictures: ViewerPicture[] };
+
+function TurnTree({ env, ...props }: TurnProps & { env: TurnEnv }) {
+  return (
+    <AppearanceContext.Provider value={env.appearance}>
+      <DocContext.Provider value={env.docs}>
+        <PkmContext.Provider value={env.pkm}>
+          <ConversationPictures.Provider value={env.pictures}>
+            <TurnContent {...props} />
+          </ConversationPictures.Provider>
+        </PkmContext.Provider>
+      </DocContext.Provider>
+    </AppearanceContext.Provider>
+  );
+}
+
+/**
+ * A turn that must stay components: the one being written (the last while the engine runs), anything still open or
+ * that keeps its own live state from elsewhere (an approval or a plan to answer, a proposal, a hand-over, a drawn
+ * picture, a linked session's cards).
+ */
+function turnIsLive(turn: Turn, last: boolean, running: boolean) {
+  if (last && running) return true;
+  if (turn.user?.link || turn.after.length) return true;
+  return turn.blocks.some((block) => {
+    switch (block.type) {
+      case "assistant": return block.item.streaming;
+      case "work": return block.items.some((step) => step.kind === "tool" && step.status === "running");
+      case "approval": return block.item.decision === null || Boolean(block.item.plan) || Boolean(block.item.officeInteraction);
+      case "plan": case "proposal": case "handoff": case "image": case "link": return true;
+      default: return false;
+    }
+  });
+}
+
+/** A turn whose drawing finishes after it is mounted (a picture loads, a diagram is laid out, a document preview, a long request's fold is measured): woken when it comes near the view. */
+function turnSettles(turn: Turn, artifacts: State["artifacts"]) {
+  const user = turn.user;
+  if (user && ((user.attachments ?? []).some((attachment) => isPicture(attachment.mime)) || requestLines(user.text) > FOLD_LINES)) return true;
+  return turn.blocks.some((block) =>
+    block.type === "work" ? block.items.some((step) => step.kind === "tool" && Boolean(step.images?.length))
+      : block.type === "assistant" ? Boolean(block.item.media?.length) || /(```|~~~)\s*mermaid/.test(block.item.text)
+      : block.type === "artifact" ? Boolean(artifacts[block.item.artifactId] && (artifacts[block.item.artifactId]!.format === "design" || isOfficeFormat(artifacts[block.item.artifactId]!.format)))
+      : false);
+}
+
+const turnItems = (turn: Turn): TranscriptItem[] => {
+  const items: TranscriptItem[] = turn.user ? [turn.user] : [];
+  for (const block of turn.blocks) if (block.type === "work") items.push(...block.items); else items.push(block.item);
+  if (turn.end) items.push(turn.end);
+  return items;
+};
+
+/** The key of a turn's markup: its items, and what else its drawing reads (document names on chips and cards, the conversation's facts). */
+function markupKey(turn: Turn, ctx: TurnContext, env: TurnEnv, forks: boolean) {
+  const facts: unknown[] = [ctx.sessionId, ctx.provider, ctx.readOnly, turn.index, forks, Boolean(env.pkm), Boolean(env.pkm?.open)];
+  for (const ref of turn.user?.refs ?? []) facts.push(ctx.state.artifacts[ref.artifactId]?.name ?? null);
+  for (const block of turn.blocks) {
+    if (block.type !== "artifact") continue;
+    const artifact = ctx.state.artifacts[block.item.artifactId];
+    facts.push(artifact ? [artifact.name, artifact.path, artifact.format, artifact.revision, artifact.diskState] : null);
+  }
+  return turnKey(turnItems(turn), facts);
+}
+
+/** The finished turn drawn by the app's own components into markup (the same escaping, Markdown and link rules as the live view). */
+function drawTurn(env: TurnEnv, props: TurnProps) {
+  return `<div class="turn-inner">${renderToString(<TurnTree env={env} {...props} />, { identifierPrefix: turnIdPrefix(props.turn) })}</div>`;
+}
+const turnIdPrefix = (turn: Turn) => `t${turn.index}-`;
+
+/** Wake / back-to-markup for a static turn's section (the conversation's layout pass and event capture call these). */
+const sleepers = new WeakMap<Element, () => void>();
+/** Sections offered back to markup since they last came near the view (the comparison is not repeated on every scroll). */
+const quiet = new WeakSet<Element>();
+/** Within this of the view (px), a turn whose drawing settles is woken; farther than FAR_VIEW, a woken or live finished turn may go back to markup. */
+const NEAR_VIEW = 1200;
+const FAR_VIEW = 3000;
+const settlers = new WeakMap<Element, () => void>();
+
+/**
+ * A finished turn as markup. Its section is the main tree's; what it holds is the markup, until it is woken: then React
+ * hydrates that very markup as a root of its own (the same nodes; no flash, a selection stays) and it is live components.
+ */
+const StaticTurn = memo(function StaticTurn({ register, env, settles, markup, draw, onFail, ...props }: TurnProps & {
+  register: Register; env: TurnEnv; settles: boolean;
+  /** The key of its markup; `draw` makes the markup when it is not kept (null: it cannot be drawn statically, `onFail`). */
+  markup: string; draw: () => string | null; onFail: (turnId: string) => void;
+}) {
+  const section = useRef<HTMLElement | null>(null);
+  const root = useRef<Root | null>(null);
+  // The key of what the section holds. The markup itself is not held here: the kept ones live in static-turns.ts (bounded).
+  const shown = useRef<string | null>(null);
+  const tree = useRef<ReactNode>(null);
+  tree.current = <TurnTree env={env} {...props} />;
+  const drawRef = useRef(draw);
+  drawRef.current = draw;
+  const wake = useCallback(() => {
+    const element = section.current;
+    const container = element?.firstElementChild;
+    if (!element || !container || root.current) return;
+    element.setAttribute("data-woken", "");
+    root.current = hydrateRoot(container, tree.current, { identifierPrefix: turnIdPrefix(props.turn), onRecoverableError: () => { staticTurnStats.mismatches += 1; } });
+    staticTurnStats.woken += 1;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const sleep = useCallback(() => {
+    const element = section.current;
+    const own = root.current;
+    if (!element || !own || shown.current === null || element.closest(".pane[hidden]") || inUse(element)) return;
+    const html = staticMarkup(shown.current, () => drawRef.current());
+    if (html === null || !looksAsMarkup(element, html)) return;
+    root.current = null;
+    own.unmount();
+    element.innerHTML = html;
+    element.removeAttribute("data-woken");
+    staticTurnStats.slept += 1;
+  }, []);
+  const id = props.turn.id;
+  const ref = useCallback((element: HTMLElement | null) => {
+    if (section.current && section.current !== element) wakers(section.current, null);
+    section.current = element;
+    if (element) wakers(element, { wake, sleep });
+    register(id, element);
+  }, [register, id, wake, sleep]);
+  // The markup goes in through React's own innerHTML on the new, still detached section: a whole window of turns then
+  // enters the page in ONE insertion (WebKit, 10 open conversations: each insertion into the live page cost ~10 ms, a
+  // parse 0.2 ms). After that the prop is left out (React leaves the children alone) so the string is not held per turn.
+  // Woken, its root draws a new key itself; asleep, the new markup is written the same way.
+  const write = shown.current !== markup && !root.current;
+  const html = write ? staticMarkup(markup, () => drawRef.current()) : null;
+  useLayoutEffect(() => {
+    if (shown.current === markup) return;
+    if (root.current) root.current.render(tree.current);
+    else if (html === null) { onFail(id); return; }
+    shown.current = markup;
+  });
+  // A woken turn whose contexts' list of pictures changed (the viewer's 이전 / 다음) is drawn again by its root.
+  useLayoutEffect(() => { root.current?.render(tree.current); }, [env]);
+  // Gone (another window of turns, the conversation closed): its root is let go after this commit.
+  useEffect(() => () => { const own = root.current; root.current = null; if (own) window.setTimeout(() => own.unmount(), 0); }, []);
+  return <section className="turn" data-static="" data-settles={settles ? "" : undefined} ref={ref} dangerouslySetInnerHTML={html !== null ? { __html: html } : undefined} />;
+}, (a, b) => a.markup === b.markup && a.settles === b.settles && a.env === b.env && a.register === b.register && a.onFork === b.onFork && a.onOpenSession === b.onOpenSession && a.onFail === b.onFail);
+
+function wakers(element: Element, own: { wake: () => void; sleep: () => void } | null) {
+  if (own) { registerWake(element, own.wake); sleepers.set(element, own.sleep); settlers.set(element, own.wake); }
+  else { sleepers.delete(element); settlers.delete(element); }
+}
 
 export function Transcript({
   sessionId,
@@ -596,7 +766,8 @@ export function Transcript({
   focusItem?: { itemId: string; nonce: number } | null;
   onFocusDone?: () => void;
 }) {
-  const { state, actions: docActions } = useDocs();
+  const docs = useDocs();
+  const { state, actions: docActions } = docs;
   const scroller = useRef<HTMLDivElement>(null);
   // Follow the newest output only while the reader is at the bottom. Any move up (wheel, keys, the
   // scroll bar, touch) stops following at once; scrolling back down to the end resumes it.
@@ -662,10 +833,41 @@ export function Transcript({
     sessionId, provider, readOnly, onAnswer: answer, onTrust: hasTrust ? trust : undefined, focusItemId: focusItem?.itemId, primaryProposal,
     state: { artifacts: state.artifacts, proposals: state.proposals, handoffs: state.handoffs },
   }), [sessionId, provider, readOnly, answer, hasTrust, trust, focusItem?.itemId, primaryProposal, state.artifacts, state.proposals, state.handoffs]);
+  const farAway = useRef<(section: HTMLElement) => void>(() => undefined);
   const registerSection = useCallback((turnId: string, element: HTMLElement | null) => {
     if (element) sections.current.set(turnId, element);
-    else sections.current.delete(turnId);
+    else if (sections.current.get(turnId)) sections.current.delete(turnId);
   }, []);
+  // Every picture of this conversation in order (attachments, tool pictures, pictures in answers): the viewer's 이전 / 다음 go through all of them.
+  // Kept the same while the list is the same (a streaming answer changes `items` on every step; no picture re-renders for it).
+  const kept = useRef<ViewerPicture[]>([]);
+  const pictures = useMemo(() => {
+    const next = conversationPictures(items);
+    const same = next.length === kept.current.length && next.every((entry, index) => entry.id === kept.current[index]!.id);
+    if (!same) kept.current = next;
+    return kept.current;
+  }, [items]);
+
+  // The light view (0.5.4): what a finished turn's own root reads — stable objects that read the latest values, so
+  // a static or woken turn is not drawn again when the app's state moves (only its markup key decides that).
+  const pkm = useOptionalPkm();
+  const appearance = useContext(AppearanceContext);
+  const latest = useRef({ docs, pkm, appearance });
+  latest.current = { docs, pkm, appearance };
+  const docsEnv = useMemo(() => ({ get state() { return latest.current.docs.state; }, get actions() { return latest.current.docs.actions; } }), []);
+  const hasPkm = Boolean(pkm), pkmOpens = Boolean(pkm?.open), hasAppearance = Boolean(appearance);
+  const pkmEnv = useMemo(() => hasPkm ? new Proxy({} as PkmApi, { get: (_target, key) => (latest.current.pkm as Record<PropertyKey, unknown> | null)?.[key] }) : null, [hasPkm, pkmOpens]);
+  const appearanceEnv = useMemo(() => hasAppearance ? new Proxy({} as AppearanceApi, { get: (_target, key) => (latest.current.appearance as Record<PropertyKey, unknown> | null)?.[key] }) : null, [hasAppearance]);
+  const env = useMemo<TurnEnv>(() => ({ docs: docsEnv, pkm: pkmEnv, appearance: appearanceEnv, pictures }), [docsEnv, pkmEnv, appearanceEnv, pictures]);
+  // Turns drawn live in this conversation stay live (an answer just written, a search hit's turn) until they are far
+  // out of view again and look exactly as their markup would (nothing a person opened would be lost).
+  const keptLive = useRef<{ sessionId: string; ids: Set<string> }>({ sessionId, ids: new Set() });
+  if (keptLive.current.sessionId !== sessionId) keptLive.current = { sessionId, ids: new Set() };
+  const forkable = useRef({ sessionId, on: false });
+  const anchor = useRef<{ sessionId: string; from: number | null }>({ sessionId, from: null });
+  const keys = useRef(new Map<string, { items: TranscriptItem[]; ctx: TurnContext; env: TurnEnv; forks: boolean; key: string }>());
+  const [drawCount, redraw] = useState(0);
+  const keepLive = useCallback((turnId: string) => { keptLive.current.ids.add(turnId); redraw((count) => count + 1); }, []);
   const [sticky, setSticky] = useState<Turn | null>(null);
   const [headGone, setHeadGone] = useState(false);
   // A request a search hit or a jump lands in opens its folded words: every time (a new nonce per
@@ -694,7 +896,13 @@ export function Transcript({
     let reading: Turn | null = null;
     for (const turn of turns) {
       const section = sections.current.get(turn.id);
-      if (!section || !turn.user) continue;
+      if (!section) continue;
+      // The light view, from the same layout: a turn whose drawing settles wakes within a screen or so of the view; a woken
+      // or live finished turn far from it is offered back to markup (farAway decides). Only for the conversation on screen.
+      const above = top - section.offsetTop - section.offsetHeight, below = section.offsetTop - top - element.clientHeight;
+      if (above < NEAR_VIEW && below < NEAR_VIEW) { quiet.delete(section); if (section.hasAttribute("data-settles") && !section.hasAttribute("data-woken")) settlers.get(section)?.(); }
+      else if ((above > FAR_VIEW || below > FAR_VIEW) && !quiet.has(section) && (section.hasAttribute("data-woken") || !section.hasAttribute("data-static"))) farAway.current(section);
+      if (!turn.user) continue;
       if (section.offsetTop <= top + 12) current = turn;
       if (section.offsetTop <= top + 12 || (atEnd && section.offsetTop < top + element.clientHeight)) reading = turn;
     }
@@ -793,6 +1001,14 @@ export function Transcript({
     window.addEventListener("resize", reconcile);
     element.addEventListener("load", reconcile, true);
     return () => { observer?.disconnect(); window.removeEventListener("resize", reconcile); element.removeEventListener("load", reconcile, true); };
+  }, [sessionId]);
+
+  // The light view: a person's first event on a static turn wakes it before the event reaches it (static-turns.ts).
+  useEffect(() => {
+    const element = scroller.current;
+    if (!element) return;
+    for (const name of WAKE_EVENTS) element.addEventListener(name, wakeTarget, true);
+    return () => { for (const name of WAKE_EVENTS) element.removeEventListener(name, wakeTarget, true); };
   }, [sessionId]);
 
   // One column edge for the record and the input under it (Hallmark merge): the transcript's scrollbar
@@ -904,18 +1120,70 @@ export function Transcript({
     onPosition?.({ top: element.scrollTop, follow: true });
   };
 
-  // Every picture of this conversation in order (attachments, tool pictures, pictures in answers): the viewer's 이전 / 다음 go through all of them.
-  // Kept the same while the list is the same (a streaming answer changes `items` on every step; no picture re-renders for it).
-  const kept = useRef<ViewerPicture[]>([]);
-  const pictures = useMemo(() => {
-    const next = conversationPictures(items);
-    const same = next.length === kept.current.length && next.every((entry, index) => entry.id === kept.current[index]!.id);
-    if (!same) kept.current = next;
-    return kept.current;
-  }, [items]);
+  /** Drawn as components: a turn that is not finished or holds something open, the one a search hit or a jump lands in, one kept live. */
+  const mustBeLive = (turn: Turn, index: number, turnReveal: number, waiting: boolean) =>
+    !lightView.on || keptLive.current.ids.has(turn.id) || turnReveal > 0 || waiting || (focusItem ? turnOf.get(focusItem.itemId) === index : false) || turnIsLive(turn, index === turns.length - 1, running);
+  // "이 요청 전으로" comes and goes with the engine's work (WorkView passes no onFork while it runs). The markup keeps the
+  // key once this conversation could fork, and CSS hides it while it cannot (data-forks-off): no turn is drawn again for it.
+  if (forkable.current.sessionId !== sessionId) { forkable.current = { sessionId, on: false }; keys.current.clear(); }
+  if (onFork) forkable.current.on = true;
+  const forks = forkable.current.on ? fork : undefined;
+  /** A finished turn's markup key; computed once per turn object and conversation facts (every render of every open conversation asks). */
+  // Turn objects are made anew whenever the items change (each streamed step); a finished turn's items stay the same objects.
+  const keyOf = (turn: Turn) => {
+    const items = turnItems(turn);
+    const known = keys.current.get(turn.id);
+    if (known && known.ctx === turnContext && known.env === env && known.forks === Boolean(forks) && known.items.length === items.length && known.items.every((item, index) => item === items[index])) return known.key;
+    const key = markupKey(turn, turnContext, env, Boolean(forks));
+    keys.current.set(turn.id, { items, ctx: turnContext, env, forks: Boolean(forks), key });
+    return key;
+  };
+  const drawOf = (turn: Turn) => drawTurn(env, { turn, ctx: { ...turnContext, focusItemId: undefined }, waiting: false, reveal: 0, onFork: forks, onOpenSession: openSession });
+  /** A finished turn's markup (kept, or drawn now); null: it cannot be drawn statically and stays components. */
+  const markupOf = (turn: Turn) => staticMarkup(keyOf(turn), () => drawOf(turn));
+  // A turn far out of view: a woken static turn goes back to its markup (StaticTurn), a turn kept live becomes static —
+  // only while its conversation is on screen, nobody is in it, and it looks exactly as its markup does.
+  farAway.current = (section: HTMLElement) => {
+    // Checked once each time it goes far: what stays live is not compared again until it has come near the view.
+    quiet.add(section);
+    if (section.hasAttribute("data-static")) { sleepers.get(section)?.(); return; }
+    const index = turns.findIndex((turn) => sections.current.get(turn.id) === section);
+    const turn = turns[index];
+    if (!turn || !keptLive.current.ids.has(turn.id) || inUse(section)) return;
+    keptLive.current.ids.delete(turn.id);
+    const html = mustBeLive(turn, index, 0, waitingFirst && index === turns.length - 1) ? null : markupOf(turn);
+    if (html !== null && looksAsMarkup(section, html)) { redraw((count) => count + 1); return; }
+    keptLive.current.ids.add(turn.id);
+  };
+  // The drawn turns, the same elements while nothing they depend on moved: every open conversation renders again on the
+  // app's state changes, and with the light view a turn's element costs a few checks; this keeps such renders at none.
+  const forkKey = onFork ? fork : undefined;
+  // Turns enter the page in groups of TURN_STEP, each group one element made whole before it is inserted: a conversation
+  // shown for the first time, or a page of earlier turns, is ONE insertion into the page instead of one per turn (WebKit
+  // with 10 conversations open: ~10 ms per insertion). Groups count from the first turn drawn in this conversation.
+  if (anchor.current.sessionId !== sessionId || anchor.current.from === null) anchor.current = { sessionId, from: drawn?.sessionId === sessionId ? from : null };
+  const turnElements = useMemo(() => drawnTurns.map((turn, drawnAt) => {
+            const index = from + drawnAt;
+            const turnReveal = turn.user && revealed?.id === turn.user.id ? revealed.nonce : 0;
+            const waiting = waitingFirst && index === turns.length - 1;
+            const props: TurnProps = { turn, ctx: turnContext, waiting, reveal: turnReveal, onFork: forkKey, onOpenSession: openSession };
+            if (mustBeLive(turn, index, turnReveal, waiting)) { keptLive.current.ids.add(turn.id); return <TurnSection key={turn.id} {...props} register={registerSection} />; }
+            return <StaticTurn key={turn.id} {...props} onFork={forks} markup={keyOf(turn)} draw={() => drawOf(turn)} onFail={keepLive} settles={turnSettles(turn, state.artifacts)} env={env} register={registerSection} />;
+          }), // eslint-disable-next-line react-hooks/exhaustive-deps
+  [turns, from, turnContext, env, running, focusItem, revealed, waitingFirst, forkKey, forks, state.artifacts, drawCount]);
+  const turnGroups = useMemo(() => {
+    const groups: { id: number; elements: ReactNode[] }[] = [];
+    const base = anchor.current.from ?? from;
+    turnElements.forEach((element, drawnAt) => {
+      const id = Math.floor((from + drawnAt - base) / TURN_STEP);
+      if (groups.at(-1)?.id !== id) groups.push({ id, elements: [] });
+      groups.at(-1)!.elements.push(element);
+    });
+    return groups.map((group) => <div key={group.id} className="turn-group">{group.elements}</div>);
+  }, [turnElements, from]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <ConversationPictures.Provider value={pictures}>
-    <div className="transcript-wrap" ref={wrap} data-screen="S03" data-follow-output={pinned.current}>
+    <div className="transcript-wrap" ref={wrap} data-screen="S03" data-follow-output={pinned.current} data-forks-off={forkable.current.on && !onFork ? "" : undefined}>
       <div
         className="transcript"
         role="region"
@@ -956,6 +1224,8 @@ export function Transcript({
             const left = top < lastTop.current - 0.5 && element.scrollHeight - top - element.clientHeight > 1;
             if (left) pinned.current = false;
             else if (nearTranscriptEnd(element)) pinned.current = true;
+            // Scrolling up within a screen of the top draws the earlier turns (as markup, cheap), the reader staying where they are.
+            if (left && from > 0 && top < element.clientHeight) { lastTop.current = top; showEarlier(); }
           }
           lastTop.current = top;
           readingAnchor.current = captureReadingAnchor(element);
@@ -1016,10 +1286,7 @@ export function Transcript({
               </button>
             </div>
           ) : null}
-          {drawnTurns.map((turn, drawnAt) => (
-            <TurnSection key={turn.id} turn={turn} ctx={turnContext} waiting={waitingFirst && from + drawnAt === turns.length - 1}
-              reveal={turn.user && revealed?.id === turn.user.id ? revealed.nonce : 0} onFork={onFork ? fork : undefined} onOpenSession={openSession} register={registerSection} />
-          ))}
+          {turnGroups}
         </div>
       </div>
       {/* Back to the newest output: a band of its own under the conversation, the button inside the

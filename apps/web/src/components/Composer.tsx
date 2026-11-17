@@ -10,6 +10,7 @@ import { DRAFT_EVENT, persistDraft, readDraft, readDraftSelection, saveDraftSele
 import { isImeComposingKeyboardEvent } from "../../../../vendor/paseo/mobile-web/keyboard-ime.ts";
 import { resolveMessageInputEnterAction } from "../../../../vendor/paseo/mobile-web/enter-action.ts";
 import { compactInput } from "../mobile-layout.ts";
+import { usePaneNarrow } from "../pane-width.ts";
 import { pickedFiles } from "../mobile-platform.ts";
 import { MenuItem, Popover } from "./Popover.tsx";
 import { VoiceInput } from "./VoiceInput.tsx";
@@ -94,14 +95,6 @@ export function Composer({
   /** Optional request tools, disclosed together without crowding the main controls. */
   tools?: ReactNode;
 }) {
-  const [compactControls, setCompactControls] = useState(() => window.matchMedia?.("(max-width: 743px)").matches ?? false);
-  useEffect(() => {
-    const query = window.matchMedia?.("(max-width: 743px)");
-    if (!query) return;
-    const update = () => setCompactControls(query.matches);
-    update(); query.addEventListener?.("change", update);
-    return () => query.removeEventListener?.("change", update);
-  }, []);
   const [draft, setDraft] = useState(() => ({ key: draftKey, text: readDraft(draftKey) }));
   const text = draft.key === draftKey ? draft.text : readDraft(draftKey);
   const composingRef = useRef(false);
@@ -117,6 +110,8 @@ export function Composer({
   const [sending, setSending] = useState(false);
   const [voiceEpoch, setVoiceEpoch] = useState(0);
   const ref = useRef<HTMLTextAreaElement>(null);
+  // The secondary keys fold into ⋯ when the PANE is narrow (a cell of 4, 6 or 9 panes), as in a narrow window.
+  const compactControls = usePaneNarrow(ref, 743);
   const [spans, setSpans] = useState<MentionSpan[]>([]);
   const [caret, setCaret] = useState(0);
   const [composing, setComposing] = useState(false);

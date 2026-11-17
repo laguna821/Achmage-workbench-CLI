@@ -37,6 +37,8 @@ export function installMcp(init: Init, handlers: {
   pageRest.restWhenClean(async () => officeAiBusy() || officeCopyBusy() || await handlers.dirty());
   let queue = Promise.resolve(), closing = false;
   listen(message => {
+    // The editor pool opened another document in this page: it is not the closed one.
+    if (message.type === "office:swap") closing = false;
     if (message.type !== "office:mcp") return;
     queue = queue.catch(() => {}).then(async () => {
       const { requestId, request } = message;

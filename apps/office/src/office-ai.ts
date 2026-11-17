@@ -74,8 +74,8 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
   const abortWeb = () => { for (const controller of webRequests) controller.abort(); };
   window.addEventListener("pagehide", abortWeb);
   setCopyAiBusy(() => active !== null || streams.size > 0 || job.busy());
-  const changed = (next: string | null, keepPanel = false) => {
-    if (sessionId === next) return;
+  const changed = (next: string | null, keepPanel = false, force = false) => {
+    if (sessionId === next && !force) return;
     sessionId = next;
     if (keepPanel) return;
     references.reset();
@@ -358,6 +358,17 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
       if (active) { active.cancel(); return; }
       if (observedTurnId && sessionId) await gateway.aiSession(init.artifact.id).json("executor-stop", { turnId: observedTurnId });
     },
+    /**
+     * The editor pool swapped another document into this page (office:swap; `init` already names it): the panel starts
+     * afresh on that document's conversation, also when both have none. Refused while anything of this one is running.
+     */
+    swap(next: string | null) {
+      if (active || run || streams.size || job.busy() || requests.size) return false;
+      binding = null; changed(next, false, true);
+      return true;
+    },
+    /** Something of this document's AI is running (a turn, a stream, a job, a request to the window): no swap now. */
+    busy: () => Boolean(active || run || streams.size || job.busy() || requests.size),
     newSession: async () => { if (active) { active.cancel(); await active.settled; } await parent("new-session"); },
     refresh: async () => { skills.refresh(); events.emit("aiSettingsChanged", await getSettings()); },
   };

@@ -1,4 +1,5 @@
 import { UpdatePolicy } from "./update-policy.ts";
+import { AppMemoryReader } from "./app-memory.ts";
 import { EnginePrefs } from "./engine-prefs.ts";
 import { AppUpdates, installedVersion } from "./app-update/service.ts";
 import { detectInstall } from "./app-update/kind.ts";
@@ -45,6 +46,7 @@ import { handleProject } from "./project-http.ts";
 import { handleEntry, WorksDir } from "./entry.ts";
 import { BookmarkStore, handleBookmarks } from "./bookmarks.ts";
 import { thisPc } from "./bookmark-import.ts";
+import { BookmarkIcons } from "./bookmark-icons.ts";
 import { DropboxFolders } from "./dropbox.ts";
 import { pdfLoader } from "./pdf-loader.ts";
 import { FindTool, withFindTool } from "./find-tool.ts";
@@ -238,6 +240,7 @@ officeAi.executorOutputs = new OfficeExecutorOutputs(manager.documents, manager.
 const officeDrive = officeControl ? new OfficeDrive(manager, officeControl, dataDir, { vault }) : undefined;
 const officeImport = officeControl ? new OfficeImport(manager.documents, manager.ieumDesktop, dataDir, { vault }) : undefined;
 const bookmarks = new BookmarkStore(join(dataDir, "bookmarks.json"));
+const bookmarkIcons = new BookmarkIcons(join(dataDir, "bookmark-icons"));
 const dropbox = new DropboxFolders(store, manager, dataDir);
 officeAi.drive = officeDrive;
 const voice = new VoiceService({ dataDir, sessionExists: id => { const s = manager.view.sessions.get(id); return !!s && !s.archivedAt; } });
@@ -271,6 +274,8 @@ const appUpdates = env.WORKBENCH_CLI_INPUT ? undefined : new AppUpdates({ dataDi
   stopForInstall: () => { void updatePolicy.stop("drain").then(() => stop()).catch(error => { console.error("Update stop:", error instanceof Error ? error.message : String(error)); try { updatePolicy.cancel(); } catch { /* stopping */ } }); },
 });
 const server = createHttpServer(manager, bus, {
+  // The window records itself in the data folder (workbench-service --desktop): found there when its program's path cannot tell it (an AppImage).
+  memory: new AppMemoryReader({ engines: () => manager.engineSources(), dataDir }),
   enginePrefs,
   updatePolicy,
   appUpdates,
@@ -304,7 +309,7 @@ const server = createHttpServer(manager, bus, {
   projects: (req, res, url) => handleProject(projects, req, res, url),
   entry: (req, res, url) => handleEntry({ view: () => manager.view, worksDir }, req, res, url),
   // The app's own web bookmarks: one small file beside the state database; a browser's are read only when asked.
-  bookmarks: (req, res, url) => handleBookmarks({ store: bookmarks, places: thisPc(), tempDir: tmpdir() }, req, res, url),
+  bookmarks: (req, res, url) => handleBookmarks({ store: bookmarks, places: thisPc(), tempDir: tmpdir(), icons: bookmarkIcons }, req, res, url),
 });
 
 /** Listen on the port used last time, or on any free one when it is taken; remember the one bound. */

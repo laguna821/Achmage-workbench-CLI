@@ -67,6 +67,14 @@ async function handle(call: WorkerCall): Promise<{ value: unknown; unhandled?: b
     case "clipboard":
       // The spreadsheet editor reads pasted pictures and text in the page itself.
       return { value: null };
+    case "token":
+      return { value: null };
+    case "close-previous": {
+      // The editor pool opened another workbook in this page: the files of the ones before are let go.
+      const sweep = (dir: string) => { for (const entry of vfs.list(dir)) { const at = `${dir}/${entry.name}`; if (entry.directory) { sweep(at); vfs.removeDir(at); } else if (at !== path) vfs.remove(at); } };
+      sweep("/document");
+      return { value: true };
+    }
   }
 }
 

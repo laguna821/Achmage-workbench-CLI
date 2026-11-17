@@ -12,7 +12,9 @@ export function connectOfficeUi(init: Init, format: OfficeUiFormat, command: (id
   if (init.headlessExport) return;
   // One AI on a new person's document: the editor's own panel starts closed (its rail key stays).
   keepEditorAiPanelClosed(localStorage);
-  const ui = mountOfficeUi({ viewId: init.artifact.id, format, theme: init.theme, onCommand: command, onTheme: theme });
+  // The view keeps the id it was mounted under: the editor pool may open other documents in this page (office:swap).
+  const viewId = init.artifact.id;
+  const ui = mountOfficeUi({ viewId, format, theme: init.theme, onCommand: command, onTheme: theme });
   // The head's 문서 AI opens and closes the editor's own panel, which reports its state back (one door).
   const dock = DOCK_FORMATS.has(format) ? installEditorAiDock(document, { post }) : null;
   // While its 문서 AI works the editor can still be looked at; only typing and changes wait (editor-hold.ts).
@@ -22,11 +24,13 @@ export function connectOfficeUi(init: Init, format: OfficeUiFormat, command: (id
     stop: (turnId) => (window as { workbenchOfficeAi?: { stop(turnId: string | null): Promise<void> } }).workbenchOfficeAi?.stop(turnId),
   }) : null;
   if (hold) Object.assign(window, { workbenchEditorHold: hold });
+  // The editor pool: after another document is swapped in, the dock reports itself afresh (the tab gives it that document's draft).
+  if (dock) Object.assign(window, { workbenchEditorDock: dock });
   const stop = listen(message => {
     if (message.type === "office:show-commands") ui.show();
     if (message.type === "office:ai-panel-set") dock?.set(message.open, message.draft);
     if (message.type === "office:ai-draft-set") dock?.put(message.draft);
-    if (message.type === "office:theme") void applyOfficeTheme(init.artifact.id, message.theme, message.palette ?? null);
+    if (message.type === "office:theme") void applyOfficeTheme(viewId, message.theme, message.palette ?? null);
   });
   window.addEventListener("pagehide", () => { dock?.dispose(); hold?.dispose(); stop(); ui.dispose(); }, { once: true });
 }

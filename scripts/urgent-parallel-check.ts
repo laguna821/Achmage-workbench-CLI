@@ -106,7 +106,8 @@ try {
       await page!.locator('.group-tab-list [role^="menuitem"]:not([aria-disabled="true"])').filter({ hasText: listName[id] ?? id }).first().click();
     }
     const pane = page!.locator(`.pane[data-pane-active="true"][data-tab="${id}"]`); await pane.waitFor();
-    if (editor) { const frame = pane.frameLocator("iframe.office-frame"); await frame.locator('.tiptap[contenteditable="true"]').waitFor({ timeout: 60_000 }); 
+    // (A pooled editor — Word, PowerPoint, Excel since 0.5.4 — lives in the window's pool layer, laid over its pane.)
+    if (editor) { const frame = page!.frameLocator(`.pane[data-pane-active="true"][data-tab="${id}"] iframe.office-frame, .editor-pool iframe.office-frame[data-pool-shown="true"][data-tab="${id}"]`); await frame.locator('.tiptap[contenteditable="true"]').waitFor({ timeout: 60_000 }); 
       // The editor's own AI 도우미 starts closed (design review I7): open it through its rail key, as a person does.
       const rail = frame.locator(".ai-dock.collapsed .ai-rail");
       if (await rail.count()) await rail.click();

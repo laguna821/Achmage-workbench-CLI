@@ -29,11 +29,18 @@ else
   target="$opt/achmage-workbench"
 fi
 
+# 0.5.4: when the kernel (or systemd-oomd) kills one process in the app's scope, the scope goes on (systemd's
+# default for a scope is to stop it whole, window and gateway included). Engines run in scopes of their own
+# (resources/engine-scope.ts). OOMPolicy on a scope needs systemd 253 or newer; older ones keep the default.
+oom_policy=""
+systemd_version=$(systemctl --version 2>/dev/null | awk 'NR==1 { print $2 }' | tr -dc '0-9')
+if [[ -n "$systemd_version" && "$systemd_version" -ge 253 ]]; then oom_policy="-p OOMPolicy=continue "; fi
+
 cat > "$bin/achmage-workbench" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 exec /usr/bin/systemd-run --user --scope --collect --quiet \\
-    --slice=app.slice --unit="app-achmage-workbench-\$\$-\${RANDOM}.scope" \\
+    --slice=app.slice --unit="app-achmage-workbench-\$\$-\${RANDOM}.scope" ${oom_policy}\\
     --expand-environment=no -- "$target" "\$@"
 EOF
 chmod +x "$bin/achmage-workbench"

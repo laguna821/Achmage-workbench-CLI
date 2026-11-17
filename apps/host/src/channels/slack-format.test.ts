@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readable } from "./format.ts";
+import { hasWideTable, readable, TABLE_IN_FILE } from "./format.ts";
 import { mrkdwn, mrkdwnParts, unescapeSlack } from "./slack-format.ts";
 
 // Markdown → Slack mrkdwn (audit #132): what each construct becomes, and two properties over random
@@ -67,6 +67,19 @@ describe("markdown as Slack shows it", () => {
     expect(slack("| 장 | 내용 |\n|---|---|\n| 1 | 질문 |\n| 2–4 | **사례** |")).toBe("```\n장  | 내용\n----+-----\n1   | 질문\n2–4 | 사례\n```");
     const wide = `| 이름 | 설명 |\n|---|---|\n| 가 | ${"아주 긴 설명 ".repeat(8)} |`;
     expect(slack(wide)).toMatch(/^\*이름 · 설명\*\n• 가 · 아주 긴 설명/);
+  });
+
+  it("0.5.4: when the whole answer goes as a file, a table too wide for the block is one line saying so; a narrow one stays a block", () => {
+    const wide = `| 이름 | 설명 |\n|---|---|\n| 가 | ${"아주 긴 설명 ".repeat(8)} |`;
+    const narrow = "| 장 | 내용 |\n|---|---|\n| 1 | 질문 |";
+    const filed = (markdown: string) => mrkdwn(readable(markdown, { tables: "pre", wide: "file" }));
+    expect(filed(`앞 문단\n\n${wide}\n\n뒤 문단`)).toBe(`앞 문단\n\n${TABLE_IN_FILE}\n\n뒤 문단`);
+    expect(filed(narrow)).toBe("```\n장 | 내용\n---+-----\n1  | 질문\n```");
+    expect(hasWideTable(wide)).toBe(true);
+    expect(hasWideTable(narrow)).toBe(false);
+    expect(hasWideTable(`\`\`\`\n${wide}\n\`\`\``)).toBe(false); // inside a code block it is code, not a table
+    // Telegram (no table style) is unchanged: bullet lines, whatever the width.
+    expect(readable(wide, { wide: "file" }).text).toMatch(/^이름 · 설명\n• 가 · 아주 긴 설명/);
   });
 
   it("&, < and > are escaped everywhere: no mention, ping, channel tag or hidden link from the model's text", () => {

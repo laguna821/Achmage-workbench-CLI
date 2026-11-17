@@ -74,6 +74,45 @@ describe("a conversation and what is beside it", () => {
     expect(onRatio).toHaveBeenLastCalledWith(0.4);
   });
 
+  it("the handle takes the panes' dividers' keys: Shift for further, Home / End to its bounds, Enter back to the start", () => {
+    const onRatio = vi.fn();
+    render(view({ onRatio }));
+    const handle = screen.getByRole("separator", { name: "대화와 문서 사이" });
+    expect([handle.getAttribute("aria-valuenow"), handle.getAttribute("aria-valuemin"), handle.getAttribute("aria-valuemax")]).toEqual(["40", "20", "70"]);
+    fireEvent.keyDown(handle, { key: "ArrowLeft", shiftKey: true });
+    expect(onRatio).toHaveBeenLastCalledWith(expect.closeTo(0.3, 5));
+    fireEvent.keyDown(handle, { key: "Home" });
+    expect(onRatio).toHaveBeenLastCalledWith(0.2);
+    fireEvent.keyDown(handle, { key: "End" });
+    expect(onRatio).toHaveBeenLastCalledWith(0.7);
+    fireEvent.keyDown(handle, { key: "Enter" });
+    expect(onRatio).toHaveBeenLastCalledWith(0.4);
+  });
+
+  it("held and moved, the width follows the pointer within its bounds and is kept when let go; a cancelled hold keeps the old one", () => {
+    const onRatio = vi.fn();
+    render(view({ onRatio }));
+    const handle = screen.getByRole("separator", { name: "대화와 문서 사이" });
+    fireEvent.pointerDown(handle, { button: 0, clientX: 480 });
+    expect(document.documentElement.classList.contains("pane-resizing")).toBe(true);
+    expect(document.activeElement).toBe(handle);
+    fireEvent.pointerMove(window, { clientX: 1150 });
+    // 1150 / (1200 - gap) is past the bound: the handle stops at 70 %.
+    expect(handle.getAttribute("aria-valuenow")).toBe("70");
+    fireEvent.pointerMove(window, { clientX: 600 });
+    fireEvent.pointerUp(window);
+    expect(document.documentElement.classList.contains("pane-resizing")).toBe(false);
+    expect(onRatio).toHaveBeenCalledTimes(1);
+    expect(onRatio.mock.calls[0]![0]).toBeGreaterThan(0.49);
+    expect(onRatio.mock.calls[0]![0]).toBeLessThan(0.52);
+    fireEvent.pointerDown(handle, { button: 0, clientX: 480 });
+    fireEvent.pointerMove(window, { clientX: 300 });
+    fireEvent(window, new Event("blur"));
+    expect(onRatio).toHaveBeenCalledTimes(1);
+    expect(handle.getAttribute("aria-valuenow")).toBe("40");
+    expect(document.documentElement.classList.contains("pane-resizing")).toBe(false);
+  });
+
   it("side by side, the conversation keeps its minimum and never takes the other below its own", async () => {
     render(view({ contentMin: 680 }));
     // 1200 − 7 − 680 = 513 left; 40% of the room is 477.

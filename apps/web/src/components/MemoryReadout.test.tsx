@@ -35,6 +35,21 @@ describe("the readout", () => {
     expect(document.querySelector(".memory-readout-text")!.textContent).toBe("메모리 2.2 GB");
   });
 
+  it("says how it counted: RSS (macOS, Windows) and, on macOS, that the page processes are left out — before the tabs line; nothing more for Linux's shares", () => {
+    const notes = () => [...document.querySelectorAll(".memory-pop .memory-note")].map((note) => note.textContent);
+    const view = render(<MemoryReadout memory={memory} sleeping={0} />);
+    fireEvent.mouseEnter(document.querySelector(".memory-readout")!);
+    expect(notes()).toEqual(["지금 보이지 않는 탭은 10분 뒤 쉬게 합니다"]);
+    view.rerender(<MemoryReadout memory={{ ...memory, measure: "rss" }} sleeping={0} />);
+    expect(notes()).toEqual(["실제 사용(RSS) 기준: 여러 프로세스가 함께 쓰는 메모리는 프로세스마다 셉니다", "지금 보이지 않는 탭은 10분 뒤 쉬게 합니다"]);
+    view.rerender(<MemoryReadout memory={{ ...memory, measure: "rss", pagesLeftOut: true }} />);
+    expect(notes()).toEqual(["실제 사용(RSS) 기준: 여러 프로세스가 함께 쓰는 메모리는 프로세스마다 셉니다", "macOS에서는 웹 화면을 그리는 프로세스가 빠져 있어 창은 실제보다 작게 나옵니다"]);
+    // The total stays the sum it is (no number is made up for what could not be counted).
+    expect(document.querySelector(".memory-readout-text")!.textContent).toBe("메모리 0.5 GB");
+    view.rerender(<MemoryReadout memory={{ ...memory, measure: "mixed" }} />);
+    expect(notes()).toEqual([]);
+  });
+
   it("hover shows the three parts in one small popover, and leaving takes it away", () => {
     render(<MemoryReadout memory={memory} />);
     expect(document.querySelector(".memory-pop")).toBeNull();

@@ -4,7 +4,7 @@ import type { Layout, PaneContent } from "./panes.ts";
 import { activeTab, contentKey, findTab, tabsOf, withTabs } from "./tabs.ts";
 import { setPane } from "./panes.ts";
 import { initialState, type State } from "./state.ts";
-import { CHAT_MIN, COLUMN_GAP, besideFit, childWork, companionMinimum, readMinimum, keepCompanions, legacyView, leavesView, oneViewPerDocument, releaseViews, upgradeStoredLayout, viewDocument, viewsOfDocument, viewsOfPage, viewsToRelease, withoutCompanion, type Companion } from "./companion.ts";
+import { BESIDE_SHARE, CHAT_MIN, COLUMN_GAP, besideFit, besideRatioKey, readBesideRatio, childWork, companionMinimum, readMinimum, keepCompanions, legacyView, leavesView, oneViewPerDocument, releaseViews, upgradeStoredLayout, viewDocument, viewsOfDocument, viewsOfPage, viewsToRelease, withoutCompanion, type Companion } from "./companion.ts";
 
 // 곁 화면: a document or web page beside its conversation, inside that conversation's tab.
 
@@ -329,5 +329,24 @@ describe("the main conversation sees its documents' AIs at work", () => {
     const state = base([session("web", { status: "running", pageAgent: { pageId: "p", parentSessionId: "main" } } as Partial<Session>)]);
     const pages = [{ pageId: "p", title: "평가 루브릭 안내", url: "https://ctl.example.ac.kr/" }] as never;
     expect(childWork(state, main, pages).map((line) => [line.kind, line.name, line.state])).toEqual([["web", "평가 루브릭 안내", "진행 중"]]);
+  });
+});
+
+// The web page (or document) beside a conversation: its width is remembered per window, in the
+// preferences, as the right sidebar's is (the main window and a session's own window apart).
+describe("the width beside a conversation, per window", () => {
+  it("each window keeps its own; a session's window without one starts from the main window's", () => {
+    expect([besideRatioKey("main"), besideRatioKey("window")]).toEqual(["splitRatio", "splitRatioWindow"]);
+    expect(readBesideRatio({}, "main")).toBe(BESIDE_SHARE);
+    expect(readBesideRatio({ splitRatio: 0.6 }, "main")).toBe(0.6);
+    expect(readBesideRatio({ splitRatio: 0.6 }, "window")).toBe(0.6);
+    expect(readBesideRatio({ splitRatio: 0.6, splitRatioWindow: 0.3 }, "window")).toBe(0.3);
+    expect(readBesideRatio({ splitRatio: 0.6, splitRatioWindow: 0.3 }, "main")).toBe(0.6);
+  });
+  it("reads within the handle's bounds; anything else is the starting share", () => {
+    expect(readBesideRatio({ splitRatio: 0.95 }, "main")).toBe(0.7);
+    expect(readBesideRatio({ splitRatio: 0.01 }, "main")).toBe(0.2);
+    expect(readBesideRatio({ splitRatio: "wide" }, "main")).toBe(BESIDE_SHARE);
+    expect(readBesideRatio({ splitRatio: Number.NaN }, "main")).toBe(BESIDE_SHARE);
   });
 });

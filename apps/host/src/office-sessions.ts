@@ -21,7 +21,7 @@ type Hooks = {
   lock(id: string, requestId: string, identity: string, action: () => Promise<SendResult>): Promise<SendResult>;
   related?(id: string): Session[];
   /** 0.5.3: a slot of the resource manager; resolves with its release once there is one (the turn waits here until then). */
-  admit?(sessionId: string, signal?: AbortSignal): (() => void) | Promise<() => void>;
+  admit?(sessionId: string, signal?: AbortSignal, request?: { artifactId: string; turnId: string; text: string }): (() => void) | Promise<() => void>;
 };
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const id = (value: unknown): value is string => typeof value === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(value);
@@ -87,7 +87,8 @@ export class OfficeSessions {
     const session = this.hooks.session(binding.sessionId);
     if (this.hooks.admit && !this.store.findRequest(key) && !(input.background && (session.status !== "idle" && session.status !== "error"))) {
       this.scope(binding.artifactId, binding.sessionId);
-      const slot = this.hooks.admit(binding.sessionId, signal);
+      // 0.5.4: what it asks is kept while it waits, so a gateway restart does not lose it.
+      const slot = this.hooks.admit(binding.sessionId, signal, { artifactId: binding.artifactId, turnId: input.turnId, text: input.instruction });
       release = typeof slot === "function" ? slot : await slot;
     }
     try { return await this.startAdmitted(binding, input, key, identity, references, attachments, skillContext, () => { duplicate = true; }, () => duplicate); }

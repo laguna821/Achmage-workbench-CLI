@@ -46,11 +46,16 @@ it("does not render or parse an earlier request with attachments again while a l
   const streamed = (text: string): TranscriptItem[] => [request, { kind: "assistant", id: "a1", text: "앞 답", streaming: false, at: 2 }, later, { kind: "assistant", id: "a2", text, streaming: true, at: 4 }];
   const view = (text: string) => <DocContext.Provider value={docs}><Transcript sessionId="s" items={streamed(text)} provider="claude" running loading={false} onAnswer={() => {}} onFork={() => {}} /></DocContext.Provider>;
   const ui = render(view("한"));
+  // Drawn once as the finished turn's markup and, this turn having a picture, once more as it wakes in place near the
+  // view (the light view, 0.5.4; no IntersectionObserver here: at once). Then never again while the answer streams.
+  const once = { request: parsed.filter((text) => text === "판서를 보고 정리해 줘").length, answer: parsed.filter((text) => text === "앞 답").length, strip: strips.filter((ids) => ids === "p1").length };
+  expect(once.request).toBeGreaterThanOrEqual(1);
+  expect(once.request).toBeLessThanOrEqual(2);
   for (const text of ["한 글", "한 글자", "한 글자씩", "한 글자씩 옵니다"]) ui.rerender(view(text));
-  expect(parsed.filter((text) => text === "판서를 보고 정리해 줘")).toHaveLength(1);
-  expect(parsed.filter((text) => text === "앞 답")).toHaveLength(1);
+  expect(parsed.filter((text) => text === "판서를 보고 정리해 줘")).toHaveLength(once.request);
+  expect(parsed.filter((text) => text === "앞 답")).toHaveLength(once.answer);
   // The finished request block itself does not render again (not only its memoised words).
-  expect(strips.filter((ids) => ids === "p1")).toHaveLength(1);
+  expect(strips.filter((ids) => ids === "p1")).toHaveLength(once.strip);
 });
 
 it("keeps the band quiet while the head is in view, and carries the head's essentials once it is not", () => {

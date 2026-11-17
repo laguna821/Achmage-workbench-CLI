@@ -8,6 +8,7 @@ import { capital, EngineCard, usageWords, type EngineActions } from "./EngineSet
 import { PathDetail, SettingsGroup, SettingsRow, SettingsSwitch } from "./SettingsSheet.tsx";
 import { Segmented } from "./ui/Hig.tsx";
 import { MESSENGER_NEEDS } from "./phone-words.ts";
+import { EDITOR_POOL_HINT, EDITOR_POOL_LABEL, readEditorPool, writeEditorPool } from "../editor-pool.ts";
 import { DOC_OPEN_CHOICES, DOC_OPEN_DEFAULT_MARK, DOC_OPEN_HINT, DOC_OPEN_LABEL, defaultDocOpen, useDocOpen } from "../doc-open.ts";
 
 // The rows of 설정 (release unit B). Each section is one component; App gives them the actions
@@ -183,6 +184,18 @@ export function DocOpenRow() {
     control={<Segmented label={DOC_OPEN_LABEL} value={choice} onChange={setChoice} options={DOC_OPEN_CHOICES.map(([value, label]) => ({ value, label: value === usual ? label + DOC_OPEN_DEFAULT_MARK : label }))} />} />;
 }
 
+/** 같은 종류 문서는 편집기 함께 쓰기 (the editor pool's master switch; on by default). */
+export function EditorPoolRow() {
+  const [on, setOn] = useState(readEditorPool);
+  useEffect(() => {
+    const changed = () => setOn(readEditorPool());
+    window.addEventListener("workbench:editor-pool", changed); window.addEventListener("storage", changed);
+    return () => { window.removeEventListener("workbench:editor-pool", changed); window.removeEventListener("storage", changed); };
+  }, []);
+  return <SettingsRow label={EDITOR_POOL_LABEL} hint={EDITOR_POOL_HINT}
+    control={<SettingsSwitch label={EDITOR_POOL_LABEL} checked={on} onChange={(next) => { writeEditorPool(next); setOn(next); }} />} />;
+}
+
 export function DocumentsSection({ tools, onInstallIeum, onRefreshTools, onOfficeSettings, onDropbox, onOfficeImport, onKnowledge, imageUpload, vault, editorAi }: {
   tools: DocumentTools | null;
   onInstallIeum(): void;
@@ -215,6 +228,7 @@ export function DocumentsSection({ tools, onInstallIeum, onRefreshTools, onOffic
           detail={<>{row.status.message ? <p className="settings-note">{row.status.message}</p> : null}<PathDetail value={row.status.path ? [row.status.path, row.status.version ? `판 ${row.status.version}` : ""].filter(Boolean).join("\n") : null} label="자세히" /></>} />;
       })}
       <DocOpenRow />
+      <EditorPoolRow />
       {onOfficeSettings ? <SettingsRow label="문서 AI" hint="문서 편집기 안의 AI가 쓰는 엔진과 고치는 방식을 정합니다." control={key("문서 AI 설정…", onOfficeSettings, { haspopup: true })} /> : null}
       {editorAi}
       {onOfficeImport ? <SettingsRow label="이음오피스 설정 가져오기" hint="이음오피스 앱에서 쓰던 설정을 이 앱으로 가져옵니다." control={key("이음오피스 설정 가져오기…", onOfficeImport, { haspopup: true })} /> : null}

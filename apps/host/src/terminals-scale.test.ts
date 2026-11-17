@@ -205,6 +205,74 @@ it("A8: a gateway killed in the middle of terminal output leaves a consistent da
   const store = new Store(join(dir, "state.sqlite"));
   const reopened = new Terminals(store, spacesFor(dir), fakeWorker);
   expect(reopened.get("noisy").status).toBe("interrupted");
-  expect(reopened.output("noisy").end).toBe(record.outputEnd);
+  // A reader pages (16 rows a page); the last page ends where the record says.
+  let cursor = record.outputStart;
+  for (;;) { const page = reopened.output("noisy", cursor); if (page.end <= cursor) break; cursor = page.end; }
+  expect(cursor).toBe(record.outputEnd);
   store.close();
 }, 30_000);
+
+/** A stored record and a Terminals over it, with the 200 ms batch timer out of the way (no timing in these tests). */
+function seeded() {
+  const fixtureSet = fixture({ outputFlushMs: 60_000 });
+  const now = Date.now();
+  fixtureSet.store.saveTerminal({ id: "t-seed", workspaceId: "ws-1", workId: "work-1", hostId: "local", cwd: fixtureSet.dir, label: "t", shell: null, args: [], status: "exited", pid: null, exitCode: 0, error: null, cols: 80, rows: 24, outputStart: 0, outputEnd: 0, createdAt: now, updatedAt: now });
+  const api = new Terminals(fixtureSet.store, spacesFor(fixtureSet.dir), fakeWorker, { outputFlushMs: 60_000 });
+  cleanup.push(() => api.shutdown());
+  const event = (message: Record<string, unknown>) => (api as unknown as { event: (id: string, message: Record<string, unknown>) => void }).event("t-seed", message);
+  const data = (text: string) => event({ type: "data", data: Buffer.from(text).toString("base64") });
+  const stored = () => {
+    const record = fixtureSet.store.terminals().find((entry) => entry.id === "t-seed")!;
+    const rows = fixtureSet.store.readTerminalOutput("t-seed", 0);
+    return { record, rows, text: Buffer.concat(rows.map((row) => Buffer.from(row.data))).toString("utf8") };
+  };
+  return { ...fixtureSet, api, event, data, stored };
+}
+
+it("0.5.4: a record saved between two flushes (a resize) stores its rows with it, never bounds past them", () => {
+  const { event, data, stored } = seeded();
+  data("first\n"); data("second\n");
+  expect(stored().rows).toHaveLength(0); // still waiting in the batch
+  event({ type: "resized", cols: 100, rows: 30 });
+  const after = stored();
+  expect(after.record.cols).toBe(100);
+  expect(after.record.outputEnd).toBe(after.rows.at(-1)!.end);
+  expect(after.text).toBe("first\nsecond\n");
+  data("third\n"); // waiting again: the stored record keeps the flushed end
+  expect(stored().record.outputEnd).toBe(after.record.outputEnd);
+});
+
+it("0.5.4: a flush that fails keeps its output waiting, and the next record save never claims output that is not stored", () => {
+  const { store, event, data, stored } = seeded();
+  const append = store.appendTerminalOutput.bind(store);
+  let fail = true;
+  store.appendTerminalOutput = (...args) => { if (fail) { fail = false; throw new Error("disk busy"); } return append(...args); };
+  data("kept\n");
+  expect(() => event({ type: "resized", cols: 90, rows: 30 })).toThrow("disk busy");
+  // The failed transaction wrote nothing: the stored record still ends where its (no) rows end.
+  expect(stored().record.outputEnd).toBe(0);
+  expect(stored().rows).toHaveLength(0);
+  // The next save (the worker's error report) writes the waiting output and the record together.
+  event({ type: "error", message: "보고" });
+  const after = stored();
+  expect(after.text).toBe("kept\n");
+  expect(after.record.outputEnd).toBe(after.rows.at(-1)!.end);
+});
+
+it("0.5.4: a batch flush that fails stores nothing ahead and loses no output: the next flush writes it", () => {
+  const { api, store, data, stored } = seeded();
+  data("a\n");
+  (api as unknown as { flushAll: () => void }).flushAll();
+  const flushed = stored().record.outputEnd;
+  expect(flushed).toBe(2);
+  const append = store.appendTerminalOutput.bind(store);
+  store.appendTerminalOutput = () => { throw new Error("disk busy"); };
+  data("b\n");
+  expect(() => api.flushAll()).toThrow("disk busy");
+  // With the row write still failing, nothing about this record may be stored ahead of its rows.
+  expect(stored().record.outputEnd).toBe(flushed);
+  store.appendTerminalOutput = append;
+  api.flushAll();
+  expect(stored().record.outputEnd).toBe(4);
+  expect(stored().text).toBe("a\nb\n");
+});

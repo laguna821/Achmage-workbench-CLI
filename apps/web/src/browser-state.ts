@@ -17,6 +17,9 @@ type Pending = { id: string; status: "waiting" | "unknown" };
 /** `heldPageIds`: pages whose tab was closed while their AI worked; released once it is done (skin 2 · B). */
 type BrowserState = BrowserList & { connected: boolean; error: string | null; pending: Record<string, Pending>; heldPageIds?: string[] };
 type Surface = { element: HTMLElement; pageId: string; visible: boolean };
+/** A key pressed while a web page had the keyboard, handed over by the native page script (bookmarks2). */
+export type PageKey = "bookmark" | "bookmark-bar";
+const PAGE_KEYS = new Set<string>(["bookmark", "bookmark-bar"]);
 const driverKey = "workbench.browser.driver";
 const pendingKey = "workbench.browser.pending";
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -63,6 +66,7 @@ export class SharedBrowser {
   private readonly nativeCreates = createdPages();
   private readonly creationErrors = new Map<string, string>();
   private nativePages: NativeBrowserPage[] = [];
+  private readonly pageKeys = new Map<string, Set<(key: PageKey) => void>>();
   private running = false;
   private epoch = 0;
   private version = 0;
@@ -77,6 +81,22 @@ export class SharedBrowser {
     this.api = api; this.native = native; this.available = Boolean(api && native); this.driverId = driverId;
   }
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
+  /** Ctrl/⌘+D and Ctrl/⌘+Shift+B pressed inside this page (the page itself had the keyboard). */
+  onPageKeys = (pageId: string, listener: (key: PageKey) => void) => {
+    const set = this.pageKeys.get(pageId) ?? new Set(); set.add(listener); this.pageKeys.set(pageId, set);
+    return () => { set.delete(listener); if (!set.size) this.pageKeys.delete(pageId); };
+  };
+  /**
+   * The native page list. A page's `keys` (pressed in it since the last listing) are handed to its views here
+   * and taken off the record: they are this window's, not the gateway's.
+   */
+  private async listNative(): Promise<NativeBrowserPage[]> {
+    const listed = await this.native!<(NativeBrowserPage & { keys?: unknown })[]>({ kind: "list" });
+    return listed.map(({ keys, ...page }) => {
+      if (Array.isArray(keys)) for (const key of keys) if (typeof key === "string" && PAGE_KEYS.has(key)) for (const listener of [...this.pageKeys.get(page.pageId) ?? []]) listener(key as PageKey);
+      return page;
+    });
+  }
   getState = () => this.value;
   private change(patch: Partial<BrowserState>) { this.value = { ...this.value, ...patch }; for (const listener of this.listeners) listener(); }
   private upsert(page: BrowserPage) {
@@ -123,7 +143,7 @@ export class SharedBrowser {
     if (!this.api || !this.native) return;
     try {
       // A failed native listing must not be represented as an empty (all pages closed) list.
-      const pages = await this.native<NativeBrowserPage[]>({ kind: "list" }); this.nativePages = pages;
+      const pages = await this.listNative(); this.nativePages = pages;
       const results = [...this.results.values()].slice(0, 128), version = this.version;
       const reply = await this.api.poll({ driverId: this.driverId, pages, results });
       for (const result of results) {
@@ -287,7 +307,7 @@ export class SharedBrowser {
     if (!this.native) throw new Error("데스크톱 기본 창에서 열어 주세요.");
     this.upsert(this.creationState(page));
     if (page.status !== "opening") return page;
-    const existing = (await this.native<NativeBrowserPage[]>({ kind: "list" })).find(entry => entry.pageId === page.pageId);
+    const existing = (await this.listNative()).find(entry => entry.pageId === page.pageId);
     if (existing && existing.profileId !== page.profileId) throw new Error("다른 프로필의 웹 탭입니다.");
     if (existing && !sameBrowserControl(existing.control, page.control)) {
       const result = await this.native<BrowserJobResult>({ kind: "execute", job: { id: `restore-${crypto.randomUUID()}`, pageId: page.pageId, driverId: this.driverId, action: { kind: "control", control: page.control }, expected: null, control: page.control, deadline: Date.now() + 20000 } });
@@ -302,7 +322,7 @@ export class SharedBrowser {
       try { sessionStorage.setItem("workbench.browser.created", JSON.stringify([...this.nativeCreates])); } catch { /* Never retry within this driver. */ }
       try { await this.native<NativeBrowserPage>({ kind: "create", pageId: page.pageId, profileId: page.profileId, url: page.url, control: page.control }); }
       catch (error) {
-        const found = await this.native<NativeBrowserPage[]>({ kind: "list" }).catch(() => []);
+        const found = await this.listNative().catch(() => []);
         if (!found.some(entry => entry.pageId === page.pageId)) {
           this.creationErrors.set(page.pageId, `웹 탭 생성 결과를 확인하지 못했습니다. ${message(error)}`);
           const interrupted = this.creationState(page); this.upsert(interrupted); return interrupted;

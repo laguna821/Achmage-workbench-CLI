@@ -50,7 +50,8 @@ export type PkmApi = {
   openArtifact: (artifact: Artifact) => void;
 };
 
-const PkmContext = createContext<PkmApi | null>(null);
+/** Exported for the light conversation view: a finished turn woken into components gets the same context (Transcript). */
+export const PkmContext = createContext<PkmApi | null>(null);
 
 export function usePkm() {
   const value = useContext(PkmContext);

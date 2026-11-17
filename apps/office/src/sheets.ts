@@ -4,6 +4,7 @@ import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
 import "./sheets.css";
 import { Gateway, GatewayError, handshake, headlessExport, listen, pageRest, post } from "./bridge.ts";
 import { installViewPosition } from "./view-position.ts";
+import { installSwap, swapInProgress } from "./swap.ts";
 import { installInPlaceReplace } from "./replace-in-place.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
 import { recovery } from "./recovery.ts";
@@ -23,7 +24,8 @@ const init = await handshake();
 const headless = headlessExport(init);
 const gateway = new Gateway(init.token);
 const ai = mountOfficeAi(init, gateway);
-const artifactId = init.artifact.id;
+/** The document this page edits now: the editor pool may open another one in place (swap.ts), so it is read each time. */
+const docId = () => init.artifact.id;
 /**
  * `revision`: what the editor's workbook is based on (a save must name it). `pending`: edits the
  * editor has not saved (its journal). `uncommitted`: saved in the editor but not taken as a
@@ -147,6 +149,8 @@ useTransport({ invoke: officeAiTransport(ai, dispatch, invoke), send });
 const dirty = () => state.pending > 0 || state.uncommitted;
 let lastReported: boolean | null = null;
 function reportDirty() {
+  // Mid-swap the journal reported is the workbook going out: said to nobody.
+  if (swapInProgress()) return;
   const now = dirty();
   if (now !== lastReported) post({ type: "office:dirty", dirty: now });
   lastReported = now;
@@ -156,12 +160,12 @@ function reportDirty() {
 async function commit(): Promise<boolean> {
   const bytes = await value<ArrayBuffer>({ type: "saved-bytes" });
   try {
-    const saved = await gateway.saveBytes(artifactId, state.revision, bytes);
+    const saved = await gateway.saveBytes(docId(), state.revision, bytes);
     state.revision = saved.revision;
     state.uncommitted = false;
     if (state.kept) {
       state.kept = false;
-      void recovery.drop(artifactId).catch(() => undefined);
+      void recovery.drop(docId()).catch(() => undefined);
     }
     post({ type: "office:saved", revision: saved.revision });
     reportDirty();
@@ -178,6 +182,7 @@ async function commit(): Promise<boolean> {
 }
 
 async function save(args: unknown[]) {
+  if (swapInProgress()) throw new Error("다른 문서를 여는 중입니다. 잠시 뒤 저장해 주세요.");
   const input = args[0] as SaveRequest;
   if (input.mode === "save-as" && input.targetPath && mcpCopy?.plan?.path === input.targetPath) {
     const request = await withFormulaResults({ ...input, mode: "save", targetPath: undefined });
@@ -360,7 +365,7 @@ async function keepNow() {
   if (!state.uncommitted) return;
   const bytes = await value<ArrayBuffer>({ type: "saved-bytes" }).catch(() => null);
   if (!bytes) return;
-  await recovery.put(artifactId, { baseRevision: state.revision, bytes, at: Date.now() }).catch(() => undefined);
+  await recovery.put(docId(), { baseRevision: state.revision, bytes, at: Date.now() }).catch(() => undefined);
   state.kept = true;
 }
 
@@ -412,16 +417,16 @@ window.addEventListener(
 );
 
 // ── open the document, then the editor ──────────────────────────────────
-let kept = init.recover && !init.readOnly ? await recovery.get(artifactId).catch(() => undefined) : undefined;
+let kept = init.recover && !init.readOnly ? await recovery.get(docId()).catch(() => undefined) : undefined;
 if (kept && kept.baseRevision > init.artifact.revision) kept = undefined;
-if (!kept && !init.readOnly) await recovery.drop(artifactId).catch(() => undefined);
+if (!kept && !init.readOnly) await recovery.drop(docId()).catch(() => undefined);
 if (kept) {
   // A saved workbook that was not taken as a revision: it opens as it was saved, still to be committed.
   state.revision = kept.baseRevision;
   state.kept = true;
   state.uncommitted = true;
 }
-const bytes = kept ? kept.bytes : await gateway.raw(artifactId, state.revision);
+const bytes = kept ? kept.bytes : await gateway.raw(docId(), state.revision);
 await value({ type: "init", token: init.token });
 await value({ type: "open", name: init.artifact.name, bytes }, [bytes]);
 post({ type: "office:opened", revision: state.revision, recovered: Boolean(kept) });
@@ -432,7 +437,11 @@ reportDirty();
 type Facade = { getActiveWorkbook(): { getActiveSheet(): Sheet | null; getSheetByName(name: string): Sheet | null; getActiveRange(): { getA1Notation(): string } | null } | null };
 type Sheet = { getSheetName(): string; activate(): unknown; getRange(a1: string): { activate(): unknown }; getScrollState?(): { sheetViewStartRow: number; sheetViewStartColumn: number }; scrollToCell?(row: number, column: number): unknown };
 const book = () => (window as unknown as { __workbenchUniverAPI?: Facade }).__workbenchUniverAPI?.getActiveWorkbook() ?? null;
-if (!init.execution && !init.headlessExport) installViewPosition({
+let viewPlace: ReturnType<typeof installViewPosition> | null = null;
+function placeView() {
+  if (init.execution || init.headlessExport) return;
+  viewPlace?.dispose();
+  viewPlace = installViewPosition({
   read: () => {
     const wb = book(), sheet = wb?.getActiveSheet();
     if (!wb || !sheet) return null;
@@ -450,6 +459,8 @@ if (!init.execution && !init.headlessExport) installViewPosition({
     return true;
   },
 }, { initial: init.view, shown: () => pageRest.onScreen() && window.innerHeight > 0, post: (position) => post({ type: "office:view-position", position }) });
+}
+placeView();
 
 // A new revision (a hidden tab's 문서 AI result) goes into this editor in place (office-leftovers point 2): the worker
 // queues it for the same view and the editor runs its own File › Open (handleInspectWorkbook → the queued workbook),
@@ -462,7 +473,7 @@ async function replaceInPlace(next: number) {
   const sheet = before.getActiveSheet()!, scroll = sheet.getScrollState?.();
   const place = { sheet: sheet.getSheetName(), cell: before.getActiveRange()?.getA1Notation(), ...(scroll ? { firstRow: scroll.sheetViewStartRow, firstColumn: scroll.sheetViewStartColumn } : {}) };
   const beforeId = before.getId?.();
-  const bytes = await gateway.raw(artifactId, next);
+  const bytes = await gateway.raw(docId(), next);
   (window as unknown as { __workbenchUniverAPI?: unknown }).__workbenchUniverAPI = undefined;
   await value({ type: "open", name: init.artifact.name, bytes, generation: ++openGeneration }, [bytes]);
   dispatch("menu:action", ["open"]);
@@ -471,7 +482,7 @@ async function replaceInPlace(next: number) {
   while (Date.now() < end && !opened()) await new Promise((resolve) => setTimeout(resolve, 50));
   if (!opened()) throw new Error("새 판을 열지 못했습니다.");
   state.revision = next; state.uncommitted = false;
-  if (state.kept) { state.kept = false; void recovery.drop(artifactId).catch(() => undefined); }
+  if (state.kept) { state.kept = false; void recovery.drop(docId()).catch(() => undefined); }
   // Back where it was (the grid draws after its first range loads: tried for a while).
   const back = Date.now() + 5_000;
   while (Date.now() < back) {
@@ -489,6 +500,48 @@ async function replaceInPlace(next: number) {
   }
 }
 if (!init.readOnly && !init.execution && !init.headlessExport) installInPlaceReplace({ dirty: async () => dirty(), replace: replaceInPlace });
+
+/**
+ * The editor pool's hold on this page (swap.ts): park the workbook shown, open another one in place — through the same
+ * path as a new revision (the worker queues it for the view, the editor's own File › Open). Excel's unsaved edits live in
+ * the editor's journal, which has no copy to keep: a workbook with them is never parked (it keeps its frame); one saved
+ * in the editor but not yet taken as a revision is kept as before (its working copy).
+ */
+if (!init.readOnly && !init.execution && !init.headlessExport) installSwap(init, gateway, ai, {
+  dirty: async () => dirty(),
+  lastDirty: () => dirty(),
+  async keep() {
+    if (state.pending > 0) return false;
+    viewPlace?.flush();
+    await keepNow();
+    return !state.uncommitted || state.kept;
+  },
+  busy: () => officeCopyBusy() || closeSaveAnswer !== null || mcpCopy !== null || state.pending > 0,
+  async open() {
+    viewPlace?.dispose(); viewPlace = null;
+    const before = book() as Book | null, beforeId = before?.getId?.();
+    Object.assign(state, { revision: init.artifact.revision, pending: 0, uncommitted: false, kept: false });
+    let kept = init.recover ? await recovery.get(docId()).catch(() => undefined) : undefined;
+    if (kept && kept.baseRevision > init.artifact.revision) kept = undefined;
+    if (!kept) await recovery.drop(docId()).catch(() => undefined);
+    if (kept) { state.revision = kept.baseRevision; state.kept = true; state.uncommitted = true; }
+    const bytes = kept ? kept.bytes : await gateway.raw(docId(), state.revision);
+    (window as unknown as { __workbenchUniverAPI?: unknown }).__workbenchUniverAPI = undefined;
+    await value({ type: "open", name: init.artifact.name, bytes, generation: ++openGeneration }, [bytes]);
+    dispatch("menu:action", ["open"]);
+    const end = Date.now() + 30_000;
+    // The facade was cleared above; the editor hands it over again when the new workbook is loaded (vendor-fixes.ts). Two
+    // workbooks made from one file can carry the same id, so its return is the sign, not a new id.
+    const opened = () => Boolean((book() as Book | null)?.getActiveSheet());
+    while (Date.now() < end && !opened()) await new Promise((resolve) => setTimeout(resolve, 50));
+    if (!opened()) throw new Error("문서를 열지 못했습니다.");
+    void beforeId;
+    void value({ type: "close-previous" }).catch(() => undefined);
+    post({ type: "office:opened", revision: state.revision, recovered: Boolean(kept) });
+    lastReported = null;
+    placeView();
+  },
+}, () => reportDirty());
 
 // Pictures in formats the editor does not take go on to it as PNG; a paste that shows the page
 // nothing (a screenshot in WebKitGTK) gets the desktop clipboard's picture.

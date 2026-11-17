@@ -42,6 +42,21 @@ try {
   assert.notEqual(fresh.documentNonce, one.documentNonce);
   await a.locator('#count').evaluate(el => { const replacement = el.cloneNode(true); el.replaceWith(replacement); });
   assert.match((await call(a, { kind: 'click', ref }, person.control, fresh.documentNonce)).error, /STALE_ELEMENT/);
+  // bookmarks2: the app's bookmark keys pressed while the page has the keyboard are taken by the page script
+  // (the page's own handler loses) and handed over once with the next state read; other keys stay the page's.
+  await a.evaluate(() => { window.seen = []; document.addEventListener('keydown', event => window.seen.push(`${event.ctrlKey ? 'C+' : ''}${event.shiftKey ? 'S+' : ''}${event.code}`)); });
+  await a.locator('input').focus();
+  for (const press of ['Control+KeyD', 'Control+Shift+KeyB', 'Control+KeyA', 'KeyD', 'Control+Shift+KeyD']) await a.keyboard.press(press);
+  const taken = await a.evaluate(() => window.__ACHMAGE_PAGE__.state({ generation: 0, owner: 'human' }));
+  assert.deepEqual(taken.keys, ['bookmark', 'bookmark-bar']);
+  const seen = await a.evaluate(() => window.seen);
+  for (const left of ['C+KeyA', 'KeyD', 'C+S+KeyD']) assert.ok(seen.includes(left), `${left} reaches the page`);
+  assert.ok(!(await a.evaluate(() => window.seen)).some(code => code === 'C+KeyD' || code === 'C+S+KeyB'));
+  assert.deepEqual((await a.evaluate(() => window.__ACHMAGE_PAGE__.state({ generation: 0, owner: 'human' }))).keys, []);
+  // A synthetic (page-made) key is not the person's: it is not taken.
+  await a.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyD', key: 'd', ctrlKey: true, bubbles: true })));
+  assert.deepEqual((await a.evaluate(() => window.__ACHMAGE_PAGE__.state({ generation: 0, owner: 'human' }))).keys, []);
+  console.log(JSON.stringify({ bookmarkKeysTakenFromPage: true, otherKeysLeftToPage: true, syntheticKeysIgnored: true }));
   console.log(JSON.stringify({ sameUrlDifferentPage: true, hiddenTargetRetained: true, trustedHumanFencesLateClick: true, navigationRejectsOldDocument: true, replacedElementNotRebound: true, scope: 'exact DOM adapter in Chromium fixture; native Tauri OS integration not asserted' }));
 } finally {
   await browser?.close(); await new Promise(resolve => server.close(resolve));
