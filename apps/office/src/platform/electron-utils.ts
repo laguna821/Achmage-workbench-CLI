@@ -18,6 +18,8 @@ export const contextMenuLabels = () => ({});
 export const helpMenuTemplate = () => [];
 export const viewMenuTemplate = () => [];
 export const windowMenuTemplate = () => [];
+// v0.13.0: the macOS app menu (Settings ⌘,) — the worker has no menus.
+export const macAppMenuTemplate = () => ({});
 export const toggleDevToolsItem = () => ({ visible: false });
 export const installContextMenu = noop;
 export const installNavigationGuard = noop;

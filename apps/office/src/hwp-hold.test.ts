@@ -90,10 +90,15 @@ describe("what only looks", () => {
     for (const key of ["c", "a", "f", "=", "-", "0"]) expect(keyOnlyLooks({ key, ctrlKey: true, metaKey: false, altKey: false })).toBe(true);
     for (const key of ["가", "a", "Enter", "Backspace", "Delete", "Tab", "Process"]) expect(keyOnlyLooks({ key, ctrlKey: false, metaKey: false, altKey: false })).toBe(false);
     for (const key of ["v", "x", "z", "y", "s", "b"]) expect(keyOnlyLooks({ key, ctrlKey: true, metaKey: false, altKey: false })).toBe(false);
+    // v0.13.0: F9 and the Hanja key convert the word before the caret to Hanja (한자로 바꾸기): they change the document
+    for (const key of ["F9", "HanjaMode", "Hanja"]) expect(keyOnlyLooks({ key, ctrlKey: false, metaKey: false, altKey: false })).toBe(false);
+    for (const key of ["F5", "F7", "F11"]) expect(keyOnlyLooks({ key, ctrlKey: false, metaKey: false, altKey: false })).toBe(true);
   });
   it("studio commands", () => {
     for (const c of ["view:zoom-in", "view:zoom-fit-page", "edit:copy", "edit:find", "file:print"]) expect(commandOnlyLooks(c)).toBe(true);
-    for (const c of ["edit:paste", "edit:undo", "file:save", "format:bold", "insert:table", "table:merge"]) expect(commandOnlyLooks(c)).toBe(false);
+    // v0.13.0's File menu (the plugin's items): print, the print preview and a PDF copy only look, as Ctrl+P does; so does 문서 정보
+    for (const c of ["ext:ieum-print", "ext:ieum-preview", "ext:ieum-export-pdf", "ieum:document-info"]) expect(commandOnlyLooks(c)).toBe(true);
+    for (const c of ["edit:paste", "edit:undo", "file:save", "format:bold", "insert:table", "table:merge", "ext:ieum-save", "ext:ieum-save-as", "ieum:hanja", "ieum:table-auto-fill"]) expect(commandOnlyLooks(c)).toBe(false);
   });
   it("step words", () => {
     expect(stepLabel("use_skill")).toBe("스킬 읽는 중");

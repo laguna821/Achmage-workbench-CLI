@@ -90,3 +90,19 @@ it("coalesces rapid stream deltas while durably retaining the final answer on ca
   expect(f.recorded.filter((e) => e.kind === "assistant")).toHaveLength(2);
   expect(f.recorded.at(-1)).toMatchObject({ text: "가".repeat(1000), streaming: false });
 });
+it("hands the loop's own stop reason to the panel with its error (v0.13.0: unusable tool input turn after turn)", async () => {
+  let turn = 0;
+  const f = fixture({ stream: (_request, callbacks) => { turn += 1; callbacks.onToolCall({ id: `provider:tool/${turn}`, name: "edit", input: {} }); callbacks.onDone(); } });
+  f.loop.run("문단을 바꿔 줘"); await f.loop.settled;
+  expect(f.execute).not.toHaveBeenCalled();
+  expect(f.failed).toHaveBeenCalledOnce();
+  expect(f.failed.mock.calls[0]![1]).toMatchObject({ kind: "tool-input", executed: 0, mutated: false });
+});
+it("wraps another checkout's agent core when given one (the Hangul page's earlier pin)", async () => {
+  const { AgentLoop } = await import("../../../vendor/ieumoffice/packages/agent-core/src/loop.ts");
+  const made: unknown[] = [];
+  class Earlier extends AgentLoop<unknown> { constructor(options: ConstructorParameters<typeof AgentLoop<unknown>>[0]) { super(options); made.push(this); } }
+  const Loop = WorkbenchAgentLoop.over(Earlier as typeof AgentLoop);
+  new Loop({ skill: { id: "fixture", systemPrompt: "", tools: [], executeTool: async () => ({ summary: "", output: "" }) }, transport: { stream: () => ({ cancel() {} }) } }, null);
+  expect(made).toHaveLength(1);
+});

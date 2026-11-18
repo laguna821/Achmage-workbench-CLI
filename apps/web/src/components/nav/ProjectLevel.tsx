@@ -67,6 +67,9 @@ export function ProjectLevel({ shared, work, query, setQuery, onBack }: {
   const [allIn, setAllIn] = useState<Partial<Record<string, boolean>>>({});
   const ctx: RowContext = { ...shared.rowCtx, words: true, listRow: true, onKey, tabId: shared.rowCtx.focusId ?? shared.visibleSessionId ?? shared.currentDocId ?? sections.chats[0]?.id ?? null };
 
+  // 불러오기 (hangul-convert): "문서 불러오기…" in the 문서 head, and files dropped from the computer onto 문서.
+  const importDocuments = actions.importDocuments;
+  const docTools = importDocuments ? <button type="button" className="icon-button small nav-inside-import" aria-label="문서 불러오기…" title="문서 불러오기… (한글·워드·엑셀 파일을 이 프로젝트로 복사해 Markdown으로 변환)" aria-haspopup="dialog" onClick={() => importDocuments(work)}><Icon name="download" size={14} /></button> : null;
   const section = (id: Extract<NavSectionId, "chats" | "docs" | "web">, label: string, rows: Row[], add: (anchor: HTMLButtonElement) => void, addLabel: string): ReactNode => {
     const folded = Boolean(nav.sections[id]);
     // About 100 rows, then "N개 더 보기" (tech review P1); the row on screen always shows; finding searches all.
@@ -81,6 +84,7 @@ export function ProjectLevel({ shared, work, query, setQuery, onBack }: {
       <InsideSection key={id} id={id} label={label} count={rows.length} folded={folded} here={here} lead={lead}
         onFold={() => shared.saveNav({ sections: { ...nav.sections, [id]: !folded } })}
         addLabel={addLabel} addMenu={id !== "chats"} onAdd={add}
+        {...(id === "docs" && importDocuments ? { tools: docTools, onFiles: (files: File[]) => importDocuments(work, files) } : {})}
         empty={text ? "찾는 이름이 없습니다." : rows.length ? null : `아직 ${label === "웹" ? "웹 페이지가" : `${withParticle(`${label}`, "이/가")}`} 없습니다.`}>
         {shown.length ? <>{shown.map((row) => <TreeRow key={row.id} row={row} ctx={ctx} />)}<MoreRows what={label === "웹" ? "웹 페이지" : label} hidden={hidden} onShow={() => setAllIn((current) => ({ ...current, [id]: true }))} onKey={(event) => onKey(event, null)} /></> : null}
       </InsideSection>

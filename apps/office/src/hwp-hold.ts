@@ -122,7 +122,8 @@ export type HoldState = ReturnType<typeof createHoldState>;
 export function keyOnlyLooks(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey">): boolean {
   const key = event.key;
   if (["Shift", "Control", "Alt", "Meta", "CapsLock", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown", "ContextMenu"].includes(key)) return true;
-  if (/^F\d+$/.test(key) && key !== "F2") return true;
+  // F2 edits; F9 (and the Hanja key) converts the word before the caret to Hanja (v0.13.0's 한자로 바꾸기)
+  if (/^F\d+$/.test(key) && key !== "F2" && key !== "F9") return true;
   if ((event.ctrlKey || event.metaKey) && !event.altKey && ["c", "a", "f", "g", "=", "+", "-", "0", "p"].includes(key.toLowerCase())) return true;
   return false;
 }
@@ -130,7 +131,9 @@ export function keyOnlyLooks(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "met
 export function commandOnlyLooks(command: string): boolean {
   if (command.startsWith("view:")) return true;
   return ["edit:copy", "edit:select-all", "edit:find", "edit:find-again", "edit:goto", "edit:compare-documents", "edit:document-history",
-    "file:print", "file:print-to-pdf", "file:about"].includes(command);
+    "file:print", "file:print-to-pdf", "file:about",
+    // v0.13.0's File menu items (the plugin's): print goes through the preview, as Ctrl+P; a PDF copy; and 문서 정보
+    "ext:ieum-print", "ext:ieum-preview", "ext:ieum-export-pdf", "ieum:document-info"].includes(command);
 }
 
 /** Cursors the studio shows over something a press would move, resize, rotate or reshape (a selected object, its handles, a table border). */

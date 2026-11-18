@@ -1,13 +1,14 @@
 // Build Ieum's offline HWP studio from its pinned rhwp source. No Electron runtime is shipped.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { IEUM_HWP_DIR, IEUM_HWP_PIN_FILE } from './ieum-earlier-source.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const ieum = join(root, 'vendor/ieumoffice');
-const pinned = readFileSync(join(root, 'vendor/ieumoffice.PINNED'), 'utf8').match(/^commit: (.+)$/m)?.[1];
+const ieum = join(root, IEUM_HWP_DIR);
+const pinned = readFileSync(join(root, IEUM_HWP_PIN_FILE), 'utf8').match(/^commit: (.+)$/m)?.[1];
 const commit = execFileSync('git', ['-C', ieum, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 if (commit !== pinned) throw new Error('Ieum checkout differs from its pin');
 // The engine the gateway runs (third_party/hop/engine.ts): the studio is built around the same one.
@@ -25,49 +26,57 @@ const replace = (needle, value) => {
   if (builder.split(needle).length !== 2) throw new Error(`HWP build hook changed: ${needle}`);
   builder = builder.replace(needle, value);
 };
+const need = (needle) => { if (builder.split(needle).length !== 2) throw new Error(`HWP build hook changed: ${needle}`); };
 replace("from './rhwp-patches.mjs'", `from ${JSON.stringify(pathToFileURL(join(upstreamScripts, 'rhwp-patches.mjs')).href)}`);
+// the adapted copy runs from node_modules/.cache: its two sibling imports point back at upstream's scripts
+replace("from './hanja-dict.mjs'", `from ${JSON.stringify(pathToFileURL(join(upstreamScripts, 'hanja-dict.mjs')).href)}`);
 replace("from 'vite'", `from ${JSON.stringify(pathToFileURL(join(ieum, 'node_modules/vite/dist/node/index.js')).href)}`);
 replace('const SCRIPTS = dirname(fileURLToPath(import.meta.url))', `const SCRIPTS = ${JSON.stringify(upstreamScripts)}`);
 replace("const CORE_DIR = dirname(require.resolve('@rhwp/core'))", `const CORE_DIR = ${JSON.stringify(core)}`);
-replace("const wasmPkg = dirname(require.resolve('@rhwp/core'))", 'const wasmPkg = CORE_DIR');
-// rhwp-studio v0.9.0 (H4b). Ieum's builder knows v0.8.7 only; for the 0.9.0 engine:
-//  - its pinned commit (a moved tag still stops the build);
-//  - the studio is cloned from a local rhwp checkout when HWP_STUDIO_FROM names one (no network),
-//    else from GitHub as before;
-//  - upstream's AI assistant is left out exactly as upstream's own switch does it (RHWP_WITHOUT_AI=1
-//    → `__RHWP_AI__` false, so main.ts never imports the AI module and its provider SDKs);
-//    `__RHWP_COMPARE_DEBUG__` (a debug overlay) is off;
-//  - the three files outside rhwp-studio/ that 0.9.0's studio imports are checked out too;
-//  - the studio patches come from scripts/hwp-studio-090.mjs (Ieum's, minus the ones 0.9.0 made
-//    unnecessary, with the one whose text is gone redone), and they take part in the build stamp.
+replace("  const wasmPkg = dirname(require.resolve('@rhwp/core'))", '  const wasmPkg = CORE_DIR');
+// rhwp-studio v0.9.0. Since IeumOffice v0.13.0 upstream's builder builds v0.9.0 itself (its pinned commit,
+// the rhwp-shared/ sparse entries and engine alias, `__RHWP_AI__` false: no studio AI assistant, its
+// provider SDKs never imported); what stays Workbench's own:
+//  - the studio is cloned from a local rhwp checkout when HWP_STUDIO_FROM names one (no network);
+//  - upstream's committed root glue of another engine build (public/rhwp.js and its two .d.ts) is
+//    never loaded (the studio reaches the engine through '@wasm'): not checked out, not shipped (M6);
+//  - `__RHWP_COMPARE_DEBUG__` (a debug overlay) is off;
+//  - the studio patches come from scripts/hwp-studio-090.mjs (Ieum's, then Workbench's own), and they
+//    take part in the build stamp;
+//  - the Hanja dictionary (한자 변환) is never fetched by the build: it is taken from upstream's cache, or
+//    seeded into it from HWP_HANJA_FROM (checked against upstream's pinned sha256), else the build stops.
 const studio090 = join(root, 'scripts/hwp-studio-090.mjs');
 const { STUDIO_COMMIT_090, unwantedStudioFiles090, CANVASKIT_TRACES, STATUS_TIMING_TRACES } = await import(pathToFileURL(studio090).href);
-let studioEnv = process.env;
-if (engine.rhwp.tag === 'v0.9.0') {
-  if (engine.rhwp.commit !== STUDIO_COMMIT_090) throw new Error('The 0.9.0 engine and studio name different commits');
-  replace("  'v0.8.7': '1a76570e833917d15817415a53c09ad61ab3203f',\n", `  'v0.8.7': '1a76570e833917d15817415a53c09ad61ab3203f',\n  'v0.9.0': '${STUDIO_COMMIT_090}',\n`);
-  const from = process.env.HWP_STUDIO_FROM;
-  if (from) {
-    if (!existsSync(join(from, '.git'))) throw new Error(`HWP_STUDIO_FROM is not a git checkout: ${from}`);
-    replace("const REPO = 'https://github.com/edwardkim/rhwp.git'", `const REPO = ${JSON.stringify(pathToFileURL(resolve(from)).href)}`);
-    // a local clone copies only the checked-out files' blobs (the reference holds gigabytes of samples)
-    replace("['clone', '--depth', '1', '--branch', TAG, '--filter=blob:none', '--no-checkout', REPO, CACHE]", "['clone', '--no-hardlinks', '--upload-pack', 'git -c uploadpack.allowFilter=true upload-pack', '--depth', '1', '--branch', TAG, '--filter=blob:none', '--no-checkout', REPO, CACHE]");
-  }
-  replace("  '/npm/hwpctrl-ocx/src/',\n", "  '/npm/hwpctrl-ocx/src/',\n  '/rhwp-shared/',\n  '/assets/fonts/enclosed-pua-metrics.json',\n  '/src/renderer/square_gradient.sksl',\n");
-  // upstream's committed root glue of another engine build (public/rhwp.js and its two .d.ts) is
-  // never loaded (the studio reaches the engine through '@wasm'): not checked out, not shipped (M6)
-  replace("  '!/rhwp-studio/public/samples',\n", "  '!/rhwp-studio/public/samples',\n  '!/rhwp-studio/public/rhwp.js',\n  '!/rhwp-studio/public/rhwp.d.ts',\n  '!/rhwp-studio/public/rhwp_bg.wasm.d.ts',\n");
-  replace("      __RHWP_HWPCTRL__: 'true',\n", "      __RHWP_HWPCTRL__: 'true',\n      __RHWP_AI__: JSON.stringify(process.env.RHWP_WITHOUT_AI !== '1'),\n      __RHWP_COMPARE_DEBUG__: 'false',\n");
-  replace('    plugins: [rhwpPatches(...STUDIO_PATCHES)],', `    plugins: [(await import(${JSON.stringify(pathToFileURL(studio090).href)})).studioPatches090()],`);
-  // 0.9.0's rhwp-shared/ (the PDF import worker, started only when the engine imports PDF; ours does
-  // not) reaches the engine as ../../pkg/rhwp.js, the repository's wasm-pack output: the same engine.
-  replace("        '@wasm': wasmPkg,\n", "        '@wasm': wasmPkg,\n        '../../pkg/rhwp.js': join(wasmPkg, 'rhwp.js'),\n");
-  replace('  hash.update(TAG)\n', `  hash.update(TAG)\n  hash.update(${JSON.stringify(createHash('sha256').update(readFileSync(studio090)).update(builder).digest('hex'))})\n`);
-  studioEnv = { ...process.env, RHWP_WITHOUT_AI: '1' };
+if (engine.rhwp.tag !== 'v0.9.0') throw new Error(`The Hangul studio is built for rhwp v0.9.0 only (engine ${engine.rhwp.tag})`);
+if (engine.rhwp.commit !== STUDIO_COMMIT_090) throw new Error('The 0.9.0 engine and studio name different commits');
+need(`  'v0.9.0': '${STUDIO_COMMIT_090}',\n`);
+const from = process.env.HWP_STUDIO_FROM;
+if (from) {
+  if (!existsSync(join(from, '.git'))) throw new Error(`HWP_STUDIO_FROM is not a git checkout: ${from}`);
+  replace("const REPO = 'https://github.com/edwardkim/rhwp.git'", `const REPO = ${JSON.stringify(pathToFileURL(resolve(from)).href)}`);
+  // a local clone copies only the checked-out files' blobs (the reference holds gigabytes of samples)
+  replace("        'clone',\n        '--depth',\n", "        'clone',\n        '--no-hardlinks',\n        '--upload-pack',\n        'git -c uploadpack.allowFilter=true upload-pack',\n        '--depth',\n");
 }
+replace("  '!/rhwp-studio/public/samples',\n", "  '!/rhwp-studio/public/samples',\n  '!/rhwp-studio/public/rhwp.js',\n  '!/rhwp-studio/public/rhwp.d.ts',\n  '!/rhwp-studio/public/rhwp_bg.wasm.d.ts',\n");
+need("      __RHWP_AI__: 'false',\n");
+replace("      __RHWP_AI__: 'false',\n", "      __RHWP_AI__: 'false',\n      __RHWP_COMPARE_DEBUG__: 'false',\n");
+replace('    plugins: [rhwpPatches(...STUDIO_PATCHES), sharedEngine],', `    plugins: [(await import(${JSON.stringify(pathToFileURL(studio090).href)})).studioPatches090(), sharedEngine],`);
+replace('  hash.update(TAG)\n', `  hash.update(TAG)\n  hash.update(${JSON.stringify(createHash('sha256').update(readFileSync(studio090)).update(builder).digest('hex'))})\n`);
+const { HANJA_COMMIT, HANJA_SHA256 } = await import(pathToFileURL(join(upstreamScripts, 'hanja-dict.mjs')).href);
+need("const HANJA_CACHE = join(APP, 'node_modules', '.cache', 'libhangul-hanja')");
+const hanja = join(ieum, 'apps/hwp/node_modules/.cache/libhangul-hanja', HANJA_COMMIT, 'hanja.txt');
+if (!existsSync(hanja)) {
+  const seed = process.env.HWP_HANJA_FROM;
+  const candidates = seed ? [seed, join(seed, 'hanja.txt'), join(seed, HANJA_COMMIT, 'hanja.txt')] : [];
+  const found = candidates.find((file) => existsSync(file) && statSync(file).isFile());
+  if (!found) throw new Error(`The Hanja dictionary is not in the studio's build cache and the build does not fetch it: set HWP_HANJA_FROM to libhangul's data/hanja/hanja.txt at ${HANJA_COMMIT} (sha256 ${HANJA_SHA256})`);
+  if (hash(found) !== HANJA_SHA256) throw new Error(`HWP_HANJA_FROM is not libhangul's hanja.txt at ${HANJA_COMMIT}: ${found}`);
+  mkdirSync(dirname(hanja), { recursive: true }); cpSync(found, hanja);
+}
+if (hash(hanja) !== HANJA_SHA256) throw new Error(`The cached Hanja dictionary differs from libhangul ${HANJA_COMMIT}: ${hanja}`);
 const adapted = join(root, 'node_modules/.cache/workbench-hwp/build-studio.mjs');
 mkdirSync(dirname(adapted), { recursive: true }); writeFileSync(adapted, builder);
-execFileSync(process.execPath, [adapted], { cwd: ieum, stdio: 'inherit', env: studioEnv });
+execFileSync(process.execPath, [adapted], { cwd: ieum, stdio: 'inherit' });
 const built = join(ieum, 'apps/hwp/public/studio');
 const output = join(root, 'apps/office/public/studio');
 if (!existsSync(join(built, 'index.html'))) throw new Error('HWP studio output is missing');
@@ -85,7 +94,7 @@ for (const file of files(built).filter((file) => /\.(js|mjs|html)$/.test(file)))
 // The 0.9.0 studio draws with Canvas2D only and carries no second engine glue (review M6): neither
 // the CanvasKit renderer chunk nor its WASM nor upstream's root rhwp.js may be in the output, and no
 // built JS may still name the CanvasKit chunk or WASM.
-if (engine.rhwp.tag === 'v0.9.0') {
+{
   const unwanted = unwantedStudioFiles090(files(built).map((file) => relative(built, file).split(sep).join('/')));
   if (unwanted.length) throw new Error(`The studio build carries files it never loads: ${unwanted.join(', ')}`);
   for (const file of files(built).filter((file) => /\.(js|mjs|html)$/.test(file))) {

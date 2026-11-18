@@ -3,6 +3,10 @@
  * (scripts/run.mjs: resolve → compose, Markdown → HWPX, forms, result.json), instead of hoping the
  * model reads the skill's files and shells out (the dock's engine has no command tool).
  *
+ * 0.5.5 (hangul-convert-brief): one input `kind`. "general" (the default unless the request names a Hallym /
+ * 공문서 form) — the model writes Markdown and the gateway runs 내보내기's pipeline with the chosen
+ * template (기본 unless named; makeGeneralDocument); "hallym" — resolve → compose below, unchanged.
+ *
  * Which skill copy runs: the effective `hallym-kordoc` of the existing precedence (user-skills.ts) —
  * the bundled one unless the person disabled it (then nothing runs) or their own installed copy
  * shadows it (then THEIR copy's runner runs, as a conversation would). The skill folder is only
@@ -20,12 +24,13 @@
  *    and opened in its own tab; the open document is never changed. `.hwp` is never filled (read-only input).
  */
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { copyFile, mkdtemp, readFile, rm } from "node:fs/promises";
+import { existsSync, realpathSync } from "node:fs";
+import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { WorkbenchSkill } from "@workbench/contracts";
 import { HttpError } from "./errors.ts";
+import { GENERAL_DEFAULT_TEMPLATE, markdownToHwpx, readDocument, withoutFrontMatter, type HangulTemplates } from "./hangul-convert.ts";
 
 export const HANGUL_TOOL = "make_hangul_document";
 const RUN_TIMEOUT_MS = 120_000;
@@ -43,7 +48,24 @@ export function effectiveHallym(skills: readonly WorkbenchSkill[]): { skill: Wor
 export type HangulInput = {
   prompt: string; title?: string; familyId?: string; context?: Record<string, string>;
   values?: Record<string, string>; sections?: Record<string, string>; tables?: Record<string, unknown>; markdown?: string;
+  /**
+   * 0.5.5: "general" — the model writes Markdown and the gateway runs 내보내기's pipeline (HanMark's
+   * adapter → the core's generate / template-apply, hangul-convert.ts) with `template`; "hallym" — the
+   * skill's resolve → compose, unchanged. Absent: hallym when the request carries compose's inputs or
+   * names a Hallym / 공문서 form, else general.
+   */
+  kind?: "general" | "hallym";
+  /** general: a template id of 내보내기 (default 기본, GENERAL_DEFAULT_TEMPLATE). */
+  template?: string;
+  /** general: an attached .md/.docx/.hwp/.hwpx of the project, read to Markdown first (불러오기) for the model to edit. */
+  source?: string;
 };
+/** Which way a request goes (see HangulInput.kind). */
+export function hangulKind(input: HangulInput): "general" | "hallym" {
+  if (input.kind) return input.kind;
+  const composes = Boolean(input.familyId || Object.keys(input.values ?? {}).length || Object.keys(input.sections ?? {}).length || Object.keys(input.tables ?? {}).length);
+  return composes || /한림|hallym|공문|기안문|시행문/i.test(input.prompt) ? "hallym" : "general";
+}
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const strings = (v: unknown, max: number) => v === undefined || (record(v) && Object.keys(v).length <= 200 && Object.values(v).every((x) => typeof x === "string" && x.length <= max));
 export function hangulInput(raw: unknown): HangulInput {
@@ -54,6 +76,9 @@ export function hangulInput(raw: unknown): HangulInput {
   if (raw.markdown !== undefined && (typeof raw.markdown !== "string" || raw.markdown.length > 2_000_000)) return bad();
   if (!strings(raw.context, 400) || !strings(raw.values, 20_000) || !strings(raw.sections, 400_000)) return bad();
   if (raw.tables !== undefined && (!record(raw.tables) || JSON.stringify(raw.tables).length > 1_000_000)) return bad();
+  if (raw.kind !== undefined && raw.kind !== "general" && raw.kind !== "hallym") return bad();
+  if (raw.template !== undefined && (typeof raw.template !== "string" || !/^(builtin|user|gongmun):[a-z0-9._-]{1,100}$/i.test(raw.template))) return bad();
+  if (raw.source !== undefined && (typeof raw.source !== "string" || !raw.source.trim() || raw.source.length > 1000)) return bad();
   return raw as HangulInput;
 }
 
@@ -129,7 +154,13 @@ export type HangulMade = Awaited<ReturnType<typeof makeHangulDocument>>;
  * document itself (empty and untouched: kept for the turn's end); else copy it beside the open document,
  * and `track` registers it and returns its artifact id. Nothing is written when the runner fails.
  */
-export async function makeHangulDocument(skillDir: string, input: HangulInput, target: { documentPath: string; track(path: string): string | null; fill?(hwpx: string, title: string): Promise<{ artifactId: string; name: string } | null>; signal?: AbortSignal }) {
+export type HangulTarget = {
+  documentPath: string; track(path: string): string | null; fill?(hwpx: string, title: string): Promise<{ artifactId: string; name: string } | null>; signal?: AbortSignal;
+  /** general: the project's folder (pictures and `source` are read only inside it) and the person's templates. */
+  root?: string; templates?: HangulTemplates;
+};
+export async function makeHangulDocument(skillDir: string, input: HangulInput, target: HangulTarget) {
+  if (hangulKind(input) === "general") return makeGeneralDocument(input, target);
   const work = await mkdtemp(join(tmpdir(), "wb-hangul-"));
   try {
     const context = input.context ?? {};
@@ -158,6 +189,51 @@ export async function makeHangulDocument(skillDir: string, input: HangulInput, t
     await copyFile(hwpx.path, path, 1 /* COPYFILE_EXCL: never over a file */);
     const artifactId = target.track(path);
     return { made: true as const, ...summary, form: form.form, artifactId, name: basename(path), folder: basename(dirname(path)), inPlace: false, draft, markdownPreview: preview };
+  } finally { await rm(work, { recursive: true, force: true }).catch(() => {}); }
+}
+
+const within = (root: string, path: string) => { const rel = relative(root, path); return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel)); };
+const firstHeading = (markdown: string) => /^#{1,2}\s+(.+?)\s*#*\s*$/m.exec(withoutFrontMatter(markdown))?.[1]?.trim();
+
+/**
+ * kind "general" (0.5.5): the gateway runs 내보내기's pipeline — HanMark's adapter, then the core's generate
+ * (기본) or template-apply (the chosen template) — on the Markdown the model wrote; placed as compose's
+ * result is (the empty untouched document filled at the turn's end, else a new HWPX beside it). With
+ * `source` and no Markdown yet: that file read to Markdown first (불러오기, nothing written) for the model
+ * to edit. Without either: the templates the model may name, and what to send next.
+ */
+export async function makeGeneralDocument(input: HangulInput, target: HangulTarget) {
+  const root = target.root ?? dirname(target.documentPath);
+  const template = input.template ?? GENERAL_DEFAULT_TEMPLATE;
+  const templates = (target.templates?.choices() ?? []).map(({ id, label, group }) => ({ id, label, group }));
+  const templateLabel = templates.find((entry) => entry.id === template)?.label ?? template;
+  if (!input.markdown?.trim() && input.source) {
+    const path = resolve(dirname(target.documentPath), input.source);
+    if (!within(realpathSync(root), existsSync(path) ? realpathSync(path) : path)) return { made: false as const, kind: "general", status: "failed", failure: { code: "outside_project", message: "프로젝트 폴더 밖의 파일은 읽지 않습니다." } };
+    if (!existsSync(path)) return { made: false as const, kind: "general", status: "failed", failure: { code: "FILE_NOT_FOUND", message: `파일이 없습니다: ${basename(path)}` } };
+    if (/\.(md|markdown|txt)$/i.test(path)) return { made: false as const, kind: "general", status: "source-markdown", source: basename(path), markdown: withoutFrontMatter(await readFile(path, "utf8")).slice(0, 400_000), template: templateLabel };
+    try {
+      const read = await readDocument(path, { preset: "default", pages: "", images: false }, { signal: target.signal });
+      return { made: false as const, kind: "general", status: "source-markdown", source: basename(path), markdown: read.markdown.slice(0, 400_000), warnings: read.warnings, template: templateLabel };
+    } catch (error) {
+      return { made: false as const, kind: "general", status: "failed", failure: { code: error instanceof HttpError ? error.code : "read_failed", message: error instanceof Error ? error.message : String(error) } };
+    }
+  }
+  if (!input.markdown?.trim()) return { made: false as const, kind: "general", status: "write-markdown", template: templateLabel, templates };
+  const made = await markdownToHwpx(input.markdown, dirname(target.documentPath), root, { template, templates: target.templates, signal: target.signal });
+  target.signal?.throwIfAborted();
+  const title = input.title?.trim() || firstHeading(input.markdown) || "새 한글 문서";
+  const work = await mkdtemp(join(tmpdir(), "wb-hangul-general-"));
+  try {
+    const hwpx = join(work, "document.hwpx");
+    await writeFile(hwpx, made.bytes);
+    const summary = { kind: "general", status: "success", template: made.label, warnings: made.warnings.map((message) => ({ message })), draft: false };
+    const filled = target.fill ? await target.fill(hwpx, title) : null;
+    if (filled) return { made: true as const, ...summary, artifactId: filled.artifactId, name: filled.name, folder: basename(dirname(target.documentPath)), inPlace: true };
+    const path = madePath(dirname(target.documentPath), title);
+    await copyFile(hwpx, path, 1 /* COPYFILE_EXCL: never over a file */);
+    const artifactId = target.track(path);
+    return { made: true as const, ...summary, artifactId, name: basename(path), folder: basename(dirname(path)), inPlace: false };
   } finally { await rm(work, { recursive: true, force: true }).catch(() => {}); }
 }
 

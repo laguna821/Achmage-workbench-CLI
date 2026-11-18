@@ -1,0 +1,344 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: pblsketch <239486537+pblsketch@users.noreply.github.com>
+Date: Sun, 8 Nov 2026 00:00:00 +0900
+Subject: [PATCH 33/33] fix(table): 닫는 행들이 같은 폭으로 개체 폭을 넘으면 칸 폭으로 그린다
+
+한글은 표 개체의 크기와 칸 폭을 따로 저장한다. 칸 폭이 바뀐 뒤에도 개체 크기가 옛
+값으로 남은 문서에서는 표를 혼자 닫는 행(위 행에서 내려온 병합 칸 없이 제 칸만으로 모든
+열을 덮는 행)이 모두 개체 폭보다 넓다. invalid_declared_width_rows 는 그런 행을 하나씩
+개체 폭과 견주어 모두 무효로 보았고, 열 폭의 근거가 닫지 못하는 행의 칸만 남았다.
+
+법원 서식(TAC 표 18행 9열, 개체 폭 41,563HU, 닫는 행 7개가 모두 46,971HU)에서는
+4번 열을 혼자 차지하는 칸이 15행에만 있다. 그 행이 빠지자 4·5번 열이 앞뒤 경계 사이를
+반씩 나눠 가져, 저장 폭 8,846HU 인 칸이 4,032HU 로 그려지고 글이 옆 칸으로 넘쳤다.
+
+한컴 한글 2024 인쇄(같은 문서를 PDF 로 내보내 세로 괘선을 잼)는 이 표를 칸 폭으로
+그린다. 칸 폭 등식이 엇갈리는 자리(15행의 4번 칸 끝 35,158HU 가 다른 행이 정한 6번
+경계 34,377HU 뒤에 있다)는 칸 폭을 하한으로 보고 뒤 경계를 민다. 경계는
+0 · 6,920 · 10,033 · 14,245 · 26,312 · 35,158 · 35,158 · 38,891 · 41,455 · 47,752HU 이고,
+표는 닫는 행의 폭보다도 781HU 넓어진다.
+
+- 닫는 행이 둘 이상이고, 모두 개체 폭을 허용치 넘게 넘으며, 합이 서로 같으면(열마다
+  2HU) 그 행들을 무효로 보지 않는다(src/model/table/stale_width.rs). 닫는 행이 하나뿐이거나
+  개체 폭과 맞는 닫는 행이 있으면 종전대로다. 모든 행이 닫히고 행 병합이 없는 TAC 표는
+  closed_inline_grid_width_hu 가 이미 같은 판단을 하므로 건드리지 않는다.
+- 그런 표의 칸 폭 등식이 엇갈리면 하한 해(contradictory_grid.rs, #8584)로 푼다. 개체 폭이
+  낡은 값이므로 "표 폭보다 짧은 행이 있어야 한다"와 "하한이 표 폭을 넘으면 안 된다"는
+  조건을 이 경우에는 묻지 않는다. 칸 그리기와 칸 문단 줄 나눔이 같은 경계를 쓴다.
+- 밀린 경계 뒤의 최소 열 폭(96HU)은 그대로다. 한컴은 이 문서에서 6번 경계를 5번 경계와
+  같은 자리에 두므로, 6·8·9번 경계가 한컴보다 96HU(0.34mm) 오른쪽에 놓인다.
+
+조판만 바뀌고 저장(HWP·HWPX) 결과는 같다. samples 의 1,513개 문서에는 이 판정에 걸리는
+표가 없다.
+---
+ src/model/table.rs                            |  17 +++-
+ src/model/table/contradictory_grid.rs         |  15 ++-
+ src/model/table/stale_width.rs                |  95 +++++++++++++++++++
+ tests/cases/stale_table_width_rows_outvote.rs | 128 ++++++++++++++++++++++++++
+ 4 files changed, 247 insertions(+), 8 deletions(-)
+ create mode 100644 src/model/table/stale_width.rs
+ create mode 100644 tests/cases/stale_table_width_rows_outvote.rs
+
+diff --git a/src/model/table.rs b/src/model/table.rs
+index 98ad0a84f18032c68f83f118aee6f6593020c0c0..64bb512baabd8af76f1dc6dbb6545540d8c5599d 100644
+--- a/src/model/table.rs
++++ b/src/model/table.rs
+@@ -10,6 +10,8 @@ mod contradictory_grid;
+ mod inline_grid;
+ #[path = "table/row_frames.rs"]
+ mod row_frames;
++#[path = "table/stale_width.rs"]
++mod stale_width;
+ 
+ #[path = "table_equal_size.rs"]
+ mod equal_size;
+@@ -934,9 +936,18 @@ impl Table {
+         &self,
+         storage: &S,
+     ) -> Result<std::collections::BTreeSet<u16>, S::Error> {
+-        let tolerance =
+-            (u64::from(self.common.width) / 100).max(usize::from(self.col_count).max(1) as u64);
+-        self.declared_width_rows_exceeding_with_storage(tolerance, storage)
++        let tolerance = self.declared_width_tolerance_hu();
++        let invalid = self.declared_width_rows_exceeding_with_storage(tolerance, storage)?;
++        // 닫는 행들이 서로 같은 폭으로 개체 폭을 넘으면 낡은 쪽은 개체 폭이다(stale_width).
++        if self.exceeding_rows_outvote_declared_width_with_storage(&invalid, storage)? {
++            return Ok(std::collections::BTreeSet::new());
++        }
++        Ok(invalid)
++    }
++
++    /// 닫는 행의 칸 폭 합이 개체 폭을 넘어도 같은 폭으로 보는 한도.
++    fn declared_width_tolerance_hu(&self) -> u64 {
++        (u64::from(self.common.width) / 100).max(usize::from(self.col_count).max(1) as u64)
+     }
+ 
+     pub(crate) fn declared_width_rows_exceeding_with_storage<S: crate::storage::Storage>(
+diff --git a/src/model/table/contradictory_grid.rs b/src/model/table/contradictory_grid.rs
+index 45ee3dbb6b8b0c12a664102e37853a2e6ccc5f6c..b934976268b02e9ca25d94fdd9dacef594815983 100644
+--- a/src/model/table/contradictory_grid.rs
++++ b/src/model/table/contradictory_grid.rs
+@@ -61,10 +61,15 @@ impl Table {
+                 ),
+             )?;
+         }
+-        if spans.is_empty()
+-            || !exact_boundaries_contradict(n, &spans, storage)?
+-            || !self.has_short_declared_row(&invalid_rows, storage)?
+-        {
++        if spans.is_empty() || !exact_boundaries_contradict(n, &spans, storage)? {
++            return Ok(None);
++        }
++        // 닫는 행들이 같은 폭으로 개체 폭을 넘는 표(stale_width)는 개체 폭이 낡은 값이다.
++        // 그 폭은 짧은 행의 기준도, 하한 경계의 상한도 되지 못한다. 한컴 한글 2024는
++        // 이런 표에서 밀린 경계만큼 표를 넓힌다.
++        let rows_define_width =
++            invalid_rows.is_empty() && self.rows_outvote_declared_width_with_storage(storage)?;
++        if !rows_define_width && !self.has_short_declared_row(&invalid_rows, storage)? {
+             return Ok(None);
+         }
+ 
+@@ -94,7 +99,7 @@ impl Table {
+                 _ => lower[index - 1] + min_step,
+             };
+         }
+-        if lower[n] > target_end + BOUNDARY_TOLERANCE_HU {
++        if !rows_define_width && lower[n] > target_end + BOUNDARY_TOLERANCE_HU {
+             return Ok(None);
+         }
+         lower[n] = lower[n].max(target_end);
+diff --git a/src/model/table/stale_width.rs b/src/model/table/stale_width.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..d4241c529daca43826b7f5a2ed2bf07af5470dcc
+--- /dev/null
++++ b/src/model/table/stale_width.rs
+@@ -0,0 +1,95 @@
++//! 개체 폭이 낡은 표: 표를 닫는 행들이 개체 폭보다 넓고 서로 같은 폭이다.
++//!
++//! 한글은 표 개체의 크기와 칸 폭을 따로 저장한다. 칸 폭이 바뀐 뒤에도 개체 크기가 옛
++//! 값으로 남은 문서가 있다. 그런 표에서는 표를 혼자 닫는 행(위 행에서 내려온 병합 칸
++//! 없이 제 칸만으로 모든 열을 한 번씩 덮는 행)이 모두 개체 폭보다 넓고, 그 합이 서로
++//! 같다. 어긋난 값은 행들이 아니라 개체 폭이다.
++//!
++//! 한컴 한글 2024 인쇄 실측(TAC 표 18행 9열, 개체 폭 41,563HU, 닫는 행 7개가 모두
++//! 46,971HU): 표를 칸 폭으로 그린다. 칸 폭 등식이 엇갈리는 곳(15행의 4번 칸 끝
++//! 35,158HU 가 다른 행이 정한 6번 경계 34,377HU 뒤에 있다)은 칸 폭을 하한으로 보고
++//! 뒤 경계를 민다. 6번 경계가 35,158HU 로 밀리고 표 오른쪽 끝은 47,752HU 가 된다.
++//! 표가 닫는 행의 폭(46,971HU)보다도 넓어진다.
++//!
++//! 모든 행이 닫히고 행 병합이 없는 TAC 표는 `closed_inline_grid_width_hu` 가 이미 같은
++//! 판단을 한다. 여기서는 그 밖의 표(행 병합이 섞인 표, TAC 가 아닌 표)를 맡는다.
++
++use super::{Cell, Table};
++use crate::storage::Storage;
++use std::collections::{BTreeMap, BTreeSet};
++
++/// 저장 HWPUNIT 은 정수라 같은 격자를 적은 행도 열마다 1~2HU 씩 다를 수 있다.
++const ROW_AGREEMENT_TOLERANCE_PER_COLUMN_HU: u64 = 2;
++
++impl Table {
++    /// 닫는 행들이 개체 폭을 넘어 같은 폭으로 합의했는가.
++    /// `invalid_declared_width_rows` 와 같은 허용치로 본다.
++    pub(crate) fn rows_outvote_declared_width_with_storage<S: Storage>(
++        &self,
++        storage: &S,
++    ) -> Result<bool, S::Error> {
++        let tolerance = self.declared_width_tolerance_hu();
++        let exceeding = self.declared_width_rows_exceeding_with_storage(tolerance, storage)?;
++        self.exceeding_rows_outvote_declared_width_with_storage(&exceeding, storage)
++    }
++
++    /// `exceeding` 은 개체 폭보다 허용치 넘게 넓은 닫는 행이다
++    /// (`declared_width_rows_exceeding_with_storage` 의 결과).
++    ///
++    /// 닫는 행이 둘 이상이고, 하나도 빠짐없이 `exceeding` 에 들고, 합이 서로 같을 때만
++    /// 참이다. 닫는 행이 하나뿐이면 그 행이 틀린 것일 수 있어 근거가 못 된다. 개체 폭과
++    /// 맞는 닫는 행이 하나라도 있으면 개체 폭이 근거다.
++    pub(super) fn exceeding_rows_outvote_declared_width_with_storage<S: Storage>(
++        &self,
++        exceeding: &BTreeSet<u16>,
++        storage: &S,
++    ) -> Result<bool, S::Error> {
++        let col_count = usize::from(self.col_count);
++        if exceeding.len() < 2
++            || col_count == 0
++            || self.common.width == 0
++            || self
++                .closed_inline_grid_width_hu_with_storage(storage)?
++                .is_some()
++        {
++            return Ok(false);
++        }
++        let mut by_row = BTreeMap::<u16, Vec<&Cell>>::new();
++        for cell in &self.cells {
++            if cell.row < self.row_count && cell.row_span == 1 {
++                if !by_row.contains_key(&cell.row) {
++                    storage.tree_entry::<u16, Vec<&Cell>>()?;
++                }
++                storage.push(by_row.entry(cell.row).or_default(), cell)?;
++            }
++        }
++        let (mut narrowest, mut widest) = (u64::MAX, 0u64);
++        for (row, mut cells) in by_row {
++            storage.bytes(std::mem::size_of_val(cells.as_slice()))?;
++            cells.sort_by_key(|cell| cell.col);
++            let mut next_col = 0usize;
++            let mut total = 0u64;
++            let mut closing = !cells.is_empty();
++            for cell in cells {
++                let start = usize::from(cell.col);
++                let end = start.saturating_add(usize::from(cell.col_span));
++                if cell.col_span == 0 || start != next_col || end > col_count {
++                    closing = false;
++                    break;
++                }
++                total = total.saturating_add(u64::from(cell.width));
++                next_col = end;
++            }
++            if !closing || next_col != col_count {
++                continue;
++            }
++            if !exceeding.contains(&row) {
++                return Ok(false);
++            }
++            narrowest = narrowest.min(total);
++            widest = widest.max(total);
++        }
++        Ok(narrowest <= widest
++            && widest - narrowest <= ROW_AGREEMENT_TOLERANCE_PER_COLUMN_HU * col_count as u64)
++    }
++}
+diff --git a/tests/cases/stale_table_width_rows_outvote.rs b/tests/cases/stale_table_width_rows_outvote.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..602792a3c7599eca7d207257f704199f814f2e15
+--- /dev/null
++++ b/tests/cases/stale_table_width_rows_outvote.rs
+@@ -0,0 +1,128 @@
++//! 닫는 행들이 개체 폭을 넘어 같은 폭으로 합의하면 그 행들은 무효 행이 아니다.
++//!
++//! 합성 표로 보는 판정 계약이다(렌더 기준선 아님). 근거가 된 한컴 한글 2024 인쇄
++//! 실측은 `src/model/table/stale_width.rs` 머리말에 있다: 개체 폭 41,563HU, 닫는 행
++//! 7개가 모두 46,971HU 인 TAC 표를 한컴은 칸 폭으로 그린다.
++use rhwp::model::table::{Cell, Table};
++use std::collections::BTreeSet;
++
++fn cell(row: u16, col: u16, span: u16, width: u32) -> Cell {
++    Cell {
++        row,
++        col,
++        col_span: span,
++        row_span: 1,
++        width,
++        ..Default::default()
++    }
++}
++
++fn table(rows: u16, cols: u16, width: u32, cells: Vec<Cell>) -> Table {
++    let mut table = Table {
++        row_count: rows,
++        col_count: cols,
++        cells,
++        ..Default::default()
++    };
++    table.common.width = width;
++    table
++}
++
++#[test]
++fn closing_rows_that_agree_beyond_the_table_width_are_valid() {
++    // 개체 폭 1000, 닫는 행 셋이 모두 1200.
++    let table = table(
++        3,
++        2,
++        1000,
++        vec![
++            cell(0, 0, 1, 600),
++            cell(0, 1, 1, 600),
++            cell(1, 0, 1, 500),
++            cell(1, 1, 1, 700),
++            cell(2, 0, 2, 1200),
++        ],
++    );
++    assert!(table.invalid_declared_width_rows().is_empty());
++}
++
++#[test]
++fn rows_closed_only_by_a_vertical_span_do_not_take_part() {
++    // 0행의 첫 칸이 1행까지 내려온다. 0·1행은 혼자 닫지 못하고, 2·3행이 합의한다.
++    let mut spanning = cell(0, 0, 1, 600);
++    spanning.row_span = 2;
++    let table = table(
++        4,
++        2,
++        1000,
++        vec![
++            spanning,
++            cell(0, 1, 1, 600),
++            cell(1, 1, 1, 600),
++            cell(2, 0, 1, 600),
++            cell(2, 1, 1, 600),
++            cell(3, 0, 2, 1201), // 열마다 2HU 까지는 같은 격자다
++        ],
++    );
++    assert!(table.invalid_declared_width_rows().is_empty());
++}
++
++#[test]
++fn a_single_wide_closing_row_stays_invalid() {
++    let mut spanning = cell(0, 0, 1, 500);
++    spanning.row_span = 2;
++    let table = table(
++        3,
++        2,
++        1000,
++        vec![
++            spanning,
++            cell(0, 1, 1, 500),
++            cell(1, 1, 1, 500),
++            cell(2, 0, 2, 1200),
++        ],
++    );
++    assert_eq!(table.invalid_declared_width_rows(), BTreeSet::from([2]));
++}
++
++#[test]
++fn wide_closing_rows_that_disagree_stay_invalid() {
++    let table = table(
++        2,
++        2,
++        1000,
++        vec![cell(0, 0, 1, 600), cell(0, 1, 1, 600), cell(1, 0, 2, 1300)],
++    );
++    assert_eq!(table.invalid_declared_width_rows(), BTreeSet::from([0, 1]));
++}
++
++#[test]
++fn a_closing_row_that_matches_the_table_width_keeps_the_table_width() {
++    let table = table(
++        3,
++        2,
++        1000,
++        vec![
++            cell(0, 0, 1, 500),
++            cell(0, 1, 1, 500),
++            cell(1, 0, 1, 600),
++            cell(1, 1, 1, 600),
++            cell(2, 0, 2, 1200),
++        ],
++    );
++    assert_eq!(table.invalid_declared_width_rows(), BTreeSet::from([1, 2]));
++}
++
++#[test]
++fn a_fully_closed_inline_table_keeps_its_own_consensus_path() {
++    // 모든 행이 닫히고 행 병합이 없는 TAC 표는 `closed_inline_grid_width_hu` 가 맡는다.
++    // 이 판정은 그 표의 무효 행 집합을 바꾸지 않는다.
++    let mut table = table(
++        2,
++        2,
++        1000,
++        vec![cell(0, 0, 1, 600), cell(0, 1, 1, 600), cell(1, 0, 2, 1200)],
++    );
++    table.common.treat_as_char = true;
++    assert_eq!(table.invalid_declared_width_rows(), BTreeSet::from([0, 1]));
++}

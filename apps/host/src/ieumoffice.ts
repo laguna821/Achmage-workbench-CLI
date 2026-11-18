@@ -10,7 +10,7 @@ import { shipped } from "./resources.ts";
 import { guiEnvironment } from "./gui-env.ts";
 
 // Word, PowerPoint and Excel documents through the `ieumoffice` command line tool of IeumOffice
-// (https://github.com/pblsketch/openoffice, Apache-2.0). Release builds ship the whole official
+// (https://github.com/pblsketch/ieumoffice, Apache-2.0). Release builds ship the whole official
 // IeumOffice app for their OS (release.yml); the tool is called, never changed: page previews, a
 // text view for reading, file checks, and the commands engines run to make and edit Office files.
 // Its original CLI script runs on Workbench's shared Node runtime. Page rendering still calls

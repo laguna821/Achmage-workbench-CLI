@@ -2,33 +2,33 @@
   "comment": "Original IeumOffice CLI and document engines from hash-checked releases. Workbench hosts the original editor renderers and native export/control; no separate Electron, HOP or PDFCraft application is shipped.",
   "ieumoffice": {
     "name": "IeumOffice",
-    "repository": "pblsketch/openoffice",
-    "tag": "v0.12.7",
+    "repository": "pblsketch/ieumoffice",
+    "tag": "v0.13.0",
     "license": "Apache-2.0",
     "layout": "cli-resources",
     "use": "Word, PowerPoint and Excel: text view, page pictures, file checks, the tool engines make and edit Office files with",
     "assets": {
       "linux-x64": {
-        "file": "IeumOffice-0.12.7.AppImage",
-        "sha512": "SrwyDDWFkVLjrDUYzmC3gqcoRwRigchu6d/TXXqaOSh5KjYwpc/3mY3f1rHuoZ5za7pxeCulBRFqe6Az+Ml2rA==",
+        "file": "IeumOffice-0.13.0.AppImage",
+        "sha512": "GHSOGvMgc91qpKMurd6v9cJl40oSVzWHHZXVsEaCDwBIxGRG3gQEnRuz8Nf2kBa3usHTtZvoWRc6x+EIOiwnEg==",
         "unpack": "appimage",
         "check": "resources/cli/genoffice.cjs"
       },
       "win32-x64": {
-        "file": "IeumOffice-Setup-0.12.7.exe",
-        "sha512": "2lzy1zLYhKim1A+gT9JSQ8jvljnJwcfxiOJXmDQ/quliW0KFojEEhVyNVpR8emSBrf4z8OrveJ8lqT763iNAFQ==",
+        "file": "IeumOffice-Setup-0.13.0.exe",
+        "sha512": "cdp48Ul6iMriopAI6kKrUq0EzhMlv6tYT3qmlYSNvbwSb6je0A/8oVzsN6yVopA1QnpH0ZHUFiido2+aGlAviQ==",
         "unpack": "nsis-app-7z",
         "check": "resources/cli/genoffice.cjs"
       },
       "darwin-arm64": {
-        "file": "IeumOffice-0.12.7-arm64-mac.zip",
-        "sha512": "hj9/KZ5eWFzx/MJuEVt1A8/BoNzFCby7WsUpNUj26wIzK87IcdMQU8O7UfO7H+JjTcfmxlUplPq44jk9fJue2A==",
+        "file": "IeumOffice-0.13.0-arm64-mac.zip",
+        "sha512": "Q/FDbJSxcTxSGIESWS5SGFwcxsrcNOCejZ6EGGN3aHn5+qGD/pTgsAs4HyfiudzDNYuWLTqkhl6D5T5RgEOjSQ==",
         "unpack": "app-zip",
         "check": "IeumOffice.app/Contents/Resources/cli/genoffice.cjs"
       },
       "darwin-x64": {
-        "file": "IeumOffice-0.12.7-mac.zip",
-        "sha512": "edJ64DQ07fDaBLfcgpRWVd2uDtxDpe7eAxI1XSnDOM0hpE42wkX9r5JnnHBa1HB/ZYr5G1y3Lxg86UcFnSupEw==",
+        "file": "IeumOffice-0.13.0-mac.zip",
+        "sha512": "hms52BmXwe9BhNMySUpgW1EwfmBVxwNxRz3dNoggo6d9JdOV/2Rm/MrYoV+d3IqZLtuGezCjYP+KW0aegT3WIg==",
         "unpack": "app-zip",
         "check": "IeumOffice.app/Contents/Resources/cli/genoffice.cjs"
       }

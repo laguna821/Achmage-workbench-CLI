@@ -1,219 +1,549 @@
 {
-  "schema": 1,
+  "schema": 2,
+  "version": "0.9.0-workbench.4",
   "base": {
     "tag": "v0.9.0",
     "commit": "c9095c5f67632e6721e800ccc7fb43ea49d26682"
   },
-  "note": "Applied in this order with `git apply` onto a clean v0.9.0 checkout (scripts/rebuild-hwp-engine.mjs --target 0.9.0). Each file starts with a header (origin, status, what differs from the 0.8.7 form, regression test) that git apply skips. Status: ported = a 0.9.0 form of the 0.8.7 patch; unchanged = the 0.8.7 change as it was, re-based; upstream-test = 0.9.0 already behaves so, the file only adds the regression test that shows it; new = a change of Workbench's own with no 0.8.7 form (origin \"Workbench NNNN\"). notCarried lists the 0.8.7 patches with no file here and why.",
+  "ieum": {
+    "tag": "v0.13.0",
+    "commit": "8602a39410adb86037f3008588b64efc75b08c60",
+    "engine": "0.9.0-ieum.33",
+    "patchFolder": "vendor/rhwp-core/patches"
+  },
+  "note": "Applied in this order with `git apply` onto a clean v0.9.0 checkout (node scripts/rebuild-hwp-engine.mjs --target 0.9.0). source: ieum = IeumOffice's engine patch copied byte for byte (file = \"ieum-\" + its name; upstreamSha256 = the file in IeumOffice v0.13.0, the same at 8e1d27960); hop = HOP's patch in its 0.9.0 form (upstreamPath/upstreamSha256 = the 0.8.7 original in this repository); workbench = Workbench's own. status: verbatim = unchanged upstream file; ported/unchanged/upstream-test/new as in 0.9.0-workbench.3; re-based = a hunk re-placed by hand to apply after the Ieum patches. Report: ux/reports/hwp-engine-ieum-report.md (outside the repository).",
   "patches": [
     {
-      "file": "0003-footnote-area-below-body-flow.patch",
-      "sha256": "b46655e302352f24fd10602bbb1482f06bdad352b75a1e82b86bd3ceb8bbb46b",
-      "origin": "Ieum 0003",
-      "status": "ported",
-      "source": "vendor/ieumoffice/vendor/rhwp-core/patches/0003-footnote-area-below-body-flow.patch",
-      "sourceSha256": "7fe8cd4eea656efbeae086f226abf6f4a32bef463ac9958dd4af9ddb1cab6a06"
+      "file": "ieum-0001-host-inline-table-clears-paper-square-table.patch",
+      "sha256": "8874eea571e6c1cfc70443a562536df2079d6f8e8b3a42cf5ff07ff85eca9055",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0001-host-inline-table-clears-paper-square-table.patch",
+      "upstreamSha256": "8874eea571e6c1cfc70443a562536df2079d6f8e8b3a42cf5ff07ff85eca9055",
+      "status": "verbatim",
+      "reason": "TAC table in a paragraph that also holds a page/paper square table (and a picture) goes below that table, not over it; v0.9.0 (#8144/#8388) covers only hosts of tables alone"
     },
     {
-      "file": "0005-stored-restart-opens-next-page.patch",
-      "sha256": "513c7082492d9e47f6ed5166c5ae49abbbc9d2609ac96d89a1eb43336f72c60e",
-      "origin": "Ieum 0005",
-      "status": "ported",
-      "source": "vendor/ieumoffice/vendor/rhwp-core/patches/0005-stored-restart-opens-next-page.patch",
-      "sourceSha256": "51a7a272679da2fbf97e905d7a66003758d1dfd0ac5f68b7408e1c7904088ea0"
+      "file": "ieum-0003-footnote-area-below-body-flow.patch",
+      "sha256": "9a32bdca242518546adbe955cd7386a997f3966244ab0ca78fed36a03ddfe777",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0003-footnote-area-below-body-flow.patch",
+      "upstreamSha256": "9a32bdca242518546adbe955cd7386a997f3966244ab0ca78fed36a03ddfe777",
+      "status": "verbatim",
+      "reason": "footnote area moves below body lines/tables that run into it (no overlap of last body line and note separator)",
+      "replaces": "0003-footnote-area-below-body-flow.patch of 0.9.0-workbench.3 (Workbench's own 0.9.0 port of Ieum 0003; Ieum's later patches are cut against Ieum's form)"
     },
     {
-      "file": "0013-restyle-per-attribute-everywhere.patch",
-      "sha256": "f3d73c3ec65f1364910e96921340362138b3846e24a8cf31b2213ed5be24eca0",
-      "origin": "Ieum 0013",
-      "status": "ported",
-      "source": "vendor/ieumoffice/vendor/rhwp-core/patches/0013-restyle-per-attribute-everywhere.patch",
-      "sourceSha256": "b1ff02859d68abeb7646170bf2874ca7af0c5f0a6b2b1d0291da9c90c0360cf4"
+      "file": "ieum-0004-page-start-below-title-table.patch",
+      "sha256": "f99986e25c697e43e192f0f44eceb8e7791096a20d30b17d0d8cf58c3fd9b282",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0004-page-start-below-title-table.patch",
+      "upstreamSha256": "f99986e25c697e43e192f0f44eceb8e7791096a20d30b17d0d8cf58c3fd9b282",
+      "status": "verbatim",
+      "reason": "a page whose first stored line starts at its title table box bottom keeps the stored origin (else-branch of 0001)"
     },
     {
-      "file": "0016-single-cell-resize.patch",
-      "sha256": "5297d2bc97471d8d5bd2d2bb1d92428a5acabc469f1f142fad2a98f47174bdf4",
-      "origin": "Ieum 0016",
-      "status": "unchanged",
-      "source": "vendor/ieumoffice/vendor/rhwp-core/patches/0016-single-cell-resize.patch",
-      "sourceSha256": "c1595554e17b07c217fa82b2c771dbb52fa9abee304cb31ba45a32342fa48055"
+      "file": "ieum-0005-stored-restart-opens-next-page.patch",
+      "sha256": "655b629468a4e70f6bd47e97831fd4c30b9e9de52d9b8476f08d804e40737209",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0005-stored-restart-opens-next-page.patch",
+      "upstreamSha256": "655b629468a4e70f6bd47e97831fd4c30b9e9de52d9b8476f08d804e40737209",
+      "status": "verbatim",
+      "reason": "a paragraph whose stored lines restart high on the page opens the next page instead of overflowing the body",
+      "replaces": "0005-stored-restart-opens-next-page.patch of 0.9.0-workbench.3 (Workbench's own 0.9.0 port of Ieum 0005; Ieum's later patches are cut against Ieum's form)"
     },
     {
-      "file": "0015-canvas-metric-requests-without-advances.patch",
-      "sha256": "0cf4a0ee67b4d73ad51a9c352236af22ec08e379f42676fc50650b6ae17aadf6",
-      "origin": "Ieum 0015",
-      "status": "ported",
-      "source": "vendor/ieumoffice/vendor/rhwp-core/patches/0015-canvas-metric-requests-without-advances.patch",
-      "sourceSha256": "b2c079d60be37584478e75ebe5ef83300162bb5a8dd8acd6594e7f6b43f3d9d4"
+      "file": "ieum-0013-restyle-per-attribute-everywhere.patch",
+      "sha256": "aea4dcf9d832d5233b1fa4194cb64cdbfef8da4f322fad521629deaca6a92ff0",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0013-restyle-per-attribute-everywhere.patch",
+      "upstreamSha256": "aea4dcf9d832d5233b1fa4194cb64cdbfef8da4f322fad521629deaca6a92ff0",
+      "status": "verbatim",
+      "reason": "applying/editing a style works per attribute as Hancom 2024, also in nested tables, text boxes, headers/footers, notes",
+      "replaces": "0013-restyle-per-attribute-everywhere.patch of 0.9.0-workbench.3 (Workbench's own 0.9.0 port of Ieum 0013; Ieum's later patches are cut against Ieum's form)"
+    },
+    {
+      "file": "ieum-0014-page-number-pos-insert.patch",
+      "sha256": "a0ab4867e23775f3191aaee763bb3b560c593881928c748ece462b677f5a9097",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0014-page-number-pos-insert.patch",
+      "upstreamSha256": "a0ab4867e23775f3191aaee763bb3b560c593881928c748ece462b677f5a9097",
+      "status": "verbatim",
+      "reason": "page-number position calls setPageNumberPos/getPageNumberPos (one pgnp per section, placed as Hancom 2024)",
+      "replaces": "0014-page-number-pos-insert.patch of 0.9.0-workbench.3 (Workbench's own 0.9.0 port of Ieum 0014; Ieum's later patches are cut against Ieum's form)"
+    },
+    {
+      "file": "ieum-0015-canvas-metric-requests-without-advances.patch",
+      "sha256": "e1c7fa341f0f6395dbeba11ac9715f15d69adf4199ede7e25a8f265d5f6663d7",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0015-canvas-metric-requests-without-advances.patch",
+      "upstreamSha256": "e1c7fa341f0f6395dbeba11ac9715f15d69adf4199ede7e25a8f265d5f6663d7",
+      "status": "verbatim",
+      "reason": "canvas metric request collection without per-glyph advances (typing speed; 50-page doc 153 -> 89 ms)",
+      "replaces": "0015-canvas-metric-requests-without-advances.patch of 0.9.0-workbench.3 (Workbench's own 0.9.0 port of Ieum 0015; Ieum's later patches are cut against Ieum's form)"
+    },
+    {
+      "file": "ieum-0016-single-cell-resize.patch",
+      "sha256": "c33de9d22468c2abd5affac7b1bd80807ecaa6346e00fbedcfa6629d7ae992cc",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0016-single-cell-resize.patch",
+      "upstreamSha256": "c33de9d22468c2abd5affac7b1bd80807ecaa6346e00fbedcfa6629d7ae992cc",
+      "status": "verbatim",
+      "reason": "resizeTableCell: one cell Shift+arrow, keeps the table size, works again on uneven grids",
+      "replaces": "0016-single-cell-resize.patch of 0.9.0-workbench.3 (Workbench's own 0.9.0 port of Ieum 0016; Ieum's later patches are cut against Ieum's form)"
+    },
+    {
+      "file": "ieum-0020-topbottom-float-anchor-flow.patch",
+      "sha256": "62c923b02d2bc85955bcebab94474d1d23549731ee7bd7eb9092bfb9f499f6fd",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0020-topbottom-float-anchor-flow.patch",
+      "upstreamSha256": "62c923b02d2bc85955bcebab94474d1d23549731ee7bd7eb9092bfb9f499f6fd",
+      "status": "verbatim",
+      "reason": "text below a page/paper top-and-bottom object: pagination follows drawing; stale stored page bounds after it ignored",
+      "replaces": "0020-topbottom-float-anchor-flow.patch of 0.9.0-workbench.3 (Workbench's own 0.9.0 port of Ieum 0020; Ieum's later patches are cut against Ieum's form)"
+    },
+    {
+      "file": "ieum-0021-table-look-and-cell-first-lead.patch",
+      "sha256": "2c768ba80e298c809f4f37c99235802bf1a0e6b52a3c377b71c4633a790bba76",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0021-table-look-and-cell-first-lead.patch",
+      "upstreamSha256": "2c768ba80e298c809f4f37c99235802bf1a0e6b52a3c377b71c4633a790bba76",
+      "status": "verbatim",
+      "reason": "cell first-line lead in generated HWPX; table border/fill change keeps per-cell lines; paragraph-float page start"
+    },
+    {
+      "file": "ieum-0022-selection-follows-drawn-lines.patch",
+      "sha256": "500c282c2adb6640ed88b38160b852cc56662f42b8161f9f8b962e95aeb59f9a",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0022-selection-follows-drawn-lines.patch",
+      "upstreamSha256": "500c282c2adb6640ed88b38160b852cc56662f42b8161f9f8b962e95aeb59f9a",
+      "status": "verbatim",
+      "reason": "selection rectangles follow the drawn lines of a paragraph with fewer stored lines"
+    },
+    {
+      "file": "ieum-0023-duplex-master-page-shift.patch",
+      "sha256": "0c26daf69b320e3df7e44a406efbf2f4e4e5eacb9ac043bf4de9c7fc0873a46e",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0023-duplex-master-page-shift.patch",
+      "upstreamSha256": "0c26daf69b320e3df7e44a406efbf2f4e4e5eacb9ac043bf4de9c7fc0873a46e",
+      "status": "verbatim",
+      "reason": "duplex master pages shifted as Hancom 2024 prints; .hwp master-page kinds read; HWPX writes EVEN"
+    },
+    {
+      "file": "ieum-0024-picture-effect-opacity.patch",
+      "sha256": "dbf13b991e9feb83be10def242bd802ab82398cfba4c4a0c77ed7df4e53b4cf6",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0024-picture-effect-opacity.patch",
+      "upstreamSha256": "dbf13b991e9feb83be10def242bd802ab82398cfba4c4a0c77ed7df4e53b4cf6",
+      "status": "verbatim",
+      "reason": "brightness/contrast pictures are not drawn as watermarks (opacity only for Hancom watermark values)"
+    },
+    {
+      "file": "ieum-0025-page-number-pages.patch",
+      "sha256": "240b298bd72a3f3d4172866f11b2a0e9145a1de9f3adaf35384b5b9e4a7eaf7b",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0025-page-number-pages.patch",
+      "upstreamSha256": "240b298bd72a3f3d4172866f11b2a0e9145a1de9f3adaf35384b5b9e4a7eaf7b",
+      "status": "verbatim",
+      "reason": "page numbers drawn on the pages Hancom 2024 prints them (cell page-number positions, carry from previous section)"
+    },
+    {
+      "file": "ieum-0026-hwpx-cellzone-on-dropped-rows.patch",
+      "sha256": "24159533aa217737346063142ad0c42e414a4a3420bbd9971f1b0917466edfd8",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0026-hwpx-cellzone-on-dropped-rows.patch",
+      "upstreamSha256": "24159533aa217737346063142ad0c42e414a4a3420bbd9971f1b0917466edfd8",
+      "status": "verbatim",
+      "reason": "HWPX save of tables whose cell zone ends on a row dropped by vertical merges (was refused)"
+    },
+    {
+      "file": "ieum-0027-merged-table-cell-extents.patch",
+      "sha256": "2f712e77c8ba897fad4444c49817ba468900b0f20c0dcab73d0708610633cd91",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0027-merged-table-cell-extents.patch",
+      "upstreamSha256": "2f712e77c8ba897fad4444c49817ba468900b0f20c0dcab73d0708610633cd91",
+      "status": "verbatim",
+      "reason": "merged-table cell extents; setTableCellExtents (cell W/H equalise, Shift+Up/Down) = Hancom 2024 in 74 cases"
+    },
+    {
+      "file": "ieum-0028-paragraph-float-follows-drawn-host.patch",
+      "sha256": "c8a9eff500211040c0949116587f218bd8472206b980b98669461d8b1719dfdf",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0028-paragraph-float-follows-drawn-host.patch",
+      "upstreamSha256": "c8a9eff500211040c0949116587f218bd8472206b980b98669461d8b1719dfdf",
+      "status": "verbatim",
+      "reason": "a paragraph-relative top-and-bottom table ending a paragraph does not add the host spacing-after below it"
+    },
+    {
+      "file": "ieum-0029-stored-frame-after-unhonored-reset.patch",
+      "sha256": "6db67126dba5c045f14beb9d899f47f3b8d8b3c8ceb069bf904d2e0630ae5bf8",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0029-stored-frame-after-unhonored-reset.patch",
+      "upstreamSha256": "6db67126dba5c045f14beb9d899f47f3b8d8b3c8ceb069bf904d2e0630ae5bf8",
+      "status": "verbatim",
+      "reason": "a table after an unhonoured stored page boundary follows the flow (was drawn over six lines)"
+    },
+    {
+      "file": "ieum-0030-no-trim-across-inner-reset.patch",
+      "sha256": "8f9c6b71109d7c5b1f8bc5e591d9921ffd6bc698068677dd34ba00ccac1a881e",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0030-no-trim-across-inner-reset.patch",
+      "upstreamSha256": "8f9c6b71109d7c5b1f8bc5e591d9921ffd6bc698068677dd34ba00ccac1a881e",
+      "status": "verbatim",
+      "reason": "no trailing line-spacing trim across a stored-position rewind inside a paragraph"
+    },
+    {
+      "file": "ieum-0031-empty-host-table-successor-line-max.patch",
+      "sha256": "d6b43362cebde2d04b9d0f0b794b7f682561ae0b7b1057fc0d4e30f77e8fb02b",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0031-empty-host-table-successor-line-max.patch",
+      "upstreamSha256": "d6b43362cebde2d04b9d0f0b794b7f682561ae0b7b1057fc0d4e30f77e8fb02b",
+      "status": "verbatim",
+      "reason": "first line after a whole top-and-bottom table of an empty paragraph = max(flow + spacing-before, box bottom)"
+    },
+    {
+      "file": "ieum-0032-tac-host-line-not-this-table.patch",
+      "sha256": "00114d290ed4be2d1e40dcf24a71cbf436de6a32fd82a82db8349995d6c92004",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0032-tac-host-line-not-this-table.patch",
+      "upstreamSha256": "00114d290ed4be2d1e40dcf24a71cbf436de6a32fd82a82db8349995d6c92004",
+      "status": "verbatim",
+      "reason": "pagination counts a lone TAC table line by the drawn table when its stored height is not Hancom's (1-page form became 2)"
+    },
+    {
+      "file": "ieum-0033-no-trailing-bridge-after-unmeasured-tac-line.patch",
+      "sha256": "52840b79b10e5b4ff500891562ac86778dc820a097d522fd45198aebd54e5d01",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0033-no-trailing-bridge-after-unmeasured-tac-line.patch",
+      "upstreamSha256": "52840b79b10e5b4ff500891562ac86778dc820a097d522fd45198aebd54e5d01",
+      "status": "verbatim",
+      "reason": "no extra bridge spacing after such an unmeasured TAC line (title 8 px low)"
+    },
+    {
+      "file": "ieum-0034-anchor-line-box-fits-above-paper-band.patch",
+      "sha256": "d942dfa295fa11b7491db93680323420cdeae5e37615211492eb3f528af1413f",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0034-anchor-line-box-fits-above-paper-band.patch",
+      "upstreamSha256": "d942dfa295fa11b7491db93680323420cdeae5e37615211492eb3f528af1413f",
+      "status": "verbatim",
+      "reason": "0020's anchor-line-above-object test uses the line box (fixes three upstream tests 0020 broke)"
+    },
+    {
+      "file": "ieum-0035-tail-table-successor-at-table-bottom.patch",
+      "sha256": "c9b62246ec69263691975db0e5fff88394a2760b5e70c1cde6130fd512370fb1",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0035-tail-table-successor-at-table-bottom.patch",
+      "upstreamSha256": "c9b62246ec69263691975db0e5fff88394a2760b5e70c1cde6130fd512370fb1",
+      "status": "verbatim",
+      "reason": "first line after a paragraph-ending top-and-bottom table at the table bottom; MS-Word-compatible docs keep spacing-before"
+    },
+    {
+      "file": "ieum-0036-continuation-terminal-host-advance.patch",
+      "sha256": "fb3de619a3df72e4cebe52be375c4a72efb8dbe140b9b4d907f70fda44a62057",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0036-continuation-terminal-host-advance.patch",
+      "upstreamSha256": "fb3de619a3df72e4cebe52be375c4a72efb8dbe140b9b4d907f70fda44a62057",
+      "status": "verbatim",
+      "reason": "#7642 host-line advance after a continued table's last fragment only where the stored first line says so"
+    },
+    {
+      "file": "ieum-0037-hwpx-raw-spans-canonical-prefix.patch",
+      "sha256": "8c731c04d7dad38bb776bcb59d130ab06b76e5a75aa5e32edbecd39b5bddb237",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0037-hwpx-raw-spans-canonical-prefix.patch",
+      "upstreamSha256": "8c731c04d7dad38bb776bcb59d130ab06b76e5a75aa5e32edbecd39b5bddb237",
+      "status": "verbatim",
+      "reason": "HWPX raw spans written with canonical namespace prefixes (other tools' ns0: made Hancom refuse the saved file)"
+    },
+    {
+      "file": "ieum-0039-footnote-number-slot-height-and-shape.patch",
+      "sha256": "a4ce12431337022c032f68c210c12fad76d14a7a44941d9f340e02787726cf0d",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0039-footnote-number-slot-height-and-shape.patch",
+      "upstreamSha256": "a4ce12431337022c032f68c210c12fad76d14a7a44941d9f340e02787726cf0d",
+      "status": "verbatim",
+      "reason": "generator footnotes without an autoNum slot draw no number; getFootnoteInfo().numberSlot"
+    },
+    {
+      "file": "ieum-0040-caption-footnote-flow-without-stored-lines.patch",
+      "sha256": "8ce29e02680d3917582ab01557353fbe83bbe0931fb3124aa4cc3c37e5b42646",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0040-caption-footnote-flow-without-stored-lines.patch",
+      "upstreamSha256": "8ce29e02680d3917582ab01557353fbe83bbe0931fb3124aa4cc3c37e5b42646",
+      "status": "verbatim",
+      "reason": "captions/footnotes of documents without stored lines measured as drawn (two-line caption overlapped)"
+    },
+    {
+      "file": "ieum-0041-edited-row-floor-follows-shrunk-cells.patch",
+      "sha256": "f504b5b7f1eac9748803c84a12c297a5c0cf814f3613a8da46705edd44f5076a",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0041-edited-row-floor-follows-shrunk-cells.patch",
+      "upstreamSha256": "f504b5b7f1eac9748803c84a12c297a5c0cf814f3613a8da46705edd44f5076a",
+      "status": "verbatim",
+      "reason": "edited row floor follows cells the user made shorter (saved .hwp rows could not shrink)"
+    },
+    {
+      "file": "ieum-0042-structure-edit-moves-tac-host-row.patch",
+      "sha256": "5ee21f7b28e30cfeb9a6c9fe7c09eed3acaee6cfa97cc9c10bb42f14b98be241",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0042-structure-edit-moves-tac-host-row.patch",
+      "upstreamSha256": "5ee21f7b28e30cfeb9a6c9fe7c09eed3acaee6cfa97cc9c10bb42f14b98be241",
+      "status": "verbatim",
+      "reason": "row insert/delete in a TAC table moves the host stored line and later vpos (.hwp save was refused)"
+    },
+    {
+      "file": "ieum-0043-batch-lays-out-format-edits-once.patch",
+      "sha256": "e4d02d638c1e2b9b9746defe38d24138c3844829b9bcd2f527c01de8a1ddad22",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0043-batch-lays-out-format-edits-once.patch",
+      "upstreamSha256": "e4d02d638c1e2b9b9746defe38d24138c3844829b9bcd2f527c01de8a1ddad22",
+      "status": "verbatim",
+      "reason": "format edits inside beginBatch/endBatch lay the section out once (Word->Hangul 204 pages 130 s -> 11 s)"
+    },
+    {
+      "file": "ieum-0047-stale-table-width-rows-outvote.patch",
+      "sha256": "33f72c0fa5980f52b67f6629cbbc15804db484894b36c3a8d59c9198095d0de7",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0047-stale-table-width-rows-outvote.patch",
+      "upstreamSha256": "33f72c0fa5980f52b67f6629cbbc15804db484894b36c3a8d59c9198095d0de7",
+      "status": "verbatim",
+      "reason": "tables whose closing rows all exceed a stale stored width are drawn by cell widths (court form text spilled)"
+    },
+    {
+      "file": "ieum-0050-export-keeps-canvas-metrics.patch",
+      "sha256": "82114e518c629090f004fa50532654ebb208504d2c746cff87064b9f4646e43c",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0050-export-keeps-canvas-metrics.patch",
+      "upstreamSha256": "82114e518c629090f004fa50532654ebb208504d2c746cff87064b9f4646e43c",
+      "status": "verbatim",
+      "reason": "setExportKeepsCanvasMetrics: export keeps the canvas-measured widths the screen used (print = screen)"
+    },
+    {
+      "file": "ieum-0051-column-separator-setter.patch",
+      "sha256": "32e33b8dcc262539457e042758137a39b08014383263ac709b0bc7cdf60705a4",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0051-column-separator-setter.patch",
+      "upstreamSha256": "32e33b8dcc262539457e042758137a39b08014383263ac709b0bc7cdf60705a4",
+      "status": "verbatim",
+      "reason": "setColumnSeparator + getColumnDef separator fields; HWPX colLine DASH/DOT names as Hancom"
+    },
+    {
+      "file": "ieum-0052-picture-crop-image-extent.patch",
+      "sha256": "3478b619e00c1340fdb7c59df9a821d8912f578ae67bd60f44e8329faaaff510",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0052-picture-crop-image-extent.patch",
+      "upstreamSha256": "3478b619e00c1340fdb7c59df9a821d8912f578ae67bd60f44e8329faaaff510",
+      "status": "verbatim",
+      "reason": "picture crop measured in image extent; getPictureProperties cropExtentWidth/Height; resize undo keeps crop"
+    },
+    {
+      "file": "ieum-0053-picture-z-order-with-shapes.patch",
+      "sha256": "89066b78d5633a66b0d6b3d1938f65556a64ab63557deac182ec0890c0122f2e",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0053-picture-z-order-with-shapes.patch",
+      "upstreamSha256": "89066b78d5633a66b0d6b3d1938f65556a64ab63557deac182ec0890c0122f2e",
+      "status": "verbatim",
+      "reason": "changeShapeZOrder/applyShapeZOrderPairs order pictures with shapes"
+    },
+    {
+      "file": "ieum-0054-duplicate-floating-control.patch",
+      "sha256": "2a1ad56790175fc551ebfc65c4ddf4bf05c3aecbef2eb1d17f651a19a339e3de",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0054-duplicate-floating-control.patch",
+      "upstreamSha256": "2a1ad56790175fc551ebfc65c4ddf4bf05c3aecbef2eb1d17f651a19a339e3de",
+      "status": "verbatim",
+      "reason": "duplicateFloatingControl: Ctrl+drag copy of a floating picture/shape in its own paragraph"
+    },
+    {
+      "file": "ieum-0055-nested-table-path-calls.patch",
+      "sha256": "ca679e85d5d0a563e830d18e9f89212e1bacaeb9bf706777bef2f7685ba36edb",
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 (8602a39410) vendor/rhwp-core/patches/0055-nested-table-path-calls.patch",
+      "upstreamSha256": "ca679e85d5d0a563e830d18e9f89212e1bacaeb9bf706777bef2f7685ba36edb",
+      "status": "verbatim",
+      "reason": "16 *ByPath calls: edit tables inside table cells and text boxes (rows, columns, merge, split, properties, sizes)"
     },
     {
       "file": "0001-hop-font-metrics-hallym.patch",
       "sha256": "d247995693bbceb9f3b5a4bcebdebf98e02d0e77d95046403aa06eaef72b47cd",
-      "origin": "HOP 0001",
+      "source": "hop",
+      "upstreamId": "HOP 0001",
       "status": "ported",
-      "source": "third_party/hop/patches/0001-hop-font-metrics-hallym.patch",
-      "sourceSha256": "5f2cc46e7d1d0a75c98134c51daafd81a2976066b8f13a77da79d00d82ececd4"
+      "reason": "Hallym Gothic (한림 고딕) font metrics",
+      "upstreamSha256": "5f2cc46e7d1d0a75c98134c51daafd81a2976066b8f13a77da79d00d82ececd4",
+      "upstreamPath": "third_party/hop/patches/0001-hop-font-metrics-hallym.patch"
     },
     {
       "file": "0005-hop-line-break-size.patch",
       "sha256": "1d6a3c4fc2a0cecd263fc92349eb6c4ba92be9b9f6ff34524c71a0623122c32d",
-      "origin": "HOP 0005",
+      "source": "hop",
+      "upstreamId": "HOP 0005",
       "status": "ported",
-      "source": "third_party/hop/patches/0005-hop-line-break-size.patch",
-      "sourceSha256": "6c1dd9404e47419b6bf126c11070f926950c91df8aae71e41bdfd45789da0ab4"
+      "reason": "a larger line-break character raises its line",
+      "upstreamSha256": "6c1dd9404e47419b6bf126c11070f926950c91df8aae71e41bdfd45789da0ab4",
+      "upstreamPath": "third_party/hop/patches/0005-hop-line-break-size.patch"
     },
     {
       "file": "0009-hop-hwpx-plain-margins.patch",
       "sha256": "64804813601690c4c00b6789a4eff5dd24dbfc96af9b3a6e54cda824631970e0",
-      "origin": "HOP 0009",
+      "source": "hop",
+      "upstreamId": "HOP 0009",
       "status": "unchanged",
-      "source": "third_party/hop/patches/0009-hop-hwpx-plain-margins.patch",
-      "sourceSha256": "50eae68bcbeb16f73f096241e16fb66c65b07f7042139dfff38f9a5c4c0acee5"
+      "reason": "HWPX without version.xml: plain margins are physical",
+      "upstreamSha256": "50eae68bcbeb16f73f096241e16fb66c65b07f7042139dfff38f9a5c4c0acee5",
+      "upstreamPath": "third_party/hop/patches/0009-hop-hwpx-plain-margins.patch"
     },
     {
       "file": "0010-hop-hang-trailing-space.patch",
       "sha256": "447e1270aa4e81e9089696fd96441a6bdcf52b8d95303a6a86dc226d4017a63f",
-      "origin": "HOP 0010",
+      "source": "hop",
+      "upstreamId": "HOP 0010",
       "status": "ported",
-      "source": "third_party/hop/patches/0010-hop-hang-trailing-space.patch",
-      "sourceSha256": "ddc04b270b399b8329cfee89784342c009d118cc92313b2cc1adecd5f1f59446"
+      "reason": "synthetic hanging lines: no extra spacing for a trailing space",
+      "upstreamSha256": "ddc04b270b399b8329cfee89784342c009d118cc92313b2cc1adecd5f1f59446",
+      "upstreamPath": "third_party/hop/patches/0010-hop-hang-trailing-space.patch"
     },
     {
       "file": "0002-hop-auto-tab-left.patch",
       "sha256": "42cc15dbd0ec48701272c70b819d57890474a9cfb095233bb1a847d03f4d3125",
-      "origin": "HOP 0002",
+      "source": "hop",
+      "upstreamId": "HOP 0002",
       "status": "upstream-test",
-      "source": "third_party/hop/patches/0002-hop-auto-tab-left.patch",
-      "sourceSha256": "830f9d13d724e64870250b75abfa194dbfdcc925685f6f7142a544490a7f58ae"
+      "reason": "automatic left tab at the hang (regression test only; v0.9.0 does it)",
+      "upstreamSha256": "830f9d13d724e64870250b75abfa194dbfdcc925685f6f7142a544490a7f58ae",
+      "upstreamPath": "third_party/hop/patches/0002-hop-auto-tab-left.patch"
     },
     {
       "file": "0003-hop-canvas-synthetic-bold.patch",
       "sha256": "73cb8e75875f69ea5a0b80ca8dd183583698a0e8a35d3fdb8f05f4b94617d23f",
-      "origin": "HOP 0003",
+      "source": "hop",
+      "upstreamId": "HOP 0003",
       "status": "upstream-test",
-      "source": "third_party/hop/patches/0003-hop-canvas-synthetic-bold.patch",
-      "sourceSha256": "e1398a1bcc5e3e7221b40b850c061074d8799306f78552ffa0637c060b368391"
+      "reason": "synthetic bold on canvas for faces without bold (regression test only)",
+      "upstreamSha256": "e1398a1bcc5e3e7221b40b850c061074d8799306f78552ffa0637c060b368391",
+      "upstreamPath": "third_party/hop/patches/0003-hop-canvas-synthetic-bold.patch"
     },
     {
       "file": "0007-hop-widow-orphan-keep-next.patch",
-      "sha256": "c5432e15135928947f278651f352ac63c51934408aaed33b44135e3e1fb39bd7",
-      "origin": "HOP 0007",
-      "status": "ported",
-      "source": "third_party/hop/patches/0007-hop-widow-orphan-keep-next.patch",
-      "sourceSha256": "7c9340a3011867fcb9135b2c647650e63d1618efc76935d82f19884101630969"
+      "sha256": "3a8a0ccc69a058870c10e0e0deba40001a12a970a24d373467bd3ab710778203",
+      "source": "hop",
+      "upstreamId": "HOP 0007",
+      "status": "re-based",
+      "reason": "Hancom 2024 widow/orphan and keep-with-next for sections rhwp lays out itself; setHopPaginationRules",
+      "upstreamSha256": "7c9340a3011867fcb9135b2c647650e63d1618efc76935d82f19884101630969",
+      "upstreamPath": "third_party/hop/patches/0007-hop-widow-orphan-keep-next.patch"
     },
     {
       "file": "0011-hop-tab-justify.patch",
       "sha256": "e3666985a304dd4c7b927720148804feff3fccd0f0e889c718a5f4eacf1f39f9",
-      "origin": "HOP 0011",
+      "source": "hop",
+      "upstreamId": "HOP 0011",
       "status": "ported",
-      "source": "third_party/hop/patches/0011-hop-tab-justify.patch",
-      "sourceSha256": "cc4043392222ba3dee529883389636c5e305fe828bbcee212ccb5f8e3be4c791"
+      "reason": "justified line with a tab spreads only after the last tab",
+      "upstreamSha256": "cc4043392222ba3dee529883389636c5e305fe828bbcee212ccb5f8e3be4c791",
+      "upstreamPath": "third_party/hop/patches/0011-hop-tab-justify.patch"
     },
     {
       "file": "0008-hop-empty-anchor-table-outer-bottom.patch",
       "sha256": "89747803f5f84c9a3aa24e121381b855d646ec889cd222119703c17ad01c7445",
-      "origin": "HOP 0008",
+      "source": "hop",
+      "upstreamId": "HOP 0008",
       "status": "upstream-test",
-      "source": "third_party/hop/patches/0008-hop-empty-anchor-table-outer-bottom.patch",
-      "sourceSha256": "fc9795376d359925eba5c8ac8904fca006c709ff75013b3da28e4fabffef71bb"
-    },
-    {
-      "file": "0020-topbottom-float-anchor-flow.patch",
-      "sha256": "5468e9664ae7d0016104acf97d5aff0fb4ee1a5629f620acbe92c3203d9459c1",
-      "origin": "Ieum 0020",
-      "status": "ported",
-      "source": "vendor/ieumoffice/vendor/rhwp-core/patches/0020-topbottom-float-anchor-flow.patch",
-      "sourceSha256": "9a6143c6977863c61e7097c5c250bb7383ca88d2069eb6b60c2b51b65dccff78"
-    },
-    {
-      "file": "0014-page-number-pos-insert.patch",
-      "sha256": "445e794d54e682067e0c83d47857bc320ce46faa4edd7a254bf7a7d359c353a8",
-      "origin": "Ieum 0014",
-      "status": "ported",
-      "source": "vendor/ieumoffice/vendor/rhwp-core/patches/0014-page-number-pos-insert.patch",
-      "sourceSha256": "627ad658f948963693ed2ada898482f62d5a974716370613ea78ce45644e0c0d"
+      "reason": "body resumes below the outer bottom margin of an empty-anchor table (regression test only)",
+      "upstreamSha256": "fc9795376d359925eba5c8ac8904fca006c709ff75013b3da28e4fabffef71bb",
+      "upstreamPath": "third_party/hop/patches/0008-hop-empty-anchor-table-outer-bottom.patch"
     },
     {
       "file": "0021-password-document-stays-protected.patch",
       "sha256": "635a949ff8d6c642beac4f47bf286b19e5cd07f4707cfd8030374f459614eab7",
-      "origin": "Ieum 0018",
+      "source": "workbench",
+      "upstreamId": "Workbench 0021 (from Ieum 0.8.7 0018-memo-support, the two password hunks upstream did not take)",
       "status": "ported",
-      "source": "vendor/ieumoffice/vendor/rhwp-core/patches/0018-memo-support.patch",
-      "sourceSha256": "8c7737a8d6f3a57ae63535aab398f6ea6f2b59dd9afd169f1faf9a9a3f8bcbed"
+      "reason": "a password document stays protected: header.encrypted after decrypting, memos read-only (upstream: a password only guards opening)"
     },
     {
       "file": "0022-hwpx-bindata-reuse-exact-deflate.patch",
       "sha256": "69030df13a278dc6841853069cc8f6d663225c0fa14a6729f25eba3c8dd23fc8",
-      "origin": "Workbench 0022",
-      "status": "new"
+      "source": "workbench",
+      "upstreamId": "Workbench 0022",
+      "status": "new",
+      "reason": "HWPX save reuses a stored BinData deflate stream only when it ends exactly (else trailing junk made strict ZIP readers refuse the file)"
+    },
+    {
+      "file": "0023-text-anchor-keeps-stored-band-lines.patch",
+      "sha256": "4008c69a43ffe4d879f19670cc5aa262f7a7e269f82f93706e91688f87457732",
+      "source": "workbench",
+      "upstreamId": "Workbench 0023 (H4b review M1 of Workbench's own Ieum 0020 port, carried onto Ieum's 0020/0034)",
+      "status": "ported",
+      "reason": "only an anchor paragraph without visible text starts below its paper/page top-and-bottom object; a text anchor keeps the lines Hangul stored in the band (roadmap sample: page 158 36 lines and page 159 text below its pictures, as Hancom prints)"
     }
   ],
   "notCarried": [
     {
-      "origin": "Ieum 0001",
-      "verdict": "upstream",
-      "evidence": "PR #8144 (tests/cases/paper_square_table_tac_host_row.rs, typeset/inline_flow/plan.rs uses page_anchored_square_table_exclusion); Ieum's vitest geometry passes on unpatched 0.9.0; its last assertion expects a footnote separator Line, which 0.9.0 no longer draws because the fixture's noteLine color is none"
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 vendor/rhwp-core/patches/0044-cmap-range-entries-across-lines.patch",
+      "upstreamSha256": "51b0ac9bca3a6e1180e641c2d42b07c4582d6065ce9f1d6367b5d3d77af32f8e",
+      "reason": "PDF import only (ToUnicode CMap range entries across lines); the PDF importer is compiled out (features console_error_panic_hook,wasm-api)"
     },
     {
-      "origin": "Ieum 0002",
-      "verdict": "upstream",
-      "evidence": "stored_body_reset_fragment_matches_current_flow (typeset/paragraph.rs, metrics.rs); Ieum vitest 'moves a picture after a stored page reset' passes on unpatched 0.9.0"
+      "source": "ieum",
+      "upstreamId": "IeumOffice v0.13.0 vendor/rhwp-core/patches/0049-cmap-range-comments.patch",
+      "upstreamSha256": "851ad1ca75df198d5afd52f1f8a7b597968777dfeea9186905d1bfb3739807de",
+      "reason": "PDF import only (CMap comments; follows 0044); the PDF importer is compiled out"
     },
     {
-      "origin": "Ieum 0004",
-      "verdict": "upstream",
-      "evidence": "PR #8144 tests/cases/title_table_page_start_row.rs (stored_page_square_preserves_source_origin); Ieum vitest 'starts a page below its title table' passes on unpatched 0.9.0"
+      "source": "ieum",
+      "upstreamId": "Ieum 0.8.7 0002",
+      "reason": "upstream: stored_body_reset_fragment_matches_current_flow (typeset/paragraph.rs, metrics.rs); Ieum vitest 'moves a picture after a stored page reset' passes on unpatched 0.9.0"
     },
     {
-      "origin": "Ieum 0006",
-      "verdict": "upstream (broader)",
-      "evidence": "PR #8486 (tests/cases/issue_8468_footnote_line_reserve.rs): BodyFootnoteMeasure::content_height measures every body footnote with paint's line composition and spacing, not only in sections whose stored ladder runs past the body"
+      "source": "ieum",
+      "upstreamId": "Ieum 0.8.7 0006",
+      "reason": "upstream (broader): PR #8486 (tests/cases/issue_8468_footnote_line_reserve.rs): BodyFootnoteMeasure::content_height measures every body footnote with paint's line composition and spacing, not only in sections whose stored ladder runs past the body"
     },
     {
-      "origin": "Ieum 0007",
-      "verdict": "NOT PORTED",
-      "evidence": "it amends Ieum's own 0.8.7 implementation of 0001/0004 (host_page_anchored_square_exclusions in typeset.rs), which 0.9.0 replaced with PR #8144's inline_flow plan; upstream keeps the stored positions on title pages (title_table_page_start_row) and the patch brought no fixture, so a 0.9.0 form could not be shown to be right. A reader would notice: in old-Hangul files whose title-table host holds an anchor-only line before the inline table, that table (and the rest of the page) sits one stored line lower than Hangul 2024 draws it."
+      "source": "ieum",
+      "upstreamId": "Ieum 0.8.7 0007",
+      "reason": "NOT PORTED: it amends Ieum's own 0.8.7 implementation of 0001/0004 (host_page_anchored_square_exclusions in typeset.rs), which 0.9.0 replaced with PR #8144's inline_flow plan; upstream keeps the stored positions on title pages (title_table_page_start_row) and the patch brought no fixture, so a 0.9.0 form could not be shown to be right. A reader would notice: in old-Hangul files whose title-table host holds an anchor-only line before the inline table, that table (and the rest of the page) sits one stored line lower than Hangul 2024 draws it."
     },
     {
-      "origin": "Ieum 0008",
-      "verdict": "upstream",
-      "evidence": "typeset/section/flow.rs (0.9.0) aligns the flow to the title host's stored line bottom after placing it, with the 0.8.7 patch's own comment; the merged-origin part belongs to 0007"
+      "source": "ieum",
+      "upstreamId": "Ieum 0.8.7 0008",
+      "reason": "upstream: typeset/section/flow.rs (0.9.0) aligns the flow to the title host's stored line bottom after placing it, with the 0.8.7 patch's own comment; the merged-origin part belongs to 0007"
     },
     {
-      "origin": "Ieum 0009",
-      "verdict": "upstream",
-      "evidence": "identical code in layout/table_layout.rs 4-2; tests/cases/cellzone_merged_end_fill_row.rs; Ieum vitest 'fills a cell zone' passes on unpatched 0.9.0"
+      "source": "ieum",
+      "upstreamId": "Ieum 0.8.7 0009",
+      "reason": "upstream: identical code in layout/table_layout.rs 4-2; tests/cases/cellzone_merged_end_fill_row.rs; Ieum vitest 'fills a cell zone' passes on unpatched 0.9.0"
     },
     {
-      "origin": "Ieum 0010",
-      "verdict": "upstream",
-      "evidence": "tests/cases/header_paper_shape_frame_origin.rs, header_footer_paper_frame.rs; both Ieum vitests on header/footer frames pass on unpatched 0.9.0"
+      "source": "ieum",
+      "upstreamId": "Ieum 0.8.7 0010",
+      "reason": "upstream: tests/cases/header_paper_shape_frame_origin.rs, header_footer_paper_frame.rs; both Ieum vitests on header/footer frames pass on unpatched 0.9.0"
     },
     {
-      "origin": "Ieum 0011",
-      "verdict": "upstream",
-      "evidence": "identical condition in document_core/queries/rendering.rs assign_master_pages_for_section; tests/cases/master_page_section_carry.rs; Ieum vitest passes on unpatched 0.9.0"
+      "source": "ieum",
+      "upstreamId": "Ieum 0.8.7 0011",
+      "reason": "upstream: identical condition in document_core/queries/rendering.rs assign_master_pages_for_section; tests/cases/master_page_section_carry.rs; Ieum vitest passes on unpatched 0.9.0"
     },
     {
-      "origin": "Ieum 0012",
-      "verdict": "upstream",
-      "evidence": "#7882 remap_style_ids in wasm_api.rs; tests/cases/deleted_style_keeps_nested_paragraph_styles.rs"
+      "source": "ieum",
+      "upstreamId": "Ieum 0.8.7 0012",
+      "reason": "upstream: #7882 remap_style_ids in wasm_api.rs; tests/cases/deleted_style_keeps_nested_paragraph_styles.rs"
     },
     {
-      "origin": "Ieum 0017",
-      "verdict": "upstream",
-      "evidence": "Ieum vitest 'lays out header text that shares a paragraph with a floating picture' passes on unpatched 0.9.0"
+      "source": "ieum",
+      "upstreamId": "Ieum 0.8.7 0017",
+      "reason": "upstream: Ieum vitest 'lays out header text that shares a paragraph with a floating picture' passes on unpatched 0.9.0"
     },
     {
-      "origin": "Ieum 0018",
-      "verdict": "upstream",
-      "evidence": "document_core/queries/memo_query.rs with the same JS API (getMemoList/insertMemo/insertMemoByPath/setMemoText/removeMemo); tests/cases/issue_8017_memo_api.rs, issue_8017_memo_hwp5_roundtrip.rs; 43/50 Ieum memo tests pass on unpatched 0.9.0, the 7 others are deliberate upstream changes (memo date kept; password-opened documents' memos editable; author null rejected; saved bytes differ from 0.8.7's)"
+      "source": "ieum",
+      "upstreamId": "Ieum 0.8.7 0018",
+      "reason": "upstream: document_core/queries/memo_query.rs with the same JS API (getMemoList/insertMemo/insertMemoByPath/setMemoText/removeMemo); tests/cases/issue_8017_memo_api.rs, issue_8017_memo_hwp5_roundtrip.rs; 43/50 Ieum memo tests pass on unpatched 0.9.0, the 7 others are deliberate upstream changes (memo date kept; password-opened documents' memos editable; author null rejected; saved bytes differ from 0.8.7's)"
     },
     {
-      "origin": "Ieum 0019",
-      "verdict": "upstream",
-      "evidence": "git apply -R --check clean on v0.9.0; tests/cases/issue_8172_textbox_shape_storage_bit.rs; 3 Ieum textbox vitests pass on unpatched 0.9.0"
+      "source": "ieum",
+      "upstreamId": "Ieum 0.8.7 0019",
+      "reason": "upstream: git apply -R --check clean on v0.9.0; tests/cases/issue_8172_textbox_shape_storage_bit.rs; 3 Ieum textbox vitests pass on unpatched 0.9.0"
     }
   ]
 }

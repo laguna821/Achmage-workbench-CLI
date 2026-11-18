@@ -1,37 +1,37 @@
 {
-  "source": "https://github.com/pblsketch/openoffice",
-  "commit": "30ff4f051f067fcb2baf1ab416c40718c802ca35",
+  "source": "https://github.com/pblsketch/ieumoffice",
+  "commit": "8602a39410adb86037f3008588b64efc75b08c60",
   "changes": "Attribution headers; explicit .ts import; inline image MIME type; extract the unchanged CSS URL scanner. Host uses create/read/SaveAs helpers and rollback of new assets, never historical asset cleanup.",
   "files": [
     {
       "source": "apps/markdown/src/main/asset-lifecycle.ts",
       "output": "text-assets/asset-lifecycle.ts",
-      "sourceSha256": "cc329316e54d76df697569aaf77e9847e25dd1f9f65fb5bc89c18b62c5483c03",
-      "outputSha256": "516325355ebfe588e56adcfa94f1ab903334a2fb21090da4bf7c6f9f5323c5ba"
+      "sourceSha256": "30916d4d82dff3543a159aedf8b41065153e853cc72ac334c95679e5a53bb7a8",
+      "outputSha256": "4949b4144eaddb412832a192db050db3bd94d222fc0d9c6cb339ae27c3ee9df3"
     },
     {
       "source": "packages/electron-utils/src/atomic-write.ts",
       "output": "text-assets/atomic-write.ts",
-      "sourceSha256": "23bc0fd9544c3ba3db22bac52a7d83a0a435d03dbd4f1351e26738fe7598acbd",
-      "outputSha256": "7726443402d45d282daf2ee7b4cd859c81a615d8d643e81fc4ecc973fd62ac52"
+      "sourceSha256": "0b25e7a2cc790366d1ab4f5ce4365e9fda21c54f00c18144d321f2a156791611",
+      "outputSha256": "23d729c13605c3aa45166e0cb0a6903ef7a7f3ff59593368ffeac79666b7adaa"
     },
     {
       "source": "apps/html/src/main/preview-document.ts",
       "output": "text-assets/preview-document.ts",
       "sourceSha256": "c59e0b19088b01c35812355bc48a9a52c4b740877e2d055f4589d1c6d2f06fb0",
-      "outputSha256": "7d01da2dbee0d97716ba74867d085b105fbc8fef2ae974f0b895e57a1893abd7"
+      "outputSha256": "b060f21133a088bdfd1c8e55216b36cf47c8e0c51d4a6f1353824c7d6aabce4c"
     },
     {
       "source": "apps/html/src/main/asset-mime.ts",
       "output": "text-assets/asset-mime.ts",
       "sourceSha256": "d681e3130fe049c8c9222f1f6a22c1db7969a8b79378ecdc016dc33e4e5bd4d0",
-      "outputSha256": "154f14eafee6999be4827db35da37e4a807f514fe47d73a23f031fa5df92156b"
+      "outputSha256": "21b7b276496b60a8c6d9fa61ad62d4f8d009c45761bb0b588133a15a2af4afa7"
     },
     {
       "source": "apps/html/src/main/asset-lifecycle.ts",
       "output": "text-assets/css-urls.ts",
-      "sourceSha256": "56ceffb0d7d053817007e0911e196bc749813ddd0006fd0fd23f62c78432c803",
-      "outputSha256": "22515b721e042dfd475328144352affaa1948d24a055e0ad60883a88c899dce8"
+      "sourceSha256": "41b45f73aea6ee611cca7eac79ae18aa053b33768dd8803eba741547416893ae",
+      "outputSha256": "298dd1128898f5c9fe046ff98f7989bf6cbc930ee56cd349e889a9971b69f15d"
     }
   ]
 }

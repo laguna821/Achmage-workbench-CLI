@@ -67,6 +67,7 @@ export const wordAdapter: OfficeUiAdapter = {
     ["shortcuts", "단축키 안내", "도움말"],
     ["print", "인쇄", "파일", "Ctrl+P"],
     ["export-pdf", "PDF로 내보내기", "파일"],
+    ["export-hwp", "한글 문서로 내보내기…", "파일"],
     ["export-html", "HTML로 내보내기", "파일"],
     ["export-markdown", "Markdown으로 내보내기", "파일"],
     ["export-images", "그림으로 내보내기", "파일"],

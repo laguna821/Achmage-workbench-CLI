@@ -1,9 +1,15 @@
 import type { PdfRequest, PdfSaveResult } from "../../../packages/contracts/src/pdf.ts";
-export function inspectPdf(bytes: Uint8Array, editable?: boolean): Promise<{ pages: number; encrypted: boolean }>;
-export function editPdf(bytes: Uint8Array, request: PdfRequest): Promise<{ bytes: Buffer } & Omit<PdfSaveResult, "revision">>;
+export function inspectPdf(bytes: Uint8Array, editable?: boolean, password?: string): Promise<{ pages: number; encrypted: boolean }>;
+export function editPdf(bytes: Uint8Array, request: PdfRequest, options?: { unlocked?: boolean }): Promise<{ bytes: Buffer } & Omit<PdfSaveResult, "revision">>;
 export function editPdfPages(bytes: Uint8Array, request: { rotate?: { pages: number[]; degrees: number }[]; delete?: number[]; move?: { from: number; to: number }[] }): Promise<{ bytes: Buffer } & Omit<PdfSaveResult, "revision">>;
 export function copyPdf(bytes: Uint8Array, request: PdfRequest, redaction?: boolean): Promise<{ bytes: Buffer } & Omit<PdfSaveResult, "revision">>;
 export function queryPdf(bytes: Uint8Array, operation: string, request: PdfRequest): Promise<unknown>;
 export function transformPdf(bytes: Uint8Array, operation: string, request: PdfRequest): Promise<Buffer>;
 export function listEditFonts(): string[];
 export function canDrawText(text: string, font?: string, bold?: boolean, italic?: boolean): boolean;
+export function copyPdfPages(bytes: Uint8Array, request: PdfRequest): Promise<{ bytes: Buffer; count: number }>;
+export function pastePdfPages(target: Uint8Array, copied: Uint8Array, afterPageIndex: unknown): Promise<{ bytes: Buffer; count: number }>;
+export function reducePdf(source: Uint8Array): Promise<{ bytes: Buffer | null; bytesBefore: number; bytesAfter: number; streamsRecompressed: number; imagesDownsampled: number }>;
+export type PdfPermissions = { printing: boolean; modifying: boolean; annotating: boolean; copying: boolean };
+export function decryptPdf(bytes: Uint8Array, password: unknown): Promise<{ ok: true; bytes: Uint8Array; permissions: PdfPermissions; neededPassword: boolean; unlockedAs: "user" | "owner" } | { ok: false; reason: string }>;
+export function sourcePassword(request: PdfRequest): string | undefined;

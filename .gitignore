@@ -9,6 +9,7 @@ apps/desktop/src-tauri/binaries/
 
 # IeumOffice source checkout (scripts/fetch-ieum.sh)
 vendor/ieumoffice/
+vendor/ieumoffice-0127/
 
 # Built from vendor/ieumoffice by apps/office/native/build-xlsx-wasm.sh
 apps/office/native/xlsx-wasm/engine/
@@ -30,3 +31,6 @@ packaging/arch/src/
 
 # Isolated UI review builds (never release inputs by accident)
 apps/web/dist-*/
+
+# The kordoc core's pdf extension, prepared by scripts/fetch-kordoc-pdf.mjs (not shipped: > 30 MB)
+apps/desktop/src-tauri/kordoc-ext/

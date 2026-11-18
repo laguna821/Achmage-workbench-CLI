@@ -5,6 +5,7 @@ import JSZip from "jszip";
 import { afterEach, expect, it, vi } from "vitest";
 import { IeumOffice } from "./ieumoffice.ts";
 import { OfficeCliInput } from "./office-cli-input.ts";
+import { xlsxWasmPath } from "./office-convert.ts";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -48,3 +49,16 @@ it("rejects an HTML .xls without a table and keeps the source", async () => {
   await expect(new OfficeCliInput(f.path, f.root, f.ieum).prepare()).rejects.toThrow("표가 없습니다");
   expect(readFileSync(f.path)).toEqual(f.original);
 });
+
+// IeumOffice v0.13.0's improved .xls import (pictures, merges, widths, heights, cell styles, print setup) through
+// the xlsx engine's WebAssembly — the Excel editor's own build — not through the bundled app's CLI.
+it.skipIf(!xlsxWasmPath())("imports a real .xls through v0.13.0's xlsx engine: its picture and merges come along, no CLI run", async () => {
+  const source = readFileSync(join(import.meta.dirname, "../../../vendor/ieumoffice/apps/sheets/native/xlsx-engine/tests/fixtures/merges-widths-picture.xls"));
+  const f = fixture("옛 성적.xls", source);
+  const run = vi.spyOn(f.ieum, "run");
+  const out = await new OfficeCliInput(f.path, f.root, f.ieum).prepare();
+  const zip = await JSZip.loadAsync(readFileSync(out.path));
+  expect(Object.keys(zip.files)).toContain("xl/media/image1.png");
+  expect(await zip.file("xl/worksheets/sheet1.xml")!.async("string")).toContain("<mergeCell");
+  expect(run).not.toHaveBeenCalled(); expect(readFileSync(f.path)).toEqual(f.original);
+}, 60_000);

@@ -27,7 +27,7 @@ const check = (name: string, ok: unknown) => { assert(ok, name); checks.push({ n
 const run = (args: string[]) => office.run(args, [allowed]);
 const md = join(allowed, "source.md"), docx = join(allowed, "document.docx");
 writeFileSync(md, "# NODE DOCUMENT\n\nOriginal paragraph.\n");
-check("CLI version on shared Node", await office.version() === "0.12.7");
+check("CLI version on shared Node", await office.version() === "0.13.0");
 await run(["create", "--type", "docx", "--from", md, "--out", docx]);
 check("DOCX creation and text extraction", (await office.textView(docx, "docx")).includes("NODE DOCUMENT"));
 const ops = join(allowed, "ops.json");

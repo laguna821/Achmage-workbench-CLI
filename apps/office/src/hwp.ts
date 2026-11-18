@@ -4,8 +4,9 @@ import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
 import { Events, Gateway, GatewayError, handshake, listen, pageRest, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
 import { installMcp } from "./mcp.ts";
-import type { HwpFormat, HwpStructure, MeasuredTab, MemoSnapshot } from "../../../packages/contracts/src/hwp.ts";
-import { encodeHwpSave } from "../../../packages/contracts/src/hwp.ts";
+import type { HwpFormat, HwpStructure, MeasuredTab, MemoSnapshot, SavePreview } from "../../../packages/contracts/src/hwp.ts";
+import { encodeHwpSave, hwpPreviewWire } from "../../../packages/contracts/src/hwp.ts";
+import { HANGUL_NOT_OFFERED, hangulFileCommand, hangulPrintLayout } from "./hwp-api-extras.ts";
 import type { OfficeOutputPlan, SvgJob } from "../../../packages/contracts/src/office-output.ts";
 import { prepareOutput, commitOutput, cancelOutput, printOutput } from "./output.ts";
 import { installHwpEnhancements, pinStudioSkin } from "./hwp-enhancements.ts";
@@ -54,7 +55,8 @@ const format: HwpFormat = /\.hwpx$/i.test(path) ? "hwpx" : "hwp";
 const state = { revision: init.artifact.revision, theme: init.theme, dirty: false, kept: false, recovered: false, trackingDropped: false, saveBlocked: false, password: false, memoOpen: false, epoch: 0 };
 connectOfficeUi(init, "hangul", command => {
   if (command === "save" || command === "save-as") events.emit("saveRequest", command === "save-as" ? "saveAs" : "save");
-  else events.emit("printRequest", command === "export-pdf" ? "pdf" : "print");
+  // v0.13.0: print goes through the editor's print preview (인쇄 미리 보기); PDF still exports directly
+  else hangulFileCommand(events, command === "export-pdf" ? "pdf" : "print");
 }, theme => { state.theme = theme; events.emit("themeChanged", theme); });
 installMcp(init, { ready: () => events.has("readBytesRequest"), dirty: () => state.dirty, async run(request) {
   if (request.kind !== "read") throw new Error("원본 한글 MCP는 읽기만 지원합니다.");
@@ -155,6 +157,8 @@ const hwpApi = {
     try {
       const output = mode === "saveAs" ? await prepareOutput(state.revision, format) : null;
       if (mode === "saveAs" && !output) return { ok: true, canceled: true };
+      // Save As that picked PDF (v0.13.0): nothing is saved; the editor writes a PDF copy through printPages.
+      if (output?.format === "pdf") { await cancelOutput(output.id).catch(() => {}); return { ok: true, path: output.path, export: "pdf" as const }; }
       saveTurn = { revision: state.revision, epoch: ++state.epoch, ...(output ? { output } : {}) };
       return { ok: true, path: output?.path ?? path, format: output?.format ?? format };
     } catch (error) { return reportFailure(error); }
@@ -163,18 +167,20 @@ const hwpApi = {
     if (exportedFormat !== (saveTurn?.output?.format ?? format)) throw new Error("문서 형식이 바뀌었습니다.");
     return gateway.hwpTabs(id, saveTurn?.revision ?? state.revision, bytes, exportedFormat);
   },
-  commitSave: async (bytes: Uint8Array, tabs?: MeasuredTab[], options?: { memos?: MemoSnapshot[] | null; structure?: HwpStructure | null }) => {
+  commitSave: async (bytes: Uint8Array, tabs?: MeasuredTab[], options?: { memos?: MemoSnapshot[] | null; structure?: HwpStructure | null; preview?: SavePreview | null }) => {
     const turn = saveTurn;
     if (!turn || init.readOnly) return { ok: false, error: "저장 요청을 다시 시작하세요." };
+    // H10: the saved file's preview text and picture are the document as it is now (absent: as the engine wrote it)
+    const preview = options && "preview" in options ? { preview: hwpPreviewWire(options.preview ?? null) } : {};
     try {
       if (turn.output) {
-        const saved = await commitOutput(turn.output.id, encodeHwpSave({ tabs, memos: options?.memos, structure: options?.structure }, bytes));
+        const saved = await commitOutput(turn.output.id, encodeHwpSave({ tabs, memos: options?.memos, structure: options?.structure, ...preview }, bytes));
         await recovery.drop(id).catch(() => undefined);
         state.kept = state.recovered = state.dirty = false;
         post({ type: "office:copied", artifactId: saved.artifactId });
         return { ok: true, path: saved.path };
       }
-      const saved = await gateway.saveHwp(id, turn.revision, bytes, { tabs, memos: options?.memos, structure: options?.structure });
+      const saved = await gateway.saveHwp(id, turn.revision, bytes, { tabs, memos: options?.memos, structure: options?.structure, ...preview });
       state.revision = saved.revision;
       state.epoch++;
       state.kept = state.recovered = state.dirty = false;
@@ -189,13 +195,22 @@ const hwpApi = {
   onSaveRequest: events.on("saveRequest"),
   requestFileCommand: (command: string) => {
     if (command === "save" || command === "saveAs") events.emit("saveRequest", command);
-    if (command === "print" || command === "pdf") events.emit("printRequest", command);
+    else hangulFileCommand(events, command);
   },
   onPrintRequest: events.on("printRequest"),
-  printPages: async (job: SvgJob & { mode: "print" | "pdf" }) => {
+  // File > 인쇄 / 인쇄 미리 보기 and Ctrl+P (v0.13.0): the preview opens; printing from it comes back as printPages.
+  onPreviewRequest: events.on("previewRequest"),
+  // Printing goes through Workbench's print; a PDF through Workbench's PDF export (which asks where, also after a
+  // Save As that picked PDF: `options.path` is that choice, the export's own dialog starts there).
+  printPages: async (job: SvgJob & { mode: "print" | "pdf" }, _options?: { path: string }) => {
     try { const result = await printOutput(state.revision, job, job.mode); return { ok: true, ...(result ?? { canceled: true }) }; }
     catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
   },
+  // 고급 인쇄 (N-up, booklet, labels…) is not connected: the preview's plain Print and PDF stay.
+  printLayout: hangulPrintLayout,
+  // Upstream's command-line PDF export (--headless-export) runs in its own hidden window; Workbench's page never is one.
+  consumeHeadlessExport: async () => null,
+  headlessExportDone: () => {},
   onCloseSaveRequest: events.on("closeSaveRequest"),
   sendCloseSaveResult: (ok: boolean) => closeAnswer?.(ok),
   setMemoModalOpen: (open: boolean) => { state.memoOpen = open; },
@@ -246,6 +261,8 @@ const hwpApi = {
   setAiPanelPrefs: (patch: object) => preferences.setPanel(patch),
   onAiPanelPrefsChanged: events.on("aiPanelPrefsChanged"),
   ...ai.desktop,
+  // What the Hangul AI is not offered (apps/office/hwp-offer-patch.ts) answers in words, should it be called.
+  ...HANGUL_NOT_OFFERED,
   aiSubscription: ai.subscription,
   openDroppedDocuments: () => false,
 };

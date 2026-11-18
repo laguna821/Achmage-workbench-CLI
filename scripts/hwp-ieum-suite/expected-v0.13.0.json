@@ -1,0 +1,176 @@
+{
+  "engine": "third_party/hop/engine.ts (rhwp 0.9.0-workbench.4) on IeumOffice v0.13.0 apps/hwp/tests: the vendored tree (vendor/ieumoffice, 8602a394) since unit hwp13 (default run); earlier with --tree refs-ext/ieumoffice-latest",
+  "note": "what of upstream's own hwp suite still fails on Workbench's engine, and why. environment = the runner (Ieum's React/DOM set-up, file layout, version string); workbench-choice = Workbench's engine differs on purpose (PDF import off, HOP 0011, Workbench 0021). A test not listed must pass. Unit hwp13 (vendored tree with its own node_modules): the 9 files that did not load under --tree load now; their tests that read localStorage fail under Node 26 (environment), the others pass; doc-check-panel's two pass.",
+  "failures": [
+    {
+      "test": "tests/agent-plugin-looks.test.ts > indent \"mark\" by construction reads a line with a tab later in it right",
+      "class": "workbench-choice",
+      "reason": "HOP 0011 (탭 있는 양쪽 정렬: only spaces after the last tab are spread): the plugin's 'mark' indent for a justified line with a tab lands 0.9 px from the left-aligned one (test bound 0.2 px). Same on 0.9.0-workbench.3; passes on Ieum's own 0.9.0-ieum.33"
+    },
+    {
+      "test": "tests/ai-autorun.test.ts > hwp AI panel: requests handed over leaves a request of the document check in the input box, unsent",
+      "class": "environment",
+      "reason": "Ieum's renderer UI test (React/jsdom): it reads window.localStorage, which Node 26's own experimental global localStorage (no --localstorage-file) shadows as undefined under this runner (\"Cannot read properties of undefined (reading 'getItem')\"); not an engine test"
+    },
+    {
+      "test": "tests/ai-autorun.test.ts > hwp AI panel: requests handed over sends an autoRun request at once, through the usual gate",
+      "class": "environment",
+      "reason": "Ieum's renderer UI test (React/jsdom): it reads window.localStorage, which Node 26's own experimental global localStorage (no --localstorage-file) shadows as undefined under this runner (\"Cannot read properties of undefined (reading 'getItem')\"); not an engine test"
+    },
+    {
+      "test": "tests/ai-autorun.test.ts > hwp AI panel: requests handed over sends an autoRun request once: the panel mounting again (the print preview) does not resend it",
+      "class": "environment",
+      "reason": "Ieum's renderer UI test (React/jsdom): it reads window.localStorage, which Node 26's own experimental global localStorage (no --localstorage-file) shadows as undefined under this runner (\"Cannot read properties of undefined (reading 'getItem')\"); not an engine test"
+    },
+    {
+      "test": "tests/ai-doc-attach.test.ts > hwp AI panel: attach from a document attaches the picked paths through the same path a Drive pick takes",
+      "class": "environment",
+      "reason": "Ieum's renderer UI test (React/jsdom): it reads window.localStorage, which Node 26's own experimental global localStorage (no --localstorage-file) shadows as undefined under this runner (\"Cannot read properties of undefined (reading 'getItem')\"); not an engine test"
+    },
+    {
+      "test": "tests/ai-off-app.test.ts > AI turned off in Settings brings the dock and the right-click item back at once when AI is turned on",
+      "class": "environment",
+      "reason": "Ieum's renderer UI test (React/jsdom): it reads window.localStorage, which Node 26's own experimental global localStorage (no --localstorage-file) shadows as undefined under this runner (\"Cannot read properties of undefined (reading 'clear')\"); not an engine test"
+    },
+    {
+      "test": "tests/ai-off-app.test.ts > AI turned off in Settings draws no AI dock or rail, keeps 쉬운 말로 풀기 out of the menus and asks nothing",
+      "class": "environment",
+      "reason": "Ieum's renderer UI test (React/jsdom): it reads window.localStorage, which Node 26's own experimental global localStorage (no --localstorage-file) shadows as undefined under this runner (\"Cannot read properties of undefined (reading 'clear')\"); not an engine test"
+    },
+    {
+      "test": "tests/ai-off-app.test.ts > AI turned off in Settings takes them away from an open tab when AI is turned off, with the AI marks",
+      "class": "environment",
+      "reason": "Ieum's renderer UI test (React/jsdom): it reads window.localStorage, which Node 26's own experimental global localStorage (no --localstorage-file) shadows as undefined under this runner (\"Cannot read properties of undefined (reading 'clear')\"); not an engine test"
+    },
+    {
+      "test": "tests/ai-project-folder.test.ts > hwp AI panel: project folder \"new chat\" starts a new project chat when a project is chosen",
+      "class": "environment",
+      "reason": "Ieum's renderer UI test (React/jsdom): it reads window.localStorage, which Node 26's own experimental global localStorage (no --localstorage-file) shadows as undefined under this runner (\"Cannot read properties of undefined (reading 'getItem')\"); not an engine test"
+    },
+    {
+      "test": "tests/ai-project-folder.test.ts > hwp AI panel: project folder \"new chat\" without a project clears the chat as before",
+      "class": "environment",
+      "reason": "Ieum's renderer UI test (React/jsdom): it reads window.localStorage, which Node 26's own experimental global localStorage (no --localstorage-file) shadows as undefined under this runner (\"Cannot read properties of undefined (reading 'getItem')\"); not an engine test"
+    },
+    {
+      "test": "tests/ai-project-folder.test.ts > hwp AI panel: project folder keeps the document’s own chat when no project is chosen",
+      "class": "environment",
+      "reason": "Ieum's renderer UI test (React/jsdom): it reads window.localStorage, which Node 26's own experimental global localStorage (no --localstorage-file) shadows as undefined under this runner (\"Cannot read properties of undefined (reading 'getItem')\"); not an engine test"
+    },
+    {
+      "test": "tests/ai-project-folder.test.ts > hwp AI panel: project folder puts the project chip on the row under the input and the chat menu in the header",
+      "class": "environment",
+      "reason": "Ieum's renderer UI test (React/jsdom): it reads window.localStorage, which Node 26's own experimental global localStorage (no --localstorage-file) shadows as undefined under this runner (\"Cannot read properties of undefined (reading 'getItem')\"); not an engine test"
+    },
+    {
+      "test": "tests/ai-project-folder.test.ts > hwp AI panel: project folder reads the project context before the run and sends the project skill with it",
+      "class": "environment",
+      "reason": "Ieum's renderer UI test (React/jsdom): it reads window.localStorage, which Node 26's own experimental global localStorage (no --localstorage-file) shadows as undefined under this runner (\"Cannot read properties of undefined (reading 'getItem')\"); not an engine test"
+    },
+    {
+      "test": "tests/cell-paste-nested.test.ts > the engine refusal the plugins recognise names drawn borders in words both plugins look for",
+      "class": "environment",
+      "reason": "reads patches/0055-nested-table-path-calls.patch next to the engine's rhwp.js; Workbench keeps its patches in third_party/hop/patches-0.9.0 (as ieum-0055-…), not beside the engine. The refusal text itself comes from that patch, carried byte for byte"
+    },
+    {
+      "test": "tests/engine-layout.test.ts > vendored rhwp engine is the build its manifest records",
+      "class": "environment",
+      "reason": "expects Ieum's own version string 0.9.0-ieum.N; ours is 0.9.0-workbench.4"
+    },
+    {
+      "test": "tests/engine-memos.test.ts > memo errors lets memos of an opened password-protected HWP document be edited",
+      "class": "workbench-choice",
+      "reason": "Workbench 0021: a password document stays protected, its memos are read-only (upstream and Ieum: \"a password only guards opening\")"
+    },
+    {
+      "test": "tests/engine-memos.test.ts > memo errors lets memos of an opened password-protected HWPX document be edited",
+      "class": "workbench-choice",
+      "reason": "Workbench 0021: a password document stays protected, its memos are read-only (upstream and Ieum: \"a password only guards opening\")"
+    },
+    {
+      "test": "tests/engine-pdf-wrapped-cmap.test.ts > PDF import: a ToUnicode array wrapped over lines imports a table whose continuation line starts with a surrogate pair",
+      "class": "workbench-choice",
+      "reason": "PDF import is compiled out (owner passed on PDF → Hangul); patches 0044/0049 are not carried and importPdf throws"
+    },
+    {
+      "test": "tests/engine-pdf-wrapped-cmap.test.ts > PDF import: a ToUnicode array wrapped over lines reads no entry out of a comment",
+      "class": "workbench-choice",
+      "reason": "PDF import is compiled out (owner passed on PDF → Hangul); patches 0044/0049 are not carried and importPdf throws"
+    },
+    {
+      "test": "tests/engine-pdf-wrapped-cmap.test.ts > PDF import: a ToUnicode array wrapped over lines reads the same letters from an array on one line and on two",
+      "class": "workbench-choice",
+      "reason": "PDF import is compiled out (owner passed on PDF → Hangul); patches 0044/0049 are not carried and importPdf throws"
+    },
+    {
+      "test": "tests/engine-pdf-wrapped-cmap.test.ts > PDF import: a ToUnicode array wrapped over lines still refuses a range that really is past the limit",
+      "class": "workbench-choice",
+      "reason": "PDF import is compiled out (owner passed on PDF → Hangul); patches 0044/0049 are not carried and importPdf throws"
+    },
+    {
+      "test": "tests/memo-side.test.ts > the memo column on screen follows a drag of its edge and remembers the width",
+      "class": "environment",
+      "reason": "Ieum's renderer UI (DOM/jsdom set-up of its own app shell), as on the vendored suite"
+    },
+    {
+      "test": "tests/memo-side.test.ts > the memo column on screen has a top-bar button that says whether the column is out",
+      "class": "environment",
+      "reason": "Ieum's renderer UI (DOM/jsdom set-up of its own app shell), as on the vendored suite"
+    },
+    {
+      "test": "tests/memo-side.test.ts > the memo column on screen hides the column while closed but keeps the panel mounted and quiet",
+      "class": "environment",
+      "reason": "Ieum's renderer UI (DOM/jsdom set-up of its own app shell), as on the vendored suite"
+    },
+    {
+      "test": "tests/memo-side.test.ts > the memo column on screen shows the panel with a resize edge while open",
+      "class": "environment",
+      "reason": "Ieum's renderer UI (DOM/jsdom set-up of its own app shell), as on the vendored suite"
+    },
+    {
+      "test": "tests/memo-side.test.ts > what the memo column remembers keeps a memo panel left out in the old shared dock out, once",
+      "class": "environment",
+      "reason": "Ieum's renderer UI (DOM/jsdom set-up of its own app shell), as on the vendored suite"
+    },
+    {
+      "test": "tests/memo-side.test.ts > what the memo column remembers keeps the width within its bounds and a share of the window",
+      "class": "environment",
+      "reason": "Ieum's renderer UI (DOM/jsdom set-up of its own app shell), as on the vendored suite"
+    },
+    {
+      "test": "tests/memo-side.test.ts > what the memo column remembers reads a saved width, and the default for nothing or nonsense",
+      "class": "environment",
+      "reason": "Ieum's renderer UI (DOM/jsdom set-up of its own app shell), as on the vendored suite"
+    },
+    {
+      "test": "tests/memo-side.test.ts > what the memo column remembers starts closed with nothing saved, and follows the saved flag after that",
+      "class": "environment",
+      "reason": "Ieum's renderer UI (DOM/jsdom set-up of its own app shell), as on the vendored suite"
+    },
+    {
+      "test": "tests/memo-side.test.ts > what the memo column remembers writes the new flag and drops the old dock mode",
+      "class": "environment",
+      "reason": "Ieum's renderer UI (DOM/jsdom set-up of its own app shell), as on the vendored suite"
+    },
+    {
+      "test": "tests/rhwp-patches.test.ts > the studio source the build fetched takes every studio patch exactly once",
+      "class": "upstream",
+      "reason": "upstream's own test lists src/engine/input-handler-mouse.ts twice in its file list, so studio-textbox-table-context-menu finds 2 targets; it runs only where a build fetched the studio (Workbench's build did; IeumOffice's CI apparently not). The build itself applies every studio patch exactly once (scripts/hwp-studio-090.mjs studioPatches090 + apps/office/src/hwp-studio-090.test.ts)"
+    },
+    {
+      "test": "tests/split-pane.test.ts > the split pane role asks the shell to focus this pane from the rail, and the panel shows once focus arrives",
+      "class": "environment",
+      "reason": "Ieum's renderer UI test (React/jsdom): it reads window.localStorage, which Node 26's own experimental global localStorage (no --localstorage-file) shadows as undefined under this runner (\"Cannot read properties of undefined (reading 'getItem')\"); not an engine test"
+    },
+    {
+      "test": "tests/split-pane.test.ts > the split pane role folds the panel to its rail in a secondary pane, and the panel stays mounted",
+      "class": "environment",
+      "reason": "Ieum's renderer UI test (React/jsdom): it reads window.localStorage, which Node 26's own experimental global localStorage (no --localstorage-file) shadows as undefined under this runner (\"Cannot read properties of undefined (reading 'getItem')\"); not an engine test"
+    },
+    {
+      "test": "tests/split-pane.test.ts > the split pane role reports this view gaining focus from the screen root",
+      "class": "environment",
+      "reason": "Ieum's renderer UI test (React/jsdom): it reads window.localStorage, which Node 26's own experimental global localStorage (no --localstorage-file) shadows as undefined under this runner (\"Cannot read properties of undefined (reading 'getItem')\"); not an engine test"
+    }
+  ]
+}

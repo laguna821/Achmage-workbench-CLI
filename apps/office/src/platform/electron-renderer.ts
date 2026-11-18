@@ -88,4 +88,12 @@ export const contextBridge = {
 
 export const webUtils = { getPathForFile: officeFileIdentity };
 
-export default { ipcRenderer, contextBridge, webUtils };
+/** Electron's frame spell engine (Hunspell), which v0.13.0's Excel preload reads for 검토 › 맞춤법 (F7).
+ * WebKit has none: every word is "not misspelled", and the preload's `nativeSpell` is not exposed, so the
+ * spelling dialog says it is unavailable rather than finding nothing. */
+export const webFrame = {
+  isWordMisspelled: (_word: string) => false,
+  getWordSuggestions: (_word: string): string[] => [],
+};
+
+export default { ipcRenderer, contextBridge, webUtils, webFrame };

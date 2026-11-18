@@ -32,6 +32,7 @@ function studio(live: HwpDocument, exported: () => Uint8Array) {
     exportHwp: async () => exported(), exportHwpx: async () => exported(),
     exportHwpVerify: async () => ({ pageCountBefore: 1, pageCountAfter: 1, recovered: true }),
     listMemos: async () => [], setMemoLock: async (locked) => { locks.push(locked); }, measureTabs: async () => [], notifySaved: async () => undefined,
+    savePreview: async () => ({ text: "", image: null }),
   };
   return { editor, locks, runSave: runSaveWith(() => studioReport(frame(live))) };
 }

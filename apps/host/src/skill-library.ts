@@ -39,7 +39,7 @@ export class SkillLibrary {
     const id = randomUUID(), hashes = new Map<string, string>();
     for (const candidate of imported.candidates) if (!candidate.problem) hashes.set(candidate.key, await skillContentHash(candidate.dir));
     this.imports.set(id, { imported, hashes, expires: Date.now() + TTL });
-    return { id, origin: imported.origin.kind === "github" ? `${imported.origin.repo}@${imported.origin.commit}` : imported.origin.kind === "folder" ? imported.origin.folder : imported.origin.file, license: imported.rootLicense ?? null,
+    return { id, origin: imported.origin.kind === "github" ? `${imported.origin.repo}@${imported.origin.commit}` : imported.origin.kind === "folder" ? imported.origin.folder : "file" in imported.origin ? imported.origin.file : "", license: imported.rootLicense ?? null,
       candidates: imported.candidates.map((item) => ({ key: item.key, name: item.name, title: item.title, description: item.description, files: item.files, bytes: item.bytes, hasScripts: item.hasScripts, hasTemplate: item.hasTemplate, collision: item.collision, problem: item.problem ?? null, urls: item.urls, license: item.license ?? null })) };
   }
   async prepare(kind: "folder" | "zip" | "github", input: string) {

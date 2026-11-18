@@ -1,4 +1,4 @@
-// Adapted from IeumOffice packages/ai-provider/src/user-skills/folder.ts @ 30ff4f051f067fcb2baf1ab416c40718c802ca35.
+// Adapted from IeumOffice packages/ai-provider/src/user-skills/folder.ts @ 8602a39410adb86037f3008588b64efc75b08c60.
 // Apache-2.0; see ../LICENSE and ../NOTICE. Changes: explicit Node .ts and local package imports.
 /**
  * One skill folder: what is in it (size, scripts, template), its front matter,
@@ -9,8 +9,11 @@ import { createHash } from 'node:crypto'
 import type { Dirent } from 'node:fs'
 import { lstat, readFile, readdir, realpath, stat } from 'node:fs/promises'
 import { basename, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { mcpServersOfSkill } from '../agent-core/skill-mcp-refs.ts'
+import { skillEditorsOf } from '../agent-core/skill-editors.ts'
 import {
   IEUM_SOURCE_FILE,
+  IEUM_EDITORS_KEY,
   IEUM_TEMPLATE_KEY,
   IEUM_TITLE_KEY,
   MAX_USER_SKILL_BYTES,
@@ -20,7 +23,7 @@ import {
   SKILL_TEMPLATE_FOLDER,
   SKILL_TEXT_EXTENSIONS,
 } from './constants.ts'
-import { parseSkillMd } from './frontmatter.ts'
+import { parseSkillMd, type ParsedSkillMd } from './frontmatter.ts'
 import { isReservedUserSkillName, isValidUserSkillName, userSkillId } from './names.ts'
 import type { UserSkill, UserSkillSource, UserSkillUnreadableReason } from './types.ts'
 
@@ -186,11 +189,13 @@ export async function readUserSkillFolder(
     template,
     templateExists: template !== undefined && files.some((file) => file.rel === template),
     hasScripts: files.some((file) => isSkillScriptPath(file.rel)),
+    mcpServers: parsed ? mcpServersOfSkillMd(parsed) : [],
     github: options.source === 'app' && files.some((file) => file.rel === IEUM_SOURCE_FILE),
     agentOnly:
       options.source === 'builtin' &&
       (options.agentOnlyNames?.has(name) === true ||
         options.agentOnlyNames?.has(folderName) === true),
+    fileEditors: skillEditorsOf(parsed?.metadata[IEUM_EDITORS_KEY]),
     files: files.length,
     bytes: listed?.bytes ?? 0,
     unreadable,
@@ -198,17 +203,54 @@ export async function readUserSkillFolder(
 }
 
 /**
+ * A skill folder's `SKILL.md` text, read only as a file the folder listing
+ * finds, so a link leading out of the folder is never read. `undefined` when
+ * the folder has none or it cannot be read.
+ */
+export async function readListedSkillMd(dir: string): Promise<string | undefined> {
+  const listed = await listSkillFolderFiles(dir, {
+    files: MAX_USER_SKILL_FILES,
+    bytes: MAX_USER_SKILL_BYTES,
+  })
+  const fold = (rel: string) => (process.platform === 'win32' ? rel.toLowerCase() : rel)
+  const skillMd =
+    listed?.files.find((file) => file.rel === 'SKILL.md') ??
+    listed?.files.find((file) => fold(file.rel) === fold('SKILL.md'))
+  if (!skillMd) return undefined
+  return readFile(skillMd.path, 'utf8').catch(() => undefined)
+}
+
+/**
+ * The MCP servers a read SKILL.md refers to (spec 8): its front matter
+ * `allowed-tools` (a list or a string) and `mcp__<server>__<tool>` in its body.
+ */
+export function mcpServersOfSkillMd(parsed: ParsedSkillMd): string[] {
+  return mcpServersOfSkill(
+    parsed.body,
+    parsed.lists['allowed-tools'] ?? parsed.fields['allowed-tools'],
+  )
+}
+
+/**
  * SHA-256 (hex) of a skill folder's paths, sizes and contents, leaving out the
  * GitHub source record at its top. The same files give the same hash on any
- * machine: paths use `/` and are sorted by code unit.
+ * machine: paths use `/` and are sorted by code unit. `skillMd` hashes the
+ * SKILL.md as the given function rewrites its text.
  */
-export async function skillContentHash(dir: string): Promise<string> {
+export async function skillContentHash(
+  dir: string,
+  options: { skillMd?: ((text: string) => string) | undefined } = {},
+): Promise<string> {
   const listed = await listSkillFolderFiles(dir)
   if (!listed) throw new Error(`Cannot read the skill folder: ${dir}`)
   const hash = createHash('sha256')
   for (const file of listed.files) {
     if (file.rel === IEUM_SOURCE_FILE) continue
-    const content = await readFile(file.path)
+    const read = await readFile(file.path)
+    const content =
+      options.skillMd && file.rel === 'SKILL.md'
+        ? Buffer.from(options.skillMd(read.toString('utf8')), 'utf8')
+        : read
     hash.update(`${file.rel}\0${content.length}\0`)
     hash.update(content)
   }

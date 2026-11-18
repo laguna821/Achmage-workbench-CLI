@@ -44,7 +44,7 @@ on:
       upgrade_from:
         description: 'Published release to install before the upgrade check'
         type: string
-        default: 'v0.5.3'
+        default: 'v0.5.4'
       upgrade_to:
         description: 'Published release to install over the old version (empty: normal build/publish)'
         type: string
@@ -136,7 +136,18 @@ jobs:
       # the save report still reaches its document (scripts/check-hwp-studio-report.ts).
       - name: Headless Chromium (office build check, urgent UI checks)
         run: node node_modules/playwright-core/cli.js install --with-deps chromium --only-shell
-      - name: Build (IeumOffice checkout, xlsx engine, UI, editors, gateway)
+      # The Hangul studio's 한자로 바꾸기 needs libhangul's data/hanja/hanja.txt (BSD-3-Clause data file). The
+      # build itself never fetches it (scripts/build-hwp-studio.mjs): it is fetched here at the commit
+      # IeumOffice pins, and the build checks its sha256 against IeumOffice's pin before using it.
+      - name: IeumOffice checkouts and the pinned Hanja dictionary
+        run: |
+          bash scripts/fetch-ieum.sh
+          commit=$(sed -n "s/^export const HANJA_COMMIT = '\([0-9a-f]\{40\}\)'$/\1/p" vendor/ieumoffice/apps/hwp/scripts/hanja-dict.mjs)
+          test -n "$commit"
+          mkdir -p "$RUNNER_TEMP/hanja"
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/libhangul/libhangul/$commit/data/hanja/hanja.txt" -o "$RUNNER_TEMP/hanja/hanja.txt"
+          echo "HWP_HANJA_FROM=$RUNNER_TEMP/hanja/hanja.txt" >> "$GITHUB_ENV"
+      - name: Build (xlsx engine, UI, editors, gateway)
         run: npm run build
       - name: Typecheck and tests
         env:
@@ -449,7 +460,7 @@ jobs:
     timeout-minutes: 15
     env:
       GH_TOKEN: ${{ github.token }}
-      UPGRADE_FROM: ${{ inputs.upgrade_from || 'v0.5.3' }}
+      UPGRADE_FROM: ${{ inputs.upgrade_from || 'v0.5.4' }}
       UPGRADE_TO: ${{ inputs.upgrade_to }}
     steps:
       - uses: actions/checkout@v4

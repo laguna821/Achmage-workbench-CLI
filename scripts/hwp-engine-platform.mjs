@@ -6,10 +6,14 @@
 // 0.8.7 glue: "LinkError … function import requires a callable"). Every '@rhwp/core' import from
 // vendor/ieumoffice/ resolves to the selector instead (H4b).
 import { fileURLToPath } from 'node:url';
+import { IEUM_HWP_DIR } from './ieum-earlier-source.mjs';
+// The Hangul page's earlier checkout (ieum-earlier-source.mjs) gets the same one engine.
+const roots = [...new Set(['vendor/ieumoffice', IEUM_HWP_DIR])].map((dir) => `/${dir}/`);
 const engine = fileURLToPath(new URL('../third_party/hop/engine.ts', import.meta.url));
 export function hwpEngineResolve(source, importer = '') {
   if (source !== '@rhwp/core' || !importer) return null;
-  return importer.replaceAll('\\', '/').includes('/vendor/ieumoffice/') ? engine : null;
+  const path = importer.replaceAll('\\', '/');
+  return roots.some((dir) => path.includes(dir)) ? engine : null;
 }
 export function hwpEnginePlugin() {
   return { name: 'workbench-hwp-engine', setup(build) {

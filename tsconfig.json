@@ -1,5 +1,11 @@
 {
   "extends": "./tsconfig.base.json",
-  "compilerOptions": { "lib": ["ES2023"] },
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    // Type-checking only: the host reaches v0.13.0's draw.io model through file-parse's attachable.ts, which
+    // needs one function from it; the package's other files use constructor parameter properties, which
+    // this project's erasableSyntaxOnly refuses. Check that one file's real code instead (bundles unchanged).
+    "paths": { "@genoffice/drawio-model": ["./vendor/ieumoffice/packages/drawio-model/src/format.ts"] }
+  },
   "include": ["packages/*/src/**/*.ts", "apps/host/src/**/*.ts", "scripts/**/*.ts"]
 }

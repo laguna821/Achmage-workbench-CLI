@@ -1,4 +1,4 @@
-// Adapted from IeumOffice (https://github.com/pblsketch/openoffice)
+// Adapted from IeumOffice (https://github.com/pblsketch/ieumoffice)
 // packages/ai-provider/src/subscription/env.ts @ 9052297, Apache-2.0 (see third_party/ieumoffice).
 // Changes: the Windows-only HOME fix and the per-launch PATH/extra options are left out; a client
 // tag for the Claude Agent SDK is added.

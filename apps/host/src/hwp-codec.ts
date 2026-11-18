@@ -1,4 +1,5 @@
-import type { HwpFormat, HwpSaveMetadata, HwpStructure, MeasuredTab, MemoSnapshot } from "../../../packages/contracts/src/hwp.ts";
+import type { HwpFormat, HwpSaveMetadata, HwpStructure, MeasuredTab, MemoSnapshot, SavePreview } from "../../../packages/contracts/src/hwp.ts";
+import { HWP_PREVIEW_IMAGE_MAX, HWP_PREVIEW_TEXT_MAX, HWP_SAVE_METADATA_MAX } from "../../../packages/contracts/src/hwp.ts";
 import { fieldKindsOf } from "../../../third_party/ieumoffice/hwp/field-kinds.ts";
 import { lostMemoCountOf } from "../../../third_party/ieumoffice/hwp/memos.ts";
 import { applySaveFixes, type SaveBase } from "../../../third_party/ieumoffice/hwp/save-fixes.ts";
@@ -52,14 +53,32 @@ function validMemo(value: unknown): value is MemoSnapshot {
   if (![value.sectionIndex, value.paraIndex, value.startCharIdx, value.endCharIdx].every((item) => item === null || integer(item))) return false;
   return value.path === null || Array.isArray(value.path) && value.path.length <= 64 && value.path.every((part) => object(part) && (part.type === "cell" || part.type === "textbox") && integer(part.controlIndex) && (part.cellIndex === undefined || integer(part.cellIndex)) && (part.paraIndex === undefined || integer(part.paraIndex)));
 }
+/** The longest body of a save request: the document and the JSON prefix (with a preview picture). */
+export const HWP_SAVE_BODY_MAX = HWP_MAX_BYTES + HWP_SAVE_METADATA_MAX + 4;
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
+function validPreview(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  if (!object(value) || typeof value.text !== "string" || value.text.length > HWP_PREVIEW_TEXT_MAX * 2) return false;
+  return value.image === null || typeof value.image === "string" && value.image.length % 4 === 0 && value.image.length <= Math.ceil(HWP_PREVIEW_IMAGE_MAX / 3) * 4 && BASE64.test(value.image);
+}
+/**
+ * The preview a save writes (IeumOffice's savePreviewOf, decision 0146): absent = leave the file's as the
+ * engine wrote it (a recovery copy, an older page); anything else = the document's now, a missing or
+ * unusable picture written as a blank one (save-fixes / preview-parts), never the stale one.
+ */
+export function savePreviewOf(wire: HwpSaveMetadata["preview"]): SavePreview | undefined {
+  if (wire === undefined) return undefined;
+  return { text: typeof wire?.text === "string" ? wire.text : "", image: typeof wire?.image === "string" && wire.image ? new Uint8Array(Buffer.from(wire.image, "base64")) : null };
+}
 export function decodeHwpSave(body: Buffer): { metadata: HwpSaveMetadata; bytes: Buffer } {
   if (body.length < 5) throw bad("한글 저장 요청이 비어 있습니다.");
   const length = body.readUInt32BE(0);
-  if (length > 1_000_000 || length + 4 >= body.length || body.length - length - 4 > HWP_MAX_BYTES) throw bad("한글 저장 요청 크기가 올바르지 않습니다.");
+  if (length > HWP_SAVE_METADATA_MAX || length + 4 >= body.length || body.length - length - 4 > HWP_MAX_BYTES) throw bad("한글 저장 요청 크기가 올바르지 않습니다.");
   let value: unknown;
   try { value = JSON.parse(body.subarray(4, 4 + length).toString("utf8")); } catch { throw bad("한글 저장 정보를 읽지 못했습니다."); }
   if (!object(value) || (value.tabs !== undefined && (!Array.isArray(value.tabs) || value.tabs.length > 5000 || !value.tabs.every(validTab))) || (value.memos !== undefined && value.memos !== null && (!Array.isArray(value.memos) || value.memos.length > 5000 || !value.memos.every(validMemo)))) throw bad("탭 간격이나 메모 정보가 올바르지 않습니다.");
   if (value.structure !== undefined && value.structure !== null && !validStructure(value.structure)) throw bad("한글 저장 정보의 문서 구조 정보가 올바르지 않습니다.");
+  if (!validPreview(value.preview)) throw bad("한글 저장 정보의 미리 보기가 올바르지 않습니다.");
   return { metadata: value as HwpSaveMetadata, bytes: body.subarray(4 + length) };
 }
 
@@ -86,7 +105,8 @@ export async function prepareHwpSave(original: Uint8Array, data: Uint8Array, for
   await checkContainer(data, format);
   const opened = await openHwpBytes(original, originalFormat);
   if (opened.saveBlocked) throw bad("이 문서의 변경 추적을 보존할 수 없어 저장하지 않았습니다.");
-  const fixed = applySaveFixes(data, format, metadata.tabs, opened.base);
+  // A save writes the document's preview as it is now (H10); a recovery copy keeps what the export has.
+  const fixed = applySaveFixes(data, format, metadata.tabs, opened.base, purpose === "save" ? savePreviewOf(metadata.preview) : undefined);
   if (fixed.tailsSkipped) throw new HttpError(422, "hwp_content_loss", "마스터 페이지나 메모를 보존할 수 없어 저장하지 않았습니다. 원본과 편집 내용은 유지됩니다.");
   // Validate both the document and memo model before considering the output a new revision
   // (Ieum's reader, as generated); the fingerprint below counts the same bytes in its own opening.

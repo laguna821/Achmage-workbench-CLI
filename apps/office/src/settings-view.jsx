@@ -2,9 +2,10 @@ import React, { useEffect, useState } from "../../../vendor/ieumoffice/node_modu
 import { createRoot } from "../../../vendor/ieumoffice/node_modules/react-dom/client.js";
 import { AiSection } from "@ieum/apps/shell/src/renderer/src/SettingsAiSection.tsx";
 import { McpServerSection } from "@ieum/apps/shell/src/renderer/src/McpServerSection.tsx";
-import { DriveSettingsCard } from "@ieum/apps/shell/src/renderer/src/DriveSettingsCard.tsx";
-import { DrivePanel, useDriveState } from "@ieum/apps/shell/src/renderer/src/DrivePanel.tsx";
-import { DrivePickerWindow } from "@ieum/apps/shell/src/renderer/src/drive-picker/DrivePickerWindow.tsx";
+// Google Drive builds from the earlier pin (scripts/ieum-earlier-source.mjs, the Google Drive switch).
+import { DriveSettingsCard } from "@ieum-drive/apps/shell/src/renderer/src/DriveSettingsCard.tsx";
+import { DrivePanel, useDriveState } from "@ieum-drive/apps/shell/src/renderer/src/DrivePanel.tsx";
+import { DrivePickerWindow } from "@ieum-drive/apps/shell/src/renderer/src/drive-picker/DrivePickerWindow.tsx";
 import { ipcRenderer } from "./platform/electron-renderer.ts";
 import { DocumentPreferences } from "./preferences-view.jsx";
 import { AiModelPane, AiMediaPane } from "@ieum/apps/shell/src/renderer/src/SettingsModal.tsx";
@@ -16,7 +17,7 @@ import "@ieum/packages/ui/src/ai-usage.css";
 import "@ieum/apps/shell/src/renderer/src/home.css";
 import "@ieum/apps/shell/src/renderer/src/settings.css";
 import "./settings.css";
-import "@ieum/apps/shell/src/renderer/src/drive-picker/drive-picker.css";
+import "@ieum-drive/apps/shell/src/renderer/src/drive-picker/drive-picker.css";
 
 const request = (channel, args = []) => ipcRenderer.invoke(channel, ...args);
 const pickerApi = { list: (listing, pageToken) => request("drive:list", [listing, pageToken]),
@@ -43,7 +44,7 @@ function Settings() {
     {error && <div className="wb-settings-notice" role="alert"><span>{error}</span><button onClick={() => setError(null)} aria-label="알림 닫기">×</button></div>}
     {legacy > 0 && <p className="wb-settings-notice" role="status">이전 앱에서 보관한 키 {legacy}개를 유지하고 있습니다. 연결하려면 해당 키를 다시 입력해 주세요.</p>}
     <DocumentPreferences t={t} />
-    <AiSection t={t} lang={lang} connection={connection} advanced={(tab) => tab === "model" ? <AiModelPane t={t} /> : <AiMediaPane t={t} lang={lang} codexImageAvailable={connection.codexImageAvailable} />} />
+    <AiSection t={t} lang={lang} connection={connection} advanced={(tab, showCard) => tab === "model" ? <AiModelPane t={t} onCliPathSaved={connection.recheck} /> : <AiMediaPane t={t} lang={lang} codexImageAvailable={connection.codexImageAvailable} statuses={connection.statuses} onShowCodex={() => showCard("codex")} />} />
     <McpServerSection t={t} />
     <DriveSettingsCard />
   </main>;

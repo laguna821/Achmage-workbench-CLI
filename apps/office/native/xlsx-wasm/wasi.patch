@@ -1,6 +1,6 @@
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -161,7 +161,12 @@
+@@ -190,7 +190,12 @@
      session_id: &str,
      cancelled: &AtomicBool,
  ) -> Result<CacheDirectory, SidecarError> {
@@ -14,7 +14,7 @@
      let directory = CacheDirectory::create(path)?;
      if cancelled.load(Ordering::Acquire) {
          return Err(SidecarError::cancelled());
-@@ -677,6 +682,13 @@
+@@ -711,6 +716,13 @@
          if runtime.handle.is_some() {
              return Ok(());
          }
@@ -28,7 +28,7 @@
          let path = self.path.clone();
          let worksheet_path = runtime.worksheet_path.clone();
          let cache_directory = self.cache_directory.clone();
-@@ -694,9 +706,7 @@
+@@ -728,9 +740,7 @@
                  .collect(),
          );
          let cancelled = Arc::clone(&self.cancelled);
@@ -39,7 +39,7 @@
                  let result = index_worksheet(
                      &path,
                      &worksheet_path,
-@@ -717,7 +727,14 @@
+@@ -751,7 +761,14 @@
                      }
                      condition.notify_all();
                  }

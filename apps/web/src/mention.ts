@@ -1,4 +1,4 @@
-// Adapted from IeumOffice (https://github.com/pblsketch/openoffice)
+// Adapted from IeumOffice (https://github.com/pblsketch/ieumoffice)
 // packages/ui/src/doc-mention-model.ts @ 9052297, Apache-2.0 (see third_party/ieumoffice).
 // Changes: rows are Workbench documents (open first, then the rest of the work) instead of the
 // shell's file list; no "find more" row and no folder disambiguation by path.

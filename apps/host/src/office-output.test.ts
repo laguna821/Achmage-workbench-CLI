@@ -112,6 +112,7 @@ it("Save As carries an intentional memo deletion into HWP while refusing an unli
       exportHwp: async () => { expect(locked).toBe(true); return doc.exportHwp(); },
       exportHwpx: async () => doc.exportHwpx(),
       measureTabs: async () => [], notifySaved: async () => {},
+      savePreview: async () => ({ text: "", image: null }),
     };
     const outcome = await runSave(editor, {
       beginSave: async () => ({ ok: true, path: plan.path, format: "hwp" }),

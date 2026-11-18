@@ -5,7 +5,7 @@ import { diagramComponents } from "../Diagram.tsx";
 import { ObsidianMarkdown, obsidianComponents } from "../../markdown/obsidian.tsx";
 
 const DRAWN = diagramComponents();
-import { PROVIDER_LABEL, isOfficeFormat, type CreateTarget, type Artifact, type ArtifactRevision, type Attachment, type DocRef, type DocRefInput, type Proposal, type Provider, type Session, type Work } from "@workbench/contracts";
+import { PROVIDER_LABEL, isLegacyFormat, isOfficeFormat, type CreateTarget, type Artifact, type ArtifactRevision, type Attachment, type DocRef, type DocRefInput, type LegacyFormat, type Proposal, type Provider, type Session, type Work } from "@workbench/contracts";
 import { ApiRequestError, type Api } from "../../api.ts";
 import { rowState } from "../../row-state.ts";
 import { StateMark } from "../StateMark.tsx";
@@ -14,6 +14,7 @@ import { Composer } from "../Composer.tsx";
 import { ModelPicker, type ModelChoice } from "../ModelPicker.tsx";
 import { PendingFiles, usePendingFiles } from "../Attachments.tsx";
 import { DocContext, FormatBadge, removedLine } from "../DocCards.tsx";
+import { LegacyConvert } from "./LegacyConvert.tsx";
 import { EngineMark } from "../EngineMark.tsx";
 import { PartialNote } from "../Recovery.tsx";
 import { Icon } from "../Icon.tsx";
@@ -1105,6 +1106,8 @@ export default function DocumentView({
       );
     }
     if (officeEditing && everWriter.current) return null;
+    // An old .doc/.ppt or an .ods: not edited as it is; "변환해서 열기" opens a NEW modern copy (LegacyConvert).
+    if (isLegacyFormat(artifact.format)) return <LegacyConvert api={api} artifact={artifact as Artifact & { format: LegacyFormat }} onOpen={(id) => onOpenArtifact(id)} notify={onToast} />;
     if (office) return <OfficeView api={api} artifact={artifact} revision={artifact.revision} mode={mode === "pages" ? "pages" : "text"} />;
     if (design) {
       return (

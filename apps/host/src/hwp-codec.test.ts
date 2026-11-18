@@ -16,9 +16,10 @@ import { EventBus } from "./bus.ts";
 import { createEditorsServer, EditorGrants, officeEditorKind } from "./editors.ts";
 import { SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
+import { IEUM_HWP_DIR } from "../../../scripts/ieum-earlier-source.mjs";
 
 beforeAll(async () => { await init({ module_or_path: readFileSync(hwpWasmPath()) }); });
-const fixture = (name: string) => readFileSync(resolve("vendor/ieumoffice/apps/hwp/tests/fixtures", name));
+const fixture = (name: string) => readFileSync(resolve(IEUM_HWP_DIR, "apps/hwp/tests/fixtures", name));
 function document(text = "한글 보존 검사") {
   const doc = HwpDocument.createEmpty(); doc.createBlankDocument(); doc.insertText(0, 0, 0, text); return doc;
 }

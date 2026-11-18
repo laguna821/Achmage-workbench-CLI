@@ -41,6 +41,11 @@ export type SidebarActions = {
   refreshUsage: () => Promise<unknown>;
   /** Home: what is going on across all works, and a new session. */
   openHome: () => void;
+  /**
+   * 불러오기 (hangul-convert): "문서 불러오기…" (no files: the native chooser) or files dropped from the
+   * computer onto the project's 문서 — copied into the project folder, then the 변환 dialog.
+   */
+  importDocuments?: (work: Work, files?: File[]) => void;
   /** A new Markdown page in a work (the "+" on a work row). */
   newPage: (work: Work) => void;
   /** "세션 잇기" for two sessions (a session row dropped on the middle of another). */

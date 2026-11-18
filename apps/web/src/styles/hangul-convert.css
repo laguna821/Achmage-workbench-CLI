@@ -1,0 +1,101 @@
+/* 불러오기 / 내보내기 dialogs (HangulImportDialog, HangulExportDialog): the stage-dialog surface, one column of
+   labelled fields (dialog body 16 px is the dialog's own; fields and meta from the tokens). Tokens only. */
+
+.hconv-dialog {
+  width: min(560px, calc(100vw - 40px));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.hconv-dialog .sheet-hint { margin: 0; }
+
+.hconv-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.hconv-field :is(input, .ui-select) { font-weight: 400; }
+
+.hconv-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--fs-ui);
+}
+
+.hconv-dialog p.hconv-desc,
+.hconv-dialog p.hconv-line {
+  margin: calc(var(--space-2xs) * -1) 0 0;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+}
+
+.hconv-dialog p.hconv-line { margin: 0; color: var(--amber-text); }
+
+.hconv-files,
+.hconv-report,
+.hconv-warnings {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hconv-files li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 32px;
+  font-size: var(--fs-ui);
+}
+
+.hconv-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-ui);
+}
+
+.hconv-file-state { color: var(--muted); font-size: var(--fs-micro); }
+
+.hconv-report > li + li { margin-top: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid var(--line); }
+
+.hconv-report-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 32px;
+}
+
+.hconv-warnings li {
+  padding-left: var(--space-sm);
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+}
+
+/* The document list as a drop target for files from the computer (ProjectLevel). */
+.nav-inside-docs.hconv-drop {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+  border-radius: var(--r-sm);
+}
+
+/* "문서 불러오기…" beside the 문서 section's + (ProjectLevel): the same quiet ink as +. */
+.nav-column .nav-inside-import { --c-ink: var(--muted); }
+
+/* The password line sits below its field with the dialog's own gap, not tucked under it. */
+.hconv-dialog p.hconv-password-note { margin: var(--space-2xs) 0 0; }
+
+/* Word → Hangul (HangulExportDialog, a Word document): the ledger — what the copy changes and leaves out — shown
+   before anything is written; the two parts are upstream's own headings (바뀌는 것 / 빠지는 것). */
+.hconv-ledger { display: flex; flex-direction: column; gap: var(--space-xs); }
+.hconv-ledger-part h3 { margin: 0; font-size: var(--fs-meta); font-weight: 600; color: var(--text); }
+.hconv-ledger .hconv-warnings { max-height: 240px; overflow: auto; }

@@ -1,6 +1,7 @@
 Achmage Workbench — rhwp v0.9.0 form of a 0.8.7 engine patch (third_party/hop/patches-0.9.0).
 Origin: HOP 0007 (third_party/hop/patches/0007-hop-widow-orphan-keep-next.patch, sha256 7c9340a3011867fcb9135b2c647650e63d1618efc76935d82f19884101630969; original author hop-workbench <hop@localhost>)
 Status: ported
+Re-based for 0.9.0-workbench.4: applied after IeumOffice v0.13.0's patches; one hunk re-placed by hand (src/model/provenance.rs: Ieum 0035 adds `prev_spacing_beneath_object` to the same struct and constructor lines; both fields kept). The other hunks are unchanged.
 Differs from the 0.8.7 form: upstream applies widow/orphan only to endnotes, so nothing runs twice; widow_orphan is computed inside the split function; provenance field, section-flow and paragraph-flow hunks placed by hand; keep-with-next budget without the 0.8.7 footnote margin (0.9.0's split loop has none); drift-margin hunk not applied (0.9.0's margin is 0). The rules still apply only to sections with no stored lines, and 0.9.0 marks re-laid-out lines as stored, so a new document typed from the blank template does not get them.
 Regression test: hop_rules::tests::widow_keeps_two_lines_together, orphan_moves_a_first_line_alone (brought by the patch); hop_0007_widow_moves_a_second_line_with_the_last, hop_0007_orphan_moves_a_paragraph_whose_first_line_ends_the_page, hop_0007_keep_with_next_moves_a_paragraph_to_its_successor (new, also with the rules off); H4b: upstream's passthrough guard (tests/issue_2724_passthrough_invalidation_guard.rs classification_drift_is_blocked) gets set_hop_pagination_rules as a SessionState exemption (a layout flag, no document change)
 
@@ -22,10 +23,10 @@ Subject: [PATCH] HOP 0007 hop-widow-orphan-keep-next (0.9.0 port)
  create mode 100644 src/renderer/typeset/paragraph/hop_rules.rs
 
 diff --git a/src/document_core/commands/document.rs b/src/document_core/commands/document.rs
-index 30208a0a4..6a972d5d8 100644
+index 68ce81c0..a142f58a 100644
 --- a/src/document_core/commands/document.rs
 +++ b/src/document_core/commands/document.rs
-@@ -452,6 +452,7 @@ impl DocumentCore {
+@@ -482,6 +482,7 @@ impl DocumentCore {
              debug_overlay: false,
              respect_vpos_reset: false,
              hangul2024_compat: false,
@@ -34,10 +35,10 @@ index 30208a0a4..6a972d5d8 100644
              dirty_sections: storage
                  .collect(std::iter::repeat_n(true, sec_count))
 diff --git a/src/document_core/mod.rs b/src/document_core/mod.rs
-index 47fccb2e1..442b11026 100644
+index 914e07d1..4cf5a945 100644
 --- a/src/document_core/mod.rs
 +++ b/src/document_core/mod.rs
-@@ -257,6 +257,8 @@ pub struct DocumentCore {
+@@ -260,6 +260,8 @@ pub struct DocumentCore {
      /// 문서 출처가 아니므로 provenance 가 아닌 여기서 들고,
      /// [`Self::effective_layout_profile`] 이 profile 에 합성한다.
      pub(crate) hangul2024_compat: bool,
@@ -46,7 +47,7 @@ index 47fccb2e1..442b11026 100644
      /// 구역별 표 측정 데이터 (페이지네이션 결과 보존)
      pub(crate) measured_tables: Vec<Vec<MeasuredTable>>,
      /// 구역별 dirty 플래그 (true = 재페이지네이션 필요)
-@@ -517,6 +519,7 @@ impl DocumentCore {
+@@ -520,6 +522,7 @@ impl DocumentCore {
          self.document
              .layout_profile()
              .with_hangul2024_layout(self.hangul2024_compat)
@@ -54,7 +55,7 @@ index 47fccb2e1..442b11026 100644
      }
  
      /// Rebuild the resolved-style aggregate with the document format's style
-@@ -555,6 +558,18 @@ impl DocumentCore {
+@@ -558,6 +561,18 @@ impl DocumentCore {
          equation_frames_changed
      }
  
@@ -73,7 +74,7 @@ index 47fccb2e1..442b11026 100644
      /// 한글 2024 계열 조판 에뮬레이션을 켜거나 끈다.
      /// 변경 시 페이지네이션 결과가 달라지므로 모든 섹션을 재페이지네이션한다.
      pub fn set_hangul2024_compat(&mut self, enabled: bool) {
-@@ -609,6 +624,7 @@ impl DocumentCore {
+@@ -613,6 +628,7 @@ impl DocumentCore {
              debug_overlay: false,
              respect_vpos_reset: false,
              hangul2024_compat: false,
@@ -82,23 +83,23 @@ index 47fccb2e1..442b11026 100644
              dirty_sections: Vec::new(),
              measured_sections: Vec::new(),
 diff --git a/src/model/provenance.rs b/src/model/provenance.rs
-index 888dbf892..005075b39 100644
+index 87e93e2e..bcf71e58 100644
 --- a/src/model/provenance.rs
 +++ b/src/model/provenance.rs
-@@ -92,6 +92,9 @@ pub struct LayoutCompatibilityProfile {
-     hwp5_container: bool,
-     hangul2024_layout: bool,
-     stored_rows_before_hancom_2020: bool,
+@@ -95,6 +95,9 @@ pub struct LayoutCompatibilityProfile {
+     /// 문서가 MS 워드 호환으로 저장돼 개체 아래 문단의 앞 간격을 적용한다
+     /// (HWPX `applyPrevspacingBeneathObject`, HWP5 호환 문서 대상 MS 워드).
+     prev_spacing_beneath_object: bool,
 +    /// [HOP patch] Hancom 2024 widow/orphan and keep-with-next pagination for sections rhwp lays out itself
 +    /// (session setting, on by default).
 +    hop_pagination_rules: bool,
      /// 이 세션에서 편집 명령이 문서를 변조했다(native HWP5 섹션의 raw_stream 소실).
      /// 저장 시점 형상 전용 보정(선언 높이 fit-down 등)은 편집 문서에서 꺼야 한다 —
      /// 한글 편집기도 편집 중에는 측정 기반으로 재조판한다.
-@@ -119,10 +122,22 @@ impl LayoutCompatibilityProfile {
-             hwp5_container: native_hwp5_layout,
+@@ -123,10 +126,22 @@ impl LayoutCompatibilityProfile {
              hangul2024_layout: false,
              stored_rows_before_hancom_2020: false,
+             prev_spacing_beneath_object: false,
 +            hop_pagination_rules: true,
              session_edited: false,
          }
@@ -119,7 +120,7 @@ index 888dbf892..005075b39 100644
      /// 옛 작성일이 남은 저장본도 유효한 현재 저장 줄 상자를 가질 수 있다.
      pub fn hwp5_container(&self) -> bool {
 diff --git a/src/renderer/typeset/paragraph.rs b/src/renderer/typeset/paragraph.rs
-index 64e18c4d7..34039d2e9 100644
+index 87f2410b..8f59be9a 100644
 --- a/src/renderer/typeset/paragraph.rs
 +++ b/src/renderer/typeset/paragraph.rs
 @@ -21,6 +21,7 @@ pub(super) mod flow;
@@ -130,7 +131,7 @@ index 64e18c4d7..34039d2e9 100644
  pub(super) mod line_queries;
  pub(super) mod metrics;
  pub(super) mod overflow;
-@@ -198,6 +199,14 @@ pub(super) fn place_split_paragraph_with_storage<S: crate::storage::Storage>(
+@@ -213,6 +214,14 @@ pub(super) fn place_split_paragraph_with_storage<S: crate::storage::Storage>(
      dpi: f64,
      storage: &S,
  ) -> Result<(), S::Error> {
@@ -145,7 +146,7 @@ index 64e18c4d7..34039d2e9 100644
      // 줄 단위 분할 루프
      let mut cursor_line = st.take_prefilled_line_prefix(para_idx);
      let mut on_entry_page = true;
-@@ -413,6 +422,32 @@ pub(super) fn place_split_paragraph_with_storage<S: crate::storage::Storage>(
+@@ -428,6 +437,32 @@ pub(super) fn place_split_paragraph_with_storage<S: crate::storage::Storage>(
              cumulative,
          } = boundary;
  
@@ -180,7 +181,7 @@ index 64e18c4d7..34039d2e9 100644
              para_idx,
 diff --git a/src/renderer/typeset/paragraph/hop_rules.rs b/src/renderer/typeset/paragraph/hop_rules.rs
 new file mode 100644
-index 000000000..551d2e236
+index 00000000..551d2e23
 --- /dev/null
 +++ b/src/renderer/typeset/paragraph/hop_rules.rs
 @@ -0,0 +1,277 @@
@@ -462,7 +463,7 @@ index 000000000..551d2e236
 +    }
 +}
 diff --git a/src/renderer/typeset/section/flow.rs b/src/renderer/typeset/section/flow.rs
-index b0d5e0418..49fc54f0d 100644
+index 76287996..6dabd483 100644
 --- a/src/renderer/typeset/section/flow.rs
 +++ b/src/renderer/typeset/section/flow.rs
 @@ -202,6 +202,40 @@ impl TypesetEngine {
@@ -507,10 +508,10 @@ index b0d5e0418..49fc54f0d 100644
              self.vpos_snap_current_height_with_storage(
                  st,
 diff --git a/src/wasm_api.rs b/src/wasm_api.rs
-index 686015e02..050d04e7b 100644
+index 7fc7a965..930d6a92 100644
 --- a/src/wasm_api.rs
 +++ b/src/wasm_api.rs
-@@ -1143,6 +1143,13 @@ impl HwpDocument {
+@@ -1153,6 +1153,13 @@ impl HwpDocument {
          }
      }
  
@@ -525,7 +526,7 @@ index 686015e02..050d04e7b 100644
      #[wasm_bindgen(js_name = pageCount)]
      pub fn page_count(&self) -> u32 {
 diff --git a/tests/common/passthrough_exemptions.rs b/tests/common/passthrough_exemptions.rs
-index 27a79a436..a16d476a1 100644
+index 27a79a43..a16d476a 100644
 --- a/tests/common/passthrough_exemptions.rs
 +++ b/tests/common/passthrough_exemptions.rs
 @@ -338,6 +338,12 @@ const EXEMPT: &[(&str, &str, Exempt, &str)] = &[

@@ -8,4 +8,8 @@ export interface HwpEditOutcome {
   structure?: "checked" | "unchecked"; text?: "checked" | "unchecked";
 }
 export function editHwp(bytes: Uint8Array, format: HwpFormat, ops: unknown[], options?: { dryRun?: boolean; mode?: "atomic" | "best_effort" | "stop_on_error" }): Promise<HwpEditOutcome>;
+/** Upstream's headless operations Workbench does not offer (not in hwpCatalog, refused by editHwp). */
+export const HWP_OPS_NOT_OFFERED: Set<string>;
 export function hwpCatalog(): Promise<{ domain: string; fingerprint: string; groups: { name: string; summary?: string; ops: string[] }[]; ops: { op: string; signature: string; note?: string; schema?: unknown }[] }>;
+/** 내보내기 › HWP: an HWPX saved as .hwp by the one rhwp engine, through the engine's read-back and the save fingerprint. */
+export function hwpxToHwp(bytes: Uint8Array): Promise<{ bytes: Buffer; structure: "checked" | "unchecked"; text: "checked" | "unchecked" }>;

@@ -12,10 +12,11 @@ import JSZip from "jszip";
 import { beforeAll, describe, expect, it } from "vitest";
 import init, { HwpDocument } from "../../../third_party/hop/engine.ts";
 import { hwpWasmPath } from "./hwp-resource.ts";
+import { IEUM_HWP_DIR } from "../../../scripts/ieum-earlier-source.mjs";
 
 beforeAll(async () => { await init({ module_or_path: readFileSync(hwpWasmPath()) }); });
 
-const FIXTURE = resolve("vendor/ieumoffice/apps/hwp/tests/fixtures/paper-topbottom-box-stale-ladder.hwpx");
+const FIXTURE = resolve(IEUM_HWP_DIR, "apps/hwp/tests/fixtures/paper-topbottom-box-stale-ladder.hwpx");
 /** The anchor paragraph (the second one: the paper-anchored TOP_AND_BOTTOM rectangle) ends its run with an empty text. */
 async function withAnchorText(text: string | null): Promise<Uint8Array> {
   const zip = await JSZip.loadAsync(readFileSync(FIXTURE));

@@ -10,7 +10,7 @@ import { hwpWasmPath } from "./hwp-resource.ts";
 // calls: 1 is the editing session's own census, the rest are the gateway's. Everything else is real.
 const exported = vi.hoisted(() => ({ bytes: new Uint8Array() as Uint8Array }));
 const failing = vi.hoisted(() => ({ call: 0, on: (_call: number): boolean => false }));
-vi.mock("../../../vendor/ieumoffice/packages/cli/src/formats/hwp-edit.ts", () => ({
+vi.mock("@ieum-hwp/packages/cli/src/formats/hwp-edit.ts", () => ({
   hwpCatalog: () => [],
   openHwpForEdit: async (bytes: Uint8Array) => ({ doc: new HwpDocument(new Uint8Array(bytes)) }),
   applyHwpOps: async () => ({ results: [{ changed: true }] }),

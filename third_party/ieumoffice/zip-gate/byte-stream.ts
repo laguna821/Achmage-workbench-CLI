@@ -1,4 +1,4 @@
-// Adapted from IeumOffice packages/zip-gate/src/byte-stream.ts @ 30ff4f051f067fcb2baf1ab416c40718c802ca35.
+// Adapted from IeumOffice packages/zip-gate/src/byte-stream.ts @ 8602a39410adb86037f3008588b64efc75b08c60.
 // Apache-2.0; see ../LICENSE and ../NOTICE. Changes: explicit Node .ts and local package imports.
 /**
  * A `ReadableStream` over bytes already in memory, fed one slice at a time.

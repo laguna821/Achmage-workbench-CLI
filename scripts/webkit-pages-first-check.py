@@ -65,7 +65,8 @@ env = {**os.environ, "WORKBENCH_DATA_DIR": data, "WORKBENCH_HOST_ID": "fixture",
 # Word/PowerPoint pictures are drawn by IeumOffice's CLI through the desktop app's own renderer: a built
 # Workbench binary (RIG_APP_BIN, used read-only) and the vendored CLI. Without them only Hangul has pictures.
 if os.environ.get("RIG_APP_BIN"):
-    env.update({"WORKBENCH_APP_BIN": os.environ["RIG_APP_BIN"], "WORKBENCH_IEUM_CLI": os.path.join(REPO, "vendor/ieumoffice/packages/cli/dist/genoffice.cjs")})
+    # RIG_IEUM_CLI: another built CLI (the vendored one is a build output; the app ships IeumOffice's release CLI).
+    env.update({"WORKBENCH_APP_BIN": os.environ["RIG_APP_BIN"], "WORKBENCH_IEUM_CLI": os.environ.get("RIG_IEUM_CLI") or os.path.join(REPO, "vendor/ieumoffice/packages/cli/dist/genoffice.cjs")})
     res["notes"].append("office pictures via RIG_APP_BIN + vendor/ieumoffice CLI")
 host = None; G = {}
 def start_gw():

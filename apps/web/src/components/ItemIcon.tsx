@@ -39,9 +39,9 @@ export function artifactKind(artifact: Pick<Artifact, "format" | "name">): ItemK
   switch (artifact.format) {
     case "markdown": case "text": return "markdown";
     case "hwp": case "hwpx": return "hwp";
-    case "docx": return "word";
-    case "pptx": return "slides";
-    case "xlsx": return "sheet";
+    case "docx": case "doc": return "word";
+    case "pptx": case "ppt": return "slides";
+    case "xlsx": case "ods": return "sheet";
     case "pdf": return "pdf";
     case "html": return "web";
     case "design": case "xmind": return "design";

@@ -14,8 +14,8 @@ export type BrowserCommand =
   | { kind: "close"; id: string };
 export type BrowserResult = { id: string } | { value: unknown } | { base64: string };
 export type OfficeOutputRequest =
-  | { type: "office:output"; requestId: string; action: "pdf-images-prepare"; revision: number; name: string; embedded?: boolean }
-  | { type: "office:output"; requestId: string; action: "pdf-images-write"; id: string; images: string[]; pageNumbers: number[]; baseName: string }
+  | { type: "office:output"; requestId: string; action: "pdf-images-prepare"; revision: number; name: string; embedded?: boolean; format?: "png" | "jpg" }
+  | { type: "office:output"; requestId: string; action: "pdf-images-write"; id: string; images: string[]; pageNumbers: number[]; baseName: string; format?: "png" | "jpg" }
   | { type: "office:output"; requestId: string; action: "pdf-images-finish"; id: string; success: boolean }
   | { type: "office:output"; requestId: string; action: "images-prepare"; revision: number; name: string; job: HtmlJob }
   | { type: "office:output"; requestId: string; action: "images-write"; id: string; page: number; base64: string }

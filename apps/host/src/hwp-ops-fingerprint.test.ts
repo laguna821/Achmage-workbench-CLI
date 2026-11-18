@@ -7,7 +7,7 @@ import { notesWithBreaks, withControlCharacters } from "./hwp-census-fixture.ts"
 // The document AI's headless editor, with an export that drops what the session still holds
 // (what an engine regression would do). Everything after the export is the real gateway code.
 const exported = vi.hoisted(() => ({ bytes: new Uint8Array() as Uint8Array }));
-vi.mock("../../../vendor/ieumoffice/packages/cli/src/formats/hwp-edit.ts", () => ({
+vi.mock("@ieum-hwp/packages/cli/src/formats/hwp-edit.ts", () => ({
   hwpCatalog: () => [],
   openHwpForEdit: async (bytes: Uint8Array) => ({ doc: new HwpDocument(new Uint8Array(bytes)) }),
   applyHwpOps: async () => ({ results: [{ changed: true }] }),

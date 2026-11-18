@@ -1,5 +1,6 @@
 /** Guarded adapters for the pinned original. Keep a request's skill versions and
- * visible text with its queue entry, instead of inferring chips from model text. */
+ * visible text with its queue entry, instead of inferring chips from model text.
+ * (The v0.12.7 branches for the Hangul page's earlier checkout went when it moved to the main pin, unit hwp13.) */
 export function patchOfficeSkillConversation(code: string, id: string, root: string): string {
   const replace = (before: string, after: string) => {
     if (code.split(before).length !== 2) throw new Error(`Original Office skill boundary changed: ${id}: ${before.slice(0, 90)}`);
@@ -55,13 +56,14 @@ export function patchOfficeSkillConversation(code: string, id: string, root: str
   if (id === `${root}/packages/ui/src/use-skill-templates.tsx`) {
     replace("options.bridge !== undefined ? options.bridge : skillTemplateBridge()", "options.bridge !== undefined ? options.bridge : (globalThis.workbenchOfficeAi?.templates ?? skillTemplateBridge())");
     // Reopening restores the card; it must never repeat the clearing model run.
-    replace("      setHanded(taken)\n      let use:", "      setHanded(taken)\n      if (taken.resumed) { setRunPhase('done'); return }\n      let use:");
-    replace("use = { text: built.text, chips: taken.chips.map(chipRefOf) }", "use = { text: built.text, chips: taken.chips.map(chipRefOf), reads: skills.map(({ id, sha256 }) => ({ id, sha256 })) }");
+    // v0.13.0: the app's note goes with the request (taken.note); a resumed card still sends nothing.
+    replace("      setHanded(taken)\n      // the app's note goes to the model with the request", "      setHanded(taken)\n      if (taken.resumed) { setRunPhase('done'); return }\n      // the app's note goes to the model with the request");
+    replace("use = { text: built.text + note, chips: taken.chips.map(chipRefOf) }", "use = { text: built.text + note, chips: taken.chips.map(chipRefOf), reads: skills.map(({ id, sha256 }) => ({ id, sha256 })) }");
   }
   if (id === `${root}/packages/ui/src/skill-template-model.ts`) {
     replace("'docs' | 'sheets' | 'slides' | 'pdf' | 'markdown' | 'html' | 'mindmap' | 'hwp'", "'docs' | 'sheets' | 'slides' | 'pdf' | 'markdown' | 'html' | 'mindmap' | 'hwp' | 'epub'");
     replace("  'mindmap',\n  'hwp',\n])", "  'mindmap',\n  'hwp',\n  'epub',\n])");
-    replace("return { id: raw.id, text: raw.text, chips, ...(preview ? { preview } : {}) }", "return { id: raw.id, text: raw.text, chips, resumed: raw.resumed === true, ...(preview ? { preview } : {}) }");
+    replace("    chips,\n    ...(preview ? { preview } : {}),\n    ...(attach.length > 0", "    chips,\n    resumed: raw.resumed === true,\n    ...(preview ? { preview } : {}),\n    ...(attach.length > 0");
   }
   const context = (text: string) => `{ text: ${text}, chips: skillUse.chips, reads: skillUse.reads }`;
   for (const app of ["docs", "slides", "hwp", "html", "mindmap", "epub", "markdown", "pdf"]) {
@@ -80,11 +82,11 @@ export function patchOfficeSkillConversation(code: string, id: string, root: str
       // its original panel omitted the shared template request hook.
       replace("  useComposerSkills,", "  useComposerSkills,\n  useSkillTemplates,");
       replace("  const skillCards = useSkillProposals({\n    lang,", "  const skillCards = useSkillProposals({\n    lang,\n    templateDocument: globalThis.workbenchEpubTemplateDocument?.() ?? null,");
-      replace("const skills = useComposerSkills({ lang })", "const skills = useComposerSkills({ lang, onTemplateSkill: (request) => skillTemplatesRef.current.onTemplateSkill(request) })");
+      replace("  const skills = useComposerSkills({\n    lang,\n    editor: 'epub',\n", "  const skills = useComposerSkills({\n    lang,\n    editor: 'epub',\n    onTemplateSkill: (request) => skillTemplatesRef.current.onTemplateSkill(request),\n");
       replace("  skillCardsRef.current = skillCards\n", "  skillCardsRef.current = skillCards\n  const skillTemplates = useSkillTemplates({ lang, editor: 'epub', cards: skillCards, busy, send: (text, use) => send(text, undefined, use), setComposer: setPrompt });\n  const skillTemplatesRef = useRef(skillTemplates);\n  skillTemplatesRef.current = skillTemplates;\n");
       replace("          onProposal: (proposal) => {", "          onUsed: (skill) => skillTemplatesRef.current.onUsed(skill),\n          onProposal: (proposal) => {");
       replace("    lastSkillUseRef.current = skillUse\n    setBusy(true)", "    lastSkillUseRef.current = skillUse\n    skillTemplatesRef.current.noteRequest(text)\n    setBusy(true)");
-      replace("        })}\n      </div>\n", "        })}\n        {skillTemplates.notes}\n      </div>\n");
+      replace("        <McpPermissionCard lang={lang} />\n      </div>\n", "        <McpPermissionCard lang={lang} />\n        {skillTemplates.notes}\n      </div>\n");
     }
     if (app === "docs") replace("loop.run(instruction + skillUse.text, images)", `loop.run(instruction + skillUse.text, images, ${context("displayInstruction")})`);
     else if (app === "slides") replace("loop.run(modelInstruction, images)", `loop.run(modelInstruction, images, ${context("shown")})`);

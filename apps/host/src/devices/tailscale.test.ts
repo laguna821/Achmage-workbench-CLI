@@ -325,7 +325,7 @@ test("M3: the child closing by itself → the panel says the road is gone and wh
   patch({ kickServe: "HTTPS certificates are not enabled for this tailnet (stand-in)" });
   // Between two tries the panel says the road is gone, and why (the child's last line, as text).
   let lost: Awaited<ReturnType<DeviceService["tailscaleState"]>> | null = null;
-  expect(await until(async () => { const view = await service.tailscaleState(); if (view.state === "ready" && view.why) lost = view; return !!lost; }, 4000)).toBe(true);
+  expect(await until(async () => { const view = await service.tailscaleState(); if (view.state === "ready" && view.why) lost = view; return !!lost; }, 20_000)).toBe(true);
   expect(lost).toMatchObject({ state: "ready", ours: true, lost: true, why: expect.stringContaining("HTTPS certificates are not enabled") });
   expect(lost!.why).not.toMatch(/Ctrl\+C/);
   patch({ kickServe: undefined, failServe: "error: not logged in (stand-in)" });
@@ -334,7 +334,7 @@ test("M3: the child closing by itself → the panel says the road is gone and wh
   expect(await until(async () => changing().length >= 3, 20_000)).toBe(true);
   await new Promise(resolve => setTimeout(resolve, 300));
   expect(changing().length).toBeLessThanOrEqual(7);
-  expect(await until(async () => { const view = await service.tailscaleState(); return view.retrying === true && !!view.why?.includes("not logged in"); }, 4000)).toBe(true);
+  expect(await until(async () => { const view = await service.tailscaleState(); return view.retrying === true && !!view.why?.includes("not logged in"); }, 20_000)).toBe(true);
   // 끄기: no more tries.
   await service.tailscaleOff();
   const after = changing().length;

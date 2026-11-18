@@ -222,7 +222,15 @@ export type PlanStep = { text: string; status: "pending" | "inProgress" | "compl
 export type ApprovalDecision = "accept" | "decline";
 
 /** Documents the app tracks with exact revisions (PRD 3.3). */
-export type DocFormat = "markdown" | "html" | "pdf" | "hwpx" | "hwp" | "text" | "design" | "docx" | "pptx" | "xlsx" | "xmind" | "epub";
+export type DocFormat = "markdown" | "html" | "pdf" | "hwpx" | "hwp" | "text" | "design" | "docx" | "pptx" | "xlsx" | "xmind" | "epub" | "doc" | "ppt" | "ods";
+
+/**
+ * Old Word (.doc), old PowerPoint (.ppt) and ODS spreadsheets: listed, never edited. "변환해서 열기" makes a
+ * NEW .docx / .pptx / .xlsx beside the file (the original stays as it is) and opens that (office-convert.ts).
+ */
+export const LEGACY_FORMATS = { doc: "docx", ppt: "pptx", ods: "xlsx" } as const;
+export type LegacyFormat = keyof typeof LEGACY_FORMATS;
+export const isLegacyFormat = (format: string): format is LegacyFormat => format in LEGACY_FORMATS;
 
 /** Word, PowerPoint and Excel: previewed and edited through the IeumOffice command line tool. */
 export const OFFICE_FORMATS = ["docx", "pptx", "xlsx"] as const;
@@ -318,6 +326,11 @@ export type ArtifactRevision = {
   note: string | null;
   /** The documents (and their revisions) this one was made from, for a document created by a request. */
   derivedFrom?: { artifactId: string; revision: number }[] | null;
+  /**
+   * Made by 불러오기 / 내보내기 (hangul-convert.ts) from the `derivedFrom` document: which converter, its
+   * version and the preset or template — kept here, never as front matter in the document's body.
+   */
+  convertedFrom?: { converter: string; version: string; preset: string } | null;
   /** An engine's revision: the model and effort its engine reported, and the request it answered. */
   model?: string | null;
   effort?: string | null;
@@ -840,6 +853,9 @@ export const FORMAT_LABEL: Record<DocFormat, string> = {
   xlsx: "엑셀(XLSX)",
   xmind: "마인드맵",
   epub: "전자책(EPUB)",
+  doc: "워드 97-2003(DOC)",
+  ppt: "PPT 97-2003(PPT)",
+  ods: "ODS 스프레드시트",
 };
 
 /** Formats the app opens as documents, by file extension. */
@@ -858,6 +874,9 @@ export function formatOf(path: string): DocFormat | null {
   if (extension === "xlsx" || extension === "xlsm") return "xlsx";
   if (extension === "epub") return "epub";
   if (extension === "xmind") return "xmind";
+  if (extension === "doc") return "doc";
+  if (extension === "ppt") return "ppt";
+  if (extension === "ods") return "ods";
   return null;
 }
 
@@ -956,6 +975,8 @@ export type OfficeHostMessage =
   | { type: "office:export-images" }
   | { type: "office:copy-rejected"; artifactId: string }
   | { type: "office:copy-accepted"; artifactId: string }
+  /** How the window's 한글 문서로 내보내기 dialog ended for the editor that asked (`path`: the new Hangul file). */
+  | { type: "office:hangul-export-result"; requestId: string; ok: boolean; path?: string }
   | import("./office-output.ts").OfficeOutputResult
   | import("./office-markdown.ts").OfficeMarkdownReply
   | import("./office-references.ts").OfficeReferenceResult
@@ -1031,6 +1052,11 @@ export type OfficePageMessage =
   | import("./office-references.ts").OfficeReferenceRequest
   | { type: "office:ai-request"; requestId: string; action: "prepare" | "new-session" | "settings" | "skills"; sessionId: string | null; freezeReferences?: string[] }
   | { type: "office:copied"; artifactId: string; keepSource?: boolean }
+  /**
+   * The editor's own "한글 문서로 내보내기" (Word: its document as it is open, `bytes`, and whether it carries an
+   * open password; Markdown: nothing): the window opens its 한글 문서로 내보내기 dialog for this document.
+   */
+  | { type: "office:hangul-export"; requestId: string; bytes?: ArrayBuffer; passwordSet?: boolean }
   | { type: "office:ready" }
   /**
    * The editor's AI sidebar opened or closed (editors that report it). The Hangul dock also says

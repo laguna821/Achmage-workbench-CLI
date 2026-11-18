@@ -1,4 +1,4 @@
-// Adapted from IeumOffice apps/hwp/src/main/tracked-changes.ts @ 30ff4f051f067fcb2baf1ab416c40718c802ca35.
+// Adapted from IeumOffice apps/hwp/src/main/tracked-changes.ts @ 8602a39410adb86037f3008588b64efc75b08c60.
 // Apache-2.0; see ../LICENSE and ../NOTICE. Changes recorded in hwp.manifest.json.
 import * as CFB from 'cfb'
 import { SECTION, openHwp, sectionCount, writeContainer } from './hwp5-file.ts'

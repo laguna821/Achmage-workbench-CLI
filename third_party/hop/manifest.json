@@ -95,14 +95,14 @@
       "output": "../../apps/office/src/ui-adapters/hangul-studio.css",
       "sourceSha256": "2555d5aa0f5129511c128a7b6bfa426b838ff7f2e6d177959387a9c47a3cec75",
       "changes": "Drop-down rules scoped to the HWP studio: HOP's geometry and type (22 px control, 15 px arrow cell with its rule, 2 px studio radius, 12 px text, 20 px rows, 2 px list padding) on the studio's --ui-* tokens (so on the app's colour set through HOP's role map); kept from Workbench: the list placed fixed in the viewport, a focus ring on the trigger, a ring on the arrow keys' row apart from the chosen row's fill, dialogs at the app's 28 px controls, no blurred shadow.",
-      "outputSha256": "41b70348bee71286eb553b00ccb82cd40eec8b951c9ff63fe1590e4613314c5a"
+      "outputSha256": "6963df03c5e80376e222ca348fc6765e67f13e685c253f703772b64e7d98e6b7"
     },
     {
       "source": "apps/studio-host/src/styles/achmage-theme.css",
       "output": "../../apps/office/src/ui-adapters/hangul-studio.css",
       "sourceSha256": "c5b48a6b87c081a26535776f5bc8f06506bbcb92fdcd68d0300edfcde182ad96",
       "changes": "HOP's role map onto the studio's --ui-* tokens (every role HOP binds, checked by scripts/check-hop-sources.mjs against the pinned achmage-theme.css): canvas / surface / raised / border / selected / hover filled from the chosen colour set's tokens (light: field with 3 / 6 % of its accent, line with 8 %; dark: desk / field / well / line), HOP's own mixes for selected (22 %) and hover (9 %), the open menu title filled with the accent; the studio's colour icon sheets as they are (no grey filter); the bars' keys in the app's UI font; icon labels one studio step larger (11 px) in a darker ink than the set's muted text. Workbench's own (not from HOP): the host's 메모 / 자동 저장 row laid on the studio's menu row on its ground, the status line's message muted.",
-      "outputSha256": "41b70348bee71286eb553b00ccb82cd40eec8b951c9ff63fe1590e4613314c5a"
+      "outputSha256": "6963df03c5e80376e222ca348fc6765e67f13e685c253f703772b64e7d98e6b7"
     },
     {
       "source": "apps/studio-host/src/core/font-authoring-policy.ts",
@@ -165,7 +165,7 @@
       "output": "../../apps/office/src/ui-adapters/hangul-studio.css",
       "sourceSha256": "6b71d98f38bf5e141445b901ff3f5074f3fed9bbdbaede6f5fb33726489a1f1e",
       "changes": "The same three rules (labels and the format row's group labels hidden, the icon row 32 px) under the studio root's data-toolbar-labels.",
-      "outputSha256": "41b70348bee71286eb553b00ccb82cd40eec8b951c9ff63fe1590e4613314c5a"
+      "outputSha256": "6963df03c5e80376e222ca348fc6765e67f13e685c253f703772b64e7d98e6b7"
     },
     {
       "source": "apps/studio-host/src/host/toolbar-labels.ts",

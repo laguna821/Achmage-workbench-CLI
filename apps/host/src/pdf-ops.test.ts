@@ -81,6 +81,15 @@ describe("original PDF engine on Node", () => {
     const doc = await PDFDocument.load(cropped);
     expect(doc.getPage(0).getCropBox().width).toBeCloseTo(489.6);
     await expect(editPdf(source, { targetPath: "/tmp/foreign.pdf" })).rejects.toThrow("별도 저장");
+    // v0.13.0's renderer sends these with every save (protectionDirty false = keep the file's own protection).
+    const author = await editPdf(source, { protectionDirty: false, annotationAuthor: "선생님", drawings: [{ kind: "note", pageIndex: 0, color: [1, 1, 0], at: [60, 500], contents: "메모" }] });
+    expect((await PDFDocument.load(author.bytes)).getPage(0).node.Annots()?.size()).toBeGreaterThan(0);
+    // Protected files are saved by the session that opened them with their password (pdf-tools.test.ts); on a plain
+    // file these fields change nothing, and a password is set only through the protection dialog's request.
+    for (const fields of [{ protectionDirty: true }, { decryption: { userPassword: "x" } }]) expect((await PDFDocument.load((await editPdf(source, { ...fields, rotations: [{ pageIndex: 0, delta: 90 }] })).bytes)).isEncrypted).toBe(false);
+    await expect(editPdf(source, { encryption: { userPassword: "x", ownerPassword: "x", permissions: { printing: true, modifying: true, annotating: true, copying: true } } })).rejects.toThrow("암호");
+    await expect(editPdf(source, { decryption: { userPassword: 7 } })).rejects.toThrow("암호");
+    await expect(editPdf(source, { outline: "nope" })).rejects.toThrow("책갈피");
     await expect(editPdf(source, { redactions: [{ pageIndex: 0, rect: [0, 0, 20, 20] }] })).rejects.toThrow("영구 가림");
     await expect(editPdf(source, { deletedPages: [0, 1] })).rejects.toThrow("남은 페이지");
     await expect(editPdf(source, { pageOrder: [0, 0] })).rejects.toThrow("한 번씩");

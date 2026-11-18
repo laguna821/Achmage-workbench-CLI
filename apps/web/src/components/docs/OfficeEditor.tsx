@@ -188,7 +188,7 @@ export const OfficeEditor = forwardRef<
   const mcpWaiters = useRef(new Map<string, (reply: OfficeMcpReply) => void>());
   const copied = useRef(new Map<string, string | null>());
   const [output, setOutput] = useState<{ revision: number; format: OfficeOutputFormat; defaultName?: string; longJob?: boolean; choose(plan: OfficeOutputPlan | null): void } | null>(null);
-  const [imageOutput, setImageOutput] = useState<{ embedded?: boolean; choose(path: string | null): void } | null>(null);
+  const [imageOutput, setImageOutput] = useState<{ embedded?: boolean; format?: "png" | "jpg"; choose(path: string | null): void } | null>(null);
   const [notePath, setNotePath] = useState<{ initialPath: string; choose(path: string | null): void } | null>(null);
   const noteClose = useRef<(() => void) | null>(null), noteBusy = useRef(false);
   const latest = useRef(artifact);
@@ -486,7 +486,7 @@ export const OfficeEditor = forwardRef<
         if (latest.current.format !== "pdf") throw new Error("PDF 문서를 먼저 열어 주세요.");
         const path = await new Promise<string | null>((resolve) => {
           const choose = (value: string | null) => { outputClose.current = null; outputRequest.current = null; setImageOutput(null); resolve(value); };
-          outputRequest.current = message.requestId; outputClose.current = () => choose(null); setImageOutput({ choose, embedded: message.embedded });
+          outputRequest.current = message.requestId; outputClose.current = () => choose(null); setImageOutput({ choose, embedded: message.embedded, format: message.format === "jpg" ? "jpg" : "png" });
         });
         if (!path) { reply(null); return; }
         check(); const bound = access ? { ...access } : null, outputApi = bound ? api.forDocument(() => bound) : api;
@@ -893,6 +893,14 @@ export const OfficeEditor = forwardRef<
           break;
         case "office:page-drawn":
           handlers.current.onPageDrawn?.();
+          break;
+        case "office:hangul-export":
+          // The window's dialog (App: HangulExportDialog) — the ledger is asked there, before anything is written.
+          // `settle` tells the editor how it ended (its status line), once.
+          window.dispatchEvent(new CustomEvent("workbench:hangul-export", { detail: {
+            artifactId: latest.current.id, ...(message.bytes ? { bytes: message.bytes, passwordSet: Boolean(message.passwordSet) } : {}),
+            settle: (result: { ok: boolean; path?: string }) => send({ type: "office:hangul-export-result", requestId: message.requestId, ok: result.ok, ...(result.path ? { path: result.path } : {}) }),
+          } }));
           break;
         case "office:ai-panel":
           handlers.current.onAiPanel?.(message.open, message.draft, message.ready === undefined ? undefined : { ready: message.ready, person: Boolean(message.person), shown: message.shown ?? message.open, ...(message.off ? { off: true } : {}) });
@@ -1307,7 +1315,7 @@ export const OfficeEditor = forwardRef<
     {skillsOpen ? <SkillLibraryDialog api={api} scope={{ workId: artifact.workId, ...(artifact.workspaceId ? { workspaceId: artifact.workspaceId } : {}), ...(sessionId ? { sessionId } : {}) }} onClose={() => { setSkillsOpen(false); send({ type: "office:skills-changed" }); }} /> : null}
     {referencePicker ? <OfficeReferencePicker {...referencePicker} /> : null}
     {output ? <OfficeOutputDialog key={outputRequest.current} api={api} artifact={artifact} revision={output.revision} format={output.format} defaultName={output.defaultName} longJob={output.longJob} onChoose={output.choose} onCancel={() => output.choose(null)} /> : null}
-    {imageOutput ? <OfficeImageOutputDialog initialPath={artifact.path.replace(/[^\\/]+$/, "")} embedded={imageOutput.embedded} onChoose={imageOutput.choose} /> : null}
+    {imageOutput ? <OfficeImageOutputDialog initialPath={artifact.path.replace(/[^\\/]+$/, "")} embedded={imageOutput.embedded} format={imageOutput.format} onChoose={imageOutput.choose} /> : null}
   </>;
   if (pooled) {
     const failed = current && "error" in current ? current.error : null;

@@ -138,6 +138,7 @@ export class DeviceGateway {
         else if (pathname === "/api/tasks") {
           const tasks = manager.tasks.list(); result = json({ ...tasks, tasks: tasks.tasks.filter(t => grant.workIds.includes(t.workId)) });
         } else if (pathname === "/api/attention") result = json(scopedSnapshot(manager.snapshot(), grant).attention);
+        else if (pathname === "/api/attention/read-all") result = json(manager.notifications.readAll(grant.workIds));
         else if (pathname === "/api/attention/presence") {
           result = json(manager.notifications.observe({ clientId: "remote:" + grant.deviceId + ":" + connectionId,
             sessionId: typeof body.sessionId === "string" ? body.sessionId : null, visible: body.visible === true }));
@@ -260,6 +261,6 @@ export class DeviceGateway {
       }).catch(() => { socket.close(1011, "connection failure"); stop(); });
     });
     socket.on("close", stop); socket.on("error", stop);
-    await sendProtectedServerInfo(socket as PaseoProtectedSocket, { serverId: manager.snapshot().hostId, hostname: manager.snapshot().hostLabel, version: "0.5.4" });
+    await sendProtectedServerInfo(socket as PaseoProtectedSocket, { serverId: manager.snapshot().hostId, hostname: manager.snapshot().hostLabel, version: "0.5.5" });
   };
 }

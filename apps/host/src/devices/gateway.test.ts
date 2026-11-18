@@ -210,6 +210,28 @@ test("scoped remote attachments preserve bytes and stop access when a project gr
   expect(removed.status).toBe(403); await removed.arrayBuffer();
 }, 20_000);
 
+// 0.5.5 알림 일괄 정리: one gateway call reads the device's own projects only; an open approval stays.
+test("모두 읽음 over the gateway reads only the device's projects and keeps an open approval", async () => {
+  const f = await fixture(), client = await f.enroll(f.ownWork.id, ["read"]);
+  const finish = (sessionId: string, id: string) => {
+    f.manager.sink.upsertItem(sessionId, { kind: "user", id: "user:" + id, text: "요청", at: Date.now() });
+    f.manager.sink.upsertItem(sessionId, { kind: "turnEnd", id: "end-" + id, status: "completed", durationMs: 1, requestId: id, at: Date.now() });
+  };
+  finish(f.ownSession.id, "own-1"); finish(f.ownSession.id, "own-2"); finish(f.foreignSession.id, "foreign-1");
+  f.manager.sink.upsertItem(f.ownSession.id, { kind: "approval", id: "own-approval", title: "명령 실행", detail: null, reason: null, decision: null, at: Date.now() });
+  await until(() => f.manager.notifications.list().events.length === 4, "attention rows were not recorded", 15_000);
+  const response = await client.peer.fetch("/api/attention/read-all", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  expect(response.status).toBe(200);
+  const result = await response.json() as import("@workbench/contracts").AttentionReadAll;
+  expect(result).toMatchObject({ read: 2, kept: 1, list: { unread: 1 } });
+  expect(result.list.events.every(row => row.workId === f.ownWork.id)).toBe(true);
+  const rows = f.manager.notifications.list().events;
+  expect(rows.filter(row => row.workId === f.foreignWork.id).map(row => row.readAt)).toEqual([null]);
+  expect(rows.find(row => row.kind === "input_needed")).toMatchObject({ readAt: null, resolvedAt: null });
+  // The desktop's own call (no device scope) reads the rest, and still leaves the open approval.
+  expect(await f.local("/api/attention/read-all", { method: "POST", body: "{}" })).toMatchObject({ read: 1, kept: 1, list: { unread: 1 } });
+}, 30_000);
+
 test("two protected loopback peers pair through local approval and keep scoped authority independent after revocation", async () => {
   const f = await fixture();
   const firstOffer = await f.offer(), first = f.peer(firstOffer), second = f.peer(firstOffer);

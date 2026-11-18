@@ -2,12 +2,15 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { unzipSync, zipSync, strFromU8, strToU8 } from "fflate";
 import { beforeAll, expect, it } from "vitest";
-import initOld, { HwpDocument as OldDocument } from "../../../vendor/ieumoffice/vendor/rhwp-core/rhwp.js";
 import init, { HwpDocument } from "../../../third_party/hop/engine.ts";
 import { hwpWasmPath } from "./hwp-resource.ts";
+import { IEUM_HWP_DIR } from "../../../scripts/ieum-earlier-source.mjs";
+
+// Ieum's own engine build in the Hangul page's checkout (scripts/ieum-earlier-source.mjs).
+const { default: initOld, HwpDocument: OldDocument } = await import("@ieum-hwp/vendor/rhwp-core/rhwp.js" as string) as typeof import("../../../vendor/ieumoffice/vendor/rhwp-core/rhwp.js");
 
 beforeAll(async () => {
-  await initOld({ module_or_path: readFileSync(resolve("vendor/ieumoffice/vendor/rhwp-core/rhwp_bg.wasm")) });
+  await initOld({ module_or_path: readFileSync(resolve(IEUM_HWP_DIR, "vendor/rhwp-core/rhwp_bg.wasm")) });
   await init({ module_or_path: readFileSync(hwpWasmPath()) });
 });
 

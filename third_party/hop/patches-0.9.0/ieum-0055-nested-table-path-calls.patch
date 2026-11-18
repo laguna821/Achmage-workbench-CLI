@@ -1,0 +1,2941 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: pblsketch <239486537+pblsketch@users.noreply.github.com>
+Date: Sun, 8 Nov 2026 00:00:00 +0900
+Subject: [PATCH 37/37] feat(table): 표 안의 표·글상자 안의 표를 셀 경로로 고치는 호출
+
+평면 표 호출(insertTableRow 등)은 (구역, 문단, 컨트롤)로 본문 표만 가리킨다. 편집기가
+안쪽 표에서 줄 넣기·합치기·표/셀 속성 창을 부르면 그 번호가 바깥 표에 쓰였다.
+
+- 셀 경로판 열여섯: insertTableRowByPath, insertTableColumnByPath, deleteTableRowByPath,
+  deleteTableColumnByPath, mergeTableCellsByPath, splitTableCellByPath,
+  splitTableCellIntoByPath, splitTableCellsInRangeByPath, setCellPropertiesByPath,
+  getCellOwnPropertiesByPath, setCellZonePropertiesByPath, applyCellBorderFillIdsByPath,
+  getTablePropertiesByPath, setTablePropertiesByPath, resizeTableCellByPath,
+  setTableCellExtentsByPath. 인자는 평면 호출의 컨트롤 번호 자리에 다른 경로 호출과 같은
+  경로 JSON([{controlIndex, cellIndex, cellParaIndex}, ...])을 받고, 마지막 항목이 가리키는
+  표에 쓴다. 답의 모양은 평면 호출과 같다. 경로가 한 항목이면 평면 호출을 그대로 부른다.
+- 경로의 첫 항목만 글상자일 수 있다(편집기 커서가 쓰는 모양). 그 뒤의 글상자, 범위 밖·표가
+  아닌 항목, 칸 테두리를 개체로 그린 표는 문서를 바꾸기 전에 오류로 거절한다. 바깥 표로 대신
+  가지 않는다. 안쪽 표의 캡션을 넣거나 빼거나 바꾸는 표 속성도 거절하고, 창이 보내는 같은
+  값은 버린다.
+- 편집 본체는 평면 호출의 모델 부분이다. 평면 호출을 모델 부분과 조판·쪽 나누기 뒤처리로
+  나누고(동작은 같다), 경로판은 안쪽 표가 든 문단을 잠시 본문 문단 자리에 두고 그 모델
+  부분을 부른다.
+- 글자처럼 취급 안쪽 표의 높이가 바뀌면 그 표가 놓인 칸(글상자) 문단의 저장 줄 높이와 같은
+  칸 뒤 문단의 vpos를 0042와 같은 규칙으로 옮긴다(move_host_row로 나눈 0042의 본체).
+---
+ .../commands/border_paint_structure.rs             |  46 +-
+ src/document_core/commands/mod.rs                  |   2 +
+ src/document_core/commands/table_ops.rs            | 350 ++++++---
+ src/document_core/commands/table_path_ops.rs       | 875 +++++++++++++++++++++
+ src/document_core/commands/table_path_ops/tests.rs | 849 ++++++++++++++++++++
+ src/document_core/tac_host_rows.rs                 | 133 ++--
+ src/wasm_api.rs                                    | 371 +++++++++
+ 7 files changed, 2438 insertions(+), 188 deletions(-)
+ create mode 100644 src/document_core/commands/table_path_ops.rs
+ create mode 100644 src/document_core/commands/table_path_ops/tests.rs
+
+diff --git a/src/document_core/commands/border_paint_structure.rs b/src/document_core/commands/border_paint_structure.rs
+index 8ebb9cbf57ffeb088b2e61dcf4d35ab6a779a0c2..b8eb0962d2e39f9a36503debce31df94e28cd9fb 100644
+--- a/src/document_core/commands/border_paint_structure.rs
++++ b/src/document_core/commands/border_paint_structure.rs
+@@ -596,13 +596,9 @@ fn preserves_layer_order(
+     true
+ }
+ 
+-fn prepare(doc: &Document, si: usize, pi: usize, ti: usize) -> Result<Option<Prepared>, HwpError> {
+-    let Some(parent) = doc.sections.get(si).and_then(|s| s.paragraphs.get(pi)) else {
+-        return Ok(None); // Preserve the ordinary API's index/type diagnostics.
+-    };
+-    let Some(Control::Table(table)) = parent.controls.get(ti) else {
+-        return Ok(None);
+-    };
++/// Whether the table's borders are drawn by objects: (paint inside its cells, paint in the
++/// paragraph `parent` that holds it bound to the table). Either makes `prepare` return Some.
++fn border_paint_owners(parent: &Paragraph, table: &Table) -> (bool, bool) {
+     let has_cell = table
+         .cells
+         .iter()
+@@ -616,6 +612,28 @@ fn prepare(doc: &Document, si: usize, pi: usize, ti: usize) -> Result<Option<Pre
+         .filter_map(PaintRef::from_control)
+         .filter_map(outside_binding)
+         .any(|v| v.0 == table.common.instance_id);
++    (has_cell, has_outside)
++}
++
++/// Whether the table `ti` of `parent` has borders drawn by objects (`prepare` would take it).
++pub(super) fn table_has_border_paint(parent: &Paragraph, ti: usize) -> bool {
++    match parent.controls.get(ti) {
++        Some(Control::Table(table)) => {
++            let (has_cell, has_outside) = border_paint_owners(parent, table);
++            has_cell || has_outside
++        }
++        _ => false,
++    }
++}
++
++fn prepare(doc: &Document, si: usize, pi: usize, ti: usize) -> Result<Option<Prepared>, HwpError> {
++    let Some(parent) = doc.sections.get(si).and_then(|s| s.paragraphs.get(pi)) else {
++        return Ok(None); // Preserve the ordinary API's index/type diagnostics.
++    };
++    let Some(Control::Table(table)) = parent.controls.get(ti) else {
++        return Ok(None);
++    };
++    let (has_cell, has_outside) = border_paint_owners(parent, table);
+     if !has_cell && !has_outside {
+         return Ok(None);
+     }
+@@ -942,19 +960,7 @@ impl DocumentCore {
+         let Some(Control::Table(table)) = parent.controls.get(ti) else {
+             return Ok(());
+         };
+-        let has_cell = table
+-            .cells
+-            .iter()
+-            .flat_map(|c| &c.paragraphs)
+-            .flat_map(|p| &p.controls)
+-            .filter_map(PaintRef::from_control)
+-            .any(|p| p.common().cell_border_paint.is_some());
+-        let has_outside = parent
+-            .controls
+-            .iter()
+-            .filter_map(PaintRef::from_control)
+-            .filter_map(outside_binding)
+-            .any(|binding| binding.0 == table.common.instance_id);
++        let (has_cell, has_outside) = border_paint_owners(parent, table);
+         if has_cell || has_outside {
+             return Err(HwpError::RenderError(
+                 "이 표의 원본 테두리를 보존하는 셀 병합·나누기는 아직 지원하지 않습니다".into(),
+diff --git a/src/document_core/commands/mod.rs b/src/document_core/commands/mod.rs
+index e2b9f81116b129e99af708b13431f350441d127b..dd7501ef34604008b0773ac3bc7d82737940fda0 100644
+--- a/src/document_core/commands/mod.rs
++++ b/src/document_core/commands/mod.rs
+@@ -36,6 +36,8 @@ mod table_formula;
+ // 구역 나누기·합치기 — 한/글 [쪽-구역 나누기]와 구역 경계 지우기.
+ mod section_ops;
+ mod table_ops;
++// Cell-path forms of the flat table calls, for tables in a cell or a text box (…ByPath).
++mod table_path_ops;
+ mod text_editing;
+ // [#5769] Stage 4 — 구역 raw 저널. SectionRawCapture 타입이 DocumentCore 필드로
+ // 쓰이므로 pub(crate).
+diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/commands/table_ops.rs
+index 3f334cef884ebf6f63b62e965f86e7fc911d0ded..61d1276e996b3dd35a2ebab1915889e653537ac6 100644
+--- a/src/document_core/commands/table_ops.rs
++++ b/src/document_core/commands/table_ops.rs
+@@ -589,6 +589,38 @@ impl DocumentCore {
+         end_row: u16,
+         end_col: u16,
+     ) -> Result<String, HwpError> {
++        let cell_count = self.merge_table_cells_edit(
++            section_idx,
++            parent_para_idx,
++            control_idx,
++            (start_row, start_col, end_row, end_col),
++        )?;
++
++        self.document.sections[section_idx].raw_stream = None;
++        self.recompose_section(section_idx);
++        self.paginate_if_needed();
++
++        self.event_log.push(DocumentEvent::CellsMerged {
++            section: section_idx,
++            para: parent_para_idx,
++            ctrl: control_idx,
++        });
++        Ok(super::super::helpers::json_ok_with(&format!(
++            "\"cellCount\":{}",
++            cell_count
++        )))
++    }
++
++    /// The model part of `merge_table_cells_native`: merges and reflows the cells of the
++    /// table at `(section, paragraph, control)` and returns the new cell count. The caller
++    /// recomposes, paginates and records the event.
++    pub(super) fn merge_table_cells_edit(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        control_idx: usize,
++        (start_row, start_col, end_row, end_col): (u16, u16, u16, u16),
++    ) -> Result<usize, HwpError> {
+         self.ensure_table_cell_topology_supported(section_idx, parent_para_idx, control_idx)?;
+         let table = self.get_table_mut(section_idx, parent_para_idx, control_idx)?;
+         table
+@@ -632,20 +664,7 @@ impl DocumentCore {
+                 cell_idx,
+             );
+         }
+-
+-        self.document.sections[section_idx].raw_stream = None;
+-        self.recompose_section(section_idx);
+-        self.paginate_if_needed();
+-
+-        self.event_log.push(DocumentEvent::CellsMerged {
+-            section: section_idx,
+-            para: parent_para_idx,
+-            ctrl: control_idx,
+-        });
+-        Ok(super::super::helpers::json_ok_with(&format!(
+-            "\"cellCount\":{}",
+-            cell_count
+-        )))
++        Ok(cell_count)
+     }
+ 
+     pub fn split_table_cell_native(
+@@ -656,28 +675,12 @@ impl DocumentCore {
+         row: u16,
+         col: u16,
+     ) -> Result<String, HwpError> {
+-        self.ensure_table_cell_topology_supported(section_idx, parent_para_idx, control_idx)?;
+-        let table = self.get_table_mut(section_idx, parent_para_idx, control_idx)?;
+-        table
+-            .split_cell(row, col)
+-            .map_err(|e| HwpError::RenderError(e))?;
+-        let cell_count = table.cells.len();
+-
+-        self.reflow_stale_cells_after_split(section_idx, parent_para_idx, control_idx);
+-
++        let cell_count =
++            self.split_table_cells_edit(section_idx, parent_para_idx, control_idx, true, |t| {
++                t.split_cell(row, col)
++            })?;
+         self.document.sections[section_idx].raw_stream = None;
+-        self.recompose_section(section_idx);
+-        self.paginate_if_needed();
+-
+-        self.event_log.push(DocumentEvent::CellSplit {
+-            section: section_idx,
+-            para: parent_para_idx,
+-            ctrl: control_idx,
+-        });
+-        Ok(super::super::helpers::json_ok_with(&format!(
+-            "\"cellCount\":{}",
+-            cell_count
+-        )))
++        self.finish_table_cell_split(section_idx, parent_para_idx, control_idx, cell_count)
+     }
+ 
+     /// 셀을 N줄 × M칸으로 분할한다 (네이티브).
+@@ -693,18 +696,47 @@ impl DocumentCore {
+         equal_row_height: bool,
+         merge_first: bool,
+     ) -> Result<String, HwpError> {
+-        if n_rows != 1 || m_cols != 1 {
++        let cell_count = self.split_table_cells_edit(
++            section_idx,
++            parent_para_idx,
++            control_idx,
++            n_rows != 1 || m_cols != 1,
++            |t| t.split_cell_into(row, col, n_rows, m_cols, equal_row_height, merge_first),
++        )?;
++        self.document.sections[section_idx].raw_stream = None;
++        self.finish_table_cell_split(section_idx, parent_para_idx, control_idx, cell_count)
++    }
++
++    /// The model part of the cell splits: checks the table's drawn borders when
++    /// `check_topology`, runs `split` on the table at `(section, paragraph, control)`,
++    /// reflows the cells it left with stale lines and returns the new cell count.
++    pub(super) fn split_table_cells_edit(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        control_idx: usize,
++        check_topology: bool,
++        split: impl FnOnce(&mut crate::model::table::Table) -> Result<(), String>,
++    ) -> Result<usize, HwpError> {
++        if check_topology {
+             self.ensure_table_cell_topology_supported(section_idx, parent_para_idx, control_idx)?;
+         }
+         let table = self.get_table_mut(section_idx, parent_para_idx, control_idx)?;
+-        table
+-            .split_cell_into(row, col, n_rows, m_cols, equal_row_height, merge_first)
+-            .map_err(|e| HwpError::RenderError(e))?;
++        split(table).map_err(HwpError::RenderError)?;
+         let cell_count = table.cells.len();
+ 
+         self.reflow_stale_cells_after_split(section_idx, parent_para_idx, control_idx);
++        Ok(cell_count)
++    }
+ 
+-        self.document.sections[section_idx].raw_stream = None;
++    /// After a split the caller has invalidated the section's source bytes.
++    fn finish_table_cell_split(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        control_idx: usize,
++        cell_count: usize,
++    ) -> Result<String, HwpError> {
+         self.recompose_section(section_idx);
+         self.paginate_if_needed();
+ 
+@@ -792,38 +824,25 @@ impl DocumentCore {
+         m_cols: u16,
+         equal_row_height: bool,
+     ) -> Result<String, HwpError> {
+-        if n_rows != 1 || m_cols != 1 {
+-            self.ensure_table_cell_topology_supported(section_idx, parent_para_idx, control_idx)?;
+-        }
+-        let table = self.get_table_mut(section_idx, parent_para_idx, control_idx)?;
+-        table
+-            .split_cells_in_range(
+-                start_row,
+-                start_col,
+-                end_row,
+-                end_col,
+-                n_rows,
+-                m_cols,
+-                equal_row_height,
+-            )
+-            .map_err(|e| HwpError::RenderError(e))?;
+-        let cell_count = table.cells.len();
+-
+-        self.reflow_stale_cells_after_split(section_idx, parent_para_idx, control_idx);
+-
++        let cell_count = self.split_table_cells_edit(
++            section_idx,
++            parent_para_idx,
++            control_idx,
++            n_rows != 1 || m_cols != 1,
++            |t| {
++                t.split_cells_in_range(
++                    start_row,
++                    start_col,
++                    end_row,
++                    end_col,
++                    n_rows,
++                    m_cols,
++                    equal_row_height,
++                )
++            },
++        )?;
+         self.document.sections[section_idx].raw_stream = None;
+-        self.recompose_section(section_idx);
+-        self.paginate_if_needed();
+-
+-        self.event_log.push(DocumentEvent::CellSplit {
+-            section: section_idx,
+-            para: parent_para_idx,
+-            ctrl: control_idx,
+-        });
+-        Ok(super::super::helpers::json_ok_with(&format!(
+-            "\"cellCount\":{}",
+-            cell_count
+-        )))
++        self.finish_table_cell_split(section_idx, parent_para_idx, control_idx, cell_count)
+     }
+ 
+     /// 선택된 셀 범위를 행/열 바꿈 복사용 내부 버퍼에 저장한다.
+@@ -1242,7 +1261,7 @@ impl DocumentCore {
+         self.cell_properties_json(table, cell_idx, true)
+     }
+ 
+-    fn cell_properties_json(
++    pub(super) fn cell_properties_json(
+         &self,
+         table: &crate::model::table::Table,
+         cell_idx: usize,
+@@ -1286,6 +1305,29 @@ impl DocumentCore {
+         control_idx: usize,
+         cell_idx: usize,
+         json: &str,
++    ) -> Result<String, HwpError> {
++        let response = self.set_cell_properties_edit(
++            section_idx,
++            parent_para_idx,
++            control_idx,
++            cell_idx,
++            json,
++        )?;
++        self.document.sections[section_idx].raw_stream = None;
++        self.recompose_section_at_batch_end(section_idx, &[parent_para_idx]);
++        self.paginate_if_needed();
++        Ok(response)
++    }
++
++    /// The model part of `set_cell_properties_native`; returns its response. The caller
++    /// recomposes and paginates.
++    pub(super) fn set_cell_properties_edit(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        control_idx: usize,
++        cell_idx: usize,
++        json: &str,
+     ) -> Result<String, HwpError> {
+         let parsed: serde_json::Value =
+             serde_json::from_str(json).unwrap_or(serde_json::Value::Null);
+@@ -1667,9 +1709,6 @@ impl DocumentCore {
+ 
+         let border_paint_undo_id =
+             self.commit_border_paint_plan((section_idx, parent_para_idx, control_idx), paint_plan);
+-        self.document.sections[section_idx].raw_stream = None;
+-        self.recompose_section_at_batch_end(section_idx, &[parent_para_idx]);
+-        self.paginate_if_needed();
+ 
+         // [#5959] self-describing 변경 기록 — TS 커맨드가 undo 때 이대로 되돌린다
+         // (z-order moves[] 선례). changes 는 borderFillId 전환만 담는다.
+@@ -1900,6 +1939,29 @@ impl DocumentCore {
+         end_row: u16,
+         end_col: u16,
+         json: &str,
++    ) -> Result<String, HwpError> {
++        let response = self.set_cell_zone_properties_edit(
++            section_idx,
++            parent_para_idx,
++            control_idx,
++            (start_row, start_col, end_row, end_col),
++            json,
++        )?;
++        self.document.sections[section_idx].raw_stream = None;
++        self.recompose_section(section_idx);
++        self.paginate_if_needed();
++        Ok(response)
++    }
++
++    /// The model part of `set_cell_zone_properties_native`; returns its response. The caller
++    /// recomposes and paginates.
++    pub(super) fn set_cell_zone_properties_edit(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        control_idx: usize,
++        (start_row, start_col, end_row, end_col): (u16, u16, u16, u16),
++        json: &str,
+     ) -> Result<String, HwpError> {
+         // [#5959] 역연산 기록 기준선 — 생성 전 스타일 테이블 길이·dirty 플래그와
+         // 매칭 zone 의 이전 id(None 이면 신설)를 응답으로 돌려 undo 가 쓴다.
+@@ -1949,10 +2011,6 @@ impl DocumentCore {
+             });
+         }
+ 
+-        self.document.sections[section_idx].raw_stream = None;
+-        self.recompose_section(section_idx);
+-        self.paginate_if_needed();
+-
+         let response = serde_json::json!({
+             "ok": true,
+             "startRow": sr,
+@@ -1980,6 +2038,23 @@ impl DocumentCore {
+         control_idx: usize,
+         json: &str,
+     ) -> Result<String, HwpError> {
++        self.apply_cell_border_fill_ids_edit(section_idx, parent_para_idx, control_idx, json)?;
++        self.document.sections[section_idx].raw_stream = None;
++        self.recompose_section(section_idx);
++        self.paginate_if_needed();
++
++        Ok("{\"ok\":true}".to_string())
++    }
++
++    /// The model part of `apply_cell_border_fill_ids_native`. The caller recomposes and
++    /// paginates.
++    pub(super) fn apply_cell_border_fill_ids_edit(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        control_idx: usize,
++        json: &str,
++    ) -> Result<(), HwpError> {
+         #[derive(serde::Deserialize)]
+         #[serde(rename_all = "camelCase")]
+         struct CellIdPair {
+@@ -2102,12 +2177,7 @@ impl DocumentCore {
+             self.discard_border_paint_undo_native(id);
+         }
+         self.rebuild_resolved_styles();
+-
+-        self.document.sections[section_idx].raw_stream = None;
+-        self.recompose_section(section_idx);
+-        self.paginate_if_needed();
+-
+-        Ok("{\"ok\":true}".to_string())
++        Ok(())
+     }
+ 
+     /// [#5959] 이번 apply 가 push 한 BorderFill 꼬리 항목 절단.
+@@ -2965,7 +3035,14 @@ impl DocumentCore {
+                 ))
+             }
+         };
++        self.table_properties_json(table)
++    }
+ 
++    /// The response of `get_table_properties_native` for one table.
++    pub(super) fn table_properties_json(
++        &self,
++        table: &crate::model::table::Table,
++    ) -> Result<String, HwpError> {
+         let pb = match table.page_break {
+             crate::model::table::TablePageBreak::None => 0,
+             crate::model::table::TablePageBreak::CellBreak => 1,
+@@ -3070,6 +3147,23 @@ impl DocumentCore {
+         parent_para_idx: usize,
+         control_idx: usize,
+         json: &str,
++    ) -> Result<String, HwpError> {
++        let response =
++            self.set_table_properties_edit(section_idx, parent_para_idx, control_idx, json)?;
++        self.document.sections[section_idx].raw_stream = None;
++        self.recompose_section_at_batch_end(section_idx, &[parent_para_idx]);
++        self.paginate_if_needed();
++        Ok(response)
++    }
++
++    /// The model part of `set_table_properties_native`; returns its response. The caller
++    /// recomposes and paginates.
++    pub(super) fn set_table_properties_edit(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        control_idx: usize,
++        json: &str,
+     ) -> Result<String, HwpError> {
+         use super::super::helpers::{json_bool, json_i16, json_i32, json_str, json_u32, json_u8};
+ 
+@@ -3541,9 +3635,6 @@ impl DocumentCore {
+                 hwp3_layout,
+             );
+         }
+-        self.document.sections[section_idx].raw_stream = None;
+-        self.recompose_section_at_batch_end(section_idx, &[parent_para_idx]);
+-        self.paginate_if_needed();
+ 
+         if caption_created {
+             let char_offset = {
+@@ -4090,12 +4181,31 @@ impl DocumentCore {
+         vertical: bool,
+         forward: bool,
+     ) -> Result<String, HwpError> {
++        let table = self.get_table_mut(section_idx, parent_para_idx, control_idx)?;
++        let (response, moved) = Self::resize_table_cell_in(table, row, col, vertical, forward);
++        if moved {
++            self.document.sections[section_idx].raw_stream = None;
++            self.mark_cell_control_dirty(section_idx, parent_para_idx, control_idx);
++            self.mark_section_dirty(section_idx);
++            self.paginate_if_needed();
++        }
++        Ok(response)
++    }
++
++    /// The model part of `resize_table_cell_native` on one table: the response and whether
++    /// a boundary moved (only then the caller marks the document for layout).
++    pub(super) fn resize_table_cell_in(
++        table: &mut crate::model::table::Table,
++        row: u16,
++        col: u16,
++        vertical: bool,
++        forward: bool,
++    ) -> (String, bool) {
+         use std::collections::BTreeSet;
+ 
+         const STEP: i64 = 283;
+         const CELL_FLAG_JUST_RESIZED: u16 = 0x0100;
+ 
+-        let table = self.get_table_mut(section_idx, parent_para_idx, control_idx)?;
+         let delta = if forward { STEP } else { -STEP };
+         let cross_of = |c: &crate::model::table::Cell| {
+             if vertical {
+@@ -4107,7 +4217,10 @@ impl DocumentCore {
+         let size_of =
+             |c: &crate::model::table::Cell| i64::from(if vertical { c.height } else { c.width });
+         let Some(mut extents) = cell_axis_extents(table, vertical) else {
+-            return Ok(r#"{"ok":false,"reason":"칸 자리를 정하지 못했다"}"#.to_string());
++            return (
++                r#"{"ok":false,"reason":"칸 자리를 정하지 못했다"}"#.to_string(),
++                false,
++            );
+         };
+ 
+         // 캐럿 칸과, 그 오른쪽(아래) 경계를 맞댄 칸들 — 위에서 내려온 합친 칸도 이웃이다.
+@@ -4116,7 +4229,10 @@ impl DocumentCore {
+             .iter()
+             .position(|c| c.row == row && c.col == col)
+         else {
+-            return Ok(r#"{"ok":false,"reason":"칸을 찾지 못했다"}"#.to_string());
++            return (
++                r#"{"ok":false,"reason":"칸을 찾지 못했다"}"#.to_string(),
++                false,
++            );
+         };
+         let boundary = extents[target_idx].1;
+         let (lo, n) = cross_of(&table.cells[target_idx]);
+@@ -4128,7 +4244,7 @@ impl DocumentCore {
+             })
+             .collect();
+         if neighbours.is_empty() {
+-            return Ok(r#"{"ok":true,"moved":false}"#.to_string());
++            return (r#"{"ok":true,"moved":false}"#.to_string(), false);
+         }
+         // 이웃이 캐럿 칸의 행(열) 밖으로 이어지면 그 칸의 옆선이 갈라진다 — 한글 2024도
+         // 이때는 옮기지 않는다(2026-10-31 실측: 옆이 세로로 합친 칸인 B2).
+@@ -4136,11 +4252,11 @@ impl DocumentCore {
+             let (s, n) = cross_of(&table.cells[i]);
+             s < lo || s + n > hi
+         }) {
+-            return Ok(r#"{"ok":true,"moved":false}"#.to_string());
++            return (r#"{"ok":true,"moved":false}"#.to_string(), false);
+         }
+         let thin = |i: usize, change: i64| size_of(&table.cells[i]) + change <= 0;
+         if thin(target_idx, delta) || neighbours.iter().any(|&i| thin(i, -delta)) {
+-            return Ok(r#"{"ok":true,"moved":false}"#.to_string());
++            return (r#"{"ok":true,"moved":false}"#.to_string(), false);
+         }
+ 
+         // 캐럿 칸의 끝과 이웃들의 시작만 움직인다.
+@@ -4162,11 +4278,7 @@ impl DocumentCore {
+             }
+         }
+         rebuild_axis_from_extents(table, vertical, &extents);
+-        self.document.sections[section_idx].raw_stream = None;
+-        self.mark_cell_control_dirty(section_idx, parent_para_idx, control_idx);
+-        self.mark_section_dirty(section_idx);
+-        self.paginate_if_needed();
+-        Ok(r#"{"ok":true,"moved":true}"#.to_string())
++        (r#"{"ok":true,"moved":true}"#.to_string(), true)
+     }
+ 
+     /// 칸들의 가로(세로) **시작·끝 좌표**를 정하고 격자를 다시 매긴다 — 한글의 `셀 너비를 같게`
+@@ -4187,6 +4299,20 @@ impl DocumentCore {
+         vertical: bool,
+         json: &str,
+     ) -> Result<String, HwpError> {
++        let given = Self::parse_cell_extents(json)?;
++        let table = self.get_table_mut(section_idx, parent_para_idx, control_idx)?;
++        let (response, changed) = Self::set_table_cell_extents_in(table, vertical, &given);
++        if changed {
++            self.document.sections[section_idx].raw_stream = None;
++            self.mark_cell_control_dirty(section_idx, parent_para_idx, control_idx);
++            self.mark_section_dirty(section_idx);
++            self.paginate_if_needed();
++        }
++        Ok(response)
++    }
++
++    /// The `json` argument of `set_table_cell_extents_native`: (cell, start, end) triples.
++    pub(super) fn parse_cell_extents(json: &str) -> Result<Vec<(usize, i64, i64)>, HwpError> {
+         let mut given: Vec<(usize, i64, i64)> = Vec::new();
+         let trimmed = json.trim();
+         if !trimmed.starts_with('[') || !trimmed.ends_with(']') {
+@@ -4222,14 +4348,26 @@ impl DocumentCore {
+                 _ => {}
+             }
+         }
+-        let table = self.get_table_mut(section_idx, parent_para_idx, control_idx)?;
++        Ok(given)
++    }
++
++    /// The model part of `set_table_cell_extents_native` on one table: the response and
++    /// whether the grid changed (only then the caller marks the document for layout).
++    pub(super) fn set_table_cell_extents_in(
++        table: &mut crate::model::table::Table,
++        vertical: bool,
++        given: &[(usize, i64, i64)],
++    ) -> (String, bool) {
+         let Some(mut extents) = cell_axis_extents(table, vertical) else {
+-            return Ok(r#"{"ok":false,"reason":"칸 자리를 정하지 못했다"}"#.to_string());
++            return (
++                r#"{"ok":false,"reason":"칸 자리를 정하지 못했다"}"#.to_string(),
++                false,
++            );
+         };
+         if given.iter().any(|&(idx, _, _)| idx >= table.cells.len()) {
+-            return Ok(r#"{"ok":false,"reason":"없는 칸"}"#.to_string());
++            return (r#"{"ok":false,"reason":"없는 칸"}"#.to_string(), false);
+         }
+-        for &(idx, s, e) in &given {
++        for &(idx, s, e) in given {
+             let step = (e - s) - (extents[idx].1 - extents[idx].0);
+             extents[idx] = (s, e);
+             let cell = &mut table.cells[idx];
+@@ -4253,11 +4391,7 @@ impl DocumentCore {
+                     .copy_from_slice(&total.to_le_bytes());
+             }
+         }
+-        self.document.sections[section_idx].raw_stream = None;
+-        self.mark_cell_control_dirty(section_idx, parent_para_idx, control_idx);
+-        self.mark_section_dirty(section_idx);
+-        self.paginate_if_needed();
+-        Ok(r#"{"ok":true}"#.to_string())
++        (r#"{"ok":true}"#.to_string(), true)
+     }
+ }
+ 
+diff --git a/src/document_core/commands/table_path_ops.rs b/src/document_core/commands/table_path_ops.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..8b2204baf15ff3432234cde3db113c340d675781
+--- /dev/null
++++ b/src/document_core/commands/table_path_ops.rs
+@@ -0,0 +1,875 @@
++//! Cell-path forms of the flat table calls (`insertTableRowByPath` and the rest).
++//!
++//! The flat calls of `table_ops.rs` reach a table as `(section, paragraph, control)`, so only
++//! a table in the body. These take the same cell path as the other `*_by_path` calls,
++//! `[(control, cell, cell paragraph), …]`, and edit the table its last step names. A path
++//! of one step is a body table and goes to the flat call unchanged. Every step before the
++//! last enters a table cell; the first may enter a text box instead (the path the editor's
++//! cursor uses there). A text box later in the path, a step that is out of range or not a
++//! table, and a table whose borders are drawn by objects are refused before anything changes.
++//!
++//! The edit itself is the flat call's model part, run while the paragraph that holds the
++//! table stands in the body paragraph's slot (`with_nested_table`). When a treat-as-char
++//! table changes height, the stored line of its paragraph and the following paragraphs of
++//! the same cell move by the difference, the rule patch 0042 keeps for a body table.
++use super::border_paint_structure::{table_has_border_paint, StructureEdit};
++use crate::document_core::helpers::{get_textbox_at, get_textbox_at_mut};
++use crate::document_core::tac_host_rows::move_host_row;
++use crate::document_core::DocumentCore;
++use crate::error::HwpError;
++use crate::model::control::Control;
++use crate::model::event::DocumentEvent;
++use crate::model::paragraph::Paragraph;
++use crate::model::table::Table;
++
++type CellPath = [(usize, usize, usize)];
++
++const DRAWN_BORDERS: &str = "칸 테두리를 개체로 그린 안쪽 표는 아직 고칠 수 없습니다";
++const CAPTION: &str = "안쪽 표의 캡션은 아직 넣거나 고칠 수 없습니다";
++
++fn error(message: impl Into<String>) -> HwpError {
++    HwpError::RenderError(message.into())
++}
++
++/// The steps to the paragraph that holds the table, and the table's control index.
++fn split_path(path: &CellPath) -> Result<(&CellPath, usize), HwpError> {
++    let (&(control_idx, _, _), steps) = path
++        .split_last()
++        .ok_or_else(|| error("경로가 비어있습니다"))?;
++    Ok((steps, control_idx))
++}
++
++/// The container a step enters: a table cell, or a text box when it is the first step.
++fn step_error(i: usize, control: Option<&Control>, control_idx: usize) -> HwpError {
++    match control {
++        None => error(format!("경로[{}]: controls[{}] 범위 초과", i, control_idx)),
++        Some(Control::Shape(_)) if i > 0 => error(format!(
++            "경로[{}]: 표 칸 안의 글상자에 든 표는 고칠 수 없습니다",
++            i
++        )),
++        Some(Control::Shape(_)) => error(format!(
++            "경로[{}]: controls[{}] 개체에 글상자가 없습니다",
++            i, control_idx
++        )),
++        Some(_) => error(format!(
++            "경로[{}]: controls[{}]가 표나 글상자가 아닙니다",
++            i, control_idx
++        )),
++    }
++}
++
++fn paragraph_error(i: usize, cell_para_idx: usize, count: usize) -> HwpError {
++    error(format!(
++        "경로[{}]: 문단 {} 범위 초과 (총 {}개)",
++        i, cell_para_idx, count
++    ))
++}
++
++/// The paragraph `steps` lead to from `outer`.
++fn host_paragraph<'a>(outer: &'a Paragraph, steps: &CellPath) -> Result<&'a Paragraph, HwpError> {
++    let mut para = outer;
++    for (i, &(control_idx, cell_idx, cell_para_idx)) in steps.iter().enumerate() {
++        let control = para.controls.get(control_idx);
++        let paragraphs = match control {
++            Some(Control::Table(table)) => {
++                &table
++                    .cells
++                    .get(cell_idx)
++                    .ok_or_else(|| {
++                        error(format!(
++                            "경로[{}]: 셀 {} 범위 초과 (총 {}개)",
++                            i,
++                            cell_idx,
++                            table.cells.len()
++                        ))
++                    })?
++                    .paragraphs
++            }
++            Some(Control::Shape(shape)) if i == 0 => {
++                &get_textbox_at(shape, cell_idx)
++                    .ok_or_else(|| step_error(i, control, control_idx))?
++                    .paragraphs
++            }
++            _ => return Err(step_error(i, control, control_idx)),
++        };
++        para = paragraphs
++            .get(cell_para_idx)
++            .ok_or_else(|| paragraph_error(i, cell_para_idx, paragraphs.len()))?;
++    }
++    Ok(para)
++}
++
++/// `host_paragraph` for writing. Only called on a path `host_paragraph` accepted.
++fn host_paragraph_mut<'a>(
++    outer: &'a mut Paragraph,
++    steps: &CellPath,
++) -> Result<&'a mut Paragraph, HwpError> {
++    let mut para = outer;
++    for (i, &(control_idx, cell_idx, cell_para_idx)) in steps.iter().enumerate() {
++        let paragraphs = match para.controls.get_mut(control_idx) {
++            Some(Control::Table(table)) => {
++                &mut table
++                    .cells
++                    .get_mut(cell_idx)
++                    .ok_or_else(|| error(format!("경로[{}]: 셀 {} 범위 초과", i, cell_idx)))?
++                    .paragraphs
++            }
++            Some(Control::Shape(shape)) if i == 0 => {
++                &mut get_textbox_at_mut(shape, cell_idx)
++                    .ok_or_else(|| error(format!("경로[{}]: 글상자가 없습니다", i)))?
++                    .paragraphs
++            }
++            _ => return Err(error(format!("경로[{}]: 표나 글상자가 아닙니다", i))),
++        };
++        let count = paragraphs.len();
++        para = paragraphs
++            .get_mut(cell_para_idx)
++            .ok_or_else(|| paragraph_error(i, cell_para_idx, count))?;
++    }
++    Ok(para)
++}
++
++/// Height of a treat-as-char table without a caption, the tables whose stored line follows it.
++fn tac_height(table: &Table) -> Option<i64> {
++    (table.common.treat_as_char && table.caption.is_none()).then(|| i64::from(table.common.height))
++}
++
++/// The JSON object of `set_table_properties_by_path_native` without its caption keys. A
++/// nested table's caption is not edited yet: a value that would add, remove or change the
++/// caption is refused, and the dialog's unchanged values are dropped.
++fn without_caption_keys(json: &str, table: &Table) -> Result<String, HwpError> {
++    use crate::model::shape::{CaptionDirection, CaptionVertAlign};
++    let serde_json::Value::Object(mut obj) =
++        serde_json::from_str(json).map_err(|e| error(format!("표 속성 JSON 파싱 실패: {}", e)))?
++    else {
++        return Err(error("표 속성은 JSON 객체여야 합니다"));
++    };
++    if let Some(has) = obj.remove("hasCaption") {
++        if has
++            .as_bool()
++            .is_some_and(|has| has != table.caption.is_some())
++        {
++            return Err(error(CAPTION));
++        }
++    }
++    let int = |obj: &serde_json::Map<String, serde_json::Value>, key: &str| {
++        obj.get(key).and_then(|v| v.as_i64())
++    };
++    if let Some(cap) = &table.caption {
++        let unchanged = [
++            int(&obj, "captionDirection").is_none_or(|v| {
++                let wanted = match v {
++                    0 => CaptionDirection::Left,
++                    1 => CaptionDirection::Right,
++                    2 => CaptionDirection::Top,
++                    _ => CaptionDirection::Bottom,
++                };
++                wanted == cap.direction
++            }),
++            int(&obj, "captionSpacing").is_none_or(|v| v == i64::from(cap.spacing)),
++            int(&obj, "captionWidth").is_none_or(|v| v == i64::from(cap.width)),
++            int(&obj, "captionVertAlign").is_none_or(|v| {
++                let wanted = match v {
++                    1 => CaptionVertAlign::Center,
++                    2 => CaptionVertAlign::Bottom,
++                    _ => CaptionVertAlign::Top,
++                };
++                wanted == cap.vert_align
++            }),
++        ];
++        if unchanged.contains(&false) {
++            return Err(error(CAPTION));
++        }
++    }
++    for key in [
++        "captionDirection",
++        "captionSpacing",
++        "captionWidth",
++        "captionVertAlign",
++    ] {
++        obj.remove(key);
++    }
++    Ok(serde_json::Value::Object(obj).to_string())
++}
++
++impl DocumentCore {
++    /// The paragraph holding the table a nested path names, and the table's control index.
++    fn nested_table_host(
++        &self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++    ) -> Result<(&Paragraph, usize), HwpError> {
++        let (steps, control_idx) = split_path(path)?;
++        let outer = self
++            .document
++            .sections
++            .get(section_idx)
++            .ok_or_else(|| error(format!("구역 {} 범위 초과", section_idx)))?
++            .paragraphs
++            .get(parent_para_idx)
++            .ok_or_else(|| error(format!("문단 {} 범위 초과", parent_para_idx)))?;
++        let host = host_paragraph(outer, steps)?;
++        match host.controls.get(control_idx) {
++            Some(Control::Table(_)) => Ok((host, control_idx)),
++            Some(_) => Err(error(format!(
++                "경로[{}]: controls[{}]가 표가 아닙니다",
++                steps.len(),
++                control_idx
++            ))),
++            None => Err(error(format!(
++                "경로[{}]: controls[{}] 범위 초과",
++                steps.len(),
++                control_idx
++            ))),
++        }
++    }
++
++    fn nested_table(
++        &self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++    ) -> Result<&Table, HwpError> {
++        let (host, control_idx) = self.nested_table_host(section_idx, parent_para_idx, path)?;
++        match &host.controls[control_idx] {
++            Control::Table(table) => Ok(table),
++            _ => unreachable!("nested_table_host checked the table"),
++        }
++    }
++
++    /// Runs `edit(self, control)` on the nested table the path names. Meanwhile the paragraph
++    /// that holds the table stands in the body paragraph's slot, so the flat calls' model
++    /// parts address it as `(section, parent paragraph, control)`. The path is checked first
++    /// and nothing changes when it is wrong. Afterwards a treat-as-char table's new height
++    /// moves its stored line (0042's rule for the paragraphs of its cell or text box).
++    fn with_nested_table<R>(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++        edit: impl FnOnce(&mut Self, usize) -> Result<R, HwpError>,
++    ) -> Result<R, HwpError> {
++        let (host, control_idx) = self.nested_table_host(section_idx, parent_para_idx, path)?;
++        if table_has_border_paint(host, control_idx) {
++            return Err(error(DRAWN_BORDERS));
++        }
++        let declared = match &host.controls[control_idx] {
++            Control::Table(table) => tac_height(table),
++            _ => None,
++        };
++        let (steps, _) = split_path(path)?;
++
++        let paragraphs = &mut self.document.sections[section_idx].paragraphs;
++        let mut outer = std::mem::take(&mut paragraphs[parent_para_idx]);
++        let host = match host_paragraph_mut(&mut outer, steps) {
++            Ok(host) => std::mem::take(host),
++            Err(e) => {
++                paragraphs[parent_para_idx] = outer;
++                return Err(e);
++            }
++        };
++        paragraphs[parent_para_idx] = host;
++        let result = edit(self, control_idx);
++        let paragraphs = &mut self.document.sections[section_idx].paragraphs;
++        let host = std::mem::replace(&mut paragraphs[parent_para_idx], outer);
++        // The outer paragraph was out of the document during the edit, so the steps that led
++        // to the host still lead to its empty place.
++        *host_paragraph_mut(&mut paragraphs[parent_para_idx], steps)
++            .expect("the outer paragraph keeps its shape while the host is out") = host;
++        let value = result?;
++
++        if let Some(declared) = declared {
++            self.move_nested_tac_host_row(section_idx, parent_para_idx, path, declared);
++        }
++        Ok(value)
++    }
++
++    /// 0042 for a nested table: when the treat-as-char table changed height from `declared`,
++    /// its stored line and the following paragraphs of the same container move with it.
++    fn move_nested_tac_host_row(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++        declared: i64,
++    ) {
++        let Ok((steps, control_idx)) = split_path(path) else {
++            return;
++        };
++        let Some(&(_, _, host_idx)) = steps.last() else {
++            return;
++        };
++        let Ok(paragraphs) =
++            self.get_cell_paragraphs_mut_by_path(section_idx, parent_para_idx, steps)
++        else {
++            return;
++        };
++        let content = match paragraphs
++            .get(host_idx)
++            .and_then(|para| para.controls.get(control_idx))
++        {
++            Some(Control::Table(table)) => i64::from(table.common.height),
++            _ => return,
++        };
++        if content != declared {
++            move_host_row(paragraphs, host_idx, control_idx, declared, content);
++        }
++    }
++
++    /// The body paragraph holding the nested table needs layout again. The caller has
++    /// invalidated the section's source bytes (`raw_stream`).
++    fn finish_nested_table_edit(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++    ) {
++        let (outer_control, outer_cell, _) = path[0];
++        self.mark_cell_control_dirty(section_idx, parent_para_idx, outer_control);
++        self.recompose_section_at_batch_end(section_idx, &[parent_para_idx]);
++        self.paginate_if_needed();
++        self.event_log.push(DocumentEvent::CellTextChanged {
++            section: section_idx,
++            para: parent_para_idx,
++            ctrl: outer_control,
++            cell: outer_cell,
++        });
++    }
++
++    /// The answer of a row or column edit on a nested table; the caller finishes the edit.
++    fn nested_structure_edit(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++        edit: StructureEdit,
++    ) -> Result<String, HwpError> {
++        let (row_count, col_count) =
++            self.with_nested_table(section_idx, parent_para_idx, path, |doc, control_idx| {
++                let table = doc.get_table_mut(section_idx, parent_para_idx, control_idx)?;
++                edit.apply(table, |_, _| {})
++                    .map_err(HwpError::RenderError)?;
++                Ok((table.row_count, table.col_count))
++            })?;
++        Ok(crate::document_core::helpers::json_ok_with(&format!(
++            "\"rowCount\":{},\"colCount\":{}",
++            row_count, col_count
++        )))
++    }
++
++    /// `insert_table_row_native` for the table the cell path names.
++    pub fn insert_table_row_by_path_native(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++        row_idx: u16,
++        below: bool,
++    ) -> Result<String, HwpError> {
++        if let [(control_idx, _, _)] = *path {
++            return self.insert_table_row_native(
++                section_idx,
++                parent_para_idx,
++                control_idx,
++                row_idx,
++                below,
++            );
++        }
++        let answer = self.nested_structure_edit(
++            section_idx,
++            parent_para_idx,
++            path,
++            StructureEdit::InsertRow(row_idx, below),
++        )?;
++        self.document.sections[section_idx].raw_stream = None;
++        self.finish_nested_table_edit(section_idx, parent_para_idx, path);
++        Ok(answer)
++    }
++
++    /// `insert_table_column_native` for the table the cell path names.
++    pub fn insert_table_column_by_path_native(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++        col_idx: u16,
++        right: bool,
++    ) -> Result<String, HwpError> {
++        if let [(control_idx, _, _)] = *path {
++            return self.insert_table_column_native(
++                section_idx,
++                parent_para_idx,
++                control_idx,
++                col_idx,
++                right,
++            );
++        }
++        let answer = self.nested_structure_edit(
++            section_idx,
++            parent_para_idx,
++            path,
++            StructureEdit::InsertColumn(col_idx, right),
++        )?;
++        self.document.sections[section_idx].raw_stream = None;
++        self.finish_nested_table_edit(section_idx, parent_para_idx, path);
++        Ok(answer)
++    }
++
++    /// `delete_table_row_native` for the table the cell path names.
++    pub fn delete_table_row_by_path_native(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++        row_idx: u16,
++    ) -> Result<String, HwpError> {
++        if let [(control_idx, _, _)] = *path {
++            return self.delete_table_row_native(
++                section_idx,
++                parent_para_idx,
++                control_idx,
++                row_idx,
++            );
++        }
++        let answer = self.nested_structure_edit(
++            section_idx,
++            parent_para_idx,
++            path,
++            StructureEdit::DeleteRow(row_idx),
++        )?;
++        self.document.sections[section_idx].raw_stream = None;
++        self.finish_nested_table_edit(section_idx, parent_para_idx, path);
++        Ok(answer)
++    }
++
++    /// `delete_table_column_native` for the table the cell path names.
++    pub fn delete_table_column_by_path_native(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++        col_idx: u16,
++    ) -> Result<String, HwpError> {
++        if let [(control_idx, _, _)] = *path {
++            return self.delete_table_column_native(
++                section_idx,
++                parent_para_idx,
++                control_idx,
++                col_idx,
++            );
++        }
++        let answer = self.nested_structure_edit(
++            section_idx,
++            parent_para_idx,
++            path,
++            StructureEdit::DeleteColumn(col_idx),
++        )?;
++        self.document.sections[section_idx].raw_stream = None;
++        self.finish_nested_table_edit(section_idx, parent_para_idx, path);
++        Ok(answer)
++    }
++
++    /// `merge_table_cells_native` for the table the cell path names.
++    pub fn merge_table_cells_by_path_native(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++        start_row: u16,
++        start_col: u16,
++        end_row: u16,
++        end_col: u16,
++    ) -> Result<String, HwpError> {
++        if let [(control_idx, _, _)] = *path {
++            return self.merge_table_cells_native(
++                section_idx,
++                parent_para_idx,
++                control_idx,
++                start_row,
++                start_col,
++                end_row,
++                end_col,
++            );
++        }
++        let cell_count =
++            self.with_nested_table(section_idx, parent_para_idx, path, |doc, control_idx| {
++                doc.merge_table_cells_edit(
++                    section_idx,
++                    parent_para_idx,
++                    control_idx,
++                    (start_row, start_col, end_row, end_col),
++                )
++            })?;
++        self.document.sections[section_idx].raw_stream = None;
++        self.finish_nested_table_edit(section_idx, parent_para_idx, path);
++        Ok(crate::document_core::helpers::json_ok_with(&format!(
++            "\"cellCount\":{}",
++            cell_count
++        )))
++    }
++
++    /// The answer of a cell split on a nested table; the caller finishes the edit.
++    fn nested_split(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++        split: impl FnOnce(&mut Table) -> Result<(), String>,
++    ) -> Result<String, HwpError> {
++        let cell_count =
++            self.with_nested_table(section_idx, parent_para_idx, path, |doc, control_idx| {
++                doc.split_table_cells_edit(section_idx, parent_para_idx, control_idx, true, split)
++            })?;
++        Ok(crate::document_core::helpers::json_ok_with(&format!(
++            "\"cellCount\":{}",
++            cell_count
++        )))
++    }
++
++    /// `split_table_cell_native` for the table the cell path names.
++    pub fn split_table_cell_by_path_native(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++        row: u16,
++        col: u16,
++    ) -> Result<String, HwpError> {
++        if let [(control_idx, _, _)] = *path {
++            return self.split_table_cell_native(
++                section_idx,
++                parent_para_idx,
++                control_idx,
++                row,
++                col,
++            );
++        }
++        let answer = self.nested_split(section_idx, parent_para_idx, path, |t| {
++            t.split_cell(row, col)
++        })?;
++        self.document.sections[section_idx].raw_stream = None;
++        self.finish_nested_table_edit(section_idx, parent_para_idx, path);
++        Ok(answer)
++    }
++
++    /// `split_table_cell_into_native` for the table the cell path names.
++    #[allow(clippy::too_many_arguments)]
++    pub fn split_table_cell_into_by_path_native(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++        row: u16,
++        col: u16,
++        n_rows: u16,
++        m_cols: u16,
++        equal_row_height: bool,
++        merge_first: bool,
++    ) -> Result<String, HwpError> {
++        if let [(control_idx, _, _)] = *path {
++            return self.split_table_cell_into_native(
++                section_idx,
++                parent_para_idx,
++                control_idx,
++                row,
++                col,
++                n_rows,
++                m_cols,
++                equal_row_height,
++                merge_first,
++            );
++        }
++        let answer = self.nested_split(section_idx, parent_para_idx, path, |t| {
++            t.split_cell_into(row, col, n_rows, m_cols, equal_row_height, merge_first)
++        })?;
++        self.document.sections[section_idx].raw_stream = None;
++        self.finish_nested_table_edit(section_idx, parent_para_idx, path);
++        Ok(answer)
++    }
++
++    /// `split_table_cells_in_range_native` for the table the cell path names.
++    #[allow(clippy::too_many_arguments)]
++    pub fn split_table_cells_in_range_by_path_native(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++        start_row: u16,
++        start_col: u16,
++        end_row: u16,
++        end_col: u16,
++        n_rows: u16,
++        m_cols: u16,
++        equal_row_height: bool,
++    ) -> Result<String, HwpError> {
++        if let [(control_idx, _, _)] = *path {
++            return self.split_table_cells_in_range_native(
++                section_idx,
++                parent_para_idx,
++                control_idx,
++                start_row,
++                start_col,
++                end_row,
++                end_col,
++                n_rows,
++                m_cols,
++                equal_row_height,
++            );
++        }
++        let answer = self.nested_split(section_idx, parent_para_idx, path, |t| {
++            t.split_cells_in_range(
++                start_row,
++                start_col,
++                end_row,
++                end_col,
++                n_rows,
++                m_cols,
++                equal_row_height,
++            )
++        })?;
++        self.document.sections[section_idx].raw_stream = None;
++        self.finish_nested_table_edit(section_idx, parent_para_idx, path);
++        Ok(answer)
++    }
++
++    /// `set_cell_properties_native` for the table the cell path names.
++    pub fn set_cell_properties_by_path_native(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++        cell_idx: usize,
++        json: &str,
++    ) -> Result<String, HwpError> {
++        if let [(control_idx, _, _)] = *path {
++            return self.set_cell_properties_native(
++                section_idx,
++                parent_para_idx,
++                control_idx,
++                cell_idx,
++                json,
++            );
++        }
++        let response =
++            self.with_nested_table(section_idx, parent_para_idx, path, |doc, control_idx| {
++                doc.set_cell_properties_edit(
++                    section_idx,
++                    parent_para_idx,
++                    control_idx,
++                    cell_idx,
++                    json,
++                )
++            })?;
++        self.document.sections[section_idx].raw_stream = None;
++        self.finish_nested_table_edit(section_idx, parent_para_idx, path);
++        Ok(response)
++    }
++
++    /// `get_cell_own_properties_native` for the table the cell path names.
++    pub fn get_cell_own_properties_by_path_native(
++        &self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++        cell_idx: usize,
++    ) -> Result<String, HwpError> {
++        if let [(control_idx, _, _)] = *path {
++            return self.get_cell_own_properties_native(
++                section_idx,
++                parent_para_idx,
++                control_idx,
++                cell_idx,
++            );
++        }
++        let table = self.nested_table(section_idx, parent_para_idx, path)?;
++        self.cell_properties_json(table, cell_idx, false)
++    }
++
++    /// `set_cell_zone_properties_native` for the table the cell path names.
++    #[allow(clippy::too_many_arguments)]
++    pub fn set_cell_zone_properties_by_path_native(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++        start_row: u16,
++        start_col: u16,
++        end_row: u16,
++        end_col: u16,
++        json: &str,
++    ) -> Result<String, HwpError> {
++        if let [(control_idx, _, _)] = *path {
++            return self.set_cell_zone_properties_native(
++                section_idx,
++                parent_para_idx,
++                control_idx,
++                start_row,
++                start_col,
++                end_row,
++                end_col,
++                json,
++            );
++        }
++        let response =
++            self.with_nested_table(section_idx, parent_para_idx, path, |doc, control_idx| {
++                doc.set_cell_zone_properties_edit(
++                    section_idx,
++                    parent_para_idx,
++                    control_idx,
++                    (start_row, start_col, end_row, end_col),
++                    json,
++                )
++            })?;
++        self.document.sections[section_idx].raw_stream = None;
++        self.finish_nested_table_edit(section_idx, parent_para_idx, path);
++        Ok(response)
++    }
++
++    /// `apply_cell_border_fill_ids_native` for the table the cell path names. A nested table
++    /// never has drawn border pieces to restore, so `borderPaintUndoIds` must be empty.
++    pub fn apply_cell_border_fill_ids_by_path_native(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++        json: &str,
++    ) -> Result<String, HwpError> {
++        if let [(control_idx, _, _)] = *path {
++            return self.apply_cell_border_fill_ids_native(
++                section_idx,
++                parent_para_idx,
++                control_idx,
++                json,
++            );
++        }
++        let paint_undo = serde_json::from_str::<serde_json::Value>(json)
++            .ok()
++            .and_then(|v| v.get("borderPaintUndoIds").cloned())
++            .and_then(|v| v.as_array().map(|ids| !ids.is_empty()))
++            .unwrap_or(false);
++        if paint_undo {
++            return Err(error(DRAWN_BORDERS));
++        }
++        self.with_nested_table(section_idx, parent_para_idx, path, |doc, control_idx| {
++            doc.apply_cell_border_fill_ids_edit(section_idx, parent_para_idx, control_idx, json)
++        })?;
++        self.document.sections[section_idx].raw_stream = None;
++        self.finish_nested_table_edit(section_idx, parent_para_idx, path);
++        Ok("{\"ok\":true}".to_string())
++    }
++
++    /// `get_table_properties_native` for the table the cell path names.
++    pub fn get_table_properties_by_path_native(
++        &self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++    ) -> Result<String, HwpError> {
++        if let [(control_idx, _, _)] = *path {
++            return self.get_table_properties_native(section_idx, parent_para_idx, control_idx);
++        }
++        let table = self.nested_table(section_idx, parent_para_idx, path)?;
++        self.table_properties_json(table)
++    }
++
++    /// `set_table_properties_native` for the table the cell path names. A nested table's
++    /// caption stays as it is: a JSON that would add, remove or change it is refused.
++    pub fn set_table_properties_by_path_native(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++        json: &str,
++    ) -> Result<String, HwpError> {
++        if let [(control_idx, _, _)] = *path {
++            return self.set_table_properties_native(
++                section_idx,
++                parent_para_idx,
++                control_idx,
++                json,
++            );
++        }
++        let json =
++            without_caption_keys(json, self.nested_table(section_idx, parent_para_idx, path)?)?;
++        let response =
++            self.with_nested_table(section_idx, parent_para_idx, path, |doc, control_idx| {
++                doc.set_table_properties_edit(section_idx, parent_para_idx, control_idx, &json)
++            })?;
++        self.document.sections[section_idx].raw_stream = None;
++        self.finish_nested_table_edit(section_idx, parent_para_idx, path);
++        Ok(response)
++    }
++
++    /// `resize_table_cell_native` (one cell's right or bottom boundary) for the table the
++    /// cell path names.
++    #[allow(clippy::too_many_arguments)]
++    pub fn resize_table_cell_by_path_native(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++        row: u16,
++        col: u16,
++        vertical: bool,
++        forward: bool,
++    ) -> Result<String, HwpError> {
++        if let [(control_idx, _, _)] = *path {
++            return self.resize_table_cell_native(
++                section_idx,
++                parent_para_idx,
++                control_idx,
++                row,
++                col,
++                vertical,
++                forward,
++            );
++        }
++        let (response, moved) =
++            self.with_nested_table(section_idx, parent_para_idx, path, |doc, control_idx| {
++                let table = doc.get_table_mut(section_idx, parent_para_idx, control_idx)?;
++                Ok(Self::resize_table_cell_in(
++                    table, row, col, vertical, forward,
++                ))
++            })?;
++        if moved {
++            self.document.sections[section_idx].raw_stream = None;
++            self.finish_nested_table_edit(section_idx, parent_para_idx, path);
++        }
++        Ok(response)
++    }
++
++    /// `set_table_cell_extents_native` for the table the cell path names.
++    pub fn set_table_cell_extents_by_path_native(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        path: &CellPath,
++        vertical: bool,
++        json: &str,
++    ) -> Result<String, HwpError> {
++        if let [(control_idx, _, _)] = *path {
++            return self.set_table_cell_extents_native(
++                section_idx,
++                parent_para_idx,
++                control_idx,
++                vertical,
++                json,
++            );
++        }
++        let given = Self::parse_cell_extents(json)?;
++        let (response, changed) =
++            self.with_nested_table(section_idx, parent_para_idx, path, |doc, control_idx| {
++                let table = doc.get_table_mut(section_idx, parent_para_idx, control_idx)?;
++                Ok(Self::set_table_cell_extents_in(table, vertical, &given))
++            })?;
++        if changed {
++            self.document.sections[section_idx].raw_stream = None;
++            self.finish_nested_table_edit(section_idx, parent_para_idx, path);
++        }
++        Ok(response)
++    }
++}
++
++#[cfg(test)]
++mod tests;
+diff --git a/src/document_core/commands/table_path_ops/tests.rs b/src/document_core/commands/table_path_ops/tests.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..8b26e8c4a50b285ac7dc4076a27d5efd5b19b31c
+--- /dev/null
++++ b/src/document_core/commands/table_path_ops/tests.rs
+@@ -0,0 +1,849 @@
++//! The cell-path table calls on a table in a table (one to three levels down) and in a text
++//! box: each edits that table only, a wrong path changes nothing, and the saved files reopen
++//! with the edited structure and the same page count.
++use crate::document_core::DocumentCore;
++use crate::model::control::Control;
++use crate::model::paragraph::Paragraph;
++use crate::model::table::Table;
++use serde_json::Value;
++
++type Path = Vec<(usize, usize, usize)>;
++
++fn json(s: &str) -> Value {
++    serde_json::from_str(s).expect("json answer")
++}
++
++fn path_of(answer: &Value) -> Path {
++    answer["cellPath"]
++        .as_array()
++        .expect("cellPath")
++        .iter()
++        .map(|e| {
++            let n = |k: &str| e[k].as_u64().expect("path number") as usize;
++            (n("controlIndex"), n("cellIndex"), n("cellParaIndex"))
++        })
++        .collect()
++}
++
++/// The path to cell `cell`, paragraph `para` of the table `table` names.
++fn in_cell(table: &Path, cell: usize, para: usize) -> Path {
++    let mut path = table.clone();
++    let last = path.last_mut().expect("path");
++    *last = (last.0, cell, para);
++    path
++}
++
++/// Body: "before", a 2×2 treat-as-char table, "after". Then `depth` tables, each a 2×2
++/// treat-as-char table in the first cell of the one above. Every table's last cell holds its
++/// level as text. Returns the document, the table's body paragraph and the path of every
++/// table, outermost first.
++fn nested(depth: usize) -> (DocumentCore, usize, Vec<Path>) {
++    let mut doc = DocumentCore::new_empty();
++    doc.create_blank_document_native().expect("blank");
++    doc.insert_text_native(0, 0, 0, "before").expect("type");
++    doc.split_paragraph_native(0, 0, 6, None).expect("split");
++    doc.split_paragraph_native(0, 1, 0, None).expect("split");
++    doc.insert_text_native(0, 2, 0, "after").expect("type");
++    let made = json(
++        &doc.create_table_ex_native(0, 1, 0, 2, 2, true, None, None)
++            .expect("outer table"),
++    );
++    let para = made["paraIdx"].as_u64().expect("para") as usize;
++    let control = made["controlIdx"].as_u64().expect("control") as usize;
++    let mut tables = vec![vec![(control, 0, 0)]];
++    for _ in 0..depth {
++        let above = tables.last().expect("table").clone();
++        let answer = json(
++            &doc.create_table_in_cell_by_path_native(
++                0,
++                para,
++                &in_cell(&above, 0, 0),
++                0,
++                2,
++                2,
++                None,
++                None,
++                true,
++            )
++            .expect("nested table"),
++        );
++        tables.push(path_of(&answer));
++    }
++    for (level, table) in tables.iter().enumerate() {
++        doc.insert_text_in_cell_by_path(0, para, &in_cell(table, 3, 0), 0, &level.to_string())
++            .expect("cell text");
++    }
++    (doc, para, tables)
++}
++
++/// A body text box holding a 2×2 table (pasted, as the editor does), and a body table after
++/// it. Returns the document, the text box's paragraph and the path of the table in it.
++fn text_box_table() -> (DocumentCore, usize, Path) {
++    let mut doc = DocumentCore::new_empty();
++    doc.create_blank_document_native().expect("blank");
++    doc.insert_text_native(0, 0, 0, "body").expect("type");
++    doc.split_paragraph_native(0, 0, 4, None).expect("split");
++    let body = json(
++        &doc.create_table_ex_native(0, 1, 0, 2, 2, true, None, None)
++            .expect("body table"),
++    );
++    let (body_para, body_control) = (
++        body["paraIdx"].as_u64().unwrap() as usize,
++        body["controlIdx"].as_u64().unwrap() as usize,
++    );
++    doc.insert_text_in_cell_by_path(0, body_para, &[(body_control, 3, 0)], 0, "body cell")
++        .expect("type");
++    let shape = json(
++        &doc.create_shape_control_native(
++            0,
++            0,
++            4,
++            30000,
++            12000,
++            0,
++            0,
++            false,
++            "Square",
++            "textbox",
++            false,
++            false,
++            &[],
++        )
++        .expect("text box"),
++    );
++    let (para, shape_control) = (
++        shape["paraIdx"].as_u64().unwrap() as usize,
++        shape["controlIdx"].as_u64().unwrap() as usize,
++    );
++    doc.copy_control_native(0, body_para, &[], body_control)
++        .expect("copy");
++    let pasted = json(
++        &doc.paste_internal_in_cell_by_path_native(0, para, &[(shape_control, 0, 0)], 0)
++            .expect("paste into the text box"),
++    );
++    let box_para = pasted["cellParaIdx"].as_u64().unwrap() as usize;
++    let paragraph = &doc.document().sections[0].paragraphs[para];
++    let Control::Shape(shape) = &paragraph.controls[shape_control] else {
++        panic!("text box");
++    };
++    let text_box = crate::document_core::helpers::get_textbox_at(shape, 0).expect("text box");
++    let table_control = text_box.paragraphs[box_para]
++        .controls
++        .iter()
++        .position(|c| matches!(c, Control::Table(_)))
++        .expect("the table in the text box");
++    (
++        doc,
++        para,
++        vec![(shape_control, 0, box_para), (table_control, 0, 0)],
++    )
++}
++
++fn host<'a>(doc: &'a DocumentCore, para: usize, path: &Path) -> &'a Paragraph {
++    let outer = &doc.document().sections[0].paragraphs[para];
++    super::host_paragraph(outer, &path[..path.len() - 1]).expect("host paragraph")
++}
++
++fn table<'a>(doc: &'a DocumentCore, para: usize, path: &Path) -> &'a Table {
++    match &host(doc, para, path).controls[path.last().unwrap().0] {
++        Control::Table(table) => table,
++        _ => panic!("not a table"),
++    }
++}
++
++fn dims(doc: &DocumentCore, para: usize, path: &Path) -> (u16, u16, usize) {
++    let t = table(doc, para, path);
++    (t.row_count, t.col_count, t.cells.len())
++}
++
++/// The whole section as text, to compare before and after a refused call.
++fn snapshot(doc: &DocumentCore) -> String {
++    format!("{:?}", doc.document().sections)
++}
++
++/// Every cell of `path`'s table but `except`, as text.
++fn cells_but(doc: &DocumentCore, para: usize, path: &Path, except: usize) -> Vec<String> {
++    table(doc, para, path)
++        .cells
++        .iter()
++        .enumerate()
++        .filter(|(i, _)| *i != except)
++        .map(|(_, c)| format!("{:?}", c))
++        .collect()
++}
++
++/// Paths of every nested table the tests run on: one, two and three levels down and in a
++/// text box. (document, body paragraph, table path, paths of the tables above it)
++fn cases() -> Vec<(&'static str, DocumentCore, usize, Path, Vec<Path>)> {
++    let mut out = Vec::new();
++    for depth in 1..=3 {
++        let (doc, para, tables) = nested(depth);
++        let target = tables[depth].clone();
++        let above = tables[..depth].to_vec();
++        out.push((
++            ["depth 1", "depth 2", "depth 3"][depth - 1],
++            doc,
++            para,
++            target,
++            above,
++        ));
++    }
++    let (doc, para, path) = text_box_table();
++    out.push(("text box", doc, para, path, Vec::new()));
++    out
++}
++
++fn reopened(bytes: &[u8]) -> DocumentCore {
++    DocumentCore::from_bytes(bytes).expect("reopen")
++}
++
++/// Saves as .hwp and .hwpx, reopens and checks the table's grid and the page count.
++fn survives_saving(doc: &DocumentCore, para: usize, path: &Path, name: &str) {
++    let want = dims(doc, para, path);
++    let verify = doc.serialize_hwp_with_verify().expect("hwp verify");
++    assert_eq!(
++        verify.page_count_before, verify.page_count_after,
++        "{name}: .hwp reopens with the edited page count"
++    );
++    for bytes in [
++        doc.export_hwp_native().expect("hwp"),
++        doc.export_hwpx_native().expect("hwpx"),
++    ] {
++        let again = reopened(&bytes);
++        assert_eq!(dims(&again, para, path), want, "{name}: the reopened grid");
++        assert_eq!(
++            again.page_count(),
++            doc.page_count(),
++            "{name}: reopened page count"
++        );
++    }
++}
++
++#[test]
++fn row_and_column_edits_change_only_the_named_table() {
++    for (name, mut doc, para, path, above) in cases() {
++        let parents: Vec<_> = above.iter().map(|p| dims(&doc, para, p)).collect();
++        // the cells of every table above, except the one the path goes through
++        let neighbours: Vec<_> = above
++            .iter()
++            .zip(above.iter().skip(1).chain(std::iter::once(&path)))
++            .map(|(p, below)| {
++                let through = below[p.len() - 1].1;
++                cells_but(&doc, para, p, through)
++            })
++            .collect();
++
++        let answer = json(
++            &doc.insert_table_row_by_path_native(0, para, &path, 0, true)
++                .expect("row"),
++        );
++        assert_eq!(
++            (answer["rowCount"].as_u64(), answer["colCount"].as_u64()),
++            (Some(3), Some(2)),
++            "{name}"
++        );
++        assert_eq!(
++            dims(&doc, para, &path),
++            (3, 2, 6),
++            "{name}: a row below the first"
++        );
++        let answer = json(
++            &doc.insert_table_column_by_path_native(0, para, &path, 1, true)
++                .expect("column"),
++        );
++        assert_eq!(
++            (answer["rowCount"].as_u64(), answer["colCount"].as_u64()),
++            (Some(3), Some(3)),
++            "{name}"
++        );
++        survives_saving(&doc, para, &path, name);
++        doc.delete_table_column_by_path_native(0, para, &path, 0)
++            .expect("delete column");
++        doc.delete_table_row_by_path_native(0, para, &path, 2)
++            .expect("delete row");
++        assert_eq!(dims(&doc, para, &path), (2, 2, 4), "{name}: back to 2×2");
++
++        for (p, before) in above.iter().zip(parents) {
++            assert_eq!(
++                dims(&doc, para, p),
++                before,
++                "{name}: a table above keeps its grid"
++            );
++        }
++        for ((p, below), before) in above
++            .iter()
++            .zip(above.iter().skip(1).chain(std::iter::once(&path)))
++            .zip(neighbours)
++        {
++            let through = below[p.len() - 1].1;
++            assert_eq!(
++                cells_but(&doc, para, p, through),
++                before,
++                "{name}: neighbour cells"
++            );
++        }
++        survives_saving(&doc, para, &path, name);
++    }
++}
++
++#[test]
++fn merge_and_split_change_only_the_named_table() {
++    for (name, mut doc, para, path, above) in cases() {
++        let parents: Vec<_> = above.iter().map(|p| dims(&doc, para, p)).collect();
++        let answer = json(
++            &doc.merge_table_cells_by_path_native(0, para, &path, 0, 0, 0, 1)
++                .expect("merge"),
++        );
++        assert_eq!(answer["cellCount"].as_u64(), Some(3), "{name}");
++        survives_saving(&doc, para, &path, name);
++        let answer = json(
++            &doc.split_table_cell_by_path_native(0, para, &path, 0, 0)
++                .expect("split"),
++        );
++        assert_eq!(answer["cellCount"].as_u64(), Some(4), "{name}");
++        let answer = json(
++            &doc.split_table_cell_into_by_path_native(0, para, &path, 1, 1, 2, 1, true, false)
++                .expect("split into"),
++        );
++        assert_eq!(answer["cellCount"].as_u64(), Some(5), "{name}");
++        let answer = json(
++            &doc.split_table_cells_in_range_by_path_native(0, para, &path, 0, 0, 0, 1, 1, 2, false)
++                .expect("split range"),
++        );
++        assert!(answer["cellCount"].as_u64().unwrap() > 5, "{name}");
++        for (p, before) in above.iter().zip(parents) {
++            assert_eq!(
++                dims(&doc, para, p),
++                before,
++                "{name}: a table above keeps its grid"
++            );
++        }
++        survives_saving(&doc, para, &path, name);
++    }
++}
++
++#[test]
++fn cell_and_table_properties_reach_the_named_table() {
++    for (name, mut doc, para, path, above) in cases() {
++        let parents: Vec<_> = above
++            .iter()
++            .map(|p| {
++                format!(
++                    "{:?}",
++                    table(&doc, para, p)
++                        .cells
++                        .iter()
++                        .map(|c| (c.vertical_align, c.border_fill_id))
++                        .collect::<Vec<_>>()
++                )
++            })
++            .collect();
++        doc.set_cell_properties_by_path_native(0, para, &path, 1, r#"{"verticalAlign":2}"#)
++            .expect("cell properties");
++        assert_eq!(
++            table(&doc, para, &path).cells[1].vertical_align,
++            crate::model::table::VerticalAlign::Bottom,
++            "{name}"
++        );
++        let own = json(
++            &doc.get_cell_own_properties_by_path_native(0, para, &path, 1)
++                .expect("own properties"),
++        );
++        assert_eq!(own["verticalAlign"].as_u64(), Some(2), "{name}");
++
++        let zone = json(
++            &doc.set_cell_zone_properties_by_path_native(
++                0,
++                para,
++                &path,
++                0,
++                0,
++                1,
++                1,
++                r##"{"fillType":"solid","fillColor":"#ff0000"}"##,
++            )
++            .expect("zone"),
++        );
++        assert_eq!(
++            table(&doc, para, &path).zones.len(),
++            1,
++            "{name}: one cell zone"
++        );
++        let undo = format!(
++            r#"{{"zones":[{{"startRow":0,"startCol":0,"endRow":1,"endCol":1,"id":null}}]}}"#
++        );
++        assert!(zone["zoneBeforeId"].is_null());
++        doc.apply_cell_border_fill_ids_by_path_native(0, para, &path, &undo)
++            .expect("undo the zone");
++        assert!(
++            table(&doc, para, &path).zones.is_empty(),
++            "{name}: zone undone"
++        );
++
++        let props = json(
++            &doc.get_table_properties_by_path_native(0, para, &path)
++                .expect("get"),
++        );
++        assert_eq!(props["treatAsChar"].as_bool(), Some(true), "{name}");
++        doc.set_table_properties_by_path_native(
++            0,
++            para,
++            &path,
++            r#"{"cellSpacing":30,"paddingLeft":200}"#,
++        )
++        .expect("table properties");
++        let t = table(&doc, para, &path);
++        assert_eq!((t.cell_spacing, t.padding.left), (30, 200), "{name}");
++        let props = json(
++            &doc.get_table_properties_by_path_native(0, para, &path)
++                .expect("get"),
++        );
++        assert_eq!(props["cellSpacing"].as_i64(), Some(30), "{name}");
++
++        for (p, before) in above.iter().zip(parents) {
++            let now = format!(
++                "{:?}",
++                table(&doc, para, p)
++                    .cells
++                    .iter()
++                    .map(|c| (c.vertical_align, c.border_fill_id))
++                    .collect::<Vec<_>>()
++            );
++            assert_eq!(now, before, "{name}: a table above keeps its cells' look");
++        }
++        survives_saving(&doc, para, &path, name);
++    }
++}
++
++#[test]
++fn cell_sizes_reach_the_named_table() {
++    for (name, mut doc, para, path, above) in cases() {
++        let widths_above: Vec<_> = above
++            .iter()
++            .map(|p| {
++                table(&doc, para, p)
++                    .cells
++                    .iter()
++                    .map(|c| c.width)
++                    .collect::<Vec<_>>()
++            })
++            .collect();
++        let before = table(&doc, para, &path).cells[0].width;
++        let answer = json(
++            &doc.resize_table_cell_by_path_native(0, para, &path, 0, 0, false, false)
++                .expect("resize"),
++        );
++        assert_eq!(answer["moved"].as_bool(), Some(true), "{name}");
++        assert_eq!(
++            table(&doc, para, &path).cells[0].width,
++            before - 283,
++            "{name}"
++        );
++
++        let t = table(&doc, para, &path);
++        let (a, b) = (t.cells[0].width as i64, t.cells[1].width as i64);
++        let half = (a + b) / 2;
++        let extents = format!(
++            r#"[{{"cellIdx":0,"start":0,"end":{half}}},{{"cellIdx":1,"start":{half},"end":{}}},{{"cellIdx":2,"start":0,"end":{half}}},{{"cellIdx":3,"start":{half},"end":{}}}]"#,
++            a + b,
++            a + b
++        );
++        json(
++            &doc.set_table_cell_extents_by_path_native(0, para, &path, false, &extents)
++                .expect("extents"),
++        );
++        let t = table(&doc, para, &path);
++        assert_eq!(t.cells[0].width as i64, half, "{name}: equal widths");
++        assert_eq!(t.cells[1].width as i64, a + b - half, "{name}");
++
++        for (p, before) in above.iter().zip(widths_above) {
++            let now: Vec<_> = table(&doc, para, p).cells.iter().map(|c| c.width).collect();
++            assert_eq!(now, before, "{name}: a table above keeps its widths");
++        }
++        survives_saving(&doc, para, &path, name);
++    }
++}
++
++#[test]
++fn a_one_step_path_is_the_flat_call() {
++    let (mut flat, para, tables) = nested(1);
++    let (mut by_path, _, _) = nested(1);
++    let outer = &tables[0];
++    let control = outer[0].0;
++    flat.insert_table_row_native(0, para, control, 1, false)
++        .unwrap();
++    by_path
++        .insert_table_row_by_path_native(0, para, outer, 1, false)
++        .unwrap();
++    flat.merge_table_cells_native(0, para, control, 1, 0, 1, 1)
++        .unwrap();
++    by_path
++        .merge_table_cells_by_path_native(0, para, outer, 1, 0, 1, 1)
++        .unwrap();
++    flat.set_table_properties_native(0, para, control, r#"{"cellSpacing":10}"#)
++        .unwrap();
++    by_path
++        .set_table_properties_by_path_native(0, para, outer, r#"{"cellSpacing":10}"#)
++        .unwrap();
++    assert_eq!(
++        flat.get_table_properties_native(0, para, control).unwrap(),
++        by_path
++            .get_table_properties_by_path_native(0, para, outer)
++            .unwrap()
++    );
++    assert_eq!(snapshot(&flat), snapshot(&by_path));
++    assert_eq!(
++        flat.export_hwp_native().unwrap(),
++        by_path.export_hwp_native().unwrap()
++    );
++}
++
++type Call = fn(&mut DocumentCore, usize, &Path) -> Result<String, crate::error::HwpError>;
++
++/// Every writing call, with arguments that would succeed on a 2×2 table.
++fn writes() -> Vec<(&'static str, Call)> {
++    vec![
++        ("insert row", |d, p, path| {
++            d.insert_table_row_by_path_native(0, p, path, 0, true)
++        }),
++        ("insert column", |d, p, path| {
++            d.insert_table_column_by_path_native(0, p, path, 0, true)
++        }),
++        ("delete row", |d, p, path| {
++            d.delete_table_row_by_path_native(0, p, path, 0)
++        }),
++        ("delete column", |d, p, path| {
++            d.delete_table_column_by_path_native(0, p, path, 0)
++        }),
++        ("merge", |d, p, path| {
++            d.merge_table_cells_by_path_native(0, p, path, 0, 0, 0, 1)
++        }),
++        ("split", |d, p, path| {
++            d.split_table_cell_into_by_path_native(0, p, path, 0, 0, 2, 1, false, false)
++        }),
++        ("split range", |d, p, path| {
++            d.split_table_cells_in_range_by_path_native(0, p, path, 0, 0, 1, 1, 2, 1, false)
++        }),
++        ("cell properties", |d, p, path| {
++            d.set_cell_properties_by_path_native(0, p, path, 0, r#"{"verticalAlign":1}"#)
++        }),
++        ("zone", |d, p, path| {
++            d.set_cell_zone_properties_by_path_native(
++                0,
++                p,
++                path,
++                0,
++                0,
++                1,
++                1,
++                r#"{"fillType":"none"}"#,
++            )
++        }),
++        ("border fill ids", |d, p, path| {
++            d.apply_cell_border_fill_ids_by_path_native(
++                0,
++                p,
++                path,
++                r#"{"cells":[{"cellIdx":0,"id":1}]}"#,
++            )
++        }),
++        ("table properties", |d, p, path| {
++            d.set_table_properties_by_path_native(0, p, path, r#"{"cellSpacing":5}"#)
++        }),
++        ("resize", |d, p, path| {
++            d.resize_table_cell_by_path_native(0, p, path, 0, 0, false, true)
++        }),
++        ("extents", |d, p, path| {
++            d.set_table_cell_extents_by_path_native(
++                0,
++                p,
++                path,
++                false,
++                r#"[{"cellIdx":0,"start":0,"end":3000}]"#,
++            )
++        }),
++    ]
++}
++
++fn refused(doc: &mut DocumentCore, para: usize, path: &Path, why: &str) {
++    let before = snapshot(doc);
++    for (name, call) in writes() {
++        assert!(call(doc, para, path).is_err(), "{why}: {name} is refused");
++        assert_eq!(snapshot(doc), before, "{why}: {name} changes nothing");
++    }
++    assert!(
++        doc.get_table_properties_by_path_native(0, para, path)
++            .is_err(),
++        "{why}: read"
++    );
++    assert!(
++        doc.get_cell_own_properties_by_path_native(0, para, path, 0)
++            .is_err(),
++        "{why}: read cell"
++    );
++}
++
++/// A rectangle (not a table) put in a cell paragraph; returns its control index there.
++fn put_rectangle(paragraph: &mut Paragraph) -> usize {
++    use crate::model::shape::{RectangleShape, ShapeObject};
++    paragraph
++        .controls
++        .push(Control::Shape(Box::new(ShapeObject::Rectangle(
++            RectangleShape::default(),
++        ))));
++    paragraph.controls.len() - 1
++}
++
++#[test]
++fn a_wrong_path_changes_nothing() {
++    let (mut doc, para, tables) = nested(2);
++    let inner = tables[2].clone();
++    refused(&mut doc, para, &Vec::new(), "empty path");
++    let mut out_of_range = inner.clone();
++    out_of_range[1].1 = 9; // no cell 9 in the middle table
++    refused(&mut doc, para, &out_of_range, "cell out of range");
++    let mut no_paragraph = inner.clone();
++    no_paragraph[0].2 = 9;
++    refused(&mut doc, para, &no_paragraph, "paragraph out of range");
++    let mut no_control = inner.clone();
++    no_control[2].0 = 7;
++    refused(&mut doc, para, &no_control, "control out of range");
++    refused(&mut doc, para + 5, &inner, "body paragraph out of range");
++    // the last step names a rectangle in the innermost table's second cell
++    let rectangle = {
++        let outer = &mut doc.document.sections[0].paragraphs[para];
++        let host = super::host_paragraph_mut(outer, &inner[..2]).unwrap();
++        let Control::Table(t) = &mut host.controls[inner[2].0] else {
++            panic!("table");
++        };
++        put_rectangle(&mut t.cells[1].paragraphs[0])
++    };
++    let mut not_a_table = inner.clone();
++    not_a_table[2] = (inner[2].0, 1, 0);
++    not_a_table.push((rectangle, 0, 0));
++    refused(&mut doc, para, &not_a_table, "not a table");
++    // a step through a rectangle
++    let mut through_shape = not_a_table.clone();
++    through_shape.push((0, 0, 0));
++    refused(
++        &mut doc,
++        para,
++        &through_shape,
++        "through a shape without a text box",
++    );
++
++    // a text box after the first step: the text box (holding its table) put in a body
++    // table's cell
++    let (mut boxed, box_para, box_path) = text_box_table();
++    let shape = boxed.document.sections[0].paragraphs[box_para].controls[box_path[0].0].clone();
++    let (body_para, body_control) = boxed.document.sections[0]
++        .paragraphs
++        .iter()
++        .enumerate()
++        .find_map(|(i, p)| {
++            p.controls
++                .iter()
++                .position(|c| matches!(c, Control::Table(_)))
++                .map(|c| (i, c))
++        })
++        .expect("the body table");
++    let Control::Table(body) =
++        &mut boxed.document.sections[0].paragraphs[body_para].controls[body_control]
++    else {
++        unreachable!()
++    };
++    body.cells[0].paragraphs[0].controls.push(shape);
++    let in_cell_box = body.cells[0].paragraphs[0].controls.len() - 1;
++    let deeper = vec![
++        (body_control, 0, 0),
++        (in_cell_box, box_path[0].1, box_path[0].2),
++        box_path[1],
++    ];
++    // the read side resolver would follow it; the path calls do not
++    assert!(boxed.resolve_table_by_path(0, body_para, &deeper).is_ok());
++    refused(&mut boxed, body_para, &deeper, "a text box inside a cell");
++}
++
++#[test]
++fn last_row_column_and_straddling_merge_are_refused() {
++    let (mut doc, para, tables) = nested(1);
++    let inner = tables[1].clone();
++    doc.delete_table_row_by_path_native(0, para, &inner, 0)
++        .expect("one row left");
++    let before = snapshot(&doc);
++    assert!(
++        doc.delete_table_row_by_path_native(0, para, &inner, 0)
++            .is_err(),
++        "last row"
++    );
++    assert_eq!(snapshot(&doc), before);
++    doc.delete_table_column_by_path_native(0, para, &inner, 0)
++        .expect("one column left");
++    let before = snapshot(&doc);
++    assert!(
++        doc.delete_table_column_by_path_native(0, para, &inner, 0)
++            .is_err(),
++        "last column"
++    );
++    assert_eq!(snapshot(&doc), before);
++
++    let (mut doc, para, tables) = nested(2);
++    let inner = tables[2].clone();
++    doc.insert_table_row_by_path_native(0, para, &inner, 1, true)
++        .unwrap();
++    doc.merge_table_cells_by_path_native(0, para, &inner, 0, 0, 1, 0)
++        .expect("merge down");
++    let before = snapshot(&doc);
++    // rows 1–2 of column 0 cut through the merged cell
++    assert!(
++        doc.merge_table_cells_by_path_native(0, para, &inner, 1, 0, 2, 0)
++            .is_err(),
++        "straddle"
++    );
++    assert_eq!(snapshot(&doc), before);
++}
++
++#[test]
++fn a_caption_change_is_refused() {
++    let (mut doc, para, tables) = nested(1);
++    let inner = tables[1].clone();
++    let before = snapshot(&doc);
++    assert!(doc
++        .set_table_properties_by_path_native(0, para, &inner, r#"{"hasCaption":true}"#)
++        .is_err());
++    assert_eq!(snapshot(&doc), before);
++    // what the dialog sends for a table without a caption goes through
++    doc.set_table_properties_by_path_native(
++        0,
++        para,
++        &inner,
++        r#"{"hasCaption":false,"cellSpacing":7}"#,
++    )
++    .expect("no caption change");
++    assert_eq!(table(&doc, para, &inner).cell_spacing, 7);
++}
++
++#[test]
++fn a_table_with_drawn_borders_is_refused() {
++    use crate::model::border_paint::{CellBorderPaint, CellSide};
++    use crate::model::shape::{RectangleShape, ShapeObject};
++    let (mut doc, para, tables) = nested(1);
++    let inner = tables[1].clone();
++    // A border piece drawn by an object, as a PDF conversion leaves it in a cell.
++    let mut piece = RectangleShape::default();
++    piece.common.cell_border_paint = Some(CellBorderPaint {
++        side: CellSide::Left,
++        source_id: 1,
++        sides: 0,
++        cell_pen: None,
++    });
++    let outer = &mut doc.document.sections[0].paragraphs[para];
++    let host = super::host_paragraph_mut(outer, &inner[..1]).unwrap();
++    let Control::Table(t) = &mut host.controls[inner[1].0] else {
++        panic!("table");
++    };
++    t.cells[0].paragraphs[0]
++        .controls
++        .push(Control::Shape(Box::new(ShapeObject::Rectangle(piece))));
++    refused_writes(&mut doc, para, &inner, "drawn borders");
++    // reading still works
++    doc.get_table_properties_by_path_native(0, para, &inner)
++        .expect("read");
++}
++
++fn refused_writes(doc: &mut DocumentCore, para: usize, path: &Path, why: &str) {
++    let before = snapshot(doc);
++    for (name, call) in writes() {
++        assert!(call(doc, para, path).is_err(), "{why}: {name} is refused");
++        assert_eq!(snapshot(doc), before, "{why}: {name} changes nothing");
++    }
++}
++
++/// The stored line of a treat-as-char table's cell paragraph holds the table, as in a file
++/// Hangul wrote: (line text height, outer table band, vpos of the next cell paragraph).
++fn host_line(doc: &DocumentCore, para: usize, path: &Path) -> (i64, i64, Option<i32>) {
++    let (steps, control) = path.split_at(path.len() - 1);
++    let host_idx = steps.last().unwrap().2;
++    let paragraphs = {
++        let outer = &doc.document().sections[0].paragraphs[para];
++        let container = super::host_paragraph(outer, &steps[..steps.len() - 1]).unwrap();
++        let (c, cell, _) = *steps.last().unwrap();
++        match &container.controls[c] {
++            Control::Table(t) => &t.cells[cell].paragraphs,
++            Control::Shape(s) => {
++                &crate::document_core::helpers::get_textbox_at(s, cell)
++                    .unwrap()
++                    .paragraphs
++            }
++            _ => unreachable!(),
++        }
++    };
++    let p = &paragraphs[host_idx];
++    let Control::Table(t) = &p.controls[control[0].0] else {
++        panic!("table");
++    };
++    let band = i64::from(t.common.height)
++        + i64::from(t.outer_margin_top)
++        + i64::from(t.outer_margin_bottom);
++    let row = crate::renderer::layout::control_line_seg_index(p, control[0].0).expect("row");
++    (
++        i64::from(p.line_segs[row].text_height),
++        band,
++        paragraphs
++            .get(host_idx + 1)
++            .and_then(|n| n.line_segs.first())
++            .map(|s| s.vertical_pos),
++    )
++}
++
++#[test]
++fn a_taller_tac_table_moves_its_cell_line_and_what_follows() {
++    for depth in 1..=3 {
++        let (doc, para, tables) = nested(depth);
++        // saved and reopened, the cell lines hold the tables. A table the engine made marks
++        // its line as computed; Hangul's files do not (nested-form.hwp), so clear the mark.
++        let mut doc = reopened(&doc.export_hwp_native().unwrap());
++        let path = tables[depth].clone();
++        let row = {
++            let outer = &mut doc.document.sections[0].paragraphs[para];
++            let host = super::host_paragraph_mut(outer, &path[..depth]).unwrap();
++            let row = crate::renderer::layout::control_line_seg_index(host, path[depth].0).unwrap();
++            host.line_segs[row].tag &=
++                !crate::model::paragraph::LineSeg::TAG_IMPLEMENTATION_PROPERTY;
++            row
++        };
++        assert_eq!(row, 0);
++        let (line, band, next) = host_line(&doc, para, &path);
++        assert_eq!(line, band, "depth {depth}: the stored line holds the table");
++        let next = next.expect("a paragraph after the table in its cell");
++
++        doc.insert_table_row_by_path_native(0, para, &path, 1, true)
++            .unwrap();
++        let (line, band_after, next_after) = host_line(&doc, para, &path);
++        let grown = band_after - band;
++        assert!(grown > 0, "depth {depth}: the table grows by the row");
++        assert_eq!(
++            line, band_after,
++            "depth {depth}: the stored line grows with it"
++        );
++        assert_eq!(
++            i64::from(next_after.unwrap()),
++            i64::from(next) + grown,
++            "depth {depth}: the next paragraph moves"
++        );
++        let verify = doc.serialize_hwp_with_verify().unwrap();
++        assert_eq!(
++            verify.page_count_before, verify.page_count_after,
++            "depth {depth}"
++        );
++
++        doc.delete_table_row_by_path_native(0, para, &path, 2)
++            .unwrap();
++        let (line, band_back, next_back) = host_line(&doc, para, &path);
++        assert_eq!(
++            (line, band_back, next_back),
++            (band, band, Some(next)),
++            "depth {depth}: back"
++        );
++    }
++}
+diff --git a/src/document_core/tac_host_rows.rs b/src/document_core/tac_host_rows.rs
+index e00dff230a9f05c1e69c535cdd125a53a1d393ae..1438b8453fda6b205ca2bad6571bc428e84e2cd2 100644
+--- a/src/document_core/tac_host_rows.rs
++++ b/src/document_core/tac_host_rows.rs
+@@ -194,73 +194,18 @@ impl DocumentCore {
+         declared: i64,
+         content: i64,
+     ) -> bool {
+-        let Some(para) = self
++        let Some(paragraphs) = self
+             .document
+             .sections
+-            .get(section_idx)
+-            .and_then(|section| section.paragraphs.get(para_idx))
++            .get_mut(section_idx)
++            .map(|section| &mut section.paragraphs)
+         else {
+             return false;
+         };
+-        let Some(Control::Table(table)) = para.controls.get(control_idx) else {
+-            return false;
+-        };
+-        if !table.common.treat_as_char
+-            || table.caption.is_some()
+-            || table.common.height == 0
+-            || declared <= 0
+-        {
+-            return false;
+-        }
+-        // 표 외곽 상자 전체가 그 줄의 글자 높이일 때만 표가 그 저장 줄을 소유한다.
+-        let Some(row) = control_line_seg_index(para, control_idx) else {
+-            return false;
+-        };
+-        let Some(seg) = para.line_segs.get(row) else {
+-            return false;
+-        };
+-        let old_band =
+-            declared + i64::from(table.outer_margin_top) + i64::from(table.outer_margin_bottom);
+-        if seg.tag & LineSeg::TAG_IMPLEMENTATION_PROPERTY != 0
+-            || i64::from(seg.text_height) != old_band
+-        {
+-            return false;
+-        }
+-        let delta = content - declared;
+-        if delta.abs() <= ROUNDING_HU || content <= 0 {
+-            return false;
+-        }
+-        let (Ok(content), Ok(delta), Ok(old_band)) = (
+-            u32::try_from(content),
+-            i32::try_from(delta),
+-            i32::try_from(old_band),
+-        ) else {
++        let Some(shifted) = move_host_row(paragraphs, para_idx, control_idx, declared, content)
++        else {
+             return false;
+         };
+-        let new_band = old_band.saturating_add(delta);
+-        let old_end = paragraph_flow_end(para);
+-
+-        let paragraphs = &mut self.document.sections[section_idx].paragraphs;
+-        let para = &mut paragraphs[para_idx];
+-        if let Some(Control::Table(table)) = para.controls.get_mut(control_idx) {
+-            table.sync_ctrl_height(content);
+-        }
+-        for (index, seg) in para.line_segs.iter_mut().enumerate() {
+-            // 한컴은 문단의 모든 줄 line_height에 가장 높은 줄 높이를 적는다.
+-            if seg.line_height == old_band {
+-                seg.line_height = new_band;
+-            }
+-            if index == row {
+-                seg.text_height = new_band;
+-                seg.baseline_distance = ((i64::from(seg.baseline_distance) * i64::from(new_band)
+-                    + i64::from(old_band) / 2)
+-                    / i64::from(old_band)) as i32;
+-            } else if index > row {
+-                seg.vertical_pos = seg.vertical_pos.saturating_add(delta);
+-            }
+-        }
+-        shift_source_positions(para, row + 1, delta);
+-        let shifted = shift_following(paragraphs, para_idx + 1, old_end, delta);
+         self.recompose_paragraph(section_idx, para_idx);
+         self.mark_paragraph_dirty(section_idx, para_idx);
+         for index in shifted {
+@@ -271,6 +216,74 @@ impl DocumentCore {
+     }
+ }
+ 
++/// The stored-line part of `move_tac_host_row` on one paragraph list (the body, a cell or a
++/// text box): when the stored line of `paragraphs[para_idx]` holds the treat-as-char table
++/// `control_idx` at `declared` height, gives that line the `content` height, moves the later
++/// lines and the following paragraphs of the same stored flow by the difference and sets the
++/// table height. Returns the following paragraphs it moved, or None when nothing changed.
++pub(crate) fn move_host_row(
++    paragraphs: &mut [Paragraph],
++    para_idx: usize,
++    control_idx: usize,
++    declared: i64,
++    content: i64,
++) -> Option<Vec<usize>> {
++    let para = paragraphs.get(para_idx)?;
++    let Some(Control::Table(table)) = para.controls.get(control_idx) else {
++        return None;
++    };
++    if !table.common.treat_as_char
++        || table.caption.is_some()
++        || table.common.height == 0
++        || declared <= 0
++    {
++        return None;
++    }
++    // 표 외곽 상자 전체가 그 줄의 글자 높이일 때만 표가 그 저장 줄을 소유한다.
++    let row = control_line_seg_index(para, control_idx)?;
++    let seg = para.line_segs.get(row)?;
++    let old_band =
++        declared + i64::from(table.outer_margin_top) + i64::from(table.outer_margin_bottom);
++    if seg.tag & LineSeg::TAG_IMPLEMENTATION_PROPERTY != 0 || i64::from(seg.text_height) != old_band
++    {
++        return None;
++    }
++    let delta = content - declared;
++    if delta.abs() <= ROUNDING_HU || content <= 0 {
++        return None;
++    }
++    let (Ok(content), Ok(delta), Ok(old_band)) = (
++        u32::try_from(content),
++        i32::try_from(delta),
++        i32::try_from(old_band),
++    ) else {
++        return None;
++    };
++    let new_band = old_band.saturating_add(delta);
++    let old_end = paragraph_flow_end(para);
++
++    let para = &mut paragraphs[para_idx];
++    if let Some(Control::Table(table)) = para.controls.get_mut(control_idx) {
++        table.sync_ctrl_height(content);
++    }
++    for (index, seg) in para.line_segs.iter_mut().enumerate() {
++        // 한컴은 문단의 모든 줄 line_height에 가장 높은 줄 높이를 적는다.
++        if seg.line_height == old_band {
++            seg.line_height = new_band;
++        }
++        if index == row {
++            seg.text_height = new_band;
++            seg.baseline_distance = ((i64::from(seg.baseline_distance) * i64::from(new_band)
++                + i64::from(old_band) / 2)
++                / i64::from(old_band)) as i32;
++        } else if index > row {
++            seg.vertical_pos = seg.vertical_pos.saturating_add(delta);
++        }
++    }
++    shift_source_positions(para, row + 1, delta);
++    Some(shift_following(paragraphs, para_idx + 1, old_end, delta))
++}
++
+ /// `from` 문단부터 같은 저장 흐름의 문단 vpos를 `delta`만큼 옮기고 옮긴 문단을 돌려준다.
+ /// 쪽·단 시작으로 vpos가 앞 문단 끝보다 작아지는 문단부터는 저장 좌표를 그대로 둔다.
+ fn shift_following(
+diff --git a/src/wasm_api.rs b/src/wasm_api.rs
+index 9e4036770bee7c41bc97ce62ece608f29c25a6a1..5307b4890ea26f2001ccd8d5291054b6f4d75874 100644
+--- a/src/wasm_api.rs
++++ b/src/wasm_api.rs
+@@ -4100,6 +4100,377 @@ impl HwpDocument {
+         .map_err(|e| e.into())
+     }
+ 
++    // ── Cell-path forms of the flat table calls ──
++    //
++    // `cell_path_json` is the path of the other by-path calls,
++    // `[{"controlIndex":0,"cellIndex":0,"cellParaIndex":9},...]`; its last entry names the
++    // table. A path of one entry is a body table and runs the flat call. A text box may be the
++    // first entry only. A wrong path changes nothing and returns an error. The answers are the
++    // flat calls' answers.
++
++    /// `insertTableRow` for the table the cell path names.
++    #[wasm_bindgen(js_name = insertTableRowByPath)]
++    pub fn insert_table_row_by_path(
++        &mut self,
++        section_idx: u32,
++        parent_para_idx: u32,
++        cell_path_json: &str,
++        row_idx: u32,
++        below: bool,
++    ) -> Result<String, JsValue> {
++        let path = parse_cell_path_arg(cell_path_json)?;
++        self.insert_table_row_by_path_native(
++            section_idx as usize,
++            parent_para_idx as usize,
++            &path,
++            row_index_from_u32(row_idx)?,
++            below,
++        )
++        .map_err(|e| e.into())
++    }
++
++    /// `insertTableColumn` for the table the cell path names.
++    #[wasm_bindgen(js_name = insertTableColumnByPath)]
++    pub fn insert_table_column_by_path(
++        &mut self,
++        section_idx: u32,
++        parent_para_idx: u32,
++        cell_path_json: &str,
++        col_idx: u32,
++        right: bool,
++    ) -> Result<String, JsValue> {
++        let path = parse_cell_path_arg(cell_path_json)?;
++        self.insert_table_column_by_path_native(
++            section_idx as usize,
++            parent_para_idx as usize,
++            &path,
++            row_index_from_u32(col_idx)?,
++            right,
++        )
++        .map_err(|e| e.into())
++    }
++
++    /// `deleteTableRow` for the table the cell path names.
++    #[wasm_bindgen(js_name = deleteTableRowByPath)]
++    pub fn delete_table_row_by_path(
++        &mut self,
++        section_idx: u32,
++        parent_para_idx: u32,
++        cell_path_json: &str,
++        row_idx: u32,
++    ) -> Result<String, JsValue> {
++        let path = parse_cell_path_arg(cell_path_json)?;
++        self.delete_table_row_by_path_native(
++            section_idx as usize,
++            parent_para_idx as usize,
++            &path,
++            row_index_from_u32(row_idx)?,
++        )
++        .map_err(|e| e.into())
++    }
++
++    /// `deleteTableColumn` for the table the cell path names.
++    #[wasm_bindgen(js_name = deleteTableColumnByPath)]
++    pub fn delete_table_column_by_path(
++        &mut self,
++        section_idx: u32,
++        parent_para_idx: u32,
++        cell_path_json: &str,
++        col_idx: u32,
++    ) -> Result<String, JsValue> {
++        let path = parse_cell_path_arg(cell_path_json)?;
++        self.delete_table_column_by_path_native(
++            section_idx as usize,
++            parent_para_idx as usize,
++            &path,
++            row_index_from_u32(col_idx)?,
++        )
++        .map_err(|e| e.into())
++    }
++
++    /// `mergeTableCells` for the table the cell path names.
++    #[wasm_bindgen(js_name = mergeTableCellsByPath)]
++    #[allow(clippy::too_many_arguments)]
++    pub fn merge_table_cells_by_path(
++        &mut self,
++        section_idx: u32,
++        parent_para_idx: u32,
++        cell_path_json: &str,
++        start_row: u32,
++        start_col: u32,
++        end_row: u32,
++        end_col: u32,
++    ) -> Result<String, JsValue> {
++        let path = parse_cell_path_arg(cell_path_json)?;
++        self.merge_table_cells_by_path_native(
++            section_idx as usize,
++            parent_para_idx as usize,
++            &path,
++            row_index_from_u32(start_row)?,
++            row_index_from_u32(start_col)?,
++            row_index_from_u32(end_row)?,
++            row_index_from_u32(end_col)?,
++        )
++        .map_err(|e| e.into())
++    }
++
++    /// `splitTableCell` for the table the cell path names.
++    #[wasm_bindgen(js_name = splitTableCellByPath)]
++    pub fn split_table_cell_by_path(
++        &mut self,
++        section_idx: u32,
++        parent_para_idx: u32,
++        cell_path_json: &str,
++        row: u32,
++        col: u32,
++    ) -> Result<String, JsValue> {
++        let path = parse_cell_path_arg(cell_path_json)?;
++        self.split_table_cell_by_path_native(
++            section_idx as usize,
++            parent_para_idx as usize,
++            &path,
++            row_index_from_u32(row)?,
++            row_index_from_u32(col)?,
++        )
++        .map_err(|e| e.into())
++    }
++
++    /// `splitTableCellInto` (the split dialog) for the table the cell path names.
++    #[wasm_bindgen(js_name = splitTableCellIntoByPath)]
++    #[allow(clippy::too_many_arguments)]
++    pub fn split_table_cell_into_by_path(
++        &mut self,
++        section_idx: u32,
++        parent_para_idx: u32,
++        cell_path_json: &str,
++        row: u32,
++        col: u32,
++        n_rows: u32,
++        m_cols: u32,
++        equal_row_height: bool,
++        merge_first: bool,
++    ) -> Result<String, JsValue> {
++        let path = parse_cell_path_arg(cell_path_json)?;
++        self.split_table_cell_into_by_path_native(
++            section_idx as usize,
++            parent_para_idx as usize,
++            &path,
++            row_index_from_u32(row)?,
++            row_index_from_u32(col)?,
++            row_index_from_u32(n_rows)?,
++            row_index_from_u32(m_cols)?,
++            equal_row_height,
++            merge_first,
++        )
++        .map_err(|e| e.into())
++    }
++
++    /// `splitTableCellsInRange` (the split dialog on a cell block) for the table the cell path
++    /// names.
++    #[wasm_bindgen(js_name = splitTableCellsInRangeByPath)]
++    #[allow(clippy::too_many_arguments)]
++    pub fn split_table_cells_in_range_by_path(
++        &mut self,
++        section_idx: u32,
++        parent_para_idx: u32,
++        cell_path_json: &str,
++        start_row: u32,
++        start_col: u32,
++        end_row: u32,
++        end_col: u32,
++        n_rows: u32,
++        m_cols: u32,
++        equal_row_height: bool,
++    ) -> Result<String, JsValue> {
++        let path = parse_cell_path_arg(cell_path_json)?;
++        self.split_table_cells_in_range_by_path_native(
++            section_idx as usize,
++            parent_para_idx as usize,
++            &path,
++            row_index_from_u32(start_row)?,
++            row_index_from_u32(start_col)?,
++            row_index_from_u32(end_row)?,
++            row_index_from_u32(end_col)?,
++            row_index_from_u32(n_rows)?,
++            row_index_from_u32(m_cols)?,
++            equal_row_height,
++        )
++        .map_err(|e| e.into())
++    }
++
++    /// `setCellProperties` for the table the cell path names.
++    #[wasm_bindgen(js_name = setCellPropertiesByPath)]
++    pub fn set_cell_properties_by_path(
++        &mut self,
++        section_idx: u32,
++        parent_para_idx: u32,
++        cell_path_json: &str,
++        cell_idx: u32,
++        json: &str,
++    ) -> Result<String, JsValue> {
++        let path = parse_cell_path_arg(cell_path_json)?;
++        self.set_cell_properties_by_path_native(
++            section_idx as usize,
++            parent_para_idx as usize,
++            &path,
++            cell_idx as usize,
++            json,
++        )
++        .map_err(|e| e.into())
++    }
++
++    /// `getCellOwnProperties` (the cell's own border and fill, without cell zones) for the
++    /// table the cell path names.
++    #[wasm_bindgen(js_name = getCellOwnPropertiesByPath)]
++    pub fn get_cell_own_properties_by_path(
++        &self,
++        section_idx: u32,
++        parent_para_idx: u32,
++        cell_path_json: &str,
++        cell_idx: u32,
++    ) -> Result<String, JsValue> {
++        let path = parse_cell_path_arg(cell_path_json)?;
++        self.get_cell_own_properties_by_path_native(
++            section_idx as usize,
++            parent_para_idx as usize,
++            &path,
++            cell_idx as usize,
++        )
++        .map_err(|e| e.into())
++    }
++
++    /// `setCellZoneProperties` (a block as one cell) for the table the cell path names.
++    #[wasm_bindgen(js_name = setCellZonePropertiesByPath)]
++    #[allow(clippy::too_many_arguments)]
++    pub fn set_cell_zone_properties_by_path(
++        &mut self,
++        section_idx: u32,
++        parent_para_idx: u32,
++        cell_path_json: &str,
++        start_row: u32,
++        start_col: u32,
++        end_row: u32,
++        end_col: u32,
++        json: &str,
++    ) -> Result<String, JsValue> {
++        let path = parse_cell_path_arg(cell_path_json)?;
++        self.set_cell_zone_properties_by_path_native(
++            section_idx as usize,
++            parent_para_idx as usize,
++            &path,
++            row_index_from_u32(start_row)?,
++            row_index_from_u32(start_col)?,
++            row_index_from_u32(end_row)?,
++            row_index_from_u32(end_col)?,
++            json,
++        )
++        .map_err(|e| e.into())
++    }
++
++    /// `applyCellBorderFillIds` (undo and redo of the border dialogs) for the table the cell
++    /// path names.
++    #[wasm_bindgen(js_name = applyCellBorderFillIdsByPath)]
++    pub fn apply_cell_border_fill_ids_by_path(
++        &mut self,
++        section_idx: u32,
++        parent_para_idx: u32,
++        cell_path_json: &str,
++        json: &str,
++    ) -> Result<String, JsValue> {
++        let path = parse_cell_path_arg(cell_path_json)?;
++        self.apply_cell_border_fill_ids_by_path_native(
++            section_idx as usize,
++            parent_para_idx as usize,
++            &path,
++            json,
++        )
++        .map_err(|e| e.into())
++    }
++
++    /// `getTableProperties` for the table the cell path names.
++    #[wasm_bindgen(js_name = getTablePropertiesByPath)]
++    pub fn get_table_properties_by_path(
++        &self,
++        section_idx: u32,
++        parent_para_idx: u32,
++        cell_path_json: &str,
++    ) -> Result<String, JsValue> {
++        let path = parse_cell_path_arg(cell_path_json)?;
++        self.get_table_properties_by_path_native(
++            section_idx as usize,
++            parent_para_idx as usize,
++            &path,
++        )
++        .map_err(|e| e.into())
++    }
++
++    /// `setTableProperties` for the table the cell path names. A nested table's caption is
++    /// not added, removed or changed: such a JSON is refused.
++    #[wasm_bindgen(js_name = setTablePropertiesByPath)]
++    pub fn set_table_properties_by_path(
++        &mut self,
++        section_idx: u32,
++        parent_para_idx: u32,
++        cell_path_json: &str,
++        json: &str,
++    ) -> Result<String, JsValue> {
++        let path = parse_cell_path_arg(cell_path_json)?;
++        self.set_table_properties_by_path_native(
++            section_idx as usize,
++            parent_para_idx as usize,
++            &path,
++            json,
++        )
++        .map_err(|e| e.into())
++    }
++
++    /// `resizeTableCell` (one cell's boundary, Shift+arrow) for the table the cell path names.
++    #[wasm_bindgen(js_name = resizeTableCellByPath)]
++    #[allow(clippy::too_many_arguments)]
++    pub fn resize_table_cell_by_path(
++        &mut self,
++        section_idx: u32,
++        parent_para_idx: u32,
++        cell_path_json: &str,
++        row: u32,
++        col: u32,
++        vertical: bool,
++        forward: bool,
++    ) -> Result<String, JsValue> {
++        let path = parse_cell_path_arg(cell_path_json)?;
++        self.resize_table_cell_by_path_native(
++            section_idx as usize,
++            parent_para_idx as usize,
++            &path,
++            row_index_from_u32(row)?,
++            row_index_from_u32(col)?,
++            vertical,
++            forward,
++        )
++        .map_err(|e| e.into())
++    }
++
++    /// `setTableCellExtents` (cell start and end positions) for the table the cell path names.
++    #[wasm_bindgen(js_name = setTableCellExtentsByPath)]
++    pub fn set_table_cell_extents_by_path(
++        &mut self,
++        section_idx: u32,
++        parent_para_idx: u32,
++        cell_path_json: &str,
++        vertical: bool,
++        json: &str,
++    ) -> Result<String, JsValue> {
++        let path = parse_cell_path_arg(cell_path_json)?;
++        self.set_table_cell_extents_by_path_native(
++            section_idx as usize,
++            parent_para_idx as usize,
++            &path,
++            vertical,
++            json,
++        )
++        .map_err(|e| e.into())
++    }
++
+     /// 표의 위치 오프셋(vertical_offset, horizontal_offset)을 이동한다.
+     ///
+     /// delta_h, delta_v: HWPUNIT 단위 이동량 (양수=오른쪽/아래, 음수=왼쪽/위)

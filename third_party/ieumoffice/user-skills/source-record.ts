@@ -1,4 +1,4 @@
-// Adapted from IeumOffice packages/ai-provider/src/user-skills/source-record.ts @ 30ff4f051f067fcb2baf1ab416c40718c802ca35.
+// Adapted from IeumOffice packages/ai-provider/src/user-skills/source-record.ts @ 8602a39410adb86037f3008588b64efc75b08c60.
 // Apache-2.0; see ../LICENSE and ../NOTICE. Changes: explicit Node .ts and local package imports.
 /**
  * The GitHub source record (`.ieum-source.json`) at the top of a skill

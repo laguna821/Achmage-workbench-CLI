@@ -62,7 +62,7 @@ export function useShownPanel(sessionId: string | null) {
   }, [panels, owner, sessionId]);
 }
 
-type AttentionApi = Pick<Api, "attention" | "readAttention" | "attentionTarget" | "claimAttention" | "attentionPresence">;
+type AttentionApi = Pick<Api, "attention" | "readAttention" | "readAllAttention" | "attentionTarget" | "claimAttention" | "attentionPresence">;
 export type AttentionState = { supported: boolean | null; list: AttentionList; loading: boolean; error: string | null; hostId: string | null };
 const later = (a: number | null, b: number | null) => a === null ? b : b === null ? a : Math.max(a, b);
 const problem = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -129,6 +129,15 @@ export class AttentionInbox {
     if (hostId !== this.value.hostId || epoch !== this.epoch || (known && !this.value.list.events.some(row => row.id === id))) return;
     this.version++; if (this.reading) this.wanted = true;
     this.publish({ list: this.list([entry, ...this.value.list.events.filter(row => row.id !== id)]) });
+  };
+  /** 모두 읽음 (0.5.5): the host's answer replaces the list; returns how many were read and how many open ones stayed. */
+  readAll = async (): Promise<{ read: number; kept: number } | null> => {
+    if (!this.api || this.value.supported !== true) return null;
+    const hostId = this.value.hostId, epoch = this.epoch, result = await this.api.readAllAttention();
+    if (hostId !== this.value.hostId || epoch !== this.epoch) return null;
+    this.version++; if (this.reading) this.wanted = true;
+    this.publish({ list: this.list(result.list.events) });
+    return { read: result.read, kept: result.kept };
   };
   target = async (id: string): Promise<AttentionTarget> => {
     if (!this.api || this.value.supported !== true || !this.value.hostId) throw new Error("알림을 지원하는 호스트에 연결해 주세요.");

@@ -1,4 +1,4 @@
-// Adapted from IeumOffice packages/ai-provider/src/user-skills/constants.ts @ 30ff4f051f067fcb2baf1ab416c40718c802ca35.
+// Adapted from IeumOffice packages/ai-provider/src/user-skills/constants.ts @ 8602a39410adb86037f3008588b64efc75b08c60.
 // Apache-2.0; see ../LICENSE and ../NOTICE. Changes: explicit Node .ts and local package imports.
 /**
  * Fixed values of the person's skills. The name rule for reading and the size
@@ -77,6 +77,8 @@ export const SKILL_TEMPLATE_FOLDER = 'assets'
 /** Front matter keys of this app, under `metadata` */
 export const IEUM_TITLE_KEY = 'ieum-title'
 export const IEUM_TEMPLATE_KEY = 'ieum-template'
+/** the editors the skill is for, ids separated by spaces; absent: every editor (decision 0122) */
+export const IEUM_EDITORS_KEY = 'ieum-editors'
 
 /**
  * Which enabled skill wins when two share a name, first wins. Plugins among

@@ -4,7 +4,7 @@
 //! the same request and gets the same response, one request at a time. Files are the worker's
 //! own (WASI, served from its memory), so no process and no disk are involved.
 //!
-//! Adapted from apps/sheets/native/xlsx-engine/src/main.rs @ 30ff4f0 (IeumOffice v0.12.7, Apache-2.0):
+//! Adapted from apps/sheets/native/xlsx-engine/src/main.rs @ 8602a39 (IeumOffice v0.13.0, Apache-2.0):
 //! its request types and dispatch, made one synchronous call per request instead of a stdin/stdout
 //! loop with worker threads (recalculation and cancellation run inline).
 
@@ -16,10 +16,10 @@ use std::sync::atomic::AtomicBool;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use xlsx_sidecar::archive::{
-    EntryContent, archive_manifest, read_entries_to_dir, save_archive, scan_entries_for_text,
+    EntryContent, StreamPatchEntry, archive_manifest, read_entries_to_dir, save_archive, scan_entries_for_text,
 };
 use xlsx_sidecar::find::FindCellsRequest;
-use xlsx_sidecar::recalc::{RecalcCache, RecalcEdit, RecalcRead, recalc_cells};
+use xlsx_sidecar::recalc::{RecalcCache, RecalcEdit, RecalcRead, recalc_cells_reporting};
 use xlsx_sidecar::{CellRange, SidecarError, WorkbookSessions};
 
 const PROTOCOL_VERSION: u8 = 1;
@@ -97,12 +97,20 @@ enum Command {
         replacements: Vec<EntryContent>,
         removals: Vec<String>,
         additions: Vec<EntryContent>,
+        /// Oversized entries rewritten by the streaming cell-upsert pass (v0.13.0).
+        #[serde(default)]
+        stream_patches: Vec<StreamPatchEntry>,
     },
     #[serde(rename_all = "camelCase")]
     RecalcCells {
         path: PathBuf,
+        #[serde(default)]
         edits: Vec<RecalcEdit>,
+        #[serde(default)]
         reads: Vec<RecalcRead>,
+        /// v0.13.0: also report formula cells whose cached value is stale (refreshed on save).
+        #[serde(default)]
+        report_stale: bool,
     },
 }
 
@@ -192,7 +200,7 @@ fn handle(engine: &mut Engine, request: Request) -> Response {
         Command::ReadRowOutline { session_id, sheet_id } => sessions.read_row_outline(&session_id, &sheet_id).and_then(to_json_value),
         Command::Cancel { .. } => to_json_value(serde_json::json!({ "cancelled": true })),
         Command::ConvertWorkbook { path, target_path } => xlsx_sidecar::convert::convert_to_xlsx(&path, &target_path)
-            .and_then(|result| to_json_value(serde_json::json!({ "sheets": result.sheets, "cells": result.cells }))),
+            .and_then(|result| to_json_value(serde_json::json!({ "sheets": result.sheets, "cells": result.cells, "formulasDropped": result.formulas_dropped }))),
         Command::ArchiveManifest { path } => archive_manifest(&path).and_then(|entries| to_json_value(serde_json::json!({ "entries": entries }))),
         Command::ReadEntries { path, entries, output_dir } => {
             read_entries_to_dir(&path, &entries, &output_dir).and_then(|extracted| to_json_value(serde_json::json!({ "entries": extracted })))
@@ -200,12 +208,12 @@ fn handle(engine: &mut Engine, request: Request) -> Response {
         Command::ScanEntries { path, entries, needle } => {
             scan_entries_for_text(&path, &entries, &needle).and_then(|matches| to_json_value(serde_json::json!({ "matches": matches })))
         }
-        Command::SaveArchive { source_path, target_path, replacements, removals, additions } => {
+        Command::SaveArchive { source_path, target_path, replacements, removals, additions, stream_patches } => {
             // The saved bytes supersede any formula model for the target (as the engine's own loop does).
             engine.recalc.purge(&target_path);
-            save_archive(&source_path, &target_path, &replacements, &removals, &additions).and_then(to_json_value)
+            save_archive(&source_path, &target_path, &replacements, &removals, &additions, &stream_patches).and_then(to_json_value)
         }
-        Command::RecalcCells { path, edits, reads } => recalc_cells(&mut engine.recalc, &path, &edits, &reads).and_then(to_json_value),
+        Command::RecalcCells { path, edits, reads, report_stale } => recalc_cells_reporting(&mut engine.recalc, &path, &edits, &reads, report_stale).and_then(to_json_value),
     };
     match result {
         Ok(value) => Response::success(request_id, value),

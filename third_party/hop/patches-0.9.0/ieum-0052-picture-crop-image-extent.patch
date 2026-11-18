@@ -1,0 +1,107 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: pblsketch <239486537+pblsketch@users.noreply.github.com>
+Date: Mon, 16 Nov 2026 00:00:00 +0900
+Subject: [PATCH 52/54] fix(picture): 자르기 양을 그림의 원본 좌표 범위로 잰다
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+그림 자르기(`crop`)는 원본 그림 좌표(imgDim)의 사각형이다. 속성 창이 쓰는 "잘라 낸 양"은
+그 범위에서 뺀 값인데, 범위를 개체의 원래 크기(`original_width`)로 쟀다. 40×20px 그림을
+8000HU 폭으로 넣으면 자르기는 0..3000×0..1500인데 범위를 8000×4000으로 보아, 자르지
+않은 그림을 오른쪽 5000·아래 2500 잘린 것으로 읽고, 자르기 값을 쓰면 그림 밖까지 잡았다.
+
+- 범위는 `crop_reference_size()`(imgDim, 없으면 자르기가 원래 크기 전체일 때의 그 크기)를
+  먼저 쓰고, 없을 때만 전처럼 원래 크기로 잰다.
+- `getPictureProperties`가 그 범위를 `cropExtentWidth`·`cropExtentHeight`로 내준다.
+  끌어서 자를 때 호출자가 지금 배율(틀 폭 ÷ 보이는 원본 폭)을 알 수 있다.
+- 그림 크기 되돌리기 기록(`capturePictureTransform`)이 자르기와 그림 꼭짓점도 보관하고
+  바꿔 놓는다. 틀과 자르기를 함께 바꾼 끌기를 되돌리면 둘 다 돌아온다.
+---
+ src/document_core/commands/object_ops/picture.rs  | 15 +++++++++++++++
+ .../commands/picture_transform_journal.rs         | 11 +++++++++++
+ 2 files changed, 26 insertions(+)
+
+diff --git a/src/document_core/commands/object_ops/picture.rs b/src/document_core/commands/object_ops/picture.rs
+index 332c7cbf1..d987c534c 100644
+--- a/src/document_core/commands/object_ops/picture.rs
++++ b/src/document_core/commands/object_ops/picture.rs
+@@ -165,6 +165,16 @@ impl DocumentCore {
+         Self::format_picture_properties_json(pic)
+     }
+     fn picture_crop_extent_hu(pic: &crate::model::image::Picture) -> (i32, i32) {
++        // The crop is a rectangle in the image's own coordinates (imgDim), not in the
++        // object's original size: a picture inserted at 40x20 px and drawn 8000 HU wide has
++        // a crop of 0..3000 x 0..1500. Measuring the amounts against the object size read
++        // that picture as already cropped by 5000 and 2500, and wrote crops past the image.
++        if let Some((width, height)) = pic.crop_reference_size() {
++            return (
++                i32::try_from(width).unwrap_or(i32::MAX),
++                i32::try_from(height).unwrap_or(i32::MAX),
++            );
++        }
+         let width = if pic.shape_attr.original_width > 0 {
+             pic.shape_attr.original_width
+         } else {
+@@ -436,6 +446,9 @@ impl DocumentCore {
+ 
+         let sa = &pic.shape_attr;
+         let (crop_left, crop_top, crop_right, crop_bottom) = Self::picture_crop_ui_amounts(pic);
++        // the full image in crop units: what the crop amounts are taken from, so a caller can
++        // tell how much of the image the frame shows (a crop drag keeps that scale)
++        let (crop_extent_w, crop_extent_h) = Self::picture_crop_extent_hu(pic);
+ 
+         Ok(format!(
+             concat!(
+@@ -452,6 +465,7 @@ impl DocumentCore {
+                 "\"originalWidth\":{},\"originalHeight\":{},",
+                 // 자르기
+                 "\"cropLeft\":{},\"cropTop\":{},\"cropRight\":{},\"cropBottom\":{},",
++                "\"cropExtentWidth\":{},\"cropExtentHeight\":{},",
+                 // 안쪽 여백 (그림 여백)
+                 "\"paddingLeft\":{},\"paddingTop\":{},\"paddingRight\":{},\"paddingBottom\":{},",
+                 // 바깥 여백
+@@ -478,6 +492,7 @@ impl DocumentCore {
+             sa.original_width, sa.original_height,
+             // 자르기
+             crop_left, crop_top, crop_right, crop_bottom,
++            crop_extent_w, crop_extent_h,
+             // 안쪽 여백
+             pic.padding.left, pic.padding.top, pic.padding.right, pic.padding.bottom,
+             // 바깥 여백
+diff --git a/src/document_core/commands/picture_transform_journal.rs b/src/document_core/commands/picture_transform_journal.rs
+index 11cc2edfc..ae446aaa2 100644
+--- a/src/document_core/commands/picture_transform_journal.rs
++++ b/src/document_core/commands/picture_transform_journal.rs
+@@ -43,6 +43,11 @@ pub(crate) struct PictureTransformCapture {
+     identity: (u32, u32, u16),
+     common: CommonObjAttr,
+     shape: ShapeComponentAttr,
++    // A crop drag (Hangul's Shift+corner on a picture) changes the crop and the frame
++    // together; undo puts both back.
++    crop: crate::model::image::CropInfo,
++    border_x: [i32; 4],
++    border_y: [i32; 4],
+ }
+ 
+ fn error(message: &str) -> HwpError {
+@@ -118,6 +123,9 @@ impl DocumentCore {
+             identity: identity(picture),
+             common: picture.common.clone(),
+             shape: picture.shape_attr.clone(),
++            crop: picture.crop,
++            border_x: picture.border_x,
++            border_y: picture.border_y,
+             target,
+         };
+         let id = self.next_picture_transform_id;
+@@ -140,6 +148,9 @@ impl DocumentCore {
+         }
+         std::mem::swap(&mut picture.common, &mut capture.common);
+         std::mem::swap(&mut picture.shape_attr, &mut capture.shape);
++        std::mem::swap(&mut picture.crop, &mut capture.crop);
++        std::mem::swap(&mut picture.border_x, &mut capture.border_x);
++        std::mem::swap(&mut picture.border_y, &mut capture.border_y);
+         let target = capture.target.clone();
+         self.picture_transform_store[index].1 = capture;
+         self.document.sections[target.sec].raw_stream = None;

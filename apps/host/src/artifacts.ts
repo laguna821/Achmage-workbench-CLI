@@ -5,6 +5,7 @@ import { diffLines } from "diff";
 import {
   DESIGN_EXTENSION,
   formatOf,
+  isLegacyFormat,
   isOfficeFormat,
   type Artifact,
   type ArtifactRevision,
@@ -919,9 +920,11 @@ export class Documents {
     derivedFrom: ArtifactRevision["derivedFrom"] = null,
     /** An engine's revision: the model, effort and request behind it. */
     provenance: Provenance | null = null,
+    /** Made by 불러오기 / 내보내기 (hangul-convert.ts): the converter, its version and the preset. */
+    convertedFrom: ArtifactRevision["convertedFrom"] = null,
   ) {
     const path = resolve(cwd, rawPath);
-    const made = author === "engine" && provenance ? { model: provenance.model ?? null, effort: provenance.effort ?? null, requestId: provenance.requestId ?? null } : {};
+    const made = { ...(author === "engine" && provenance ? { model: provenance.model ?? null, effort: provenance.effort ?? null, requestId: provenance.requestId ?? null } : {}), ...(convertedFrom ? { convertedFrom } : {}) };
     const format = formatOf(path);
     if (!format || isWorkbenchPath(path)) return null;
     const data = readFileOrNull(path);
@@ -999,6 +1002,7 @@ export class Documents {
     const office = isOfficeFormat(artifact.format);
     if (!hasTextView(artifact.format)) {
       if (artifact.format === "pdf") throw new HttpError(415, "binary_document", "PDF는 텍스트로 열지 않습니다.");
+      if (isLegacyFormat(artifact.format)) throw new HttpError(415, "legacy_document", "예전 형식 파일은 글로 열지 않습니다. 「변환해서 열기」로 사본을 만든 뒤 열어 주세요.");
       return readFileSync(file, "utf8");
     }
     const cached = this.viewCachePath(artifact, revision);
@@ -1352,7 +1356,7 @@ export class Documents {
     if (!Number.isSafeInteger(ref.revision) || ref.revision < 1 || ref.revision > artifact.revision) throw new HttpError(400, "revision_not_found", `r${ref.revision} 판이 없습니다.`);
     const digest = this.revisionSha(artifact.id, ref.revision);
     if (ref.sha256 && ref.sha256 !== digest) throw new HttpError(409, "reference_changed", "참조 문서의 해시가 일치하지 않습니다.");
-    if (ref.mode === "edit" && (artifact.format === "pdf" || artifact.format === "xmind" || artifact.format === "epub")) {
+    if (ref.mode === "edit" && (artifact.format === "pdf" || artifact.format === "xmind" || artifact.format === "epub" || isLegacyFormat(artifact.format))) {
       throw new HttpError(400, "not_editable", `${artifact.format.toUpperCase()}는 AI 수정안을 만들 수 없습니다. 검토 요청으로 보내 주세요.`);
     }
     const office = isOfficeFormat(artifact.format);

@@ -1,14 +1,16 @@
 import { handshakeFromHeader, protocolHeader, PROTOCOL_HEADER, requireProtocolWrite } from "@workbench/contracts";
+import { HWP_SAVE_BODY_MAX } from "./hwp-codec.ts";
 import { handleDesktopHttp } from "./desktop-http.ts";
 import { restoreLegacyVault, vaultStatus } from "./office-vault.ts";
 import { randomBytes } from "node:crypto";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { basename, dirname, extname, join, normalize, resolve, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, normalize, resolve, sep } from "node:path";
 import { timingSafeEqual } from "node:crypto";
 import { isAccessMode, parseSearchScope, type AccessMode, type Attachment, type CreateSessionRequest, type DocRef, type DocumentViewInput, type Provider, type SequencedEvent, type Timeline, type HistoryFilter, type HistoryPage } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import { HttpError, type SessionManager } from "./sessions.ts";
+import { ConvertError } from "./hangul-convert.ts";
 import { handleRuntimeHttp } from "./runtime-http.ts";
 import { DeviceRegistryError } from "./devices.ts";
 import { DESIGN_PRESETS, systemFonts, type DesignPreset } from "./design.ts";
@@ -420,6 +422,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         }
       }
       if (path === "/api/attention" && method === "GET") return sendJson(res, 200, manager.notifications.list());
+      if (path === "/api/attention/read-all" && method === "POST") return sendJson(res, 200, manager.notifications.readAll());
       if (path === "/api/attention/presence" && method === "POST") return sendJson(res, 200, manager.notifications.observe(await readJson(req) as unknown as import("@workbench/contracts").AttentionPresence));
       if (parts[0] === "attention" && parts.length === 3) {
         if (parts[2] === "target" && method === "GET") return sendJson(res, 200, manager.notifications.target(parts[1]!));
@@ -1073,6 +1076,26 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         if (path === "/api/integrations/skills/copy") return sendJson(res, 200, await manager.copySkill(String(body.name ?? ""), to));
         if (path === "/api/integrations/ieum-skill") return sendJson(res, 200, await manager.installIeumSkill(to));
       }
+      // 불러오기 / 내보내기 (hangul-convert.ts): the dialogs' choices, the person's templates, files into a project.
+      if (method === "GET" && path === "/api/hangul-convert/choices") return sendJson(res, 200, manager.hangulConvert.choices());
+      if (method === "POST" && path === "/api/hangul-templates") {
+        const body = await readJson(req, 16_000);
+        if (typeof body.path !== "string" || !isAbsolute(body.path)) throw new HttpError(400, "template_path", "양식으로 등록할 HWPX 파일을 골라 주세요.");
+        await manager.hangulConvert.templates.register(body.path, typeof body.name === "string" ? { name: body.name } : {});
+        return sendJson(res, 200, manager.hangulConvert.choices());
+      }
+      if (parts[0] === "works" && parts[1] && method === "POST" && parts.length === 3 && (parts[2] === "import-documents" || parts[2] === "import-upload" || parts[2] === "convert-to-markdown")) {
+        const convert = manager.hangulConvert;
+        if (parts[2] === "import-upload") {
+          const name = decodeURIComponent(String(req.headers["x-file-name"] ?? ""));
+          const workspaceId = typeof req.headers["x-workspace-id"] === "string" ? req.headers["x-workspace-id"] : undefined;
+          return sendJson(res, 200, { files: [convert.importUpload(parts[1], name, await readBody(req, 200 * 1024 * 1024), workspaceId)] });
+        }
+        const body = await readJson(req, 64_000);
+        const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId : undefined;
+        if (parts[2] === "import-documents") return sendJson(res, 200, { files: convert.importFiles(parts[1], body.paths, workspaceId) });
+        return sendJson(res, 200, await convert.convertFile(parts[1], body.path, body, workspaceId));
+      }
       if (parts[0] === "works" && parts[1] && parts[2] === "artifacts" && method === "POST") {
         const body = await readJson(req);
         return sendJson(res, 200, manager.openFile(parts[1], String(body.path ?? ""), typeof body.workspaceId === "string" ? body.workspaceId : undefined, typeof body.sessionId === "string" ? body.sessionId : undefined));
@@ -1097,6 +1120,22 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           const body = await readJson(req);
           return sendJson(res, 200, manager.renameDocument(artifactId, typeof body.name === "string" ? body.name : ""));
         }
+        // "Markdown 문서로 변환" (불러오기) and "한글 문서로 내보내기…": a NEW document beside this one (hangul-convert.ts).
+        if (method === "POST" && parts[2] === "convert-to-markdown" && parts.length === 3) return sendJson(res, 200, await manager.hangulConvert.convertDocument(artifactId, await readJson(req, 16_000)));
+        if (method === "POST" && parts[2] === "export-hangul" && parts.length === 3) return sendJson(res, 200, await manager.hangulConvert.exportDocument(artifactId, await readJson(req, 16_000)));
+        // IeumOffice v0.13.0's converters (office-convert.ts): "변환해서 열기" of a .doc/.ppt/.ods, and a Word
+        // document → Hangul in two steps (the ledger first, the file only after 저장). The Word editor sends its
+        // document as it is open (octet-stream, the options in the query); the list sends JSON (the recorded revision).
+        if (method === "POST" && parts[2] === "open-converted" && parts.length === 3) return sendJson(res, 200, await manager.hangulConvert.openConverted(artifactId));
+        if (method === "POST" && parts[2] === "word-to-hangul" && parts.length === 3) {
+          if (String(req.headers["content-type"] ?? "").startsWith("application/octet-stream")) {
+            const query = url.searchParams;
+            const options = { format: query.get("format") ?? undefined, name: query.get("name") ?? undefined, passwordSet: query.get("passwordSet") === "1" };
+            return sendJson(res, 200, await manager.hangulConvert.prepareWordHangul(artifactId, options, await readBody(req, 200 * 1024 * 1024)));
+          }
+          return sendJson(res, 200, await manager.hangulConvert.prepareWordHangul(artifactId, await readJson(req, 16_000)));
+        }
+        if (method === "POST" && parts[2] === "word-to-hangul" && parts[3] === "commit" && parts.length === 4) return sendJson(res, 200, await manager.hangulConvert.commitWordHangul(artifactId, (await readJson(req, 16_000)).ticket));
         if (method === "POST" && parts[2] === "save-copy" && parts.length === 3) {
           const body = await readJson(req);
           return sendJson(res, 200, manager.saveDocumentCopy(artifactId, typeof body.to === "string" ? body.to : ""));
@@ -1131,7 +1170,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           throw new HttpError(400, "image_output", "그림 출력 요청을 확인해 주세요.");
         }
         if (method === "POST" && parts[2] === "outputs") {
-          if (parts[3]) return sendJson(res, 201, await outputs.commit(artifactId, parts[3], await readBody(req, 201_000_004), url.searchParams.get("replace") === "1", documentAccess(req), url.searchParams.has("sourceRevision") ? Number(url.searchParams.get("sourceRevision")) : undefined, url.searchParams.get("generatedId") ?? undefined));
+          if (parts[3]) return sendJson(res, 201, await outputs.commit(artifactId, parts[3], await readBody(req, Math.max(201_000_004, HWP_SAVE_BODY_MAX)), url.searchParams.get("replace") === "1", documentAccess(req), url.searchParams.has("sourceRevision") ? Number(url.searchParams.get("sourceRevision")) : undefined, url.searchParams.get("generatedId") ?? undefined));
           const body = await readJson(req);
           return sendJson(res, 200, outputs.prepare(artifactId, Number(body.revision), String(body.path ?? ""), documentAccess(req), body.longJob === true));
         }
@@ -1403,7 +1442,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       throw new HttpError(404, "not_found", `${method} ${path}`);
     } catch (error) {
       if (error instanceof HttpError || error instanceof DeviceRegistryError) {
-        sendJson(res, error.status, { code: error.code, message: error.message });
+        sendJson(res, error.status, { code: error.code, message: error.message, ...(error instanceof ConvertError ? { passwordHelps: error.passwordHelps } : {}) });
       } else {
         sendJson(res, 500, { code: "internal", message: error instanceof Error ? error.message : String(error) });
       }

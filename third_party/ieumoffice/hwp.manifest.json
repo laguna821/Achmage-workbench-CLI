@@ -1,67 +1,73 @@
 {
-  "source": "https://github.com/pblsketch/openoffice",
-  "commit": "30ff4f051f067fcb2baf1ab416c40718c802ca35",
+  "source": "https://github.com/pblsketch/ieumoffice",
+  "commit": "8602a39410adb86037f3008588b64efc75b08c60",
   "changes": "Attribution headers; explicit .ts imports; local HWP contract/ZIP gate/file parser; pinned shared WASM resource resolver",
   "files": [
     {
       "source": "apps/hwp/src/main/hwp5-file.ts",
       "output": "hwp/hwp5-file.ts",
-      "sourceSha256": "74fe4042003b32a1fb34bd8a73f528e4368172c541a0f392d38a75d30bf95089",
-      "outputSha256": "4c84230fc4df78ecce8a6ea7d0e2318314dab04d85eb9e414dd9330a1d300076"
+      "sourceSha256": "12b886be2d710796dd26d1eb4935cca595bdd4431c2437524771fb526ebdc794",
+      "outputSha256": "737e67c6ffa007e393b46839a9255a3fa9d9eb27923a38dc0ec48544729c5bbf"
     },
     {
       "source": "apps/hwp/src/main/tracked-changes.ts",
       "output": "hwp/tracked-changes.ts",
       "sourceSha256": "fb1875646db1624ccb7b53903ce88ddc51a85ef3bb17f549a810f65a96809f87",
-      "outputSha256": "8e55b6cdbffbdce8b76aaaf3558ced05f7dfeb8429b5c5eb33bb8cae8e059cc7"
+      "outputSha256": "104bf1abbd0bc1f9742b7345317889e3c86522ae9cecd39b3c09afc433e727d2"
     },
     {
       "source": "apps/hwp/src/main/field-kinds.ts",
       "output": "hwp/field-kinds.ts",
       "sourceSha256": "794a2bd06b26ee63ba9b00100d5a6c9d6b9442d6c7c7a464f2c6b8976eaa3c65",
-      "outputSha256": "4796de84c6898adb29b4394685a7fc266b29c3203c6dce6fe31fa26e9af50f04"
+      "outputSha256": "d9bacb57c3232dfb5d34137d5fde0378dbbfc9da4a8b3a136296a49afcebc7c3"
     },
     {
       "source": "apps/hwp/src/main/section-tails.ts",
       "output": "hwp/section-tails.ts",
       "sourceSha256": "362c127868cc249ddaf1e432f4e6fbc6e4a025c548f0a9333503e02cd7b66f24",
-      "outputSha256": "e8f60e13c18b2b9a1efac66de4b6037baae90432d32e98d8168e7356f6e2fcaf"
+      "outputSha256": "2d33241891a60eb92a8f7a7148e2a9851f55063a485ff5294fb28b149d3ddfda"
     },
     {
       "source": "apps/hwp/src/main/tab-widths.ts",
       "output": "hwp/tab-widths.ts",
-      "sourceSha256": "7c28aee59655e95a582e3d3a9c79f811c84b1949814aacdee027caa78b346eaa",
-      "outputSha256": "db5140847773b8faa489c4ea3a43b9c84f16f2e496be1fee0d9eace44810c85b"
+      "sourceSha256": "16ae2bff609a116e081c48068fc969885cf8fe009d03ca4ed057cddb80de0590",
+      "outputSha256": "f45499adde1b5e9d9a7ce1845ac0ba8dc2484d28e2645f819ded8a0feedc4fa5"
     },
     {
       "source": "apps/hwp/src/main/save-plan.ts",
       "output": "hwp/save-plan.ts",
       "sourceSha256": "6d0e993410081f79cffe78d036ed1868f35c834614cd14532b2caa4784195195",
-      "outputSha256": "fd409e75b9b5a6ea5c528e3792b2cc4c628ff0c5f8a0baf03b96a78841e4f82a"
+      "outputSha256": "a30982b260db01b3edd1ee8ba1e6151b38396ca8e4d1fbf61a3c3cc8cfde86af"
     },
     {
       "source": "apps/hwp/src/main/save-fixes.ts",
       "output": "hwp/save-fixes.ts",
-      "sourceSha256": "2fb987bba9df448c83d105684f6b7b97c240622c93371606fff27162e80208e3",
-      "outputSha256": "3cb204e20c4348e2052e9b396a16e0012c915de9228242ba51ec73350ffe1219"
+      "sourceSha256": "4891e6a94b3dfc5f740460a18a823e5394b7572513a28b662f842b3e9755f5f6",
+      "outputSha256": "9531457a85a1c6a0e66bff1db52b8d1a4364a21211f7cac4d7055156d564af4d"
     },
     {
       "source": "apps/hwp/src/main/memos.ts",
       "output": "hwp/memos.ts",
       "sourceSha256": "7a02defead0b0c88eb008e492e6b912e670f6b96f146c59e0d0bd3c1d20ddbb1",
-      "outputSha256": "82dc22b13883ca55f6a89ed2d18a15bbe067a3947744cf611ca3e194d4ce04b0"
+      "outputSha256": "5b007aad465962bb65add86c1bbc0b84b96c79846e08683d36c90292cbfda30e"
+    },
+    {
+      "source": "apps/hwp/src/main/preview-parts.ts",
+      "output": "hwp/preview-parts.ts",
+      "sourceSha256": "959fa7b011b4109d15f43e56bdadde6cd21ee8a701062e24b86450379954c4ef",
+      "outputSha256": "9e0be5881cad06820e3ce01ab82f28c2d2aed960bfaa1c0f4afb561055129425"
     },
     {
       "source": "packages/file-parse/src/hwp.ts",
       "output": "file-parse/hwp.ts",
-      "sourceSha256": "3d44486239cc95f8abc4d5d8daad025affe855cd6cd04dfa8f624782a745997d",
-      "outputSha256": "137dd8d3b3ce45740bb4414869f1cd8b39f69666238ad999a47fc1e22b30f293"
+      "sourceSha256": "6bde1406f2ddd5138d6ba268400e86ee72fd411bb81317ede156e98a5ffae138",
+      "outputSha256": "1e6500bf5af873a15f71a173065c545f3090ca17de9c193b6585fc238d0aca97"
     },
     {
       "source": "apps/hwp/src/renderer/save-flow.ts",
       "output": "hwp/save-flow.ts",
-      "sourceSha256": "425f2d309e911ac7ebe086cb4f5096686f722ad3d2f7a9b7fb7712774a6a6ce3",
-      "outputSha256": "465ac33ee0bb83dbdd7089010fd5cd4214e411711d5844be03e7cdf1c553ae42"
+      "sourceSha256": "af6144bcaff87168400d514671601c93ef492f0316a15f1c79741087757dfd4e",
+      "outputSha256": "bb7fb7292c61c190cb8d79a11b483eba56518a064dff4e46e1c4f6dd0acf74b5"
     }
   ]
 }

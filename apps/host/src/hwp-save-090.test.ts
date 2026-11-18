@@ -26,6 +26,7 @@ import { openHwpBytes, prepareHwpSave } from "./hwp-codec.ts";
 import { hwpWasmPath } from "./hwp-resource.ts";
 import { hwpStructureOf } from "./hwp-structure.ts";
 import { FIXTURES as OWN_FIXTURES, OWN_MEMO, OWN_TEXT, PASSWORD as OWN_PASSWORD } from "../../../scripts/hwp-password-fixtures.ts";
+import { IEUM_HWP_DIR } from "../../../scripts/ieum-earlier-source.mjs";
 
 beforeAll(async () => { await init({ module_or_path: readFileSync(hwpWasmPath()) }); });
 
@@ -183,7 +184,7 @@ describe("(b) a memo's date survives a save, so no save warns of a lost memo", (
 
   it("memos written by Hangul (Ieum's fixtures) keep their dates, an empty one included", async () => {
     for (const name of ["memo.hwp", "memo.hwpx", "memo-short-header-tail.hwp"]) {
-      const original = readFileSync(resolve("vendor/ieumoffice/apps/hwp/tests/fixtures", name));
+      const original = readFileSync(resolve(IEUM_HWP_DIR, "apps/hwp/tests/fixtures", name));
       const doc = new HwpDocument(original);
       try {
         const listed = dates(doc);

@@ -1,19 +1,21 @@
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, cpSync, mkdirSync } from 'node:fs';
+import { readFileSync, cpSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pdfHostPlugin } from './pdf-platform.mjs';
 import { officeProviderHostPlugin } from './office-provider-platform.mjs';
 import { officeFileParsePlugin } from './office-file-parse-platform.mjs';
 import { hwpEnginePlugin } from './hwp-engine-platform.mjs';
+import { officeShellHostPlugin } from './office-shell-platform.mjs';
+import { ieumEarlierResolve } from './ieum-earlier-source.mjs';
 import { RESOLVE_GUARD_BANNER, REQUIRE_BANNER, TICKET_HOLDERS } from './host-resolve-guard.mjs';
 import { extensionRuntimeExternals, copyExtensionRuntimeAssets } from '../extension-runtime/package-assets.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 await import('./emit-paseo-host.mjs');
 const pin = readFileSync(new URL('../vendor/ieumoffice.PINNED', import.meta.url), 'utf8').match(/^commit: (.+)$/m)?.[1];
 if (execFileSync('git', ['-C', `${root}vendor/ieumoffice`, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() !== pin) throw new Error('Ieum source differs from the reviewed pin');
-const entryPoints = { 'voice-worker': 'vendor/paseo/voice-server/src/server/speech/providers/local/worker-process.ts', 'workbench-service': 'apps/host/src/daemon/cli.ts', host: 'apps/host/src/main.ts', 'hwp-cli': 'apps/host/src/hwp-cli.ts', 'hangul-picture-job': 'apps/host/src/hangul-picture-job.ts', 'ieum-setup': 'apps/host/src/ieum-setup.ts', 'cleanup-legacy': 'apps/host/src/cleanup-legacy.ts', 'pdf-structure-job': 'apps/host/src/pdf-structure-job.mjs', 'workbench-client': 'packages/client/src/cli.ts', 'workbench-mcp': 'packages/client/src/mcp.ts', 'update-helper': 'apps/host/src/update-helper.ts' };
+const entryPoints = { 'voice-worker': 'vendor/paseo/voice-server/src/server/speech/providers/local/worker-process.ts', 'workbench-service': 'apps/host/src/daemon/cli.ts', host: 'apps/host/src/main.ts', 'hwp-cli': 'apps/host/src/hwp-cli.ts', 'hangul-picture-job': 'apps/host/src/hangul-picture-job.ts', 'office-convert-job': 'apps/host/src/office-convert-job.ts', 'ieum-setup': 'apps/host/src/ieum-setup.ts', 'cleanup-legacy': 'apps/host/src/cleanup-legacy.ts', 'pdf-structure-job': 'apps/host/src/pdf-structure-job.mjs', 'workbench-client': 'packages/client/src/cli.ts', 'workbench-mcp': 'packages/client/src/mcp.ts', 'update-helper': 'apps/host/src/update-helper.ts' };
 // The installed version the in-app update compares against (app-update). WORKBENCH_BUILD_VERSION only for
 // the update proof's deliberately older test build; WORKBENCH_UPDATE_TEST_KEYS adds a throwaway public key
 // to a TEST build — the release web job sets neither, so a release gateway trusts only the listed keys.
@@ -33,7 +35,8 @@ for (const [entries, banner] of [[pick(true), RESOLVE_GUARD_BANNER], [pick(false
     __WORKBENCH_VERSION__: JSON.stringify(buildVersion),
     __WORKBENCH_UPDATE_TEST_KEYS__: JSON.stringify(process.env.WORKBENCH_UPDATE_TEST_KEYS ?? ''),
   },
-  plugins: [pdfHostPlugin(), officeProviderHostPlugin(), officeFileParsePlugin(), hwpEnginePlugin()],
+  plugins: [pdfHostPlugin(), officeProviderHostPlugin(), officeFileParsePlugin(), hwpEnginePlugin(), officeShellHostPlugin(),
+    { name: 'workbench-ieum-earlier-source', setup(b) { b.onResolve({ filter: /^@ieum-(hwp|drive)\// }, ({ path }) => ({ path: ieumEarlierResolve(path) })); } }],
   banner: { js: banner },
 });
 
@@ -43,6 +46,11 @@ await copyExtensionRuntimeAssets(process.env.WORKBENCH_HOST_BUILD_DIR ?? "apps/h
 const hostOut = resolve(root, process.env.WORKBENCH_HOST_BUILD_DIR ?? "apps/host/dist");
 cpSync(`${root}node_modules/@resvg/resvg-wasm/index_bg.wasm`, resolve(hostOut, "resvg_bg.wasm"));
 cpSync(`${root}third_party/resvg-wasm`, resolve(hostOut, "licenses/resvg-wasm"), { recursive: true });
+// The xlsx engine's WebAssembly (the Excel editor's build, made by the office build before this one) beside
+// the conversion job (office-convert.ts: .ods → .xlsx copies, old .xls for the office command line).
+const xlsxWasm = `${root}apps/office/src/sheets/xlsx-engine.wasm`;
+if (existsSync(xlsxWasm)) cpSync(xlsxWasm, resolve(hostOut, "xlsx-engine.wasm"));
+else console.warn("build-host: apps/office/src/sheets/xlsx-engine.wasm is missing (build the office editors first): .ods and .xls conversions will be refused");
 
 // Official import-only installer; preserves its Apache notice and package-relative helpers.
 const desktopInstallerTarget = resolve(root, process.env.WORKBENCH_HOST_BUILD_DIR ?? "apps/host/dist", "node_modules/@workbench/agent-desktop-installer");

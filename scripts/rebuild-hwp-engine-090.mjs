@@ -1,6 +1,9 @@
 // The second engine target of rebuild-hwp-engine.mjs (`--target 0.9.0`): rhwp v0.9.0 with the
-// 0.9.0 forms of Ieum's and HOP's patches (third_party/hop/patches-0.9.0), built WITHOUT PDF
+// patch set third_party/hop/patches-0.9.0 (0.9.0-workbench.4: IeumOffice v0.13.0's engine patches
+// byte for byte, minus the PDF-import ones, then HOP's and Workbench's), built WITHOUT PDF
 // import, into third_party/hop/rhwp-core-0.9.0. The shipped 0.8.7 engine is not touched.
+// The manifest is the source of the order and the engine version; the build writes both into the
+// engine's package.json.
 //
 //   node scripts/rebuild-hwp-engine.mjs --target 0.9.0 [--from GIT_URL_OR_PATH] [--keep] [--allow-network]
 //
@@ -41,6 +44,8 @@ export function patchSet090(root) {
   for (const patch of manifest.patches) {
     if (patch.file.includes('/') || patch.file.includes('\\')) throw new Error(`0.9.0 patch outside its folder: ${patch.file}`)
     if (sha256(readFileSync(join(folder, patch.file))) !== patch.sha256) throw new Error(`0.9.0 patch differs from its manifest: ${patch.file}`)
+    // schema 2: an Ieum patch is carried byte for byte (its hash is the upstream file's)
+    if (manifest.schema >= 2 && patch.status === 'verbatim' && patch.sha256 !== patch.upstreamSha256) throw new Error(`0.9.0 patch marked verbatim differs from upstream: ${patch.file}`)
   }
   return { folder, manifest }
 }
@@ -53,7 +58,12 @@ export async function rebuild090(root, argv) {
   const { tag, commit } = pin.rhwp
   if (manifest.base.tag !== tag || manifest.base.commit !== commit) throw new Error('0.9.0 patch set and engine pin name different commits')
   const patches = manifest.patches.map((patch) => patch.file)
-  if (JSON.stringify(patches) !== JSON.stringify(pin.rhwp.patches)) throw new Error('0.9.0 engine pin lists other patches than the patch set')
+  // the pin records what was built: the manifest's order (and, schema 2, its version) replace the old ones
+  pin.rhwp.patches = patches
+  if (manifest.version) pin.version = manifest.version
+  // rhwp.ieumCommit stays the vendored Ieum pin the studio is built from (build-hwp-studio.mjs checks it);
+  // the IeumOffice commit the engine patches were copied from is recorded beside it
+  if (manifest.ieum?.commit) pin.rhwp.ieumPatchesCommit = manifest.ieum.commit
   const fromIndex = argv.indexOf('--from')
   const fromArg = fromIndex >= 0 ? argv[fromIndex + 1] : REPO
   const local = !/^[a-z]+:\/\//.test(fromArg) && existsSync(fromArg)

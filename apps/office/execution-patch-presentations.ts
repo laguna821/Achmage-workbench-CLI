@@ -32,53 +32,50 @@ export function patchPresentationExecutions(code: string, id: string, root: stri
   const loopRef = useRef<AgentLoop<DocSnapshot> | null>(null)`);
     replace("    const sentAtts = attachmentsOverride ?? attachmentsRef.current", "    const sentAtts = attachmentsOverride ?? attachmentsRef.current\n    wbExecutionAttachmentsRef.current = sentAtts");
     replace("      loopRef.current?.cancel()\n      depsRef.current.clearHighlights()", "      wbExecutionStartRef.current?.reject(new Error('문서 실행 준비 중 편집기가 닫혔습니다.'))\n      wbExecutionStartRef.current = null\n      loopRef.current?.detach()\n      depsRef.current.clearHighlights()");
-    replace(`            askClarification: (questions) =>
-              new Promise((resolve) => {
-                clarifyResolverRef.current = resolve
-                setActiveClarify(questions)
-              }),`, `            askClarification: (questions) =>
-              new Promise((resolve, reject) => {
-                clarifyResolverRef.current = resolve
-                setActiveClarify(questions)
-                if (isOfficeExecutor()) void wbAskPresentationClarification(questions, tGlobal('aiClarifyDecideAnswer')).then(answer => {
-                  if (clarifyResolverRef.current !== resolve) return;
-                  clarifyResolverRef.current = null; setActiveClarify(null); resolve(answer);
-                }, error => {
-                  if (clarifyResolverRef.current !== resolve) return;
-                  clarifyResolverRef.current = null; setActiveClarify(null); reject(error);
-                });
-              }),`);
-    replace(`            confirmBrief: (brief) =>
-              new Promise((resolve) => {
-                briefResolverRef.current = resolve
-                setActiveBrief(brief)
-              }),`, `            confirmBrief: (brief) =>
-              new Promise((resolve, reject) => {
-                briefResolverRef.current = resolve
-                setActiveBrief(brief)
-                if (isOfficeExecutor()) void wbAskHtmlExecutionBrief(brief).then(decision => {
-                  if (briefResolverRef.current !== resolve) return;
-                  if (decision.kind === 'confirmed') depsRef.current.onBriefConfirmed(decision.brief);
-                  briefResolverRef.current = null; setActiveBrief(null); resolve(decision);
-                }, error => {
-                  if (briefResolverRef.current !== resolve) return;
-                  briefResolverRef.current = null; setActiveBrief(null); reject(error);
-                });
-              }),`);
-    replace(`    const keep = await new Promise<boolean>((resolve) => {
-      partialResolverRef.current = resolve
-      setActivePartial({ lines: outcome.html.split('\\n').length })
-    })`, `    const keep = await new Promise<boolean>((resolve, reject) => {
-      partialResolverRef.current = resolve
-      setActivePartial({ lines: outcome.html.split('\\n').length })
-      if (isOfficeExecutor()) void askOfficeExecutionQuestion('HTML 작성을 끝내지 못했습니다. 지금까지 작성한 ' + outcome.html.split('\\n').length + '줄을 유지할까요?').then(keep => {
-        if (partialResolverRef.current !== resolve) return;
-        partialResolverRef.current = null; setActivePartial(null); resolve(keep);
-      }, error => {
-        if (partialResolverRef.current !== resolve) return;
-        partialResolverRef.current = null; setActivePartial(null); reject(error);
-      });
-    })`);
+    // v0.13.0 wraps each card in awaitPerson(…) (the waiting step in the run's tool list).
+    replace(`                new Promise((resolve) => {
+                  clarifyResolverRef.current = resolve
+                  setActiveClarify(questions)
+                }),`, `                new Promise((resolve, reject) => {
+                  clarifyResolverRef.current = resolve
+                  setActiveClarify(questions)
+                  if (isOfficeExecutor()) void wbAskPresentationClarification(questions, tGlobal('aiClarifyDecideAnswer')).then(answer => {
+                    if (clarifyResolverRef.current !== resolve) return;
+                    clarifyResolverRef.current = null; setActiveClarify(null); resolve(answer);
+                  }, error => {
+                    if (clarifyResolverRef.current !== resolve) return;
+                    clarifyResolverRef.current = null; setActiveClarify(null); reject(error);
+                  });
+                }),`);
+    replace(`                new Promise((resolve) => {
+                  briefResolverRef.current = resolve
+                  setActiveBrief(brief)
+                }),`, `                new Promise((resolve, reject) => {
+                  briefResolverRef.current = resolve
+                  setActiveBrief(brief)
+                  if (isOfficeExecutor()) void wbAskHtmlExecutionBrief(brief).then(decision => {
+                    if (briefResolverRef.current !== resolve) return;
+                    if (decision.kind === 'confirmed') depsRef.current.onBriefConfirmed(decision.brief);
+                    briefResolverRef.current = null; setActiveBrief(null); resolve(decision);
+                  }, error => {
+                    if (briefResolverRef.current !== resolve) return;
+                    briefResolverRef.current = null; setActiveBrief(null); reject(error);
+                  });
+                }),`);
+    replace(`      new Promise<boolean>((resolve) => {
+        partialResolverRef.current = resolve
+        setActivePartial({ lines: outcome.html.split('\\n').length })
+      }),`, `      new Promise<boolean>((resolve, reject) => {
+        partialResolverRef.current = resolve
+        setActivePartial({ lines: outcome.html.split('\\n').length })
+        if (isOfficeExecutor()) void askOfficeExecutionQuestion('HTML 작성을 끝내지 못했습니다. 지금까지 작성한 ' + outcome.html.split('\\n').length + '줄을 유지할까요?').then(keep => {
+          if (partialResolverRef.current !== resolve) return;
+          partialResolverRef.current = null; setActivePartial(null); resolve(keep);
+        }, error => {
+          if (partialResolverRef.current !== resolve) return;
+          partialResolverRef.current = null; setActivePartial(null); reject(error);
+        });
+      }),`);
     const run = code.match(/        await loop\.run\(instruction \+ skillUse\.text, images\.length > 0 \? images : undefined[^\n]*\)/g);
     if (run?.length !== 1) throw new Error("Original HTML send completion boundary changed");
     replace(run[0]!, `${run[0]}\n        wbExecutionStartRef.current?.resolve(true)\n        wbExecutionStartRef.current = null`);
@@ -217,15 +214,18 @@ ${marker}`);
       },`);
     replace("  settingsRef.current = liveSettings", "  settingsRef.current = isOfficeExecutor() && wbExecutionSettingsRef.current ? wbExecutionSettingsRef.current : liveSettings");
     replace("    const items = editQueue ?? []", "    const items = wbExecutionQueueRef.current ?? editQueue ?? []\n    wbSubmittedQueueRef.current = structuredClone(items)");
-    replace("    if (!sendGate.admitQueued(() => {})) return", "    if (!isOfficeExecutor() && !sendGate.admitQueued(() => {})) return");
+    // v0.13.0 has a second gate (the project chat's consolidation, `return null`): only the queue's.
+    replace("    if (!sendGate.admitQueued(() => {})) return\n    const resolved = resolveQueue(", "    if (!isOfficeExecutor() && !sendGate.admitQueued(() => {})) return\n    const resolved = resolveQueue(");
     replace("    const shown = lines.join('\\n')", "    const shown = lines.join('\\n')\n    wbQueueTextRef.current = shown");
     replace(`        .catch(() => {
           runStartingRef.current = false
+          projectPanelRef.current.finishSend()
           queueRunResolverRef.current = null
           void finishHistoryBatch().finally(() => setBusy(false))
           resolve(false)
         })`, `        .catch((error) => {
           runStartingRef.current = false;
+          projectPanelRef.current.finishSend();
           queueRunResolverRef.current = null;
           void finishHistoryBatch().finally(() => setBusy(false));
           wbExecutionQueueErrorRef.current = error;
@@ -242,7 +242,12 @@ ${marker}`);
             setBusy(false)
             // Post-generation layout QC: only after a completed run that landed generated pages
             if (cancelled) qcPagesRef.current = []
-            else if (qcPagesRef.current.length > 0) void runQcPassRef.current()
+            const qc =
+              !cancelled && qcPagesRef.current.length > 0
+                ? runQcPassRef.current()
+                : Promise.resolve()
+            // a handed-over run that ended well: the deck goes into the project after its check
+            if (handedDone) void qc.finally(() => onHandedRunDoneRef.current?.())
             // After the batch closes, so the next queued page opens a fresh one
             const resolveQueueRun = queueRunResolverRef.current
             queueRunResolverRef.current = null
@@ -252,7 +257,11 @@ ${marker}`);
               await finishHistoryBatch();
               setBusy(false);
               if (cancelled || officeExecutionSignal()?.aborted) qcPagesRef.current = [];
-              else if (qcPagesRef.current.length > 0) await optionalOfficeExecution(() => runQcPassRef.current());
+              const qc = !cancelled && !officeExecutionSignal()?.aborted && qcPagesRef.current.length > 0
+                ? Promise.resolve(optionalOfficeExecution(() => runQcPassRef.current()))
+                : Promise.resolve();
+              if (handedDone) void qc.catch(() => {}).then(() => onHandedRunDoneRef.current?.());
+              await qc;
               const resolveQueueRun = queueRunResolverRef.current;
               queueRunResolverRef.current = null;
               resolveQueueRun?.(!cancelled && !officeExecutionSignal()?.aborted);
@@ -271,12 +280,14 @@ ${marker}`);
     replace(run[0]!, `${run[0]}\n        wbExecutionStartRef.current?.resolve(true)\n        wbExecutionStartRef.current = null`);
     replace(`      .catch(() => {
         runStartingRef.current = false
+        projectPanelRef.current.finishSend()
         void finishHistoryBatch().finally(() => setBusy(false))
       })`, `      .catch((error) => {
         wbExecutionStartRef.current?.reject(error)
         wbExecutionCompleteRef.current?.reject(error); wbExecutionCompleteRef.current = null;
         wbExecutionStartRef.current = null
         runStartingRef.current = false
+        projectPanelRef.current.finishSend()
         void finishHistoryBatch().finally(() => setBusy(false))
       })`);
     replace("  useEffect(() => () => qcAbortRef.current?.abort(), [])", `  useEffect(() => () => {

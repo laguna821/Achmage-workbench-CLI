@@ -19,15 +19,16 @@ const groups = [
   ['packages/zip-gate/src', 'zip-gate'],
 ];
 const files = groups.flatMap(([input, output]) => readdirSync(join(source, input)).filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts')).sort().map((name) => [join(input, name), join(output, name)]));
-files.push(['packages/agent-core/src/user-skill-names.ts', 'agent-core/user-skill-names.ts']);
+// v0.13.0's skill core also reads which editors a skill is for and the MCP servers it names.
+for (const name of ['user-skill-names', 'skill-editors', 'skill-mcp-refs']) files.push([`packages/agent-core/src/${name}.ts`, `agent-core/${name}.ts`]);
 const sha = (data) => createHash('sha256').update(data).digest('hex');
-const manifest = { source: 'https://github.com/pblsketch/openoffice', commit, changes: 'Apache-2.0 source headers, explicit .ts relative imports, local paths for zip-gate and user-skill-names', files: [] };
+const manifest = { source: 'https://github.com/pblsketch/ieumoffice', commit, changes: 'Apache-2.0 source headers, explicit .ts relative imports, local paths for zip-gate and the agent-core skill helpers', files: [] };
 for (const [input, output] of files) {
   const original = readFileSync(join(source, input), 'utf8');
   const text = `// Adapted from IeumOffice ${input} @ ${commit}.\n// Apache-2.0; see ../LICENSE and ../NOTICE. Changes: explicit Node .ts and local package imports.\n` + original
     .replace(/\bfrom (['"])(\.[^'"]+)\1/g, (_, quote, path) => `from ${quote}${path.endsWith('.ts') ? path : path + '.ts'}${quote}`)
     .replaceAll("'@genoffice/zip-gate'", "'../zip-gate/index.ts'")
-    .replaceAll("'@genoffice/agent-core/user-skill-names'", "'../agent-core/user-skill-names.ts'");
+    .replace(/'@genoffice\/agent-core\/(user-skill-names|skill-editors|skill-mcp-refs)'/g, "'../agent-core/$1.ts'");
   const path = join(destination, output);
   if (mode === '--write') { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, text); }
   else if (readFileSync(path, 'utf8') !== text) throw new Error(`Vendored source differs: ${output}`);

@@ -1,4 +1,4 @@
-// Adapted from IeumOffice packages/ai-provider/src/user-skills/index.ts @ 30ff4f051f067fcb2baf1ab416c40718c802ca35.
+// Adapted from IeumOffice packages/ai-provider/src/user-skills/index.ts @ 8602a39410adb86037f3008588b64efc75b08c60.
 // Apache-2.0; see ../LICENSE and ../NOTICE. Changes: explicit Node .ts and local package imports.
 /**
  * The person's skills (Node only, no Electron): where they are read from, how
@@ -21,3 +21,5 @@ export * from './source-record.ts'
 export * from './import.ts'
 export * from './update.ts'
 export * from './export.ts'
+export * from './history.ts'
+export * from './warnings.ts'

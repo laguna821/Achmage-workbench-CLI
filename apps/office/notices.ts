@@ -122,7 +122,7 @@ export function thirdPartyNotices(sections: Section[], modules: RustModule[] = [
       const parts = [
         "Achmage Workbench office editors — third-party notices",
         "",
-        "The pages in this folder are built from IeumOffice (https://github.com/pblsketch/openoffice,",
+        "The pages in this folder are built from IeumOffice (https://github.com/pblsketch/ieumoffice,",
         "based on GenOffice) and the npm packages listed below. Workbench adds a bridge to its own",
         "gateway and hides the editors' AI features; IeumOffice's source is used unchanged.",
       ];

@@ -1,4 +1,4 @@
-// Adapted from IeumOffice (https://github.com/pblsketch/openoffice)
+// Adapted from IeumOffice (https://github.com/pblsketch/ieumoffice)
 // packages/ai-provider/src/subscription/status.ts (parseClaudeAuthStatus, codexAccountInfo) and
 // contract.ts (subscriptionAccountOf) @ 9052297, Apache-2.0 (see third_party/ieumoffice).
 // Changes: one result type for both engines; the login-kind ledger and metered consent are left

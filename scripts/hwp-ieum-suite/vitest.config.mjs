@@ -17,6 +17,7 @@ export default defineConfig({
       return code.includes("require.resolve('@rhwp/core')") ? code.replaceAll("require.resolve('@rhwp/core')", JSON.stringify(entry)) : null
     },
   }],
-  resolve: { alias: [{ find: /^@rhwp\/core$/, replacement: entry }] },
+  // scripts/hwp-ieum-suite.ts --tree runs another checkout through a mirror of links: keep the links' paths
+  resolve: { alias: [{ find: /^@rhwp\/core$/, replacement: entry }], preserveSymlinks: process.env.HWP_SUITE_PRESERVE_SYMLINKS === '1' },
   test: { include: ['tests/**/*.test.ts'], environment: 'node', testTimeout: 20000, maxWorkers: 1 },
 })

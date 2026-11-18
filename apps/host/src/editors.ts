@@ -10,7 +10,7 @@ import { HttpError } from "./errors.ts";
 import { fontFace, matchFont } from "./fonts.ts";
 import { hwpFontFace, hwpFontSnapshot } from "./hwp-fonts.ts";
 import { MIME, readBody, sendJson, serveStatic } from "./http.ts";
-import { decodeHwpSave, hwpFormat, hwpTabs, HWP_MAX_BYTES, openHwpBytes, prepareHwpSave, type HwpLossPolicy } from "./hwp-codec.ts";
+import { decodeHwpSave, hwpFormat, hwpTabs, HWP_MAX_BYTES, HWP_SAVE_BODY_MAX, openHwpBytes, prepareHwpSave, type HwpLossPolicy } from "./hwp-codec.ts";
 import { hwpToText } from "../../../third_party/ieumoffice/file-parse/hwp.ts";
 import { OFFICE_IMAGE_MAX_BYTES, readOfficeAsset, saveOfficeImage } from "./office-assets.ts";
 import { buildPreviewDocument } from "../../../third_party/ieumoffice/text-assets/preview-document.ts";
@@ -21,6 +21,7 @@ import { OfficeReferences } from "./office-references.ts";
 import { OfficeStyles } from "./office-styles.ts";
 import { officeGenerated } from "./office-generated.ts";
 import { pdfLoader } from "./pdf-loader.ts";
+import { PdfPageClipboard } from "./pdf-clipboard.mjs";
 
 // The office editors (IeumOffice's editor screens, apps/office) run on their own origin, a second
 // port on 127.0.0.1. Their code is third-party and reads documents from anywhere, so it never
@@ -112,6 +113,14 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
   const epub = new EpubEditors(documents, grants);
   const pdfStructure = new PdfStructureEditors(documents, grants);
   const styles = new OfficeStyles(documents, webDir);
+  const pageClipboard = new PdfPageClipboard();
+  /** The window of a document tab's page (UI views only: a document AI run has none). */
+  const windowOf = (bearer: string | null, artifactId: string) => {
+    const viewId = bearer ? grants.access(bearer)?.viewId : undefined;
+    const view = viewId ? documents.registry.forArtifact(artifactId).find((entry) => entry.viewId === viewId) : undefined;
+    if (!view) throw new HttpError(409, "pdf_clipboard_window", "PDF 탭에서 다시 시도해 주세요.");
+    return view.windowId;
+  };
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname;
@@ -249,14 +258,16 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
         if (method !== "POST") throw new HttpError(405, "method_not_allowed", "허용되지 않은 PDF 요청입니다.");
         const revision = Number(url.searchParams.get("revision"));
         if (!Number.isSafeInteger(revision) || revision < 1 || revision > artifact.revision) throw new HttpError(400, "revision_not_found", "PDF 문서 판이 올바르지 않습니다.");
-        const writing = ["save", "blank-page", "page-size", "crop"].includes(operation!);
+        const writing = ["save", "blank-page", "page-size", "crop", "paste-pages"].includes(operation!);
         if (writing) {
           documents.registry.assertWrite(id!, grants.access(bearer!));
           if (revision !== artifact.revision) throw new HttpError(409, "revision_conflict", "PDF 문서의 판이 바뀌었습니다. 편집을 보관한 뒤 새 판을 확인해 주세요.");
           if (artifact.diskState === "changed") throw new HttpError(409, "disk_changed", "PDF 파일이 외부에서 바뀌었습니다. 편집을 보관한 뒤 원문을 확인해 주세요.");
         }
         const { request, source } = decodePdfRequest(await readBody(req, PDF_MAX_BYTES + PDF_REQUEST_MAX_BYTES + 4));
-        if (request.path !== undefined && (typeof request.path !== "string" || !documents.isPathOf(artifact.id, request.path))) throw new HttpError(403, "pdf_path", "열린 PDF만 처리할 수 있습니다.");
+        // v0.13.0's page copy names the document inside `source` (the view's file with its pending edits).
+        const named = request.source && typeof request.source === "object" && !Array.isArray(request.source) ? [request.path, (request.source as { path?: unknown }).path] : [request.path];
+        if (named.some((value) => value !== undefined && (typeof value !== "string" || !documents.isPathOf(artifact.id, value)))) throw new HttpError(403, "pdf_path", "열린 PDF만 처리할 수 있습니다.");
         const loader = pdfLoader(documents.dataDir);
         if (operation === "loader-state") return sendJson(res, 200, loader.status());
         if (operation === "loader-install") { void loader.install(request.ocr === true ? "ocr" : "core"); return sendJson(res, 200, loader.status()); }
@@ -268,6 +279,8 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
           try { return sendJson(res, 200, await loader.extract(source ?? readFileSync(documents.revisionPath(id!, revision)), { pages: request.pages as number[] | undefined, password: request.password as string | undefined, ocr: request.ocr === true, images: request.images === true, signal: controller.signal })); }
           finally { res.off("close", stop); }
         }
+        // The page clipboard holds pages per window (pdf-clipboard.mjs); counting reads no document.
+        if (operation === "copied-count") return sendJson(res, 200, { count: pageClipboard.count(windowOf(bearer, artifact.id)) });
         const engine = await import("./pdf-ops.mjs");
         if (operation === "fonts") return sendJson(res, 200, engine.listEditFonts());
         if (operation === "can-draw") {
@@ -277,8 +290,35 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
         // A restored draft is already a complete PDF. Never apply its old edits to a newly
         // adopted revision: the caller sends these bytes until a successful save/reload.
         const original = readFileSync(documents.revisionPath(id!, revision));
-        if (source || writing || operation === "recover") await engine.inspectPdf(original);
+        // A session that opened a protected file with its password saves it and copies it (protection kept).
+        const unlocked = (operation === "save" || operation === "copy") && (request.decryption !== undefined || request.encryption !== undefined);
+        if (source || writing || operation === "recover") await engine.inspectPdf(original, true, unlocked ? engine.sourcePassword(request) : undefined);
         const bytes = source ?? original;
+        if (operation === "decrypt") return sendJson(res, 200, await engine.decryptPdf(bytes, request.password));
+        if (operation === "copy-pages") {
+          const window = windowOf(bearer, artifact.id), copied = await engine.copyPdfPages(bytes, request);
+          pageClipboard.hold(window, copied);
+          return sendJson(res, 200, { count: copied.count });
+        }
+        if (operation === "paste-pages") {
+          const held = pageClipboard.held(windowOf(bearer, artifact.id));
+          if (!held) return sendJson(res, 200, { revision, insertedCount: 0 });
+          const { bytes: merged, count } = await engine.pastePdfPages(bytes, held.bytes, request.afterPageIndex);
+          const saved = documents.savePdfBytes(id!, revision, merged, grants.access(bearer!));
+          return sendJson(res, 200, { revision: saved.revision, insertedCount: count });
+        }
+        // 용량 줄이기: the saved revision only (never the page's bytes), into a private result that only the
+        // parent's chosen place publishes (office-output.ts) — never over the original.
+        if (operation === "reduce") {
+          const viewId = grants.access(bearer!)?.viewId;
+          if (!viewId) throw new HttpError(409, "output_view_changed", "PDF 탭에서 다시 시도해 주세요.");
+          const { bytes: reduced, ...sizes } = await engine.reducePdf(original);
+          if (!reduced) return sendJson(res, 200, { ...sizes, generatedId: null });
+          const generated = officeGenerated(documents).create(artifact.id, revision, viewId, "pdf");
+          try { writeFileSync(generated.path, reduced, { flag: "wx", mode: 0o600 }); }
+          catch (error) { officeGenerated(documents).discard(generated.id); throw error; }
+          return sendJson(res, 200, { ...sizes, generatedId: generated.id });
+        }
         if (operation === "copy" || operation === "redact-copy") {
           if (operation === "redact-copy" && source) throw new HttpError(422, "pdf_redaction_unsaved", "복원한 편집을 먼저 저장한 뒤 영구 가림 사본을 만들어 주세요.");
           const { bytes: copied, ...skips } = await engine.copyPdf(bytes, request, operation === "redact-copy");
@@ -286,7 +326,7 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
           res.writeHead(200, { "content-type": "application/pdf", "cache-control": "no-store" }); res.end(copied); return;
         }
         if (operation === "save" || operation === "recover") {
-          const { bytes: edited, ...skips } = await engine.editPdf(bytes, request);
+          const { bytes: edited, ...skips } = await engine.editPdf(bytes, request, { unlocked });
           if (operation === "recover") {
             if (Object.values(skips).some((items) => items.length)) throw new HttpError(422, "pdf_recovery_incomplete", "일부 편집을 복구본에 담지 못했습니다. 이 탭을 열어 둔 채 저장 결과를 확인해 주세요.");
             res.writeHead(200, { "content-type": "application/pdf", "cache-control": "no-store" }); res.end(edited); return;
@@ -318,7 +358,7 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
         if (operation === "read-text" && method === "POST") return sendJson(res, 200, await hwpToText(await readBody(req, HWP_MAX_BYTES)));
         if ((operation === "save" || operation === "repair") && method === "POST") {
           if (operation === "save") documents.registry.assertWrite(id!, grants.access(bearer!));
-          const { bytes, metadata } = decodeHwpSave(await readBody(req, HWP_MAX_BYTES + 1_000_004));
+          const { bytes, metadata } = decodeHwpSave(await readBody(req, HWP_SAVE_BODY_MAX));
           const original = readFileSync(documents.revisionPath(id!, revision));
           const check: NonNullable<HwpLossPolicy["check"]> = {};
           const fixed = await prepareHwpSave(original, bytes, format, metadata, operation === "repair" ? "recovery" : "save", format, { check });
@@ -382,6 +422,7 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
   server.close = function (...args: Parameters<Server["close"]>) {
     // Cancel child jobs before waiting for their HTTP responses to drain.
     pdfStructure.close();
+    pageClipboard.clear();
     return close.apply(this, args);
   };
   server.once("close", () => ai.close());

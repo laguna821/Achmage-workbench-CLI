@@ -1,4 +1,4 @@
-// Adapted from IeumOffice apps/hwp/src/main/tab-widths.ts @ 30ff4f051f067fcb2baf1ab416c40718c802ca35.
+// Adapted from IeumOffice apps/hwp/src/main/tab-widths.ts @ 8602a39410adb86037f3008588b64efc75b08c60.
 // Apache-2.0; see ../LICENSE and ../NOTICE. Changes recorded in hwp.manifest.json.
 import { crc32, deflateRawSync, inflateRawSync } from 'node:zlib'
 import {
@@ -218,7 +218,7 @@ function writeHwpTabs(file: Uint8Array, measured: Map<string, TabMeasure>): Uint
 
 // ---- HWPX ----
 
-interface ZipEntry {
+export interface ZipEntry {
   name: string
   /** the central directory record */
   central: Buffer
@@ -245,7 +245,7 @@ const ENCRYPTED_ENTRY = 0x1
 const SECTION_PART = /^Contents\/section(\d+)\.xml$/
 
 /** The entries of a zip in the order of the file, or null for one this does not handle. */
-function zipEntries(zip: Buffer): { entries: ZipEntry[]; centralStart: number } | null {
+export function zipEntries(zip: Buffer): { entries: ZipEntry[]; centralStart: number } | null {
   let endAt = -1
   for (
     let at = zip.length - END_SIZE;
@@ -299,7 +299,7 @@ function zipEntries(zip: Buffer): { entries: ZipEntry[]; centralStart: number } 
   return { entries: ordered, centralStart }
 }
 
-function entryData(zip: Buffer, entry: ZipEntry): Buffer | null {
+export function entryData(zip: Buffer, entry: ZipEntry): Buffer | null {
   const raw = zip.subarray(entry.dataStart, entry.dataStart + entry.compressedSize)
   if (entry.method === STORED) return Buffer.from(raw)
   if (entry.method === DEFLATED) return inflateRawSync(raw)
@@ -307,7 +307,7 @@ function entryData(zip: Buffer, entry: ZipEntry): Buffer | null {
 }
 
 /** The zip with some entries' content replaced; every other entry's bytes are copied as they were. */
-function rewriteZip(
+export function rewriteZip(
   zip: Buffer,
   parts: { entries: ZipEntry[] },
   changed: Map<string, Buffer>,

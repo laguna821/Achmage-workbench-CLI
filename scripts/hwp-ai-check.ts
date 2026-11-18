@@ -3,7 +3,8 @@
 // Rig check of the Hangul editor's document AI (unit ux/hwp-ai): the built gateway and UI in
 // Chromium, an .hwpx document, its own AI dock, and a STAND-IN engine (a local OpenAI-compatible
 // endpoint — no real model, credential or outside host). Turns: one that only answers; one that
-// edits; one that calls 한글 문서 만들기 (the bundled hallym-kordoc runner really runs); one whose
+// edits; one that calls 한글 문서 만들기 (the bundled hallym-kordoc runner really runs); `general` (0.5.5): one
+// whose request is a general one (kind "general": the model's Markdown through the 기본 template); one whose
 // engine dies; one that never answers; `fill` (doc-default): 한글 문서 만들기 in an EMPTY new document fills it in place. Asserts: scrolling works during the turn, the hold line and
 // 중단, the hold released in each case, the made document opened in its own tab. Frames → outDir.
 // `--executor`: every turn runs in the independent executor (as in the desktop app): a stand-in app
@@ -42,6 +43,8 @@ type Msg = { role: string; content?: unknown; tool_calls?: unknown[] };
 const textOf = (content: unknown): string => typeof content === "string" ? content : Array.isArray(content) ? content.map((part) => (part as { text?: string }).text ?? "").join("") : "";
 const requests: { scenario: string; step: number; tools: string[] }[] = [];
 const held: ServerResponse[] = [];
+/** The tool's answers the stand-in engine got in the general scenario. */
+const generalOutputs: string[] = [];
 const SECTIONS = { "추진 배경": "정기 시설 점검 시기가 되었습니다.", "현황과 문제": "노후 설비 점검이 필요합니다.", "제안 내용": "다음 주에 점검을 진행합니다.", "추진 일정": "- 일시: 미정 (확인 필요)", "기대효과": "안전한 시설 이용" };
 const provider = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   let input = ""; for await (const part of req) input += String(part);
@@ -50,7 +53,7 @@ const provider = createServer(async (req: IncomingMessage, res: ServerResponse) 
   const lastUser = messages.map((m, i) => [m, i] as const).filter(([m]) => m.role === "user").at(-1);
   const instruction = lastUser ? textOf(lastUser[0].content) : "";
   const step = lastUser ? messages.slice(lastUser[1] + 1).filter((m) => m.role === "tool").length : 0;
-  const scenario = /\[무응답\]/.test(instruction) ? "silent" : /\[엔진종료\]/.test(instruction) ? "dies" : /공문서/.test(instruction) ? "make" : /\[고치기\]/.test(instruction) ? "edit" : "answer";
+  const scenario = /\[무응답\]/.test(instruction) ? "silent" : /\[엔진종료\]/.test(instruction) ? "dies" : /\[일반\]/.test(instruction) ? "general" : /공문서/.test(instruction) ? "make" : /\[고치기\]/.test(instruction) ? "edit" : "answer";
   requests.push({ scenario, step, tools: (body.tools ?? []).map((tool) => tool.function?.name ?? "") });
   if (args.includes("--trace")) console.log("TRACE provider", new Date().toISOString().slice(11, 23), scenario, step);
   res.writeHead(200, { "content-type": "text/event-stream" });
@@ -64,6 +67,12 @@ const provider = createServer(async (req: IncomingMessage, res: ServerResponse) 
   if (scenario === "edit") {
     if (step === 0) return call("insert_paragraphs", { where: "end", paragraphs: ["문서 AI가 덧붙인 문단입니다."] });
     await sleep(7000); return answer("문서 끝에 문단 하나를 덧붙였습니다.");
+  }
+  // general (0.5.5, kind "general"): the model writes Markdown, the gateway makes it through the 기본 template.
+  if (scenario === "general") {
+    if (step === 0) { await sleep(800); return call("make_hangul_document", { prompt: "수업 안내문 만들어줘", kind: "general", title: "수업 안내", markdown: "# 수업 안내\n\n다음 주 수업은 쉽니다.\n\n| 주 | 내용 |\n| --- | --- |\n| 11 | 휴강 |\n" }); }
+    generalOutputs.push(textOf(messages.filter((m) => m.role === "tool").at(-1)?.content));
+    return answer("기본 서식으로 '수업 안내.hwpx'를 만들어 새 탭에 열었습니다.");
   }
   // make: form → document → answer
   if (step === 0) { await sleep(800); return call("make_hangul_document", { prompt: "공문서 하나 만들어줘" }); }
@@ -302,6 +311,25 @@ if (want("make")) {
   check("만든 문서가 자기 탭으로 열림", opened);
   await sleep(4000);
   await shot("06-made-open");
+}
+
+// ---- 5b. (0.5.5) a general request: kind "general", the model's Markdown through the 기본 template (hangul-convert) ----
+if (want("general")) {
+  // Back to the lecture plan's tab (the make case opened its made document in a tab of its own).
+  await page.evaluate(() => { const tab = [...document.querySelectorAll<HTMLElement>(".group-tab [role=tab], [role=tab]")].find((e) => /강의계획서/.test(e.textContent ?? "")); tab?.click(); });
+  await (await ofr()).waitForSelector(".hwp-app .ai-dock:not(.collapsed) .ai-input-box textarea", { state: "visible", timeout: 30_000 }).catch(() => {});
+  await sleep(1500);
+  const before = new Set(readdirSync(project));
+  await send("[일반] 수업 안내문 만들어줘");
+  check("일반 요청 끝", await ended());
+  const made = readdirSync(project).filter((name) => !before.has(name));
+  check("일반 요청은 기본 서식으로 새 HWPX를 만듦(열린 문서는 그대로)", made.includes("수업 안내.hwpx") && readFileSync(join(project, "수업 안내.hwpx")).subarray(0, 2).toString() === "PK", made.join(", "));
+  const output = generalOutputs.at(-1) ?? "";
+  check("도구의 답: kind general, 기본 서식(compose를 거치지 않음)", /"kind":"general"/.test(output) && /"template":"기본"/.test(output) && !/familyId/.test(output), output.slice(0, 200));
+  const opened = await waitFor(() => page.evaluate(() => [...document.querySelectorAll(".group-tab, [role=tab]")].some((tab) => tab.textContent?.includes("수업 안내"))), 20_000);
+  check("일반 요청으로 만든 문서가 자기 탭으로 열림", opened);
+  await sleep(3000);
+  await shot("06b-general-open");
 }
 
 // ---- 6. (doc-default, 0.5.2's leftover 4d) 한글 문서 만들기 in an EMPTY untouched new document: it fills THIS document --

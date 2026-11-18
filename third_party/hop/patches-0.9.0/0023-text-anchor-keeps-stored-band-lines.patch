@@ -1,0 +1,32 @@
+Achmage Workbench — rhwp v0.9.0 engine patch of Workbench's own (third_party/hop/patches-0.9.0).
+Origin: Workbench 0023 (0.9.0-workbench.4) — the H4b review M1 rule of 0.9.0-workbench.3's own port of Ieum 0020, carried onto IeumOffice's 0020/0034 forms
+Status: ported
+What it changes: Ieum's `topbottom_float_anchor_flow_bottom` (typeset.rs, Ieum 0020; used by section/flow.rs and by `first_stale_topbottom_float_anchor`) moves ANY anchor paragraph that starts inside its paper/page top-and-bottom object below it. Workbench's own 0020 port (0.9.0-workbench.2/.3) had limited this to anchors without visible text after the H4b review (M1): samples/issue5941 roadmap, an 11-line paragraph with text anchoring a page-high frame on page 158. With Ieum's form the roadmap still has 302 pages, but page 158 draws 31 text lines instead of Hancom's 36 (35 body + 1 note) and page 159's body text starts at the top of the body, over the picture group drawn at 140–454 px (0.9.0-workbench.3: below it, from 525 px). This restores the rule: an anchor with visible text (not white space, not a control, not U+FFFC) keeps its stored lines.
+Regression test: apps/host/src/hwp-anchor-space.test.ts (Ieum's fixture with the anchor text varied: empty and space-only anchors below the box, a text anchor keeps its band line — failed on Ieum's form: 18 vs 17 lines on page 2); the roadmap probe (302 pages, page 158 36 lines) in the unit report (the sample is not in this repository).
+
+diff --git a/src/renderer/typeset.rs b/src/renderer/typeset.rs
+index 03a79eed..65694e1c 100644
+--- a/src/renderer/typeset.rs
++++ b/src/renderer/typeset.rs
+@@ -6891,6 +6891,21 @@ pub(crate) fn topbottom_float_anchor_flow_bottom(
+     dpi: f64,
+ ) -> Option<f64> {
+     use crate::model::shape::{HorzAlign, HorzRelTo, TextWrap, VertAlign, VertRelTo};
++    // [Workbench 0023, H4b M1 carried onto Ieum's 0020] Only an anchor paragraph WITHOUT visible
++    // text (it holds just the object, as in Ieum's Hangul 2024 fixture) starts below its object.
++    // A paragraph with text whose stored lines Hangul laid inside the object's band keeps them
++    // there: samples/issue5941 roadmap (Hancom print 302 pages, upstream
++    // issue_7445_roadmap_source_fragment_ownership) has an 11-line paragraph anchoring a page-high
++    // frame on page 158; moved below it, page 158 lost lines and page 159's text was drawn over
++    // its pictures. "Visible" = not white space, not a control, not the object character: an
++    // anchor holding only spaces looks empty and is laid out as the empty one.
++    if para
++        .text
++        .chars()
++        .any(|c| !c.is_whitespace() && !c.is_control() && c != '\u{FFFC}')
++    {
++        return None;
++    }
+     // layout `calc_shape_bottom_y` 와 같은 (아래끝, 위끝).
+     let geometry = |common: &crate::model::shape::CommonObjAttr| -> (f64, f64) {
+         let v_offset = hwpunit_to_px(common.vertical_offset as i32, dpi);

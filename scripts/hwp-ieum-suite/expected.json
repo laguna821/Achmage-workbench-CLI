@@ -1,5 +1,5 @@
 {
-  "engine": "third_party/hop/engine.ts (rhwp 0.9.0-workbench.3)",
+  "engine": "third_party/hop/engine.ts (rhwp 0.9.0-workbench.4; the same 29 as on 0.9.0-workbench.3)",
   "note": "Ieum's vendored HWP suite on our engine: the tests listed here fail and why (H4b MUST 3). environment = fails the same on 0.8.7 (Ieum's own app shell); upstream = 0.9.0 behaves differently on purpose and the new value is right; engine-version = pins bytes of the 0.8.7 build. A test not listed must pass.",
   "failures": [
     {

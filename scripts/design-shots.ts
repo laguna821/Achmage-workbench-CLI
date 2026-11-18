@@ -2531,7 +2531,23 @@ const PANE_SCREENS: Screen[] = paneSet ? [
       { js: standIn }, { js: "__wb.blur()" }, { probe: BESIDE_PROBE }, { assert: "칸 안에 다 들어감" }],
   } satisfies Screen)) : []),
 ] : [];
-const availableScreens = paneSet ? PANE_SCREENS : menusSet ? MENUS_SCREENS : ptabsSet ? PTABS_SCREENS : relA ? REL_A_SCREENS : relbSet ? (only!.some((name) => name.startsWith("relb-phone")) ? RELB_PHONE : RELB_SCREENS) : fix1Set ? FIX1_SCREENS : rvSet ? RV_SCREENS : ownerSet ? OWNER_SCREENS : phone ? PHONE_SCREENS : c2 ? C2_SCREENS : skin2b ? SKIN2B_SCREENS : skin2d ? SKIN2D_SCREENS : u38 ? U38_SCREENS : u28 ? (args.includes("--native-stub") ? U28_WEB_SCREENS : U28_SCREENS) : higMode ? HIG_SCREENS : args.includes("--motion") ? MOTION_SCREENS : navMode ? NAV_SCREENS : only?.some(name => name.startsWith("completion")) ? COMPLETION_SCREENS : u26 ? U26_SCREENS : m01 ? M01_SCREENS : SCREENS;
+// ── 0.5.5 알림 일괄 정리 (--only=notif-): the panel with the seed's notices unread, then after 모두 읽음, on the desktop
+// and through the phone's 더 보기 menu. Run one theme per invocation (모두 읽음 changes the seeded host's data).
+const notifSet = only?.some((name) => name.startsWith("notif-")) ?? false;
+const NOTIF_PROBE = "(() => ({ unread: document.querySelector('.attention-center header p')?.textContent, cleared: document.querySelector('.attention-center-cleared')?.textContent ?? null, entries: document.querySelectorAll('.attention-entry').length, open: document.querySelectorAll('.attention-entry.unread[data-kind=input_needed]').length, key: document.querySelector('.attention-center-keys button')?.textContent, keyDisabled: document.querySelector('.attention-center-keys button')?.disabled }))()";
+const notifOpenDesk: Step = { js: "__wb.click('.topbar .shell-bell')", wait: "__wb.has('dialog.attention-center[open]')", pause: 400 };
+const notifOpenPhone: Step[] = [{ js: "__wb.click('.topbar button[aria-label=\"더 보기\"]')", wait: "__wb.has('.compact-toolbar-menu .shell-bell')", pause: 300 }, { js: "__wb.click('.compact-toolbar-menu .shell-bell')", wait: "__wb.has('dialog.attention-center[open]')", pause: 400 }];
+const notifReadAll: Step = { js: "__wb.click('.attention-center-keys button', '모두 읽음')", wait: "__wb.has('.attention-center-cleared')", pause: 400 };
+const notifClose: Step[] = [{ js: "__wb.click('[aria-label=\"알림 닫기\"]')", wait: "!__wb.has('dialog.attention-center[open]')", pause: 200 }];
+const NOTIF_SCREENS: Screen[] = notifSet ? [
+  { name: "notif-phone-unread", viewport: { width: 390, height: 844 }, steps: [...notifOpenPhone, { js: "__wb.blur()" }, { probe: NOTIF_PROBE }], settle: 400, cleanup: notifClose },
+  { name: "notif-1440-unread", viewport: { width: 1440, height: 900 }, steps: [notifOpenDesk, { js: "__wb.blur()" }, { probe: NOTIF_PROBE }], settle: 400, cleanup: notifClose },
+  { name: "notif-1440-read-all", viewport: { width: 1440, height: 900 }, steps: [notifOpenDesk, notifReadAll, { js: "__wb.blur()" }, { probe: NOTIF_PROBE }, { probe: "document.querySelector('.topbar .shell-bell')?.getAttribute('aria-label')" }], settle: 400, cleanup: notifClose },
+  { name: "notif-1440-unread-only", viewport: { width: 1440, height: 900 }, steps: [notifOpenDesk, { js: "__wb.q('.attention-center-filter input[type=checkbox]')?.click()", pause: 300 }, { js: "__wb.blur()" }, { probe: NOTIF_PROBE }], settle: 400, cleanup: [{ js: "__wb.q('.attention-center-filter input[type=checkbox]')?.click()", pause: 200 }, ...notifClose] },
+  { name: "notif-phone-read-all", viewport: { width: 390, height: 844 }, steps: [...notifOpenPhone, notifReadAll, { js: "__wb.blur()" }, { probe: NOTIF_PROBE }], settle: 400, cleanup: notifClose },
+] : [];
+
+const availableScreens = notifSet ? NOTIF_SCREENS : paneSet ? PANE_SCREENS : menusSet ? MENUS_SCREENS : ptabsSet ? PTABS_SCREENS : relA ? REL_A_SCREENS : relbSet ? (only!.some((name) => name.startsWith("relb-phone")) ? RELB_PHONE : RELB_SCREENS) : fix1Set ? FIX1_SCREENS : rvSet ? RV_SCREENS : ownerSet ? OWNER_SCREENS : phone ? PHONE_SCREENS : c2 ? C2_SCREENS : skin2b ? SKIN2B_SCREENS : skin2d ? SKIN2D_SCREENS : u38 ? U38_SCREENS : u28 ? (args.includes("--native-stub") ? U28_WEB_SCREENS : U28_SCREENS) : higMode ? HIG_SCREENS : args.includes("--motion") ? MOTION_SCREENS : navMode ? NAV_SCREENS : only?.some(name => name.startsWith("completion")) ? COMPLETION_SCREENS : u26 ? U26_SCREENS : m01 ? M01_SCREENS : SCREENS;
 const screens = (only ? availableScreens.filter((screen) => only.some((name) => screen.name.includes(name))) : availableScreens)
   // N1: rows are reached through the list column's levels (see __wb.reveal).
   .map((screen) => ({ ...screen, steps: expandSteps(screen.steps), ...(screen.cleanup ? { cleanup: expandSteps(screen.cleanup) } : {}) }));

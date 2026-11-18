@@ -51,6 +51,9 @@ const FORMAT_MARK: Record<DocFormat, string> = {
   xlsx: "XLSX",
   xmind: "지도",
   epub: "전자책",
+  doc: "DOC",
+  ppt: "PPT",
+  ods: "ODS",
 };
 
 export function FormatBadge({ format }: { format: DocFormat }) {

@@ -7,6 +7,8 @@ import { HttpError } from './errors.ts';
 
 const stores = new WeakMap(), fail = message => new HttpError(409, 'pdf_images', message);
 const png = bytes => bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+const jpg = bytes => bytes.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]));
+const kinds = { png: { check: png, label: 'PNG' }, jpg: { check: jpg, label: 'JPG' } };
 export function pdfImageOutputs(documents) {
   let store = stores.get(documents); if (!store) stores.set(documents, store = new PdfImageOutputs(documents)); return store;
 }
@@ -54,15 +56,17 @@ class PdfImageOutputs {
     finally { job.busy = false; if (job.canceled) await this.discard(id); }
   }
   async write(artifactId, id, request, access) {
-    const job = this.own(artifactId, id, access), { images, pageNumbers, baseName } = request ?? {};
-    if (!Array.isArray(images) || !images.length || images.length > 1000 || !hasValidExportPageNumbers(pageNumbers, images.length) || typeof baseName !== 'string' || baseName.length > 200 || /[\x00-\x1f]/.test(baseName)) throw fail('출력할 페이지 그림을 확인해 주세요.');
+    const job = this.own(artifactId, id, access), { images, pageNumbers, baseName, format = 'png' } = request ?? {};
+    if (!Array.isArray(images) || !images.length || images.length > 1000 || !hasValidExportPageNumbers(pageNumbers, images.length) || typeof baseName !== 'string' || baseName.length > 200 || /[\x00-\x1f]/.test(baseName) || !Object.hasOwn(kinds, format)) throw fail('출력할 페이지 그림을 확인해 주세요.');
+    const kind = kinds[format];
     return this.run(artifactId, id, access, job.revision, async path => {
-      const targets = buildExportImagePaths(path, baseName, pageNumbers); let size = 0;
+      // v0.13.0 draws PNG or JPG pages (797a89292); one job writes one kind, under its own extension.
+      const targets = buildExportImagePaths(path, baseName, pageNumbers, format); let size = 0;
       for (let i = 0; i < images.length; i++) {
         this.own(artifactId, id, access); const encoded = images[i];
-        if (typeof encoded !== 'string' || encoded.length > 70_000_000 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) throw fail('PNG 그림 형식이나 크기를 확인해 주세요.');
+        if (typeof encoded !== 'string' || encoded.length > 70_000_000 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) throw fail(`${kind.label} 그림 형식이나 크기를 확인해 주세요.`);
         const bytes = Buffer.from(encoded, 'base64'); size += bytes.length;
-        if (!png(bytes) || size > 200_000_000) throw fail('PNG 그림이 아니거나 그림 출력 합계가 200MB를 넘습니다.');
+        if (!kind.check(bytes) || size > 200_000_000) throw fail(`${kind.label} 그림이 아니거나 그림 출력 합계가 200MB를 넘습니다.`);
         await writeFile(targets[i], bytes, { flag: 'wx', mode: 0o600 });
       }
       return { ok: true };
@@ -78,7 +82,8 @@ class PdfImageOutputs {
       const files = []; let size = 0;
       for (const name of await readdir(job.path)) {
         const path = join(job.path, name), info = await lstat(path); size += info.size;
-        if (!info.isFile() || info.isSymbolicLink() || !name.endsWith('.png') || size > 200_000_000 || files.length >= 1000 || !png(await readFile(path))) throw fail('출력한 그림을 확인하지 못했습니다.');
+        const kind = name.endsWith('.png') ? kinds.png : name.endsWith('.jpg') ? kinds.jpg : null;
+        if (!info.isFile() || info.isSymbolicLink() || !kind || size > 200_000_000 || files.length >= 1000 || !kind.check(await readFile(path))) throw fail('출력한 그림을 확인하지 못했습니다.');
         files.push(path);
       }
       this.own(artifactId, id, access);

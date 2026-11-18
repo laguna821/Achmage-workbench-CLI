@@ -1,11 +1,12 @@
-// Adapted from IeumOffice apps/hwp/src/main/save-fixes.ts @ 30ff4f051f067fcb2baf1ab416c40718c802ca35.
+// Adapted from IeumOffice apps/hwp/src/main/save-fixes.ts @ 8602a39410adb86037f3008588b64efc75b08c60.
 // Apache-2.0; see ../LICENSE and ../NOTICE. Changes recorded in hwp.manifest.json.
 import { restoreFieldKinds } from './field-kinds.ts'
 import type { FieldKinds } from './field-kinds.ts'
 import { restoreSectionTails } from './section-tails.ts'
 import type { RestoreSkip, SectionTails } from './section-tails.ts'
+import { writePreview } from './preview-parts.ts'
 import { writeTabWidths } from './tab-widths.ts'
-import type { HwpFormat, MeasuredTab } from '../../../packages/contracts/src/hwp.ts'
+import type { HwpFormat, MeasuredTab, SavePreview } from '../../../packages/contracts/src/hwp.ts'
 
 /**
  * What a save corrects against the file the view opened: kept when the file is
@@ -25,15 +26,17 @@ export interface SaveFixResult {
 
 /**
  * The corrections a save makes to the engine's bytes before they are written, in
- * their order: tabs, field kinds, section tails (see AGENTS.md). Both the save and
- * the recovery copy go through here, so a copy holds the bytes a save at that
- * moment would have written.
+ * their order: tabs, field kinds, section tails, preview (see AGENTS.md). Both the save
+ * and the recovery copy go through here, so a copy holds the bytes a save at that
+ * moment would have written. A recovery copy brings no preview: it stays in the app's
+ * data folder, and the save after restoring it writes a fresh one.
  */
 export function applySaveFixes(
   data: Uint8Array,
   format: HwpFormat,
   tabs: readonly MeasuredTab[] | undefined,
   base: SaveBase,
+  preview?: SavePreview,
 ): SaveFixResult {
   let bytes = data
   // the tabs first: their places were found in the engine's bytes, and putting the
@@ -44,10 +47,13 @@ export function applySaveFixes(
   const kinds = format === 'hwp' ? base.kinds : undefined
   if (kinds) bytes = restoreFieldKinds(bytes, kinds).bytes
   const tails = format === 'hwp' ? base.tails : undefined
+  let tailsSkipped: RestoreSkip | undefined
   if (tails) {
     const result = restoreSectionTails(bytes, tails)
-    if (result.skipped) return { bytes: result.bytes, tailsSkipped: result.skipped }
+    tailsSkipped = result.skipped
     bytes = result.bytes
   }
-  return { bytes }
+  // last: the preview parts are whole streams and zip entries no fix above reads
+  if (preview) bytes = writePreview(bytes, format, preview) ?? bytes
+  return tailsSkipped ? { bytes, tailsSkipped } : { bytes }
 }

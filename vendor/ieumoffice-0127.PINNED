@@ -1,0 +1,6 @@
+# The earlier IeumOffice pin, kept ONLY for Google Drive (the gateway's office-drive.mjs and the settings
+# page's Drive parts) until the owner decides on v0.13.0's drive.file scope (switch: scripts/ieum-earlier-source.mjs).
+# Fetched by scripts/fetch-ieum.sh into vendor/ieumoffice-0127 (not committed). Apache-2.0.
+repository: https://github.com/pblsketch/ieumoffice
+release: v0.12.7
+commit: 30ff4f051f067fcb2baf1ab416c40718c802ca35

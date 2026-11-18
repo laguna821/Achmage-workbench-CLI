@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { UserSkills } from "./user-skills.ts";
 import { bundledHallymSkill } from "./hallym-kordoc.ts";
-import { effectiveHallym, hangulInput, madePath, makeHangulDocument } from "./hangul-document.ts";
+import { effectiveHallym, hangulInput, hangulKind, madePath, makeHangulDocument } from "./hangul-document.ts";
+import { HangulTemplates } from "./hangul-convert.ts";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -78,3 +79,47 @@ it("an ambiguous request comes back as the skill's question, and nothing is made
   expect(result).toMatchObject({ made: false, status: "needs-clarification", needsClarification: true });
   expect(readdirSync(root)).toEqual(["a.hwpx"]);
 }, 30_000);
+
+it("kind: general unless the request carries compose's inputs or names a Hallym / 공문서 form", () => {
+  expect(hangulKind({ prompt: "수업 안내문 만들어줘" })).toBe("general");
+  expect(hangulKind({ prompt: "공문서 하나 만들어줘" })).toBe("hallym");
+  expect(hangulKind({ prompt: "한림대 회의록 양식으로" })).toBe("hallym");
+  expect(hangulKind({ prompt: "회의록 만들어줘", sections: { 회의내용: "논의" } })).toBe("hallym");
+  expect(hangulKind({ prompt: "공문서", kind: "general" })).toBe("general");
+  expect(() => hangulInput({ prompt: "x", kind: "other" })).toThrow();
+  expect(() => hangulInput({ prompt: "x", template: "../x" })).toThrow();
+});
+
+it("general: Markdown through the 기본 template (the 0.5.4 placement rules), a named template, an attachment read first; a Hallym request still goes to compose", async () => {
+  const { root } = setup(), skill = bundledHallymSkill()!;
+  const folder = join(root, "project"); mkdirSync(folder);
+  const open = join(folder, "열린 문서.hwpx"); writeFileSync(open, "ORIGINAL");
+  const templates = new HangulTemplates(join(root, "data"));
+  const tracked: string[] = [];
+  const target = { documentPath: open, root: folder, templates, track: (path: string) => { tracked.push(path); return `made-${tracked.length}`; } };
+  // No Markdown yet: the templates the model may name.
+  const listed = await makeHangulDocument(skill, { prompt: "수업 안내문" }, target);
+  expect(listed).toMatchObject({ made: false, kind: "general", status: "write-markdown", template: "기본" });
+  expect((listed as { templates: { label: string }[] }).templates.map((entry) => entry.label)).toContain("한국언론학회");
+  // Markdown → a new HWPX beside the open one through the 기본 template; the open one untouched.
+  const made = await makeHangulDocument(skill, { prompt: "수업 안내문", kind: "general", markdown: "# 수업 안내\n\n다음 주 수업은 쉽니다.\n" }, target);
+  expect(made).toMatchObject({ made: true, kind: "general", template: "기본", name: "수업 안내.hwpx", inPlace: false, artifactId: "made-1" });
+  expect(readFileSync(open, "utf8")).toBe("ORIGINAL");
+  expect(readFileSync(join(folder, "수업 안내.hwpx")).subarray(0, 2).toString()).toBe("PK");
+  // The same Markdown and template again: the same bytes (deterministic), under a free name.
+  await makeHangulDocument(skill, { prompt: "수업 안내문", kind: "general", markdown: "# 수업 안내\n\n다음 주 수업은 쉽니다.\n" }, target);
+  expect(readFileSync(join(folder, "수업 안내 (2).hwpx"))).toEqual(readFileSync(join(folder, "수업 안내.hwpx")));
+  // A named template.
+  const styled = await makeHangulDocument(skill, { prompt: "청소년학 서식으로", kind: "general", template: "builtin:youth-studies", title: "학회 원고", markdown: "# 원고\n\n본문\n" }, target);
+  expect(styled).toMatchObject({ made: true, template: "청소년학", name: "학회 원고.hwpx" });
+  // An empty untouched open document is filled in place (kept for the turn's end).
+  const filled = await makeHangulDocument(skill, { prompt: "안내", kind: "general", markdown: "# 채움\n" }, { ...target, fill: async () => ({ artifactId: "open-1", name: "열린 문서.hwpx" }) });
+  expect(filled).toMatchObject({ made: true, inPlace: true, artifactId: "open-1" });
+  // An attached .md: read first so the model edits Markdown; outside the project: refused.
+  writeFileSync(join(folder, "자료.md"), "---\na: 1\n---\n# 자료\n\n본문 자료\n");
+  expect(await makeHangulDocument(skill, { prompt: "이 자료로", source: "자료.md" }, target)).toMatchObject({ status: "source-markdown", markdown: "# 자료\n\n본문 자료\n" });
+  writeFileSync(join(root, "밖.md"), "x");
+  expect(await makeHangulDocument(skill, { prompt: "이 자료로", source: "../밖.md" }, target)).toMatchObject({ made: false, status: "failed", failure: { code: "outside_project" } });
+  // A Hallym / 공문서 request still goes to resolve → compose.
+  expect(await makeHangulDocument(skill, { prompt: "공문서 하나 만들어줘" }, target)).toMatchObject({ made: false, status: "form", familyId: "report.hallym" });
+}, 120_000);

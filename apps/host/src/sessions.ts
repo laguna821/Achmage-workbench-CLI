@@ -84,6 +84,7 @@ import { openWithDesktop } from "./desktop-open.ts";
 import { embeddedDocumentTools } from "./embedded-tools.ts";
 import { createGuide } from "./create.ts";
 import { hangulSkillGuide } from "./hallym-kordoc.ts";
+import { HangulConvert } from "./hangul-convert.ts";
 import { CreationJournal, type CreationRecord } from "./creation-journal.ts";
 import { UserSkills } from "./user-skills.ts";
 import { SkillLibrary } from "./skill-library.ts";
@@ -2584,6 +2585,19 @@ export class SessionManager {
   /** Authenticated home actions choose a destination without creating a conversation. */
   documentDestination(workId: string, workspaceId?: string) { return this.officeFileScope(workId, workspaceId); }
 
+  private convert: HangulConvert | null = null;
+  /** 불러오기 / 내보내기 (hangul-convert.ts): the one kordoc, HanMark's adapter, the rhwp engine for .hwp, Ieum for .docx. */
+  get hangulConvert() {
+    const ieum = this.documents.ieum;
+    this.convert ??= new HangulConvert({
+      documents: this.documents,
+      projectFolder: (workId, workspaceId) => this.documentDestination(workId, workspaceId).cwd,
+      dataDir: this.documents.dataDir,
+      ieumConvert: ieum?.available ? async (input, out, roots) => { await ieum.run(["convert", input, "--to", "docx", "--out", out], roots); } : null,
+    });
+    return this.convert;
+  }
+
   /** A direct blank document, without starting an AI request or an Electron process. */
   async createOfficeDocument(workId: string, request: NewOfficeDocument) {
     const kind = BLANK_OFFICE_DOCUMENTS.find((entry) => entry.format === request.format);
@@ -2613,7 +2627,7 @@ export class SessionManager {
     if (!rawPath.trim()) throw new HttpError(400, "missing_path", "파일 경로가 필요합니다.");
     const path = isAbsolute(rawPath) ? rawPath : resolve(work.cwd, rawPath);
     if (!existsSync(path)) throw new HttpError(404, "file_missing", "파일이 없습니다.");
-    if (!formatOf(path)) throw new HttpError(415, "unsupported_format", "Markdown·HTML·PDF·한글(HWPX·HWP)·워드·PPT·엑셀·마인드맵(.xmind)·전자책(.epub)·텍스트·디자인(.design.json)만 열 수 있습니다.");
+    if (!formatOf(path)) throw new HttpError(415, "unsupported_format", "Markdown·HTML·PDF·한글(HWPX·HWP)·워드·PPT·엑셀·마인드맵(.xmind)·전자책(.epub)·텍스트·디자인(.design.json)과 변환해서 여는 옛 워드(.doc)·PPT(.ppt)·ODS만 열 수 있습니다.");
     const tracked = this.documents.track(work.id, work.cwd, path, "external", sessionId ?? null, "작업 폴더에서 열기");
     if (tracked) return tracked.artifact;
     const existing = this.documents.list().find((artifact) => artifact.workId === work.id && artifact.path === path);

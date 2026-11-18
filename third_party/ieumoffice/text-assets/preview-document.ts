@@ -1,4 +1,4 @@
-// Adapted from IeumOffice apps/html/src/main/preview-document.ts @ 30ff4f051f067fcb2baf1ab416c40718c802ca35.
+// Adapted from IeumOffice apps/html/src/main/preview-document.ts @ 8602a39410adb86037f3008588b64efc75b08c60.
 // Apache-2.0; see ../LICENSE and ../NOTICE. Changes recorded in text-assets.manifest.json.
 export const PREVIEW_SCHEME = 'html-preview'
 export const ASSET_SCHEME = 'html-asset'

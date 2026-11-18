@@ -1,4 +1,4 @@
-import { AgentLoop as OriginalAgentLoop, type AgentLoopOptions, type AgentRunResult } from "../../../vendor/ieumoffice/packages/agent-core/src/loop.ts";
+import { AgentLoop as OriginalAgentLoop, type AgentLoopOptions, type AgentRunResult, type AgentRunStop } from "../../../vendor/ieumoffice/packages/agent-core/src/loop.ts";
 import type { AgentImage, AgentMessage, AgentToolCall } from "../../../vendor/ieumoffice/packages/agent-core/src/types.ts";
 import type { OfficeTurnEvent, OfficeTurnFinish } from "../../../packages/contracts/src/office-ai.ts";
 import type { OfficeSkillContext } from "../../../packages/contracts/src/office-skills.ts";
@@ -25,6 +25,12 @@ const messageOf = (error: unknown) => error instanceof Error ? error.message : S
  * persistence boundary is different: a tool cannot run ahead of its durable start record,
  * and a follow-up model call cannot run ahead of the saved document/tool result. */
 export class WorkbenchAgentLoop<TSnapshot = unknown> {
+  /** The agent core this loop wraps. The Hangul page, still built from its own upstream checkout
+   * (scripts/ieum-earlier-source.mjs), wraps that checkout's core instead: `WorkbenchAgentLoop.over(…)`. */
+  static Original: typeof OriginalAgentLoop = OriginalAgentLoop;
+  static over(Original: typeof OriginalAgentLoop) {
+    return class extends WorkbenchAgentLoop { static override Original = Original; };
+  }
   private readonly original: OriginalAgentLoop<TSnapshot>;
   private readonly options: AgentLoopOptions<TSnapshot>;
   private readonly port: OfficeConversationPort | null;
@@ -47,7 +53,7 @@ export class WorkbenchAgentLoop<TSnapshot = unknown> {
     this.options = options; this.port = port;
     const enqueue = (task: () => Promise<void>) => this.enqueue(task);
     const events = options.events;
-    this.original = new OriginalAgentLoop({
+    this.original = new (this.constructor as typeof WorkbenchAgentLoop).Original<TSnapshot>({
       ...options,
       skill: new Proxy(options.skill, {
         get: (skill, key) => key === "executeTool" ? async (call: AgentToolCall, signal?: AbortSignal) => {
@@ -106,7 +112,8 @@ export class WorkbenchAgentLoop<TSnapshot = unknown> {
           if (!this.detached) events?.onTurnEnd?.();
         },
         onDone: (result) => { void this.finish(result); },
-        onError: (error) => { void this.finish(undefined, error); },
+        // `stop`: the loop gave up by its own rule (unusable tool input, failing tools, a repeating turn).
+        onError: (error, stop) => { void this.finish(undefined, error, stop); },
       },
     });
   }
@@ -181,7 +188,7 @@ export class WorkbenchAgentLoop<TSnapshot = unknown> {
     if (this.reasoningText) events.push({ kind: "reasoning", id: `${this.assistantId}_reasoning`, text: this.reasoningText });
     if (events.length) this.enqueue(() => this.runState!.append(events));
   }
-  private async finish(result?: AgentRunResult, error?: string) {
+  private async finish(result?: AgentRunResult, error?: string, stop?: AgentRunStop) {
     if (this.ending) return;
     this.ending = true;
     this.sealText();
@@ -193,7 +200,9 @@ export class WorkbenchAgentLoop<TSnapshot = unknown> {
     this.runState = null; this.pending = false; this.release(); this.resolveSettled();
     reportTurnActivity({ kind: "end", status: failure ? "failed" : result?.cancelled || this.abort.signal.aborted ? "interrupted" : "completed", ...(failure ? { error: failure } : {}) });
     if (this.detached) { this.original.reset(); return; }
-    if (failure) this.options.events?.onError?.(failure);
+    // The loop's own stop reason belongs to its own error only (not to a failed Workbench write).
+    if (failure && stop && failure === error) this.options.events?.onError?.(failure, stop);
+    else if (failure) this.options.events?.onError?.(failure);
     else if (result) this.options.events?.onDone?.(result);
   }
 }

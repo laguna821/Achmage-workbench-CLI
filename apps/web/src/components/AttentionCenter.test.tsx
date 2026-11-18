@@ -25,8 +25,15 @@ function fixture(initial = [event()]) {
   const attentionTarget = vi.fn(async (id: string): Promise<AttentionTarget> => { const row = rows.find(row => row.id === id)!; return { hostId: "host-a", workId: row.workId, sessionId: row.taskRef.sessionId, itemId: row.itemId, artifactId: "document", taskRef: row.taskRef }; });
   const claimAttention = vi.fn(async (id: string, _clientId: string) => ({ claimed: true, payload: { title: "Achmage Workbench", body: ATTENTION_LABEL[rows.find(row => row.id === id)!.kind], attentionId: id } }));
   const attentionPresence = vi.fn(async (_presence: { clientId: string; sessionId: string | null; visible: boolean }, _keepalive = false) => ({ ok: true as const }));
-  const inbox = new AttentionInbox({ attention, readAttention, attentionTarget, claimAttention, attentionPresence }); inbox.snapshot(snapshot(rows));
-  return { inbox, attention, readAttention, attentionTarget, claimAttention, attentionPresence, setRows: (next: AttentionEvent[]) => { rows = next; } };
+  // The host's 모두 읽음: one call; open approvals/questions stay unread.
+  const readAllAttention = vi.fn(async () => {
+    let read = 0;
+    rows = rows.map(row => row.readAt !== null || (row.kind === "input_needed" && row.resolvedAt === null) ? row : (read++, { ...row, readAt: 2000 }));
+    const kept = rows.filter(row => row.readAt === null).length;
+    return { list: { events: rows, unread: kept }, read, kept };
+  });
+  const inbox = new AttentionInbox({ attention, readAttention, readAllAttention, attentionTarget, claimAttention, attentionPresence }); inbox.snapshot(snapshot(rows));
+  return { inbox, attention, readAttention, readAllAttention, attentionTarget, claimAttention, attentionPresence, setRows: (next: AttentionEvent[]) => { rows = next; } };
 }
 
 it("marks an alert read without approving it and restores overlay focus", async () => {
@@ -127,4 +134,36 @@ it("gives the focus back to the bell when 알림 closes (by its 닫기 key and b
     expect([how, document.activeElement === bell ? "bell" : document.activeElement?.tagName]).toEqual([how, "bell"]);
     bell.remove();
   }
+});
+
+// 0.5.5 (owner, 2026-11-18): "알림일괄 clear하기 버튼이 없고 수동으로 읽기 확인을 해야되서 불편해".
+it("모두 읽음 reads every notice in one call and says how many that still need the person stayed", async () => {
+  const done = (id: string, at: number) => event(id, { kind: "completed", itemId: "end-" + id, createdAt: at, resolvedAt: at });
+  const f = fixture([done("a", 3000), done("b", 2900), event("open-1"), event("open-2", { itemId: "approval-2", createdAt: 900 }), event("answered", { itemId: "approval-3", createdAt: 800, resolvedAt: 850 })]);
+  render(<AttentionCenter inbox={f.inbox} state={state} onOpen={async () => {}} onClose={() => {}} />);
+  expect(screen.getByText("읽지 않음 5개")).toBeTruthy();
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "모두 읽음" })));
+  expect(f.readAllAttention).toHaveBeenCalledOnce(); expect(f.readAttention).not.toHaveBeenCalled();
+  expect(f.inbox.getState().list.unread).toBe(2); expect(screen.getByText("읽지 않음 2개")).toBeTruthy();
+  expect(screen.getByRole("status").textContent).toBe("3건을 읽음으로 표시했습니다. 확인이 필요한 2건은 남겼습니다.");
+  expect(f.inbox.getState().list.events.filter(row => row.readAt === null).map(row => row.id)).toEqual(["open-1", "open-2"]);
+  // Nothing is deleted: the read ones leave the view through the existing filter, and come back without it.
+  fireEvent.click(screen.getByRole("checkbox", { name: "읽지 않은 알림만" }));
+  expect(screen.getAllByRole("article")).toHaveLength(2);
+  fireEvent.click(screen.getByRole("checkbox", { name: "읽지 않은 알림만" }));
+  expect(screen.getAllByRole("article")).toHaveLength(5);
+  // Only open ones left: the key still answers, and says why nothing changed.
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "모두 읽음" })));
+  expect(screen.getByRole("status").textContent).toBe("확인이 필요한 2건은 남겼습니다.");
+});
+
+it("모두 읽음 is off with nothing unread, and a failed call keeps the list and shows the error", async () => {
+  const f = fixture([event("x", { kind: "completed", resolvedAt: 1000 })]);
+  f.readAllAttention.mockRejectedValueOnce(new Error("연결이 끊겼습니다."));
+  render(<AttentionCenter inbox={f.inbox} state={state} onOpen={async () => {}} onClose={() => {}} />);
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "모두 읽음" })));
+  expect(screen.getByRole("alert").textContent).toContain("연결이 끊겼습니다."); expect(f.inbox.getState().list.unread).toBe(1);
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "모두 읽음" })));
+  expect(screen.getByRole("status").textContent).toBe("1건을 읽음으로 표시했습니다.");
+  expect((screen.getByRole("button", { name: "모두 읽음" }) as HTMLButtonElement).disabled).toBe(true);
 });

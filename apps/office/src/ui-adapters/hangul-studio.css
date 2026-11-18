@@ -328,9 +328,17 @@ __WB_ROOT__:root:root .tcp-disabled .dialog-unit { color: var(--ieum-dialog-ink-
     background: var(--wb-hop-canvas) !important;
   }
   __WB_ROOT__ .hwp-app .hwp-topbar .memo-toggle { margin-inline-end: 0; }
+  /* v0.13.0's 공문서 점검 panel opens at the stage's top corner (Ieum: under its own top bar); here the top bar lies in
+     the menu row, so the panel opens under that row and never covers its own key, 메모 or 자동 저장. */
+  __WB_ROOT__ .hwp-app .hwp-stage .doc-check:not(#wb-none) { top: 36px; max-height: calc(100% - 44px); }
 }
-__WB_ROOT__ .hwp-app .hwp-topbar :is(.memo-toggle, .autosave-text) { font-size: var(--wb-ui-text-sm); }
-__WB_ROOT__ .hwp-app .hwp-topbar .memo-toggle { height: 24px; color: var(--wb-ui-text); }
+__WB_ROOT__ .hwp-app .hwp-topbar :is(.memo-toggle, .autosave-text, .hwp-topbar-button) { font-size: var(--wb-ui-text-sm); }
+__WB_ROOT__ .hwp-app .hwp-topbar :is(.memo-toggle, .hwp-topbar-button) { height: 24px; color: var(--wb-ui-text); }
+/* v0.13.0's 공문서 점검 key (Ieum's .hwp-topbar-button) is a key of the same row as 메모: flat, no frame of its own;
+   while its panel is open it shows the selected ground, as 메모 does while its column is out. */
+__WB_ROOT__ .hwp-app .hwp-topbar .hwp-topbar-button:not(#wb-none) { padding-inline: 8px; border-color: transparent; border-radius: var(--wb-ui-radius-key); }
+__WB_ROOT__ .hwp-app .hwp-topbar .hwp-topbar-button:not(#wb-none):not(:hover) { background: transparent; }
+__WB_ROOT__ .hwp-app .hwp-topbar .hwp-topbar-button[aria-pressed="true"]:not(#wb-none) { background: var(--wb-hop-selected); }
 __WB_ROOT__ .hwp-app .hwp-topbar .autosave-text { color: var(--wb-ui-muted); }
 
 /* The bars' keys are buttons: the UA gives them its own control font (Arial, no Hangul — WebKitGTK and Chromium
@@ -354,3 +362,7 @@ __WB_ROOT__[data-toolbar-labels="hidden"] #icon-toolbar { height: 32px; min-heig
 __WB_ROOT__ #status-bar .stb-message { color: var(--wb-ui-muted); }
 /* Status items keep a gap when the studio hides its dividers in a narrow editor ("1 / 1 쪽", "구역: 1 / 1", "삽입"). */
 __WB_ROOT__ #status-bar { column-gap: 8px; }
+
+/* v0.13.0's print preview (인쇄 미리 보기): the 쪽 배치 panel's result head keeps its 닫기 key on one line (in the
+   panel's narrow column the app's UI font broke it into two). */
+__WB_ROOT__ .gs-pl-result-head .gs-pl-btn { white-space: nowrap; flex: none; }

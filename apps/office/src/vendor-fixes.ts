@@ -64,8 +64,9 @@ export const VENDOR_FIXES: KoreanCopy[] = [
     // office-leftovers point 2: the same for the HTML editor — its source replaced as one load (the document's new
     // text is also what is saved, so it is not unsaved); the preview keeps its scroll (frameScrollRef is kept).
     file: "apps/html/src/renderer/App.tsx",
-    from: "    [commitText, flushPending],\n  )\n",
-    to: `    [commitText, flushPending],
+    // v0.13.0 (f256ff2d2): replaceAll also re-syncs upstream's AI marks, so its deps line names syncAiMarks.
+    from: "    [commitText, flushPending, syncAiMarks],\n  )\n",
+    to: `    [commitText, flushPending, syncAiMarks],
   )
   useEffect(() => {
     // The preview's place as last seen on screen (a hidden frame reports 0 when it loses its layout).

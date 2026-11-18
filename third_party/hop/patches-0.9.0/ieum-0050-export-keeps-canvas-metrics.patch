@@ -1,0 +1,104 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: pblsketch <239486537+pblsketch@users.noreply.github.com>
+Date: Sat, 14 Nov 2026 00:00:00 +0900
+Subject: [PATCH 36/36] feat(render): 호스트가 고르면 Canvas2D 보충 폭으로 조판한
+ 쪽을 export한다
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+엔진은 폭을 모르는 글꼴의 글자를 Canvas2D에 물어 화면을 조판하고(보충 폭), 그 폭이
+켜진 동안에는 export를 거절한다(`require_portable_metrics`). 보충 폭은 화면이 실제로
+그린 대체 글꼴의 것이라, 같은 글꼴로 그리지 못하는 backend에 그 자리를 넘기지 않으려는
+것이다. 그래서 호출자는 export 전에 portable 폭으로 바꾸고, 그러면 폭을 모르는 글꼴의
+영문·숫자가 반각 칸에 놓인다. 화면과 인쇄의 줄 나눔·쪽 나눔이 달라진다.
+
+보충 폭을 잰 바로 그 브라우저에서, 같은 글꼴 목록으로 export 결과를 그리는 호스트에는
+이 걱정이 해당하지 않는다(Electron 앱의 인쇄 창이 그렇다). 그런 호스트가 export 하는
+동안만 켜는 옵트인을 더한다.
+
+- `DocumentCore::export_keeps_canvas_metrics`(기본 꺼짐). 켜져 있으면
+  `require_portable_metrics`가 보충 폭이 켜진 채로도 통과한다.
+- WASM: `setExportKeepsCanvasMetrics(enabled)`. 호출자가 export 앞뒤로 켜고 끈다.
+- 조판과 저장은 바꾸지 않는다. 꺼진 동안의 동작은 전과 같다.
+---
+ src/document_core/canvas_metrics.rs    |  7 ++++++-
+ src/document_core/commands/document.rs |  1 +
+ src/document_core/mod.rs               |  4 ++++
+ src/wasm_api.rs                        | 10 ++++++++++
+ 4 files changed, 21 insertions(+), 1 deletion(-)
+
+diff --git a/src/document_core/canvas_metrics.rs b/src/document_core/canvas_metrics.rs
+index a4aea097c..7a85c88b6 100644
+--- a/src/document_core/canvas_metrics.rs
++++ b/src/document_core/canvas_metrics.rs
+@@ -118,8 +118,13 @@ impl DocumentCore {
+     /// Do not export positions derived from Canvas's implicit fallback to a
+     /// backend that cannot paint that same source. Caller must select portable
+     /// metrics (and thus rebuild pagination) before enumerating export pages.
++    ///
++    /// A host that paints the export with the very fonts its Canvas2D metrics were
++    /// measured on (the same browser, the same resolved families) may opt out for
++    /// the span of an export with `export_keeps_canvas_metrics`: the pages then
++    /// keep the layout the screen shows.
+     pub(crate) fn require_portable_metrics(&self) -> Result<(), HwpError> {
+-        if self.canvas_metrics_active() {
++        if self.canvas_metrics_active() && !self.export_keeps_canvas_metrics {
+             return Err(HwpError::RenderError(
+                 "Canvas2D supplemental metrics are active; select portable metrics before exporting"
+                     .into(),
+diff --git a/src/document_core/commands/document.rs b/src/document_core/commands/document.rs
+index 2092e235e..68ce81c0d 100644
+--- a/src/document_core/commands/document.rs
++++ b/src/document_core/commands/document.rs
+@@ -475,6 +475,7 @@ impl DocumentCore {
+             paste_cascade_count: 0,
+             show_paragraph_marks: false,
+             annotate_metric_font: false,
++            export_keeps_canvas_metrics: false,
+             show_control_codes: false,
+             show_transparent_borders: false,
+             clip_enabled: true,
+diff --git a/src/document_core/mod.rs b/src/document_core/mod.rs
+index 47fccb2e1..914e07d19 100644
+--- a/src/document_core/mod.rs
++++ b/src/document_core/mod.rs
+@@ -243,6 +243,9 @@ pub struct DocumentCore {
+     pub(crate) show_paragraph_marks: bool,
+     /// [#4709] SVG 출력에 배치 메트릭 face 주석(data-metric-font) 부착 여부 (옵트인)
+     pub(crate) annotate_metric_font: bool,
++    /// 호스트가 Canvas2D 보충 폭을 잰 것과 같은 글꼴로 export 결과를 그리겠다고
++    /// 밝힌 동안에는, 보충 폭으로 조판한 쪽을 그대로 export한다 (옵트인, 기본 꺼짐).
++    pub(crate) export_keeps_canvas_metrics: bool,
+     /// 조판부호 표시 여부 (개체 마커 [표]/[그림] 등, 문단부호 포함)
+     pub(crate) show_control_codes: bool,
+     /// 투명선 표시 여부
+@@ -603,6 +606,7 @@ impl DocumentCore {
+             paste_cascade_count: 0,
+             show_paragraph_marks: false,
+             annotate_metric_font: false,
++            export_keeps_canvas_metrics: false,
+             show_control_codes: false,
+             show_transparent_borders: false,
+             clip_enabled: true,
+diff --git a/src/wasm_api.rs b/src/wasm_api.rs
+index f7881e83e..265091ce1 100644
+--- a/src/wasm_api.rs
++++ b/src/wasm_api.rs
+@@ -1086,6 +1086,16 @@ impl HwpDocument {
+         self.annotate_metric_font = enabled;
+     }
+ 
++    /// Canvas2D 보충 폭이 켜진 채로 export(SVG 등)를 허용할지 설정한다 (기본 꺼짐).
++    ///
++    /// 호스트가 보충 폭을 잰 것과 같은 브라우저·같은 글꼴로 결과를 그릴 때만 켠다.
++    /// 켜 둔 동안의 export는 화면과 같은 조판(줄·쪽 나눔)을 그대로 담는다.
++    /// export가 끝나면 호출자가 다시 끈다. 조판 자체는 바꾸지 않는다.
++    #[wasm_bindgen(js_name = setExportKeepsCanvasMetrics)]
++    pub fn set_export_keeps_canvas_metrics(&mut self, enabled: bool) {
++        self.export_keeps_canvas_metrics = enabled;
++    }
++
+     /// [#4709] SVG 메트릭 face 주석 부착 여부를 반환한다.
+     #[wasm_bindgen(js_name = getAnnotateMetricFont)]
+     pub fn get_annotate_metric_font(&self) -> bool {

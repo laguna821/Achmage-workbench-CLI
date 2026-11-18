@@ -1,5 +1,9 @@
 /** Adapt the pinned renderer's undo boundary without modifying vendor files or
- * the PDF serialization engine. Every marker is checked when the app is built. */
+ * the PDF serialization engine. Every marker is checked when the app is built.
+ * ONE undo: Workbench's history (pending-edit snapshots over saved revisions) owns Undo/Redo. v0.13.0's
+ * own undo for page operations written to the file at once (161e68fff: Replace pages, Page size, Crop,
+ * Insert PDF keep up to ten whole-file before/after copies, `writtenRef`) records no steps here: a page
+ * operation is a new Workbench revision, as before, and earlier revisions stay in the tab's 판 기록. */
 export function patchPdfHistory(code: string, modulePath: string): string {
   const replace = (before: string, after: string) => {
     if (code.split(before).length !== 2) throw new Error(`Original PDF history boundary changed: ${before.slice(0, 90)}`);
@@ -11,14 +15,15 @@ export function patchPdfHistory(code: string, modulePath: string): string {
   }
   replace("  const coalesceKeyRef = useRef<string | null>(null)", "  const wbHistoryBusyRef = useRef(false)\n  const wbDisplayedBase = useRef<PdfHistoryBase | null>(null)\n  const [wbHistoryBusy, setWbHistoryBusy] = useState(false)\n  const coalesceKeyRef = useRef<string | null>(null)");
   replace("      waitForPageNos: number[] = [],\n    ) => {", "      waitForPageNos: number[] = [],\n      wbKeepHistory = false,\n    ) => {");
-  replace("      const data = await window.pdfApi.readFile(path)", "      const data = await window.pdfApi.readFile(path)\n      const wbLoadedBase = pdfHistory.capture()");
+  // v0.13.0 reads the file in 8 MiB slices (73c69181f).
+  replace("      const bytes = await readFileBytes(window.pdfApi, path)\n", "      const bytes = await readFileBytes(window.pdfApi, path)\n      const wbLoadedBase = pdfHistory.capture()\n");
   // A corrupt/unavailable historical base must leave the current pending edits
   // and catalog intact. Adopt UI state only after PDF.js has validated the file.
-  const resetStart = code.indexOf("      setFormHasXfa(hasXfaMarker(bytes))"), resetEnd = code.indexOf("      const task = getDocument({", resetStart);
+  const resetStart = code.indexOf("      setFormHasXfa(xfaMarker)\n"), resetEnd = code.indexOf("      const task = loadPdfForView(bytes, passwordRef.current)", resetStart);
   if (resetStart < 0 || resetEnd < 0) throw new Error("Original PDF load preparation changed");
   const resetForm = code.slice(resetStart, resetEnd);
   code = code.slice(0, resetStart) + code.slice(resetEnd);
-  replace("      const userUnits: number[] = []", "      const userUnits: number[] = []\n      let wbDocInfo = { title: '', author: '', subject: '', keywords: '' }\n      let wbFormFeatures = { hasXfa: false, encrypted: false }");
+  replace("      const userUnits: number[] = []", "      const userUnits: number[] = []\n      let wbDocInfo = { title: '', author: '', subject: '', keywords: '' }\n      let wbFormFeatures = { hasXfa: xfaMarker, encrypted: false }");
   replace(`        setDocInfo({
           title: documentInfo.Title ?? '',
           author: documentInfo.Author ?? '',
@@ -30,12 +35,16 @@ export function patchPdfHistory(code: string, modulePath: string): string {
           subject: documentInfo.Subject ?? '',
           keywords: documentInfo.Keywords ?? '',
         }`);
+  // The encrypted-file branch after it (the session's own decryptor) still reads `formFeatures`.
   replace(`        const formFeatures = documentFormFeatures(documentInfo, bytes)
-        setFormHasXfa(formFeatures.hasXfa)
-        setDocumentEncrypted(formFeatures.encrypted)`, "        wbFormFeatures = documentFormFeatures(documentInfo, bytes)");
+        setFormHasXfa(formFeatures.hasXfa || xfaMarker)
+        setDocumentEncrypted(formFeatures.encrypted)
+`, `        const formFeatures = documentFormFeatures(documentInfo, bytes)
+        wbFormFeatures = { hasXfa: formFeatures.hasXfa || xfaMarker, encrypted: formFeatures.encrypted }
+`);
   replace("      try {\n        setFormCatalog(await buildFormCatalog(loaded))", resetForm + "      setDocInfo(wbDocInfo)\n      setFormHasXfa(wbFormFeatures.hasXfa)\n      setDocumentEncrypted(wbFormFeatures.encrypted)\n      try {\n        setFormCatalog(await buildFormCatalog(loaded))");
   replace("      setUndoStack([])\n      setRedoStack([])", "      wbDisplayedBase.current = wbLoadedBase\n      if (!saved && !wbKeepHistory) {\n        setUndoStack([])\n        setRedoStack([])\n      }\n      coalesceKeyRef.current = null");
-  replace("  const readOnly = status === 'ready' && (passwordRef.current !== undefined || documentEncrypted)", "  const readOnly = wbHistoryBusy || !pdfHistory.writable() || (status === 'ready' && (passwordRef.current !== undefined || documentEncrypted))");
+  replace("  const readOnly =\n    status === 'ready' &&\n", "  const readOnly =\n    wbHistoryBusy || !pdfHistory.writable() ||\n    status === 'ready' &&\n");
   replace("  const snapshot = (): EditSnapshot => ({", "  const snapshot = (): WorkbenchPdfSnapshot => ({\n    wbBase: wbDisplayedBase.current ?? pdfHistory.capture(),");
   replace("  const editOpContext = (): OpContext => ({\n    readOnly,", "  const editOpContext = (): OpContext => ({\n    readOnly: readOnly || wbHistoryBusyRef.current,");
   replace("    readOnly: () => readOnly,", "    readOnly: () => readOnly || wbHistoryBusyRef.current,");
@@ -61,6 +70,8 @@ export function patchPdfHistory(code: string, modulePath: string): string {
         if (top.wbBase !== cur.wbBase) {
           await pdfHistory.restore(top.wbBase, () => loadDoc(filePath, doc, undefined, [], true))
         }
+        // the marked places may be the ones this takes back (as v0.13.0's own undo does)
+        setAiMarks(null)
         applySnapshot(top)
         setRestoredUnsaved(pdfHistory.unsaved())
         if (direction === 'undo') {
@@ -91,6 +102,14 @@ export function patchPdfHistory(code: string, modulePath: string): string {
   replace("  const saveInPlace = (autosave = false, flushAll = false): Promise<boolean> => {", "  const saveInPlace = (autosave = false, flushAll = false): Promise<boolean> => {\n    if (wbHistoryBusyRef.current) return Promise.resolve(false)");
   replace("      inert={redactionCopyInFlight}", "      inert={redactionCopyInFlight || wbHistoryBusy}");
   replace("      aria-busy={redactionCopyInFlight}", "      aria-busy={redactionCopyInFlight || wbHistoryBusy}");
-  for (const stack of ["undoStack", "redoStack"]) replace(`disabled={${stack}.length === 0}`, `disabled={${stack}.length === 0 || readOnly || saveState === 'saving'}`);
+  for (const [stack, steps] of [["undoStack", "written.undo"], ["redoStack", "written.redo"]]) replace(`disabled={${stack}.length === 0 && ${steps} === 0}`, `disabled={${stack}.length === 0 && ${steps} === 0 || readOnly || saveState === 'saving'}`);
+  // Upstream's written steps: none recorded (above). The page operation reloads as it did before v0.13.0,
+  // without first reading a whole-file "before" copy for a step that would never be used.
+  replace(`    const kept = writtenRef.current.undo
+    const pageCount = await loadDoc(filePath, doc)
+    const after = await window.pdfApi.readFile(filePath)
+    setWritten({ undo: [...kept.slice(-(MAX_WRITTEN_STEPS - 1)), { before, after }], redo: [] })
+    return pageCount`, "    void before\n    return loadDoc(filePath, doc)");
+  replace("      held.before = await window.pdfApi.readFile(filePath)\n", "");
   return `import { pdfHistory, pdfHistoryRendered, type PdfHistoryBase } from ${JSON.stringify(modulePath)};\ntype WorkbenchPdfSnapshot = EditSnapshot & { wbBase: PdfHistoryBase };\n${code}`;
 }

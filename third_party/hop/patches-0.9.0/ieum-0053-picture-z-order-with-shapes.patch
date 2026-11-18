@@ -1,0 +1,112 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: pblsketch <239486537+pblsketch@users.noreply.github.com>
+Date: Mon, 16 Nov 2026 00:00:00 +0900
+Subject: [PATCH 53/54] fix(shape): 그림도 도형과 같은 z 순서로 앞뒤를 바꾼다
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+그림은 도형과 같은 순서(plane, z_order, 경로)로 겹쳐 그려지는데, 순서 바꾸기
+(`changeShapeZOrder`)와 그 되돌리기(`applyShapeZOrderPairs`)는 구역의 도형만 모아
+그림을 "대상 Shape를 찾을 수 없습니다"로 거절했다. 한글은 그림에도 맨 앞으로·맨 뒤로를
+한다(개체 선택 상태의 Shift+PageUp/PageDown).
+
+순서를 매길 때 그림을 도형과 함께 세우고, 바꾸기와 되돌리기 모두 그림의 z_order를 쓴다.
+표와 수식 등 다른 개체는 전처럼 거절한다.
+---
+ .../commands/object_ops/shape.rs              | 50 ++++++++++++++-----
+ 1 file changed, 37 insertions(+), 13 deletions(-)
+
+diff --git a/src/document_core/commands/object_ops/shape.rs b/src/document_core/commands/object_ops/shape.rs
+index 12f2fb4a4..d618bd462 100644
+--- a/src/document_core/commands/object_ops/shape.rs
++++ b/src/document_core/commands/object_ops/shape.rs
+@@ -11,6 +11,32 @@ use crate::model::event::DocumentEvent;
+ use crate::model::paragraph::Paragraph;
+ use crate::model::shape::{Caption, CaptionDirection, CaptionVertAlign, ShapeObject};
+ 
++/// The z order of an object stacked with the others of the section: a drawing object or a
++/// picture. Both draw in one order (plane, z order, path), so ordering one against the other
++/// has to see both.
++fn stacked_z_order(ctrl: &Control) -> Option<i32> {
++    match ctrl {
++        Control::Shape(shape) => Some(shape.z_order()),
++        Control::Picture(picture) => Some(picture.common.z_order),
++        _ => None,
++    }
++}
++
++/// Sets the z order of a drawing object or a picture; false for any other control.
++fn set_stacked_z_order(ctrl: &mut Control, z: i32) -> bool {
++    match ctrl {
++        Control::Shape(shape) => {
++            shape.common_mut().z_order = z;
++            true
++        }
++        Control::Picture(picture) => {
++            picture.common.z_order = z;
++            true
++        }
++        _ => false,
++    }
++}
++
+ impl DocumentCore {
+     fn shape_caption_ref(shape: &ShapeObject) -> Option<&Caption> {
+         match shape {
+@@ -1521,12 +1547,13 @@ impl DocumentCore {
+             HwpError::RenderError(format!("구역 인덱스 {} 범위 초과", section_idx))
+         })?;
+ 
+-        // 구역 내 모든 Shape의 (z_order, para_idx, ctrl_idx) 수집
++        // 구역 내 모든 Shape·그림의 (z_order, para_idx, ctrl_idx) 수집 — 그림도 도형과 같은
++        // z 순서로 겹쳐 그려지므로(plane·z_order·경로) 한 줄에 세운다.
+         let mut shape_infos: Vec<(i32, usize, usize)> = Vec::new();
+         for (pi, para) in section.paragraphs.iter().enumerate() {
+             for (ci, ctrl) in para.controls.iter().enumerate() {
+-                if let Control::Shape(shape) = ctrl {
+-                    shape_infos.push((shape.z_order(), pi, ci));
++                if let Some(z) = stacked_z_order(ctrl) {
++                    shape_infos.push((z, pi, ci));
+                 }
+             }
+         }
+@@ -1622,13 +1649,9 @@ impl DocumentCore {
+         // z_order 변경: 대상 + 이웃
+         {
+             let section = &mut self.document.sections[section_idx];
+-            if let Control::Shape(shape) = &mut section.paragraphs[para_idx].controls[control_idx] {
+-                shape.common_mut().z_order = new_z;
+-            }
++            set_stacked_z_order(&mut section.paragraphs[para_idx].controls[control_idx], new_z);
+             if let Some((n_pi, n_ci, n_z)) = neighbor_change {
+-                if let Control::Shape(shape) = &mut section.paragraphs[n_pi].controls[n_ci] {
+-                    shape.common_mut().z_order = n_z;
+-                }
++                set_stacked_z_order(&mut section.paragraphs[n_pi].controls[n_ci], n_z);
+             }
+         }
+ 
+@@ -1676,7 +1699,7 @@ impl DocumentCore {
+                     HwpError::RenderError(format!("문단 인덱스 {} 범위 초과", pi))
+                 })?;
+                 match para.controls.get(ci) {
+-                    Some(Control::Shape(_)) => {}
++                    Some(ctrl) if stacked_z_order(ctrl).is_some() => {}
+                     _ => {
+                         return Err(HwpError::RenderError(format!(
+                             "지목 (ppi={}, ci={}) 은 Shape 가 아니다 — 기록 이후 문서가 바뀌었다",
+@@ -1695,9 +1718,10 @@ impl DocumentCore {
+                 let pi = pair["ppi"].as_u64().expect("1차에서 검증됨") as usize;
+                 let ci = pair["ci"].as_u64().expect("1차에서 검증됨") as usize;
+                 let z = pair["z"].as_i64().expect("1차에서 검증됨") as i32;
+-                if let Some(Control::Shape(shape)) = section.paragraphs[pi].controls.get_mut(ci) {
+-                    shape.common_mut().z_order = z;
+-                    applied += 1;
++                if let Some(ctrl) = section.paragraphs[pi].controls.get_mut(ci) {
++                    if set_stacked_z_order(ctrl, z) {
++                        applied += 1;
++                    }
+                 }
+             }
+             applied

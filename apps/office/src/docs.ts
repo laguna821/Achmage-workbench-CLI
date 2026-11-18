@@ -2,6 +2,7 @@ import { connectOfficeUi } from "./ui-adapters/connect.ts";
 import { keepPaperWhite } from "./ui-adapters/paper.ts";
 import "./docs.css";
 import { Events, Gateway, GatewayError, handshake, headlessExport, listen, pageRest, post, stubBridge } from "./bridge.ts";
+import { askHangulExport } from "./hangul-export.ts";
 import { installInPlaceReplace, keepScroll } from "./replace-in-place.ts";
 import { installViewPosition, readScroll, restoreScroll } from "./view-position.ts";
 import { recovery } from "./recovery.ts";
@@ -333,6 +334,13 @@ const desktop = stubBridge(
       }),
     onMenuCommand: events.on("menuCommand"),
     ...createDocsOutput(() => state.revision),
+    // "한글 문서로 내보내기" (v0.13.0's File menu item; ui-adapters/word.ts export-hwp): the window's dialog converts
+    // this document as it is open (unsaved edits too) with docx2hwp on Workbench's one Hangul engine and asks
+    // with the ledger before writing a NEW .hwpx/.hwp beside it. No answer with an error: the dialog said it.
+    exportHwp: async (_name: string, docx: ArrayBuffer, _outPath?: string, passwordSet?: boolean) => {
+      const result = await askHangulExport({ bytes: docx, passwordSet: passwordSet === true });
+      return result.ok ? { ok: true, path: result.path } : { ok: false };
+    },
     print: async () => {
       window.print();
       return { ok: true };

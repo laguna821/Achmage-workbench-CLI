@@ -35,6 +35,20 @@ it("preserves original page numbers in new output folders and never overwrites p
     expect(c.manager.documents.get(c.artifact.id).revision).toBe(1); expect(readFileSync(join(c.output, "existing.txt"), "utf8")).toBe("보존");
   } finally { await c.close(); }
 });
+it("writes JPG pages when the page drew JPG (v0.13.0), never a PNG under a .jpg name or a mix in one folder", async () => {
+  const c = await setup();
+  try {
+    const jpeg = createRequire(import.meta.url)("jpeg-js");
+    const jpg = Buffer.from(jpeg.encode({ data: Buffer.alloc(4 * 4, 255), width: 2, height: 2 }, 90).data).toString("base64");
+    const job = await c.images.prepare(c.artifact.id, 1, c.output, "사진", c.access);
+    await expect(c.images.write(c.artifact.id, job.id, { images: [png], pageNumbers: [1], baseName: "사진", format: "jpg" }, c.access)).rejects.toThrow("JPG");
+    const again = await c.images.prepare(c.artifact.id, 1, c.output, "사진", c.access);
+    await c.images.write(c.artifact.id, again.id, { images: [jpg], pageNumbers: [3], baseName: "사진", format: "jpg" }, c.access);
+    const result = await c.images.finish(c.artifact.id, again.id, true, c.access);
+    expect(readdirSync(result.path!)).toEqual(["사진-p3.jpg"]);
+    expect(readFileSync(join(result.path!, "사진-p3.jpg")).subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
+  } finally { await c.close(); }
+});
 it("rejects foreign views and duplicate pages, and removes only the incomplete job after invalid PNG data", async () => {
   const c = await setup();
   try {

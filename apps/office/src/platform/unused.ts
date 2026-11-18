@@ -47,6 +47,13 @@ export const ATTACHABLE_IMAGE_EXTS = new Set<string>();
 export const ATTACHABLE_MAX_BYTES = 0;
 export const ATTACHABLE_IMAGE_MAX_BYTES = 0;
 export const parseFileToText = notHere;
+// v0.13.0 additions on the same paths: unknown stored settings kept on write, per-type attachment caps,
+// draw.io picture names, the ChatGPT sign-in pages (none of it runs here).
+export const withStoredUnknownFields = <T>(settings: T) => settings;
+export const attachableMaxBytes = () => 0;
+export const diagramPictureExtOf = () => null;
+export const diagramPictureExtOfName = () => null;
+export const aiChatGptSignInPages = () => ({});
 
 // Worker-local hooks replaced by scoped persistence, browser font assets or pending seed integration.
 export const cleanupExpiredGeneratedPages = nothing;
@@ -63,6 +70,9 @@ export const queueSlidesSeedFor = noop;
 export const registerPresenterIpc = noop;
 export const exportSlidesPdf = notHere;
 export const printSlidesHtml = notHere;
+// v0.13.0: the print job of 고급 인쇄 (see ensurePrintLayoutIpc below; never registered here).
+export const slidesPrintHtml = () => "";
+export const slidesPrintJobPdf = notHere;
 export const exportPdf = notHere;
 export const printWorkbook = notHere;
 export const installStandaloneTemplateFontProtocol = noop;
@@ -70,6 +80,14 @@ export const convertLegacyWorkbook = async () => {
   throw new Error("예전 엑셀 형식(.xls)은 Workbench에서 아직 열지 못합니다. .xlsx로 저장한 뒤 열어 주세요.");
 };
 export const createServer = () => ({ listen: noop, close: noop, on: noop });
+
+// 고급 인쇄 (v0.13.0: @genoffice/electron-utils/print-arranged, sheets ./print-layout): Electron's print and a
+// pdfium worker thread. Not connected in Workbench yet: the channels are never registered, so the
+// editors' advanced-print requests fail like any unconnected channel. Workbench's own print stays.
+export const ensurePrintLayoutIpc = noop;
+export const registerPrintLayoutIpc = noop;
+export const registerSheetsPrintLayoutIpc = noop;
+export const LABEL_SPEC_FILE_NAME = "print-label-spec.json";
 
 // Projects (@genoffice/project-store)
 export class ProjectStore {

@@ -76,6 +76,6 @@ WORKBENCH_WEB_DIR=apps/web/dist node apps/host/src/main.ts   # WORKBENCH_READY �
 
 - 이 저장소의 코드: [MIT](LICENSE)
 - `vendor/doory`: [doory](https://github.com/shaongitbd/doory). Attribution Assurance License이며, 출처(이름, 소개, 주소)를 앱을 열 때마다 작업 영역 아래 한 줄로, 그리고 디자인 편집기와 설정 › 정보 › 오픈소스 라이선스에 표시합니다.
-- IeumOffice: [pblsketch/openoffice](https://github.com/pblsketch/openoffice), Apache-2.0. 빌드할 때 고정 커밋으로 받습니다(`scripts/fetch-ieum.sh`). 옮겨 온 코드의 출처는 `third_party/ieumoffice`에 있습니다.
+- IeumOffice: [pblsketch/ieumoffice](https://github.com/pblsketch/ieumoffice), Apache-2.0. 빌드할 때 고정 커밋으로 받습니다(`scripts/fetch-ieum.sh`). 옮겨 온 코드의 출처는 `third_party/ieumoffice`에 있습니다.
 - `third_party/textfold`: [textfold](https://github.com/chenxiachan/textfold), Apache-2.0
 - `third_party/fast-find`: [Obsidian Fast Find 10k](https://github.com/ssp-data/obsidian-fast-find-10k), MIT. 고정 원본·변경 내역과 라이선스를 함께 보존합니다.

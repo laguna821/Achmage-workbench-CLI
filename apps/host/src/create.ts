@@ -25,7 +25,7 @@ export function parseCreate(value: unknown): CreateTarget | null {
 
 /** A file name in `cwd` that does not exist yet: `<name><ext>`, then `<name> 2<ext>`, … */
 export function reservePath(cwd: string, target: { format: DocFormat; name: string; extension?: string }, reserved: ReadonlySet<string> = new Set()) {
-  const extensions: Record<DocFormat, string> = { ...CREATE_EXTENSION, pdf: ".pdf", hwp: ".hwp", text: ".txt", xmind: ".xmind", epub: ".epub" };
+  const extensions: Record<DocFormat, string> = { ...CREATE_EXTENSION, pdf: ".pdf", hwp: ".hwp", text: ".txt", xmind: ".xmind", epub: ".epub", doc: ".doc", ppt: ".ppt", ods: ".ods" };
   if (target.extension && (!/^\.[a-z]+$/.test(target.extension) || formatOf(`copy${target.extension}`) !== target.format)) throw new HttpError(400, "invalid_extension", "사본의 파일 형식을 확인해 주세요.");
   const extension = target.extension ?? extensions[target.format];
   const stem =

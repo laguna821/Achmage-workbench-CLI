@@ -4,6 +4,7 @@ import { csvToXlsxBufferForOpen, decodeCsvBuffer } from "../../../vendor/ieumoff
 import { convertLegacyWorkbook } from "../../../vendor/ieumoffice/apps/sheets/src/main/legacy-import.ts";
 import type { IeumOffice } from "./ieumoffice.ts";
 import { HttpError } from "./errors.ts";
+import { convertLegacy, xlsxWasmPath } from "./office-convert.ts";
 
 /** The native CLI fixes this source and owns dataDir for one invocation. The
  * original importers make a disposable XLSX; the original file keeps its type
@@ -29,13 +30,22 @@ export class OfficeCliInput {
       const imported = await csvToXlsxBufferForOpen(decodeCsvBuffer(readFileSync(this.input), "euc-kr"), "Sheet1");
       writeFileSync(target, imported.buffer, { flag: "wx", mode: 0o600 });
     } else {
+      // A real .xls goes through IeumOffice v0.13.0's xlsx engine — the Excel editor's own WebAssembly build
+      // (office-convert.ts): pictures, merges, widths, heights, cell styles, print setup and Excel 95 Korean text
+      // come along. Without that build (a gateway built alone) the bundled IeumOffice app's CLI, as before.
       const result = await convertLegacyWorkbook({ convertWorkbook: async ({ path, targetPath }) => {
+        if (xlsxWasmPath()) {
+          const made = await convertLegacy("xls", readFileSync(path));
+          writeFileSync(targetPath, made.bytes, { flag: "wx", mode: 0o600 });
+          return made.reply;
+        }
         const result = await this.ieum.run(["convert", path, "--to", "xlsx", "--out", targetPath], [dirname(path), dir], 60_000);
         if (result.status !== "ok") throw new Error(result.message ?? "원본 Excel 변환이 완료되지 않았습니다.");
         return result;
       } }, this.input, target, "euc-kr");
-      if (result === "html-no-table") throw new HttpError(422, "xls_no_table", "Excel 파일에 표가 없습니다.");
-      if (result === "html-too-large") throw new HttpError(413, "xls_limit", "HTML 형식의 Excel 파일이 너무 큽니다.");
+      // v0.13.0 answers { kind, formulasDropped } instead of the kind alone.
+      if (result.kind === "html-no-table") throw new HttpError(422, "xls_no_table", "Excel 파일에 표가 없습니다.");
+      if (result.kind === "html-too-large") throw new HttpError(413, "xls_limit", "HTML 형식의 Excel 파일이 너무 큽니다.");
     }
     return { path: target };
   }

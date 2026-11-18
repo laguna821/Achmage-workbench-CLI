@@ -11,7 +11,7 @@ export function AttentionCenter({ inbox, state, onOpen, onClose }: {
   inbox: AttentionInbox; state: Pick<State, "sessions" | "works">; onOpen: (id: string) => Promise<void>; onClose: () => void;
 }) {
   const feed = useSyncExternalStore(inbox.subscribe, inbox.getState);
-  const [unreadOnly, setUnreadOnly] = useState(false), [busy, setBusy] = useState<string | null>(null);
+  const [unreadOnly, setUnreadOnly] = useState(false), [busy, setBusy] = useState<string | null>(null), [cleared, setCleared] = useState<string | null>(null);
   const dialog = useRef<HTMLDialogElement>(null), opener = useRef(document.activeElement), working = useRef(false);
   useLayoutEffect(() => { const surface = dialog.current; surface?.showModal(); return () => restoreSurfaceFocus(opener.current, surface); }, []);
   const act = async (id: string, action: () => Promise<void>) => {
@@ -19,10 +19,18 @@ export function AttentionCenter({ inbox, state, onOpen, onClose }: {
     try { await action(); } catch (error) { inbox.reportError(error); }
     finally { working.current = false; setBusy(null); }
   };
+  // 모두 읽음 (0.5.5): one host call. An approval or a question still open is not cleared; the key says how many stayed.
+  const readAll = () => act("all", async () => {
+    setCleared(null);
+    const result = await inbox.readAll(); if (!result) return;
+    const stayed = result.kept ? `확인이 필요한 ${result.kept}건은 남겼습니다.` : "";
+    setCleared(result.read ? `${result.read}건을 읽음으로 표시했습니다.${stayed ? " " + stayed : ""}` : stayed || "읽지 않은 알림이 없습니다.");
+  });
   const shown = feed.list.events.filter(entry => !unreadOnly || entry.readAt === null);
   return <dialog ref={dialog} className="attention-center" aria-labelledby="attention-center-title" onCancel={event => { event.stopPropagation(); onClose(); }}>
     <header><div><h2 id="attention-center-title">알림</h2><p aria-live="polite">읽지 않음 {feed.list.unread}개</p></div><button type="button" className="icon-button" aria-label="알림 닫기" onClick={onClose}><Icon name="x" /></button></header>
-    <div className="attention-center-filter"><label><input type="checkbox" checked={unreadOnly} onChange={event => setUnreadOnly(event.target.checked)} /> 읽지 않은 알림만</label><button type="button" className="ghost-button small" disabled={feed.loading || feed.supported !== true} onClick={() => void inbox.refresh()}>새로고침</button></div>
+    <div className="attention-center-filter"><label><input type="checkbox" checked={unreadOnly} onChange={event => setUnreadOnly(event.target.checked)} /> 읽지 않은 알림만</label><span className="attention-center-keys"><button type="button" className="ghost-button small" aria-busy={busy === "all" ? true : undefined} disabled={busy !== null || feed.supported !== true || !feed.list.unread} title="확인이 필요한 승인·질문은 답할 때까지 남습니다" onClick={() => void readAll()}>모두 읽음</button><button type="button" className="ghost-button small" disabled={feed.loading || feed.supported !== true} onClick={() => void inbox.refresh()}>새로고침</button></span></div>
+    {cleared ? <p className="attention-center-cleared" role="status">{cleared}</p> : null}
     {feed.error ? <div className="attention-center-error" role="alert">{feed.error}<button type="button" className="text-button" onClick={inbox.clearError}>닫기</button></div> : null}
     <div className="attention-center-list" aria-busy={feed.loading}>
       {feed.supported === false ? <p className="attention-center-empty">이 호스트는 알림 목록을 지원하지 않습니다. 기존 완료·확인 알림은 계속 사용할 수 있습니다.</p> : feed.supported === null ? <p className="attention-center-empty">호스트의 알림을 불러오는 중…</p> : !shown.length ? <p className="attention-center-empty">{unreadOnly ? "읽지 않은 알림이 없습니다." : "아직 알림이 없습니다."}</p> : null}

@@ -7,7 +7,7 @@ import { markNewDocument } from "./doc-new.ts";
 import type { CommandReceipt, TaskCommand, TaskSnapshot, NativeTaskDetail } from "@workbench/contracts";
 import type { AgentProfile, AgentProfileInput } from "@workbench/contracts";
 import type { WorkspaceService, WorkspaceServiceList, WorkspaceServiceOwner, WorkspaceServiceStart } from "@workbench/contracts";
-import type { AttentionEvent, AttentionList, AttentionPayload, AttentionPresence, AttentionTarget } from "@workbench/contracts";
+import type { AttentionEvent, AttentionList, AttentionPayload, AttentionPresence, AttentionReadAll, AttentionTarget } from "@workbench/contracts";
 import type { BrowserAction, BrowserDriverPoll, BrowserDriverReply, BrowserJobResult, BrowserList, BrowserObservation, BrowserPage, BrowserPageCreate, BrowserProfile } from "@workbench/contracts";
 import type {
   GitHubBinding, GitHubSelection, GitHubView, GitHubCheckDetails, GitHubLog,
@@ -122,12 +122,33 @@ export function readToken(): string | null {
 export class ApiRequestError extends Error {
   readonly status: number;
   readonly code: string;
+  /** 불러오기: a password can make the next attempt succeed (the gateway's ConvertError). */
+  readonly passwordHelps: boolean;
   constructor(status: number, body: ApiError) {
     super(body.message);
     this.status = status;
     this.code = body.code;
+    this.passwordHelps = (body as { passwordHelps?: unknown }).passwordHelps === true;
   }
 }
+
+/** 불러오기 / 내보내기 (apps/host/src/hangul-convert.ts). */
+export type HangulChoices = {
+  presets: { id: "default" | "text" | "form" | "exam"; label: string; description: string }[];
+  templates: { id: string; label: string; group: "기본 서식" | "내 양식" | "공문서" }[];
+  defaultTemplate: string;
+  /** PDF can be read (its extension ships). */
+  pdf: boolean;
+  /** The one line said when it does not. */
+  pdfLine: string;
+  converter: string;
+};
+export type ImportedFile = { path: string; name: string; artifactId: string | null };
+export type ConvertOptions = { preset: string; pages: string; images: boolean; password?: string; name?: string };
+export type Converted = { artifact: Artifact; pictures: number; tables: number; warnings: string[]; fileType: string };
+export type ExportedHangul = { artifact: Artifact; warnings: string[]; template: string; check?: { structure: string; text: string } };
+/** Word → Hangul, step 1 (office-convert.ts): what the copy loses, in IeumOffice's words; nothing written yet. */
+export type WordHangulPlan = { ticket: string; format: "hwp" | "hwpx"; name: string; losses: number; ledger: { title: string; message: string; sections: { heading: string; items: string[] }[] } };
 
 export type RemoteApiConnection = { hostId: string; peer: RemotePeer };
 let activeMediaConnection: RemoteApiConnection | null = null;
@@ -194,6 +215,8 @@ export class Api {
   snapshot = async () => { const snapshot = await this.request<Snapshot>("GET", "/api/snapshot"); this.epoch = snapshot.epoch; if (this.remote) snapshot.prefs = await this.request("GET", "/api/prefs"); else localMediaHostId = snapshot.hostId; return snapshot; };
   attention = () => this.request<AttentionList>("GET", "/api/attention");
   readAttention = (id: string) => this.request<AttentionEvent>("POST", `/api/attention/${encodeURIComponent(id)}/read`, {});
+  /** 모두 읽음: one call; open approvals/questions stay unread (a device is answered for its own projects). */
+  readAllAttention = () => this.request<AttentionReadAll>("POST", "/api/attention/read-all", {});
   attentionTarget = (id: string) => this.request<AttentionTarget>("GET", `/api/attention/${encodeURIComponent(id)}/target`);
   attentionPresence = (presence: AttentionPresence, keepalive = false) => this.request<{ ok: true }>("POST", "/api/attention/presence", presence, { keepalive });
   claimAttention = (id: string, clientId: string) => this.request<{ claimed: boolean; payload: AttentionPayload | null }>("POST", `/api/attention/${encodeURIComponent(id)}/claim`, { clientId });
@@ -229,7 +252,7 @@ export class Api {
   writeOfficeImage = (artifactId: string, id: string, page: number, base64: string) => this.request<{ ok: true }>("POST", `/api/artifacts/${artifactId}/image-outputs/${id}/write`, { page, base64 });
   finishOfficeImages = (artifactId: string, id: string, success: boolean) => this.request<{ ok: true; path?: string; canceled?: true }>("POST", `/api/artifacts/${artifactId}/image-outputs/${id}/finish`, { success });
   preparePdfImages = (artifactId: string, revision: number, path: string, name: string) => this.request<{ id: string }>("POST", `/api/artifacts/${artifactId}/pdf-image-outputs`, { revision, path, name });
-  writePdfImages = (artifactId: string, id: string, request: { images: string[]; pageNumbers: number[]; baseName: string }) => this.request<{ ok: true }>("POST", `/api/artifacts/${artifactId}/pdf-image-outputs/${id}/write`, request);
+  writePdfImages = (artifactId: string, id: string, request: { images: string[]; pageNumbers: number[]; baseName: string; format?: "png" | "jpg" }) => this.request<{ ok: true }>("POST", `/api/artifacts/${artifactId}/pdf-image-outputs/${id}/write`, request);
   finishPdfImages = (artifactId: string, id: string, success: boolean) => this.request<{ ok: true; path?: string; files?: string[]; canceled?: true }>("POST", `/api/artifacts/${artifactId}/pdf-image-outputs/${id}/finish`, { success });
   async commitOfficeOutput(artifactId: string, id: string, bytes: ArrayBuffer, replace: boolean, sourceRevision?: number, generatedId?: string) {
     const response = await this.transport(`/api/artifacts/${artifactId}/outputs/${id}?replace=${replace ? 1 : 0}${sourceRevision === undefined ? "" : `&sourceRevision=${sourceRevision}`}${generatedId ? `&generatedId=${encodeURIComponent(generatedId)}` : ""}`, { method: "POST", headers: { authorization: `Bearer ${this.token}`, ...this.editorHeaders(), "content-type": "application/octet-stream" }, body: bytes });
@@ -493,6 +516,47 @@ export class Api {
   /** What can be done with a document now, as the gateway decides it. */
   documentRemoval = (artifactId: string) => this.request<DocumentRemovalPlan>("GET", `/api/artifacts/${artifactId}/removal`);
   /** 이름 바꾸기: the file renamed inside its folder (same extension); refused with a plain line. Undo = renaming back. */
+  hangulChoices = () => this.request<HangulChoices>("GET", "/api/hangul-convert/choices");
+  registerHangulTemplate = (path: string) => this.request<HangulChoices>("POST", "/api/hangul-templates", { path });
+  /** "문서 불러오기…": files from the native chooser, copied into the project folder (never moved). */
+  importDocuments = (workId: string, paths: string[]) => this.request<{ files: ImportedFile[] }>("POST", `/api/works/${workId}/import-documents`, { paths });
+  /** A file dropped from the computer onto the document list: its bytes, written into the project folder. */
+  async importUpload(workId: string, file: File): Promise<{ files: ImportedFile[] }> {
+    const response = await this.transport(`/api/works/${workId}/import-upload`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${this.token}`, "content-type": "application/octet-stream", "x-file-name": encodeURIComponent(file.name) },
+      body: file,
+    });
+    const json = (await response.json().catch(() => ({ code: "invalid_response", message: response.statusText }))) as { files: ImportedFile[] } & ApiError;
+    if (!response.ok) throw new ApiRequestError(response.status, json);
+    return json;
+  }
+  /** "Markdown 문서로 변환" of a listed document (or of a project file that is not one, by path). */
+  convertToMarkdown = (target: { artifactId: string } | { workId: string; path: string }, options: ConvertOptions) =>
+    "artifactId" in target ? this.request<Converted>("POST", `/api/artifacts/${target.artifactId}/convert-to-markdown`, options)
+      : this.request<Converted>("POST", `/api/works/${target.workId}/convert-to-markdown`, { ...options, path: target.path });
+  /** "한글 문서로 내보내기…": a NEW .hwpx/.hwp/.docx beside the Markdown document. */
+  exportHangul = (artifactId: string, options: { format: "hwpx" | "hwp" | "docx"; template: string; name?: string; date?: string }) => this.request<ExportedHangul>("POST", `/api/artifacts/${artifactId}/export-hangul`, options);
+  /** "변환해서 열기" of a .doc/.ppt/.ods: a NEW .docx/.pptx/.xlsx beside it, and the one line on what did not come along. */
+  openConverted = (artifactId: string) => this.request<{ artifact: Artifact; line: string }>("POST", `/api/artifacts/${artifactId}/open-converted`, {});
+  /**
+   * "한글 문서로 내보내기" of a Word document, step 1: the ledger (nothing written). `editor`: the open editor's
+   * document as it is now (with unsaved edits); absent: the recorded revision.
+   */
+  async prepareWordHangul(artifactId: string, options: { format: "hwpx" | "hwp"; name?: string; passwordSet?: boolean }, editor?: ArrayBuffer): Promise<WordHangulPlan> {
+    if (!editor) return this.request<WordHangulPlan>("POST", `/api/artifacts/${artifactId}/word-to-hangul`, options);
+    const query = new URLSearchParams({ format: options.format, ...(options.name ? { name: options.name } : {}), ...(options.passwordSet ? { passwordSet: "1" } : {}) });
+    const response = await this.transport(`/api/artifacts/${artifactId}/word-to-hangul?${query}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${this.token}`, "content-type": "application/octet-stream" },
+      body: editor,
+    });
+    const json = (await response.json().catch(() => ({ code: "invalid_response", message: response.statusText }))) as WordHangulPlan & ApiError;
+    if (!response.ok) throw new ApiRequestError(response.status, json);
+    return json;
+  }
+  /** Step 2, after 저장: the NEW .hwpx/.hwp beside the Word document. */
+  commitWordHangul = (artifactId: string, ticket: string) => this.request<{ artifact: Artifact }>("POST", `/api/artifacts/${artifactId}/word-to-hangul/commit`, { ticket });
   renameDocument = (artifactId: string, name: string) => this.request<{ artifact: Artifact; noteLinks: number; notice?: string }>("POST", `/api/artifacts/${artifactId}/rename`, { name });
   restoreDocument = (artifactId: string) => this.request<Artifact>("POST", `/api/artifacts/${artifactId}/restore`, {});
   /** "다른 곳에 저장" of a deleted project's trashed document: a copy, never over a file; the record stays. */

@@ -93,3 +93,31 @@ it("honours muted/off settings, ignores archived imports and refuses hidden or f
   f.session.hostId = "foreign"; expect(() => f.service.target(id)).toThrow("이 호스트");
   f.session.hostId = "host"; f.hide(); expect(f.service.list().events).toEqual([]); expect(() => f.service.read(id)).toThrow("이 호스트");
 });
+
+// 0.5.5 알림 일괄 정리: 모두 읽음 is one write; an open approval/question is not cleared — it stays until answered.
+it("reads every notice at once, keeps open approvals unread, and honours a work scope", async () => {
+  const f = fixture(), changed: string[] = [];
+  f.bus.subscribe(event => { if (event.type === "attention.changed") changed.push(event.type); });
+  await f.end("one"); await f.end("two", "failed");
+  await f.publish({ kind: "approval", id: "open", title: "PRIVATE COMMAND", detail: null, reason: null, decision: null, at: 1000 });
+  expect(f.service.list().unread).toBe(3);
+  expect(f.service.readAll(["another-work"])).toMatchObject({ read: 0, kept: 0, list: { events: [], unread: 0 } });
+  expect(f.service.list().unread).toBe(3);
+  changed.length = 0;
+  const result = f.service.readAll();
+  expect(result).toMatchObject({ read: 2, kept: 1, list: { unread: 1 } });
+  expect(changed).toHaveLength(1);
+  const open = f.service.list().events.find(row => row.kind === "input_needed")!;
+  expect(open).toMatchObject({ readAt: null, resolvedAt: null });
+  expect(f.items.find(item => item.kind === "approval")).toMatchObject({ decision: null });
+  expect(f.service.list().events.filter(row => row.kind !== "input_needed").every(row => row.readAt === 1000)).toBe(true);
+  // Idempotent and persisted: a second call writes nothing; a restart keeps the reads.
+  changed.length = 0; expect(f.service.readAll()).toMatchObject({ read: 0, kept: 1 }); expect(changed).toHaveLength(0);
+  f.service.close();
+  const restored = new Notifications(f.store, f.bus, f.hooks); cleanup.push(() => restored.close());
+  expect(restored.list().unread).toBe(1);
+  // Once answered, the next 모두 읽음 clears it too.
+  await f.publish({ kind: "approval", id: "open", title: "PRIVATE COMMAND", detail: null, reason: null, decision: "accept", at: 1000 });
+  expect(restored.readAll()).toMatchObject({ read: 1, kept: 0, list: { unread: 0 } });
+  f.hide(); expect(restored.readAll()).toMatchObject({ read: 0, kept: 0, list: { events: [] } });
+});

@@ -10,6 +10,8 @@ export type AttentionEvent = {
   delivery: AttentionDelivery; deliveryError: string | null;
 };
 export type AttentionList = { events: AttentionEvent[]; unread: number };
+/** 모두 읽음 (0.5.5): `read` notices were marked read; `kept` open approvals/questions stay unread until answered. */
+export type AttentionReadAll = { list: AttentionList; read: number; kept: number };
 /** Ephemeral UI presence. It never owns or extends a job's execution lease. */
 export type AttentionPresence = { clientId: string; sessionId: string | null; visible: boolean };
 export type AttentionTarget = { hostId: string; workId: string; sessionId: string; itemId: string; artifactId: string | null; pageId?: string | null; taskRef: TaskRef };

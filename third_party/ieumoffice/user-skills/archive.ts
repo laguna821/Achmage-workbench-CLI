@@ -1,4 +1,4 @@
-// Adapted from IeumOffice packages/ai-provider/src/user-skills/archive.ts @ 30ff4f051f067fcb2baf1ab416c40718c802ca35.
+// Adapted from IeumOffice packages/ai-provider/src/user-skills/archive.ts @ 8602a39410adb86037f3008588b64efc75b08c60.
 // Apache-2.0; see ../LICENSE and ../NOTICE. Changes: explicit Node .ts and local package imports.
 /**
  * Opening a skill archive (a zip file the person chose, or a GitHub commit
@@ -7,13 +7,14 @@
  * Any failure throws before or while writing into a folder the caller owns
  * and removes; nothing outside that folder is written.
  */
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { assertZipInflatesWithinLimits, type ZipLimits } from '../zip-gate/index.ts'
 import JSZip from 'jszip'
 import { MAX_USER_SKILL_BYTES } from './constants.ts'
 import { SkillImportError } from './errors.ts'
 import { isInsideDir } from './folder.ts'
+import { MAX_SKILL_ARCHIVE_BYTES } from './github.ts'
 
 /**
  * Limits for the inflated archive. A GitHub archive holds the whole
@@ -188,4 +189,54 @@ export async function extractSkillArchive(
     }
   }
   return { files, bytes: total, topFolder }
+}
+
+/**
+ * How a zip holds skills, judged from its entry names alone:
+ * - `single`: a `SKILL.md` at its top (one skill, the zip is its folder)
+ * - `bundle`: one or more top folders, each with a `SKILL.md` (the app's
+ *   export, of one skill or several)
+ * Loose files beside the folders (a license, a readme) are allowed. Folders
+ * macOS adds and hidden ones do not count. Anything else is not a skill zip.
+ */
+export type SkillArchiveLayout = 'single' | 'bundle'
+
+export function skillArchiveLayout(names: readonly string[]): SkillArchiveLayout | undefined {
+  const folders = new Set<string>()
+  const withSkillMd = new Set<string>()
+  for (const name of names) {
+    const parts = (name.endsWith('/') ? name.slice(0, -1) : name).split('/')
+    const top = parts[0]!
+    if (!top || IGNORED_ARCHIVE_FOLDERS.has(top) || top.startsWith('.')) continue
+    if (parts.length === 1) {
+      if (!name.endsWith('/') && top.toLowerCase() === 'skill.md') return 'single'
+      if (name.endsWith('/')) folders.add(top)
+      continue
+    }
+    folders.add(top)
+    if (parts.length === 2 && parts[1]!.toLowerCase() === 'skill.md') withSkillMd.add(top)
+  }
+  if (folders.size === 0) return undefined
+  return [...folders].every((folder) => withSkillMd.has(folder)) ? 'bundle' : undefined
+}
+
+/**
+ * The layout of a zip file on disk, reading only its entry list (nothing is
+ * inflated or written). `undefined` when it is not a skill zip, is over the
+ * archive size limit, or cannot be read as a zip.
+ */
+export async function readSkillArchiveLayout(
+  file: string,
+  maxBytes = MAX_SKILL_ARCHIVE_BYTES,
+): Promise<SkillArchiveLayout | undefined> {
+  const info = await stat(file).catch(() => undefined)
+  if (!info?.isFile() || info.size > maxBytes) return undefined
+  try {
+    const zip = await JSZip.loadAsync(await readFile(file))
+    return skillArchiveLayout(
+      Object.values(zip.files).map((entry) => entry.unsafeOriginalName ?? entry.name),
+    )
+  } catch {
+    return undefined
+  }
 }

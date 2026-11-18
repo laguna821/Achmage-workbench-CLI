@@ -70,7 +70,7 @@ describe("one Hangul engine for the gateway and the studio", () => {
   });
 
   // Every gateway bundle that carries the engine's glue (hangul-picture-job.mjs too: review M2).
-  for (const name of ["hwp-cli.mjs", "host.mjs", "hangul-picture-job.mjs"]) {
+  for (const name of ["hwp-cli.mjs", "host.mjs", "hangul-picture-job.mjs", "office-convert-job.mjs"]) {
     const bundle = join(root, "apps/host/dist", name);
     it.skipIf(!existsSync(bundle))(`is the only engine in the built gateway (${name})`, () => {
       const text = readFileSync(bundle, "utf8");

@@ -17,7 +17,7 @@ const files = [
   ['apps/html/src/main/asset-lifecycle.ts', 'text-assets/css-urls.ts'],
 ];
 const sha = (data) => createHash('sha256').update(data).digest('hex');
-const manifest = { source: 'https://github.com/pblsketch/openoffice', commit, changes: 'Attribution headers; explicit .ts import; inline image MIME type; extract the unchanged CSS URL scanner. Host uses create/read/SaveAs helpers and rollback of new assets, never historical asset cleanup.', files: [] };
+const manifest = { source: 'https://github.com/pblsketch/ieumoffice', commit, changes: 'Attribution headers; explicit .ts import; inline image MIME type; extract the unchanged CSS URL scanner. Host uses create/read/SaveAs helpers and rollback of new assets, never historical asset cleanup.', files: [] };
 for (const [input, output] of files) {
   const original = readFileSync(join(source, input), 'utf8');
   let text = original.replace("from './atomic-write'", "from './atomic-write.ts'")

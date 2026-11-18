@@ -1,10 +1,9 @@
 // Original search/read engines. The bridge supplies only stored settings and the
 // document request's lifetime; no Electron app or renderer-supplied key/endpoint.
 import { AsyncLocalStorage } from "node:async_hooks";
-import { tmpdir } from "node:os";
 import { isAbsolute } from "node:path";
 import { setAiSecretCodec, setCodexImageGenerationAvailable, codexImageGenerationAvailable } from "../../../vendor/ieumoffice/packages/ai-provider/src/index.ts";
-import { webSearch, imageSearch, searchOptionsFromSettings, readUrlTool, generateImageTool, analyzeMediaTool, documentMediaRoots, registerCodexImageGenerator, createCodexImageCliGenerator } from "../../../vendor/ieumoffice/packages/ai-search/src/index.ts";
+import { webSearch, imageSearch, searchOptionsFromSettings, readUrlTool, generateImageTool, analyzeMediaTool, documentMediaRoots, registerCodexImageGenerator, createCodexImageGenerator } from "../../../vendor/ieumoffice/packages/ai-search/src/index.ts";
 import { aiToolCapabilities } from "../../../vendor/ieumoffice/packages/ai-search/src/tool-capabilities.ts";
 import { fetchRemoteImage, readBodyCapped, MAX_REMOTE_IMAGE_BYTES } from "../../../vendor/ieumoffice/packages/electron-utils/src/remote-image.ts";
 import { readGeneratedImage } from "../../../vendor/ieumoffice/packages/electron-utils/src/generated-images.ts";
@@ -36,14 +35,16 @@ export function createOfficeWebTools(store, injected = {}, context = async () =>
   // The original slot is process-wide. Its implementation is request-local so
   // separate settings stores never borrow each other's CLI path or credentials.
   if (!generatorRegistered) {
-    registerCodexImageGenerator(request => {
-      const generate = requestGenerator.getStore();
-      if (!generate) throw new Error("이미지 생성 요청의 설정을 확인하지 못했습니다.");
-      return generate(request);
-    });
+    // v0.13.0 (b0f77be8b): a generator is { generate, models } and makes pictures over Codex's app-server.
+    const current = () => {
+      const generator = requestGenerator.getStore();
+      if (!generator) throw new Error("이미지 생성 요청의 설정을 확인하지 못했습니다.");
+      return generator;
+    };
+    registerCodexImageGenerator({ generate: request => current().generate(request), models: () => current().models() });
     setCodexImageGenerationAvailable(true); generatorRegistered = true;
   }
-  const generate = injected.codexGenerate ?? createCodexImageCliGenerator({ settingsPath: () => store.path, tempRoot: tmpdir });
+  const generate = injected.codexGenerate ? { generate: injected.codexGenerate, models: async () => null } : createCodexImageGenerator({ settingsPath: () => store.path });
   return {
     async capabilities() {
       const routeContext = await context();

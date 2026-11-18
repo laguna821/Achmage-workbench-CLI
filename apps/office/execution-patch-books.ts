@@ -110,7 +110,8 @@ export function patchBookExecutions(code: string, id: string, root: string, modu
       if (isOfficeExecutor()) void askOfficeExecutionQuestion([req.summary, req.detail].filter(Boolean).join('\\n\\n'))
         .then(ok => pending.settle(ok), () => pending.settle(false));
       signal?.addEventListener`);
-    replace("      } catch (err) {\n        patchLast({\n          streaming: false,", "      } catch (err) {\n        if (isOfficeExecutor()) reportOfficeExecutionError(err);\n        patchLast({\n          streaming: false,");
+    // v0.13.0: the project panel's send ends first (project folders).
+    replace("      } catch (err) {\n        projectPanelRef.current.finishSend()\n        patchLast({\n          streaming: false,", "      } catch (err) {\n        projectPanelRef.current.finishSend()\n        if (isOfficeExecutor()) reportOfficeExecutionError(err);\n        patchLast({\n          streaming: false,");
     replace("    persistMessage('user', instruction, undefined, scope, skillUse.chips)", `    if (!isOfficeExecutor()) {
       // A save flattens the pending page order. Capture its saved-file positions,
       // while keeping the original selected text and passage-card follow-up.
@@ -191,7 +192,7 @@ export function patchBookExecutions(code: string, id: string, root: string, modu
   if (id === `${root}/apps/epub/src/renderer/ai/AiPanel.tsx`) {
     replace("    if (!sendGate.admit({ text: instruction, attachments: attachmentsOverride, skillUse })) {", "    if (!isOfficeExecutor() && !sendGate.admit({ text: instruction, attachments: attachmentsOverride, skillUse })) {");
     replace("      mountedRef.current = false\n      loopRef.current?.cancel()", "      mountedRef.current = false\n      loopRef.current?.detach()");
-    replace("      } catch (err) {\n        if (!mountedRef.current || seq !== sendSeqRef.current) return", "      } catch (err) {\n        if (!mountedRef.current || seq !== sendSeqRef.current) return\n        if (isOfficeExecutor()) reportOfficeExecutionError(err);");
+    replace("      } catch (err) {\n        void projectChatRef.current.finishSend()\n        if (!mountedRef.current || seq !== sendSeqRef.current) return", "      } catch (err) {\n        void projectChatRef.current.finishSend()\n        if (!mountedRef.current || seq !== sendSeqRef.current) return\n        if (isOfficeExecutor()) reportOfficeExecutionError(err);");
     replace("  hostRef.current = host", `  type WbEpubState = {
     schema: 1; request: { text: string; skillUse: SkillUse; attachments: AttachmentMeta[] };
     availableAttachments: AttachmentMeta[]; context: EpubExecutionContext;
@@ -246,7 +247,8 @@ export function patchBookExecutions(code: string, id: string, root: string, modu
   }
 
   if (id === `${root}/apps/epub/src/renderer/translate/BookTranslation.tsx`) {
-    replace("      setReport({ lang: run.lang, report: combineReports(reports), outputs, failures, partial })", "      setReport({ lang: run.lang, report: combineReports(reports), outputs, failures, partial })\n      recordOriginalBookOutputs(outputs, failures);");
+    // v0.13.0 adds the run's mode (쉬운 설명, 541779fee) to the report.
+    replace("        outputs,\n        failures,\n        partial,\n      })\n    }\n", "        outputs,\n        failures,\n        partial,\n      })\n      recordOriginalBookOutputs(outputs, failures);\n    }\n");
     replace("      } finally {\n        await unlock()\n      }\n    }\n\n    /** \"Export what is translated so far\"", `      } finally {
         await unlock()
         finishOriginalBookTranslation({ state: last.state === 'complete' ? 'complete' : last.state === 'stopped' ? 'stopped' : 'failed', done: last.done, total: last.total, failedBlocks: last.failed, ...(last.error ? { error: last.error } : {}) });

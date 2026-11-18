@@ -1,57 +1,21 @@
-// The studio build for rhwp-studio v0.9.0 (H4b): Ieum's builder (vendor/ieumoffice/apps/hwp/scripts/
+// The studio build for rhwp-studio v0.9.0: Ieum's builder (vendor/ieumoffice/apps/hwp/scripts/
 // build-studio.mjs) and Ieum's studio patches (rhwp-patches.mjs) are vendored and stay unedited;
-// scripts/build-hwp-studio.mjs runs an adapted copy of the builder, and for v0.9.0 it takes the
-// studio patches from here: Ieum's, minus the ones 0.9.0 made unnecessary (DROPPED_090, each with
-// where upstream does the same), with the one whose text is gone redone against 0.9.0 (OWN_090).
+// scripts/build-hwp-studio.mjs runs an adapted copy of the builder, and takes the studio patches from
+// here: all of Ieum's, in Ieum's order, then Workbench's own (OWN_090). Since IeumOffice v0.13.0 builds
+// v0.9.0 itself (unit hwp13), what this file used to drop or redo is gone: the four Ieum patches 0.9.0 had
+// made unnecessary are no longer in Ieum's list, and Ieum has its own 0.9.0 nested-table Cut.
 // Each patch replaces text found exactly once and fails the build loudly otherwise.
-import { applyPatch, patchTargets, STUDIO_PATCHES } from '../vendor/ieumoffice/apps/hwp/scripts/rhwp-patches.mjs'
+import { IEUM_HWP_DIR } from './ieum-earlier-source.mjs'
+const { applyPatch, patchTargets, STUDIO_PATCHES } = await import(new URL(`../${IEUM_HWP_DIR}/apps/hwp/scripts/rhwp-patches.mjs`, import.meta.url).href)
 
 /** The 0.9.0 studio commit the build checks out (the engine's tag). */
 export const STUDIO_COMMIT_090 = 'c9095c5f67632e6721e800ccc7fb43ea49d26682'
 
-/** Ieum studio patches not applied to 0.9.0, and what in upstream's 0.9.0 studio does their work. */
-export const DROPPED_090 = {
-  'studio-memo-anchors':
-    'upstream WasmBridge.getMemoAnchors() (rhwp-studio/src/core/wasm-bridge.ts) returns the same anchors; a second method of the same name would shadow it',
-  'studio-memo-delete-undo':
-    'upstream DeleteTextCommand captures the paragraph when a deletion touches a memo anchor (rhwp-studio/src/engine/command.ts touchesMemoAnchor, core/memo.ts), edges included, as Ieum\'s did',
-  'studio-font-memo-state':
-    'upstream CanvasFontResolutionScope (rhwp-studio/src/core/canvas-font-resolution-scope.ts) keeps one answer per font string within a paint',
-  'studio-font-memo-use':
-    'the font setter goes through upstream\'s CanvasFontResolutionScope.resolve; the line this patch rewrote is gone',
-}
-
-/** Ieum studio patches redone against the 0.9.0 source (same name, same purpose). */
-export const OWN_090 = {
-  // Ieum's: Cut takes a selected table in a cell (after copying it) instead of doing nothing.
-  // 0.9.0 cuts through cutSelectedObject (an awaited copy, then a guarded delete).
-  'studio-nested-table-cut': {
-    file: /[\\/]rhwp-studio[\\/]src[\\/]engine[\\/]input-handler\.ts$/,
-    edits: [
-      {
-        find: [
-          '    // 중첩 표 잘라내기는 지원하지 않는다. keydown 경로도 같은 선택 상태를 유지한다.',
-          '    if (table?.cellPath && table.cellPath.length > 1) return;',
-          '',
-        ].join('\n'),
-        replace: '',
-      },
-      {
-        find: [
-          "        this.executeOperation({ kind: 'snapshot', operationType: 'cutTable', operation: (wasm: WasmBridge) => {",
-          '          wasm.deleteTableControl(ref.sec, ref.ppi, ref.ci);',
-        ].join('\n'),
-        replace: [
-          "        this.executeOperation({ kind: 'snapshot', operationType: 'cutTable', operation: (wasm: WasmBridge) => {",
-          '          wasm.deleteTableAt(table!);',
-        ].join('\n'),
-      },
-    ],
-  },
-}
+/** Workbench's own studio patches (no Ieum form), applied after Ieum's. */
+export const OWN_090 = {}
 
 /**
- * Workbench's own studio patches for 0.9.0 (no Ieum form). `workbench-pdf-import-setting`: the
+ * `workbench-pdf-import-setting`: the
  * options dialog always offers "PDF 가져오기" (how an imported PDF is laid out), though the studio
  * opens no PDF when the engine has no PDF import (ours is built without it); the section is shown
  * only when the engine can import PDF, as the studio's open paths already decide.
@@ -139,8 +103,29 @@ OWN_090['workbench-status-pages'] = {
 /** Text that must not be in the built studio: the load time in the status line. */
 export const STATUS_TIMING_TRACES = ['페이지 ({p3}ms)', '쪽 ({p3}ms)']
 
+/**
+ * `workbench-file-menu`: v0.13.0's plugin puts two new items into the File menu that Workbench does not
+ * offer: "PDF 가져오기" (PDF → 한글 through Electron's importPdfAsHwp; Workbench's engine is built without
+ * PDF import and the owner passed on PDF → Hangul) and "열기" (Electron's own open dialog and window; in
+ * Workbench documents open from the document list into tabs). A menu item that cannot work would only fail.
+ * Save, Save As, PDF, Print Preview and Print stay.
+ */
+OWN_090['workbench-file-menu'] = {
+  file: /[\\/]studio-plugin[\\/]agent-plugin\.mjs$/,
+  edits: [
+    {
+      find: "  { command: 'open', id: 'ext:ieum-open', shortcut: 'Ctrl+O' },\n",
+      replace: '',
+    },
+    {
+      find: "  { command: 'importPdf', id: 'ext:ieum-import-pdf' },\n",
+      replace: '',
+    },
+  ],
+}
+
 /** The patches the 0.9.0 studio build applies: Ieum's in Ieum's order, then Workbench's own. */
-export const STUDIO_PATCHES_090 = [...STUDIO_PATCHES.filter((name) => !(name in DROPPED_090)), 'workbench-pdf-import-setting', 'workbench-canvas2d-only', 'workbench-no-canvaskit', 'workbench-status-pages']
+export const STUDIO_PATCHES_090 = [...STUDIO_PATCHES, 'workbench-pdf-import-setting', 'workbench-canvas2d-only', 'workbench-no-canvaskit', 'workbench-status-pages', 'workbench-file-menu']
 
 /**
  * What the built 0.9.0 studio must not carry (review M6): the CanvasKit renderer chunk and its WASM,

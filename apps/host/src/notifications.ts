@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { ATTENTION_LABEL, type AttentionEvent, type AttentionKind, type AttentionList, type AttentionPayload, type AttentionPresence, type AttentionTarget, type SequencedEvent, type Session, type TranscriptItem, type NativeTaskSnapshot } from "@workbench/contracts";
+import { ATTENTION_LABEL, type AttentionEvent, type AttentionKind, type AttentionList, type AttentionPayload, type AttentionReadAll, type AttentionPresence, type AttentionTarget, type SequencedEvent, type Session, type TranscriptItem, type NativeTaskSnapshot } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import type { Store } from "./store.ts";
 import { HttpError } from "./errors.ts";
@@ -112,6 +112,19 @@ export class Notifications {
     const next = { ...row, readAt: this.now() };
     this.records.set(id, next); this.persist();
     return next;
+  }
+  /** 모두 읽음: one write for every notice in scope (a device passes its granted projects). A notice that still needs
+   * the person — an approval or a question not yet answered — is not cleared: it stays unread until it is answered. */
+  readAll(workIds?: readonly string[]): AttentionReadAll {
+    const inScope = (row: AttentionEvent) => !workIds || workIds.includes(row.workId), now = this.now();
+    let read = 0;
+    for (const [id, row] of this.records) {
+      if (row.readAt !== null || (row.kind === "input_needed" && row.resolvedAt === null) || !inScope(row) || !this.accessible(row)) continue;
+      this.records.set(id, { ...row, readAt: now }); read++;
+    }
+    if (read) this.persist();
+    const events = this.list().events.filter(inScope), kept = events.filter(row => row.readAt === null).length;
+    return { list: { events, unread: kept }, read, kept };
   }
   observe(input: AttentionPresence) {
     if (!input || typeof input.clientId !== "string" || !/^[\w:.-]{1,96}$/.test(input.clientId) || typeof input.visible !== "boolean"

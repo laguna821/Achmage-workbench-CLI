@@ -5,7 +5,7 @@ import { createShownReporter, SHOWN_CLIENT } from "./engine-shown.ts";
 import { forgetUnread, keepUnread } from "./kept-unread.ts";
 import { MobilePushSettings } from "./components/MobilePushSettings.tsx";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { GLOBAL_LAYOUT, PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type Attachment, type CreateTarget, type DocRef, type DocumentRemovalPlan, type ProjectPick, type Proposal, type Provider, type Session, type SessionStatus, type UiPrefs, type Work, type Workspace } from "@workbench/contracts";
+import { GLOBAL_LAYOUT, PROVIDER_LABEL, isLegacyFormat, isUnseen, type AccessMode, type Artifact, type Attachment, type CreateTarget, type DocRef, type DocumentRemovalPlan, type ProjectPick, type Proposal, type Provider, type Session, type SessionStatus, type UiPrefs, type Work, type Workspace } from "@workbench/contracts";
 import { Api, ApiRequestError, readToken } from "./api.ts";
 import { saveBlobAs } from "./mobile-platform.ts";
 import { VoiceEnvironment } from "./voice/context.ts";
@@ -58,6 +58,14 @@ import type { DocModes } from "./components/note/ConversationHead.tsx";
 import { addShortcuts, readShortcuts, sameShortcut } from "./components/nav/model.ts";
 import { RenameDialog } from "./components/RenameDialog.tsx";
 import { DocRenameDialog } from "./components/docs/DocRenameDialog.tsx";
+import { HangulImportDialog, type ImportTarget } from "./components/docs/HangulImportDialog.tsx";
+import { HangulExportDialog } from "./components/docs/HangulExportDialog.tsx";
+import { openConverted } from "./components/docs/LegacyConvert.tsx";
+import type { ImportedFile } from "./api.ts";
+
+/** Documents "Markdown 문서로 변환" reads (hangul-convert.ts; .xls is not a listed format). */
+const CONVERTIBLE = new Set(["hwp", "hwpx", "docx", "pdf", "xlsx"]);
+const IMPORTABLE = /\.(hwp|hwpx|docx|pdf|xlsx|xls)$/i;
 import { EDITOR_MIN_WIDTH, documentAttentionSession, type AgentReveal } from "./components/docs/document-modes.ts";
 import { ContextMenu, type MenuEntry, type MenuRequest } from "./components/ContextMenu.tsx";
 import { createActions, creationWorkspace, type CreateAction } from "./create-actions.ts";
@@ -211,7 +219,7 @@ async function pickFileNative(folder: string): Promise<string | null> {
     multiple: false,
     defaultPath: folder,
     title: "문서 열기",
-    filters: [{ name: "문서", extensions: ["md", "markdown", "html", "htm", "pdf", "hwpx", "hwp", "txt", "docx", "pptx", "xlsx", "xlsm", "xmind", "epub"] }],
+    filters: [{ name: "문서", extensions: ["md", "markdown", "html", "htm", "pdf", "hwpx", "hwp", "txt", "docx", "pptx", "xlsx", "xlsm", "xmind", "epub", "doc", "ppt", "ods"] }],
   });
   return typeof picked === "string" ? picked : null;
 }
@@ -1839,6 +1847,25 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   /** A document AI being renamed (it has no sidebar row to rename in place). */
   const [renamingSession, setRenamingSession] = useState<Session | null>(null);
   const [renamingDoc, setRenamingDoc] = useState<Artifact | null>(null);
+  // 불러오기 / 내보내기 (hangul-convert): the files to convert, the Markdown document to export.
+  const [importing, setImporting] = useState<ImportTarget | null>(null);
+  // `editor`: the Word editor's own "한글 문서로 내보내기" sends its document as it is open (with unsaved edits).
+  const [exporting, setExporting] = useState<{ artifact: Artifact; editor?: { bytes: ArrayBuffer; passwordSet: boolean }; settle?: (result: { ok: boolean; path?: string }) => void } | null>(null);
+  const exportingRef = useRef(exporting);
+  exportingRef.current = exporting;
+  // The editors' own menu items (OfficeEditor relays them): the Word editor's and the Markdown editor's "한글 문서로 내보내기".
+  useEffect(() => {
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<{ artifactId: string; bytes?: ArrayBuffer; passwordSet?: boolean; settle?: (result: { ok: boolean; path?: string }) => void }>).detail;
+      const artifact = state.artifacts[detail.artifactId];
+      if (!artifact) { detail.settle?.({ ok: false }); return; }
+      // A dialog already open for another editor's request ends as not done.
+      exportingRef.current?.settle?.({ ok: false });
+      setExporting({ artifact, ...(detail.bytes ? { editor: { bytes: detail.bytes, passwordSet: Boolean(detail.passwordSet) } } : {}), ...(detail.settle ? { settle: detail.settle } : {}) });
+    };
+    window.addEventListener("workbench:hangul-export", open);
+    return () => window.removeEventListener("workbench:hangul-export", open);
+  }, [state.artifacts]);
   const deleteProject = async (owner: Work) => {
     if (!api) return;
     for (const pane of layoutRef.current.panes) for (const tab of tabsOf(pane)) if (tab.workId === owner.id) await leaveGuards.current[tab.id]?.();
@@ -2181,6 +2208,11 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
         const items: MenuEntry[] = [
           { kind: "item", label: "열기", icon: "file", hint: "Enter", onSelect: () => docActions.openArtifact(artifact.id) },
           { kind: "item", label: "이름 바꾸기", icon: "edit", onSelect: () => setRenamingDoc(artifact) },
+          // 불러오기 / 내보내기 (hangul-convert): a NEW document beside this one, never over it.
+          ...(CONVERTIBLE.has(artifact.format) ? [{ kind: "item" as const, label: "Markdown 문서로 변환", icon: "markdown" as const, onSelect: () => setImporting({ workId: artifact.workId, files: [{ path: artifact.path, name: artifact.name, artifactId: artifact.id }] }) }] : []),
+          ...(artifact.format === "markdown" || artifact.format === "docx" ? [{ kind: "item" as const, label: "한글 문서로 내보내기…", icon: "download" as const, onSelect: () => setExporting({ artifact }) }] : []),
+          // An old .doc/.ppt or an .ods (office-convert.ts): a NEW .docx/.pptx/.xlsx beside it, opened; the original kept.
+          ...(isLegacyFormat(artifact.format) ? [{ kind: "item" as const, label: "변환해서 열기", icon: "refresh" as const, onSelect: () => { if (api) void openConverted(api, artifact, (id) => docActions.openArtifact(id), setToast).catch(fail); } }] : []),
           ...(single ? [] : [{ kind: "item" as const, label: "오른쪽에 열기", icon: "columns" as const, hint: "Ctrl+클릭", onSelect: () => panesRef.current.placeItem({ kind: "doc", id: artifact.id }, "right") }]),
           ...(artifact.format === "markdown"
             ? [
@@ -2328,6 +2360,34 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   // Laid over the work (a narrow window, the phone), the column leaves once an item is chosen — also
   // when it is the one already on screen (nothing else changes then, so the view's effect cannot close it).
   const chosen = () => { if (compactShell) overlay.chosen(); };
+  /**
+   * "문서 불러오기…" (the native chooser, many files) or files dropped from the computer onto the
+   * project's 문서: each copied into the project folder by the gateway (never moved), then 변환.
+   */
+  const importDocuments = async (target: Work, dropped?: File[]) => {
+    if (!api) return;
+    try {
+      let files: ImportedFile[] = [];
+      if (dropped) {
+        const wanted = dropped.filter((file) => IMPORTABLE.test(file.name));
+        if (wanted.length < dropped.length) setToast({ kind: "error", text: "한글·워드·엑셀·PDF 파일만 불러옵니다. 다른 파일은 건너뛰었습니다." });
+        for (const file of wanted) files.push(...(await api.importUpload(target.id, file)).files);
+      } else if ("__TAURI_INTERNALS__" in window) {
+        const { open } = await import("@tauri-apps/plugin-dialog");
+        const picked = await open({ directory: false, multiple: true, defaultPath: target.cwd, title: "문서 불러오기", filters: [{ name: "한글·워드·엑셀·PDF", extensions: ["hwp", "hwpx", "docx", "xlsx", "xls", "pdf"] }] });
+        const paths = Array.isArray(picked) ? picked : typeof picked === "string" ? [picked] : [];
+        if (!paths.length) return;
+        files = (await api.importDocuments(target.id, paths)).files;
+      } else {
+        // A browser page (a phone joined to the PC) has no native chooser: the page's own file picker.
+        const input = Object.assign(document.createElement("input"), { type: "file", multiple: true, accept: ".hwp,.hwpx,.docx,.xlsx,.xls,.pdf" });
+        const chosen = await new Promise<File[]>((done) => { input.onchange = () => done(Array.from(input.files ?? [])); input.click(); });
+        for (const file of chosen) files.push(...(await api.importUpload(target.id, file)).files);
+      }
+      if (files.length) setImporting({ workId: target.id, files });
+    } catch (error) { fail(error); }
+  };
+
   const sidebarActions: SidebarActions = {
     web: webRows,
     closeWebTab: session => { if (session.pageAgent) void sharedBrowser.close(session.pageAgent.pageId).catch(fail); },
@@ -2371,6 +2431,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
     openArchive: () => setView({ kind: "archive" }),
     linkSessions: (pair) => linkApi.openDialog(pair.map((session) => session.id)),
     importConversations: () => setImportOpen(true),
+    importDocuments: (target, files) => void importDocuments(target, files),
     openRight: single ? undefined : (item) => placeItem(item, "right"),
     // N1: a project chosen in the list brings back the tab the person had open in it (the focused
     // pane's most recent, else another pane's), else its project note. Nothing else moves or stops.
@@ -3469,6 +3530,8 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
         onConfirm={async () => unsavedAsk.answer(true)} onClose={() => { unsavedAsk.answer(false); setUnsavedAsk(null); }} /></FromMenu> : null}
       {refusedTrash ? <FromMenu><ConfirmDialog title="휴지통으로 옮길 수 없습니다" tone="primary" lines={[refusedTrash.reason, "목록에서만 빼면 파일은 그대로 둡니다."]} confirmLabel="목록에서 빼기" busyLabel="빼는 중…"
         onConfirm={() => removeDoc(refusedTrash.artifact, "unlisted")} onClose={() => setRefusedTrash(null)} /></FromMenu> : null}
+      {importing && api ? <HangulImportDialog api={api} target={importing} onOpen={(id) => docActions.openArtifact(id)} onClose={() => setImporting(null)} /> : null}
+      {exporting && api ? <FromMenu><HangulExportDialog api={api} artifact={exporting.artifact} editor={exporting.editor} onOpen={(id) => docActions.openArtifact(id)} onDone={(made) => exporting.settle?.({ ok: true, path: made.path })} onClose={() => { if (exporting.settle) exporting.settle({ ok: false }); setExporting(null); }} /></FromMenu> : null}
       {renamingDoc && api ? <FromMenu><DocRenameDialog artifact={renamingDoc} rename={api.renameDocument} notify={setToast} onClose={() => setRenamingDoc(null)} /></FromMenu> : null}
       {renamingSession ? <FromMenu><RenameDialog title="문서 AI 이름 바꾸기" value={renamingSession.purpose} onSave={(purpose) => api ? api.updateSession(renamingSession.id, { purpose }).then(() => undefined) : Promise.resolve()} onClose={() => setRenamingSession(null)} /></FromMenu> : null}
       {deletingWork ? <ProjectDeleteDialog work={deletingWork} sessions={Object.values(state.sessions).filter(session => session.workId === deletingWork.id).length}

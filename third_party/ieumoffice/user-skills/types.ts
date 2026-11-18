@@ -1,5 +1,7 @@
-// Adapted from IeumOffice packages/ai-provider/src/user-skills/types.ts @ 30ff4f051f067fcb2baf1ab416c40718c802ca35.
+// Adapted from IeumOffice packages/ai-provider/src/user-skills/types.ts @ 8602a39410adb86037f3008588b64efc75b08c60.
 // Apache-2.0; see ../LICENSE and ../NOTICE. Changes: explicit Node .ts and local package imports.
+import type { SkillEditorId, SkillEditorsChoice } from '../agent-core/skill-editors.ts'
+
 /**
  * Shapes of the person's skills: where one comes from, what was read from its
  * folder, and its on/off state.
@@ -46,10 +48,14 @@ export interface UserSkill {
   template: string | undefined
   templateExists: boolean
   hasScripts: boolean
+  /** MCP servers named in SKILL.md: front matter `allowed-tools` and the body (spec 8) */
+  mcpServers: string[]
   /** an app skill installed from GitHub (it has a source record) */
   github: boolean
   /** a builtin skill only the agent window uses */
   agentOnly: boolean
+  /** `metadata.ieum-editors`, known ids only; undefined: every editor */
+  fileEditors: SkillEditorId[] | undefined
   files: number
   bytes: number
   unreadable: UserSkillUnreadableReason | undefined
@@ -62,6 +68,8 @@ export type UserSkillInvoke = 'auto' | 'manual'
 export interface UserSkillStateSetting {
   enabled?: boolean
   invoke?: UserSkillInvoke
+  /** where the skill is used, over what its file says (skills the person cannot edit) */
+  editors?: SkillEditorsChoice
 }
 
 /** The `skills` value of the app settings file, after reading */
@@ -78,6 +86,8 @@ export interface ResolvedUserSkill extends UserSkill {
   invoke: UserSkillInvoke
   /** a builtin skill the person hid; it is off */
   hidden: boolean
+  /** the editors the skill is used in (the person's choice, else its file); undefined: every editor */
+  editors: SkillEditorId[] | undefined
 }
 
 /** One entry of `builtin-skills.json` */

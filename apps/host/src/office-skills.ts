@@ -1,4 +1,4 @@
-import { dirname, extname, isAbsolute } from "node:path";
+import { dirname, extname, isAbsolute, relative } from "node:path";
 import { createHash } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WorkbenchSkill } from "@workbench/contracts";
@@ -17,8 +17,9 @@ import type { Store } from "./store.ts";
 import { OfficeHomeSkills } from "./office-home-skills.ts";
 import { bindTemplateSession, isTemplateSource } from "./office-template-session.ts";
 import { readFile, writeFile } from "node:fs/promises";
-import { defaultNamed, effectiveHallym, emptyUntouched, hangulInput, madePath, makeHangulDocument } from "./hangul-document.ts";
+import { defaultNamed, effectiveHallym, emptyUntouched, hangulInput, hangulKind, madePath, makeHangulDocument } from "./hangul-document.ts";
 
+const within = (root: string, path: string) => { const rel = relative(root, path); return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel); };
 export type OfficeSkillContext = { artifactId: string; token: string; grants: EditorGrants };
 type Context = OfficeSkillContext;
 export type OfficeSkillAccess = ReturnType<OfficeSkills["writable"]>;
@@ -256,7 +257,8 @@ export class OfficeSkills {
     const input = hangulInput(raw);
     const chosen = effectiveHallym(await this.manager.userSkills.list(scope));
     if ("refused" in chosen) return { made: false, status: "unavailable", reason: chosen.refused === "disabled" ? "hallym-kordoc 스킬이 설정 › 스킬에서 꺼져 있습니다." : chosen.refused === "no-runner" ? "사용 중인 hallym-kordoc 사본에 실행기(scripts/run.mjs)가 없습니다." : "hallym-kordoc 스킬을 찾지 못했습니다." };
-    const result = await makeHangulDocument(chosen.skill.dir, input, { documentPath: artifact.path, signal, fill: async (hwpx, title) => {
+    const root = this.manager.documentDestination(artifact.workId, artifact.workspaceId).cwd;
+    const result = await makeHangulDocument(chosen.skill.dir, input, { documentPath: artifact.path, signal, root: within(root, artifact.path) ? root : dirname(artifact.path), templates: this.manager.hangulConvert.templates, fill: async (hwpx, title) => {
       // The open document is empty and untouched: the made one becomes its content when the turn ends.
       if (!(await this.blank(artifact.id))) return null;
       this.made.set(artifact.id, { sourceArtifactId: artifact.id, sessionId, fill: { bytes: await readFile(hwpx), title, revision: this.manager.documents.get(artifact.id).revision } });
@@ -268,7 +270,7 @@ export class OfficeSkills {
       this.manager.sink.upsertItem(sessionId, { kind: "artifact", id: `artifact:hangul:${tracked.artifact.id}`, artifactId: tracked.artifact.id, revision: tracked.artifact.revision, change: "created", at: Date.now() });
       return tracked.artifact.id;
     } });
-    return { ...result, skill: chosen.skill.source === "builtin" ? "hallym-kordoc (앱 기본)" : "hallym-kordoc (설치한 사본)" };
+    return { ...result, kind: hangulKind(input), skill: hangulKind(input) === "general" ? "한글 문서 만들기 (kordoc 내보내기)" : chosen.skill.source === "builtin" ? "hallym-kordoc (앱 기본)" : "hallym-kordoc (설치한 사본)" };
   }
   /** Revalidate the exact versions the composer read, before admitting a model run. */
   async prepare(context: Context, raw: unknown): Promise<{ text: string; skills: OfficeStoredSkill[]; skillReads: OfficeStoredSkill[] } | undefined> {

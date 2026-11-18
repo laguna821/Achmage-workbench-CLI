@@ -1,10 +1,11 @@
-// Adapted from IeumOffice packages/ai-provider/src/user-skills/states.ts @ 30ff4f051f067fcb2baf1ab416c40718c802ca35.
+// Adapted from IeumOffice packages/ai-provider/src/user-skills/states.ts @ 8602a39410adb86037f3008588b64efc75b08c60.
 // Apache-2.0; see ../LICENSE and ../NOTICE. Changes: explicit Node .ts and local package imports.
 /**
  * On/off states. The settings file keeps only what the person changed; the
  * rest is the initial state of the skill's source. Every AI window follows the
  * same result. Project skills of the agent window are always on.
  */
+import { skillEditorScope, skillEditorsChoiceOf } from '../agent-core/skill-editors.ts'
 import { USER_SKILL_PRIORITY } from './constants.ts'
 import { parseUserSkillId } from './names.ts'
 import type {
@@ -45,10 +46,12 @@ export function normalizeUserSkillSettings(raw: unknown): UserSkillSettings {
       const parsed = parseUserSkillId(id)
       if (!parsed || parsed.source === 'project') continue
       if (!value || typeof value !== 'object' || Array.isArray(value)) continue
-      const { enabled, invoke } = value as Record<string, unknown>
+      const { enabled, invoke, editors } = value as Record<string, unknown>
       const state: UserSkillStateSetting = {}
       if (typeof enabled === 'boolean') state.enabled = enabled
       if (isInvoke(invoke)) state.invoke = invoke
+      const choice = skillEditorsChoiceOf(editors)
+      if (choice) state.editors = choice
       settings.states[id] = state
     }
   }
@@ -75,7 +78,13 @@ export function resolveUserSkillStates(
   return skills.map((skill) => {
     const initial = initialUserSkillState(skill.source)
     if (skill.source === 'project') {
-      return { ...skill, enabled: skill.unreadable === undefined, invoke: 'auto', hidden: false }
+      return {
+        ...skill,
+        enabled: skill.unreadable === undefined,
+        invoke: 'auto',
+        hidden: false,
+        editors: skill.fileEditors,
+      }
     }
     const saved = settings.states[skill.id] ?? {}
     const isHidden = skill.source === 'builtin' && hidden.has(skill.name.toLowerCase())
@@ -84,6 +93,7 @@ export function resolveUserSkillStates(
       enabled: !isHidden && skill.unreadable === undefined && (saved.enabled ?? initial.enabled),
       invoke: saved.invoke ?? initial.invoke,
       hidden: isHidden,
+      editors: skillEditorScope(saved.editors, skill.fileEditors),
     }
   })
 }

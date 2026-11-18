@@ -7,6 +7,7 @@ import { installInPlaceReplace, keepScroll } from "./replace-in-place.ts";
 import { recovery } from "./recovery.ts";
 import { configureTextAssets, resolveTextImage, unresolveTextImage } from "./text-assets.ts";
 import { copyOfficeBytes, officeCopyBusy } from "./copy.ts";
+import { askHangulExport } from "./hangul-export.ts";
 import type { OfficeOutputFormat } from "../../../packages/contracts/src/office-output.ts";
 import { cancelOutput, commitGeneratedOutput, htmlOutput, prepareOutput, presentHtml, prepareImageOutput, writeImageOutput, finishImageOutput } from "./output.ts";
 import { preparePrintHtml } from "./print-html.ts";
@@ -17,6 +18,8 @@ import { createMarkdownSettings } from "./markdown-settings.ts";
 import { noteRequests } from "./pdf-notes.ts";
 
 /** The original Markdown/HTML renderers serialize their own source; never normalize it here. */
+const PRINT_LAYOUT_NOT_YET = "고급 인쇄는 Workbench에 아직 연결하지 않았습니다.";
+
 export async function createTextEditor(kind: "markdown" | "html") {
   const init = await handshake(), gateway = new Gateway(init.token), events = new Events();
   const headless = headlessExport(init);
@@ -288,7 +291,32 @@ export async function createTextEditor(kind: "markdown" | "html") {
       try { await htmlOutput(revision, await preparePrintHtml(request.html, printOptions), "html-print"); return { ok: true }; }
       catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
     },
-    renderPrintPreview: async () => null,
+    // v0.13.0: Markdown's Print opens a preview dialog (its PDF preview is not connected: the dialog says so) whose
+    // Print goes through printDocument, i.e. Workbench's print as before; HTML's page rail still takes null.
+    renderPrintPreview: async () => kind === "markdown" ? { ok: false, error: "인쇄 미리 보기는 아직 연결하지 않았습니다. 인쇄는 할 수 있습니다." } : null,
+    printDocument: async (request: { html: string; pages: { from: number; to: number } | null }) => {
+      if (request.pages) return { ok: false, error: "쪽을 골라 인쇄하기는 아직 연결하지 않았습니다. 모든 쪽으로 인쇄해 주세요." };
+      try { await htmlOutput(revision, await preparePrintHtml(request.html, printOptions), "html-print"); return { ok: true }; }
+      catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
+    },
+    // 고급 인쇄 (v0.13.0: N-up, booklet, labels, a page range) is not connected: its dialog's plain Print stays.
+    printJobPages: async () => ({ ok: false, error: PRINT_LAYOUT_NOT_YET }),
+    printLayout: {
+      preview: async () => ({ ok: false, error: PRINT_LAYOUT_NOT_YET }),
+      print: async () => ({ ok: false, error: PRINT_LAYOUT_NOT_YET }),
+      savePdf: async () => ({ ok: false, error: PRINT_LAYOUT_NOT_YET }),
+      cancel: async () => {},
+      onProgress: () => () => {},
+      getLabelSpec: async () => null,
+      setLabelSpec: async () => ({ ok: false, error: PRINT_LAYOUT_NOT_YET }),
+    },
+    // Markdown → 한글: the window's 한글 문서로 내보내기 dialog (the HanMark way, kordoc — the owner's direction),
+    // not upstream's docx2hwp. It reads the saved document; the editor's own export of Word bytes is not used.
+    // `canceled` keeps upstream's App from logging a failure; the dialog says what happened.
+    exportHwp: async () => {
+      const result = await askHangulExport();
+      return result.ok && result.path ? { ok: true, path: result.path } : { ok: true, canceled: true };
+    },
     takeGenerateHandoff: async () => null, reportGenerateRunStarted: () => {},
     getPreviewInfo: () => gateway.previewInfo(id),
     updatePreview: (text: string) => (previewQueue = previewQueue.catch(() => {}).then(() => gateway.updatePreview(id, text))),

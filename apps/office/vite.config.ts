@@ -7,11 +7,14 @@ import { patchPdfHistory } from "./pdf-history-patch.ts";
 import { patchPdfCopy } from "./pdf-copy-patch.ts";
 import { patchPdfImageExport } from "./pdf-image-export-patch.ts";
 import { patchPdfLoader } from "./pdf-loader-patch.ts";
+import { patchPdfTools } from "./pdf-tools-patch.ts";
 import { patchOfficeSkillConversation } from "./skill-conversation-patch.ts";
 import { patchOfficeExecution } from "./execution-patch.ts";
+import { patchHangulOffer } from "./hwp-offer-patch.ts";
 import { templateFonts } from "./template-fonts-build.ts";
-import { hwpMemoDatePatch } from "./src/hwp-memo-date.ts";
 import { koreanCopy } from "./korean-copy-plugin.ts";
+import { foldOtherAiConnections } from "./settings-fold-patch.ts";
+import { IEUM_DRIVE_DIR, IEUM_HWP_DIR } from "../../scripts/ieum-earlier-source.mjs";
 
 // IeumOffice's editor screens, built from vendor/ieumoffice (scripts/fetch-ieum.sh) and served on
 // the editors' own origin at /office/. The editors are used unchanged:
@@ -26,6 +29,19 @@ import { koreanCopy } from "./korean-copy-plugin.ts";
 const ieum = realpathSync(fileURLToPath(new URL("../../vendor/ieumoffice", import.meta.url)));
 if (!existsSync(`${ieum}/node_modules`)) throw new Error("vendor/ieumoffice is missing: run scripts/fetch-ieum.sh first");
 const packages = `${ieum}/packages`;
+// The Hangul page (hwp.html) and the settings page's Google Drive parts build from an earlier checkout
+// until they move (the switches: scripts/ieum-earlier-source.mjs). What they import from upstream
+// resolves inside that checkout.
+const checkoutOf = (dir: string) => {
+  const root = realpathSync(fileURLToPath(new URL(`../../${dir}`, import.meta.url)));
+  if (!existsSync(`${root}/node_modules`)) throw new Error(`${dir} is missing: run scripts/fetch-ieum.sh first`);
+  return root;
+};
+const ieumHwp = checkoutOf(IEUM_HWP_DIR), ieumDrive = checkoutOf(IEUM_DRIVE_DIR);
+const hwpLegacy = ieumHwp !== ieum;
+const earlier = [...new Set([ieumHwp, ieumDrive])].filter((root) => root !== ieum);
+/** The upstream checkout a module belongs to (patches pass it on as their root). */
+const rootOf = (id: string) => earlier.find((root) => id.startsWith(`${root}/`)) ?? ieum;
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 const slidesMain = `${ieum}/apps/slides/src/main/`;
 const sheetsMain = `${ieum}/apps/sheets/src/main/`;
@@ -102,6 +118,8 @@ function workbenchPlatform(): Plugin {
     "@genoffice/electron-utils": platform("electron-utils.ts"),
     "@genoffice/electron-utils/atomic-write": platform("electron-utils.ts"),
     "@genoffice/electron-utils/office-encryption": platform("electron-utils.ts"),
+    // 고급 인쇄's Electron print and pdfium worker thread (v0.13.0), like pdf-export / print-window below.
+    "@genoffice/electron-utils/print-arranged": platform("unused.ts"),
   };
   // Modules of the slides main code Workbench replaces, by their path relative to it.
   const LOCAL: Record<string, string> = {
@@ -132,6 +150,7 @@ function workbenchPlatform(): Plugin {
     "./pdf-export": platform("unused.ts"),
     "./template-fonts": platform("unused.ts"),
     "./legacy-import": platform("unused.ts"),
+    "./print-layout": platform("unused.ts"),
     "./xlsx-sidecar-client": here("./src/sheets/engine-client.ts"),
   };
   return {
@@ -148,13 +167,34 @@ function workbenchPlatform(): Plugin {
   };
 }
 
+/**
+ * An earlier checkout's modules stay inside it: the Hangul page's entry (`@ieum/apps/hwp/…`) goes to the
+ * Hangul checkout, and every path into the main checkout that a module of an earlier checkout asks for
+ * (the workspace-package aliases above) goes to the same file in that module's checkout. React stays the
+ * one shared instance (same version in both).
+ */
+function earlierCheckouts(): Plugin {
+  const shared = [`${ieum}/node_modules/react/`, `${ieum}/node_modules/react-dom/`];
+  return {
+    name: "workbench-earlier-checkouts", enforce: "pre",
+    resolveId(source, importer) {
+      if (source.startsWith("@ieum-drive/")) return this.resolve(`${ieumDrive}/${source.slice("@ieum-drive/".length)}`, importer, { skipSelf: true });
+      if (!earlier.length || !source.startsWith(`${ieum}/`)) return null;
+      const from = importer && rootOf(importer) !== ieum && !shared.some((dir) => source.startsWith(dir) || `${source}/` === dir) ? rootOf(importer) : null;
+      const root = from ?? (hwpLegacy && source.startsWith(`${ieum}/apps/hwp/`) ? ieumHwp : null);
+      if (!root) return null;
+      return this.resolve(root + source.slice(ieum.length), importer, { skipSelf: true });
+    },
+  };
+}
+
 /** The page side of the slides editor: its preload's Electron imports go to the page's transport. */
 function pagePlatform(): Plugin {
   return {
     name: "workbench-page-platform",
     enforce: "pre",
     resolveId(source, importer) {
-      if (source === "./save-flow" && importer === `${ieum}/apps/hwp/src/renderer/App.tsx`) return here("./src/hwp-save.ts");
+      if (source === "./save-flow" && importer === `${ieumHwp}/apps/hwp/src/renderer/App.tsx`) return here("./src/hwp-save.ts");
       if (source === "@genoffice/pdf-structure" && (importer?.includes("/apps/epub/") || importer?.includes("/packages/epub-engine/"))) return `${ieum}/apps/epub/src/renderer/translate/pdf-structure-browser.ts`;
       return source === "electron" ? here("./src/platform/electron-renderer.ts") : null;
     },
@@ -180,6 +220,9 @@ function originalSettingsPanes(): Plugin {
     return () => { alive = false; window.removeEventListener('workbench:knowledge-corpus-changed', refresh); };
   }, []);\n\n` + marker);
       }
+      if (id === `${ieum}/apps/shell/src/renderer/src/SettingsAiSection.tsx`) {
+        try { return foldOtherAiConnections(code); } catch (error) { this.error(error instanceof Error ? error.message : String(error)); }
+      }
       if (id !== `${ieum}/apps/shell/src/renderer/src/SettingsModal.tsx`) return null;
       for (const name of ["AiModelPane", "AiMediaPane"]) {
         const marker = `function ${name}(`;
@@ -202,10 +245,11 @@ function originalOfficeConversation(): Plugin {
   return {
     name: "workbench-office-conversation", enforce: "pre",
     transform(code, id) {
-      const adapted = patchOfficeExecution(patchOfficeSkillConversation(code, id, ieum), id, ieum, here("./src/execution-adapter.ts"));
+      const root = rootOf(id), legacy = root !== ieum;
+      const adapted = patchOfficeExecution(patchOfficeSkillConversation(patchHangulOffer(code, id, root), id, root), id, root, here("./src/execution-adapter.ts"));
       const skillChanged = adapted !== code;
       code = adapted;
-      if (["docs", "slides", "sheets", "hwp", "html", "mindmap", "epub"].some((app) => id === `${ieum}/apps/${app}/src/renderer/ai/files-skill.ts`)) {
+      if (["docs", "slides", "sheets", "hwp", "html", "mindmap", "epub"].some((app) => id === `${root}/apps/${app}/src/renderer/ai/files-skill.ts`)) {
         const boundary = /(export function createFilesSkill\([\s\S]*?\): AgentSkill \{)/;
         if (!boundary.test(code)) this.error("Original attachment factory changed: review the Workbench reference adapter");
         return `import { bindOfficeFiles } from ${JSON.stringify(here("./src/office-references.ts"))};\n` + code.replace(boundary, "$1\n  getAttachments = bindOfficeFiles(getAttachments);");
@@ -240,7 +284,7 @@ function originalOfficeConversation(): Plugin {
           .replace("    const raw = localStorage.getItem(CHAT_STORAGE_KEY)", "    return; // Preserve legacy storage until Workbench's migration records it.\n    const raw = localStorage.getItem(CHAT_STORAGE_KEY)");
         return `import { WorkbenchAgentLoop } from ${JSON.stringify(here("./src/office-agent.ts"))};\nimport { useSyncExternalStore as wbUseStore } from 'react';\n${code}`;
       }
-      const app = ["docs", "slides", "hwp", "pdf", "markdown", "html", "mindmap", "epub"].find((name) => id === `${ieum}/apps/${name}/src/renderer/ai/AiPanel.tsx`);
+      const app = ["docs", "slides", "hwp", "pdf", "markdown", "html", "mindmap", "epub"].find((name) => id === `${root}/apps/${name}/src/renderer/ai/AiPanel.tsx`);
       if (!app) return skillChanged ? code : null;
       if (app === "slides") {
         const thumb = "function ImageThumb({ url, title }: { url: string; title?: string }) {";
@@ -253,25 +297,37 @@ function originalOfficeConversation(): Plugin {
         code = `import { GeneratedImageThumb } from ${JSON.stringify(here("./src/slides/generated-image.tsx"))};\n${code}\nfunction ImageThumb(props) { return wbCreateElement(/^file:/.test(props.url) ? GeneratedImageThumb : OriginalImageThumb, props); }\n`;
       }
       if (app === "hwp") {
-        // The original HWP history mapper omits attachment cards. Restore the
-        // authoritative metadata just as the other original panels do.
-        const marker = "            text: message.text,\n            ...(message.tools";
+        // The original HWP history mapper (v0.13.0: the module-level chatEntryOf, used for a stored
+        // document chat and a project chat alike) omits attachment cards. Restore the authoritative
+        // metadata just as the other original panels do.
+        const marker = "function chatEntryOf(message: StoredEntry): ChatEntry {\n  return {\n    role: message.role,\n    text: message.text,\n    ...(message.tools";
         if (code.split(marker).length !== 2) this.error("Original HWP attachment history changed: review the Workbench history adapter");
-        code = code.replace(marker, "            text: message.text,\n            attachments: message.attachments?.filter((a) => a.path).map((a) => ({ path: a.path, name: a.name, ext: a.ext ?? '', sizeBytes: a.sizeBytes ?? 0 })),\n            ...(message.tools");
+        code = code.replace(marker, "function chatEntryOf(message: StoredEntry & { attachments?: { path?: string; name: string; ext?: string; sizeBytes?: number }[] }): ChatEntry {\n  return {\n    role: message.role,\n    text: message.text,\n    attachments: message.attachments?.filter((a) => a.path).map((a) => ({ path: a.path, name: a.name, ext: a.ext ?? '', sizeBytes: a.sizeBytes ?? 0 })),\n    ...(message.tools");
       }
-      const named = app === "docs" || app === "slides";
-      const boundary = named ? "  const newChat = () => {" : "                loopRef.current?.reset()";
+      // "New chat" (every caller: the button, the project panel, keys) is one function in each panel:
+      // `newChat` in Word and PowerPoint, `startNewChat` in PDF, Markdown and Hangul, `newChat` with a return type
+      // in HTML, mind map and EPUB. Hangul (v0.13.0): `startNewChat` is the button and the project panel's
+      // onNewChat; it calls `resetConversation()`, which opening a stored chat also calls, so the boundary is
+      // `startNewChat`, not the reset (opening a chat must not start a new Workbench session).
+      const boundary = app === "docs" || app === "slides" ? "  const newChat = () => {"
+        : app === "pdf" || app === "markdown" || app === "hwp" ? "  const startNewChat = (): void => {"
+        : "  const newChat = (): void => {";
       for (const marker of ["export function AiPanel(", "new AgentLoop", boundary]) {
         if (code.split(marker).length !== 2) this.error(`Original ${app} AI panel changed: review the Workbench conversation adapter`);
       }
       // Intercept before the original handler clears UI/queues. The authoritative
       // session switch cancels and awaits the old turn, then remounts only its panel.
-      const handler = named ? code.indexOf(boundary) : code.lastIndexOf("onClick={() => {", code.indexOf(boundary));
+      const handler = code.indexOf(boundary);
       if (handler < 0) this.error(`Original ${app} new-chat handler changed`);
-      const start = handler + (named ? boundary.length : "onClick={() => {".length);
+      const start = handler + boundary.length;
       code = code.slice(0, start) + "\n    void window.workbenchOfficeAi.newSession().catch((error) => window.alert(error.message));\n    return;" + code.slice(start);
       code = code.replace("export function AiPanel(", "function OriginalAiPanel(").replace("new AgentLoop", "new WorkbenchAgentLoop");
-      return `import { WorkbenchAgentLoop } from ${JSON.stringify(here("./src/office-agent.ts"))};\nimport { createElement as wbCreateElement, useSyncExternalStore as wbUseStore } from 'react';\n${code}\nexport function AiPanel(props) {\n  const bridge = window.workbenchOfficeAi;\n  const key = wbUseStore(bridge.subscribe, bridge.snapshot);\n  return wbCreateElement(OriginalAiPanel, { ...props, key });\n}\n`;
+      // A panel of an earlier checkout would run over its own checkout's agent core (WorkbenchAgentLoop.over);
+      // since the Hangul page moved to the main pin (unit hwp13) no panel does.
+      const loop = legacy
+        ? `import { WorkbenchAgentLoop as WbLoopOverMain } from ${JSON.stringify(here("./src/office-agent.ts"))};\nimport { AgentLoop as WbOriginalLoop } from ${JSON.stringify(`${root}/packages/agent-core/src/loop.ts`)};\nconst WorkbenchAgentLoop = WbLoopOverMain.over(WbOriginalLoop);`
+        : `import { WorkbenchAgentLoop } from ${JSON.stringify(here("./src/office-agent.ts"))};`;
+      return `${loop}\nimport { createElement as wbCreateElement, useSyncExternalStore as wbUseStore } from 'react';\n${code}\nexport function AiPanel(props) {\n  const bridge = window.workbenchOfficeAi;\n  const key = wbUseStore(bridge.subscribe, bridge.snapshot);\n  return wbCreateElement(OriginalAiPanel, { ...props, key });\n}\n`;
     },
   };
 }
@@ -405,11 +461,6 @@ export default defineConfig({
     { name: "workbench-office-ui-font", generateBundle() {
       for (const file of ["PretendardVariable.ttf", "LICENSE.txt"]) this.emitFile({ type: "asset", fileName: `fonts/pretendard/${file}`, source: readFileSync(here(`../web/public/fonts/pretendard/${file}`)) });
     } },
-    { name: "workbench-hwp-memo-date", enforce: "pre", transform(code, id) {
-      // rhwp 0.9.0 gives a memo's date as Hangul writes it, local time with a literal Z (H4b)
-      if (id !== `${ieum}/apps/hwp/src/renderer/MemoPanel.tsx`) return;
-      return hwpMemoDatePatch(code, here("./src/hwp-memo-date.ts"));
-    } },
     { name: "workbench-sheets-generated-images", enforce: "pre", transform(code, id) {
       if (id !== `${ieum}/apps/sheets/src/preload/index.ts`) return;
       // The original renderer accepts generated file URLs. Its older preload still rejects
@@ -425,12 +476,13 @@ export default defineConfig({
       return `import { cancelOfficeCopy } from ${JSON.stringify(here("./src/copy.ts"))};\n` + code.replace(marker, "function originalWorkbenchSave(\n  ctx: FileActionContext,")
         + "\nexport async function save(...args: Parameters<typeof originalWorkbenchSave>): Promise<boolean> { try { return await originalWorkbenchSave(...args); } finally { if (args[1]) cancelOfficeCopy(); } }\n";
     } },
+    earlierCheckouts(),
     pagePlatform(),
     templateFonts(`${packages}/ui/template-fonts`),
     originalSettingsPanes(),
     originalOfficeConversation(),
     { name: "workbench-pdf-history", enforce: "pre", transform(code, id) {
-      return id === `${ieum}/apps/pdf/src/renderer/App.tsx` ? patchPdfLoader(patchPdfImageExport(patchPdfCopy(patchPdfHistory(code, here("./src/pdf-history.ts"))), here("./src/pdf-history.ts")), here("./src/pdf-loader.tsx")) : null;
+      return id === `${ieum}/apps/pdf/src/renderer/App.tsx` ? patchPdfTools(patchPdfLoader(patchPdfImageExport(patchPdfCopy(patchPdfHistory(code, here("./src/pdf-history.ts"))), here("./src/pdf-history.ts")), here("./src/pdf-loader.tsx"))) : null;
     } },
     textEditorPlatform(),
     // The editors' words in plain Korean (design review copy list; the vendored source is not edited).
@@ -441,6 +493,7 @@ export default defineConfig({
       { title: "IeumOffice / GenOffice (Apache License 2.0)", files: [`${ieum}/NOTICE`, `${ieum}/LICENSE`] },
       { title: "Unicode data used by IeumOffice", files: [`${ieum}/LICENSE-UNICODE.txt`] },
       { title: "rhwp editor / WASM engine", files: [here("./public/studio/LICENSE-rhwp.txt"), here("./public/studio/THIRD-PARTY-LICENSES-rhwp.md")] },
+      { title: "libhangul Hanja dictionary (한자 변환, BSD-3-Clause)", files: [here("./public/studio/hanja/LICENSE-libhangul-hanja.txt")] },
       { title: "Achmage HOP font, canvas and layout improvements (MIT)", files: [here("../../third_party/hop/LICENSE")] },
       {
         title: "Fonts bundled with the editors",

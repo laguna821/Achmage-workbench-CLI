@@ -2,10 +2,10 @@
  "schema": 5,
  "engine": {
   "dir": "third_party/hop/rhwp-core-0.9.0",
-  "wasmSha256": "259f87cb96c5caa207c48b82226ed83979910b545ce2095101fe51960f52c425",
-  "version": "0.9.0-workbench.3"
+  "wasmSha256": "ec4d6f026494dd162ae0bf52b2f5610fac11f340709da7a133b0d2b13a8b5a10",
+  "version": "0.9.0-workbench.4"
  },
- "codecWasmSha256": "259f87cb96c5caa207c48b82226ed83979910b545ce2095101fe51960f52c425",
+ "codecWasmSha256": "ec4d6f026494dd162ae0bf52b2f5610fac11f340709da7a133b0d2b13a8b5a10",
  "startedAt": "2026-11-14T08:47:57.918Z",
  "node": "v26.8.1",
  "ms": 661161,

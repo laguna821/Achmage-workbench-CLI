@@ -2,11 +2,12 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { DriveConnection, FOLDER_MIME, openPlan, isGoogleNative } from "../../../vendor/ieumoffice/packages/google-drive/src/index.ts";
-import { DriveFiles } from "../../../vendor/ieumoffice/apps/shell/src/main/drive/drive-files.ts";
-import { DriveAi, entryType } from "../../../vendor/ieumoffice/apps/shell/src/main/drive/drive-ai.ts";
-import { downloadPicks } from "../../../vendor/ieumoffice/apps/shell/src/main/drive/drive-attach.ts";
-import { copyFileName, driveText } from "../../../vendor/ieumoffice/apps/shell/src/main/drive/drive-strings.ts";
+// Drive builds from the earlier pin (scripts/ieum-earlier-source.mjs, the Google Drive switch).
+import { DriveConnection, FOLDER_MIME, openPlan, isGoogleNative } from "@ieum-drive/packages/google-drive/src/index.ts";
+import { DriveFiles } from "@ieum-drive/apps/shell/src/main/drive/drive-files.ts";
+import { DriveAi, entryType } from "@ieum-drive/apps/shell/src/main/drive/drive-ai.ts";
+import { downloadPicks } from "@ieum-drive/apps/shell/src/main/drive/drive-attach.ts";
+import { copyFileName, driveText } from "@ieum-drive/apps/shell/src/main/drive/drive-strings.ts";
 import { atomicWriteFile } from "../../../vendor/ieumoffice/apps/shell/src/main/atomic-write.ts";
 import { OfficeVault } from "./office-vault.ts";
 import { watchDriveCopies } from "./office-drive-watch.ts";

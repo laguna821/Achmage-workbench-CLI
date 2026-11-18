@@ -14,7 +14,7 @@ import { pdfJobs } from "./pdf-jobs.ts";
 import { noteRequests } from "./pdf-notes.ts";
 import { pdfOfficeConvert } from "./pdf-office-convert.tsx";
 import { configurePdfLoader } from "./pdf-loader.tsx";
-import { preparePdfImages, writePdfImages, finishPdfImages, revealExport } from "./output.ts";
+import { preparePdfImages, writePdfImages, finishPdfImages, revealExport, prepareOutput, cancelOutput, commitGeneratedOutput } from "./output.ts";
 
 const init = await handshake(), gateway = new Gateway(init.token);
 const ai = mountOfficeAi(init, gateway);
@@ -25,7 +25,7 @@ connectOfficeUi(init, "pdf", command => {
   dispatch("pdf:print-request", []);
 }, next => { theme = next; dispatch("app:theme-changed", [theme]); });
 let source = await gateway.raw(id, revision), restored = false, dirty = false, epoch = 0, opened = false;
-let writing = 0, copyOpening = false;
+let writing = 0, copyOpening = false, unprotectable = false;
 let copyState: { turn: OfficeCopy; redaction: boolean; finish(ok: boolean): void } | null = null;
 const copying = () => copyOpening || copyState !== null || officeCopyBusy();
 if (init.recover && !init.readOnly) {
@@ -66,7 +66,8 @@ let recoveryFailure = false;
 const checkPath = (value: unknown) => { if (value !== path) throw new Error("열린 PDF만 처리할 수 있습니다."); };
 const requestOf = (value: unknown) => { if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("PDF 요청이 올바르지 않습니다."); const request = value as PdfRequest; checkPath(request.path); return request; };
 async function keepRequest(request: PdfRequest) {
-  if (init.readOnly) return "skipped";
+  // A password-protected document keeps no recovery copy (its content would sit unprotected), as upstream.
+  if (init.readOnly || unprotectable) return "skipped";
   if (pdfHistory.busy() || copying()) return "superseded";
   const before = epoch, baseRevision = revision;
   try {
@@ -181,6 +182,44 @@ const pathQueries: Record<string, string> = {
 const transforms: Record<string, string> = { "pdf:insert-blank-page": "blank-page", "pdf:set-page-size": "page-size", "pdf:crop-pages": "crop" };
 const preferences = await createOfficePreferences(init, gateway, (channel, value) => dispatch(channel, [value]), legacyOfficePanel("workbench.office.pdf.prefs"));
 const fail = (channel: string) => { throw new Error(`PDF의 이 서비스를 아직 연결하지 못했습니다: ${channel}`); };
+// v0.13.0's PDF services Workbench has not connected (compare with another file and the attachment file picker /
+// save: each needs a file chosen outside the open document, and Workbench has no plain route for that from this page):
+// each answers in the shape its caller already handles, so the editor says it plainly.
+const NOT_YET = "Workbench에서는 아직 쓸 수 없는 기능입니다.";
+const notYet: Record<string, () => unknown> = {
+  "pdf:compare-read-pdf": () => ({ ok: false, reason: NOT_YET }),
+  "pdf:compare-read-open": () => ({ ok: false, reason: NOT_YET }),
+  "pdf:pick-attachment-file": () => ({ ok: false, reason: NOT_YET }),
+  "pdf:export-attachment": () => ({ ok: false, reason: NOT_YET }),
+  // Upstream's own undo for page operations records nothing here (pdf-history-patch.ts): never asked.
+  "pdf:restore-file": () => ({ ok: false, error: NOT_YET }),
+  "pdf:annot-document": () => ({ ok: false, error: NOT_YET }),
+  // Workbench owns the file and its revisions: no watcher of another program's writes.
+  "pdf:watch-disk-file": () => false,
+  "pdf:discard-for-disk-reload": () => false,
+  "pdf:convert-ask-before-open": () => "open",
+  // The shell's record of running AI jobs: Workbench's own job route (pdf-jobs.ts) runs them.
+  "pdf:ai-job-begin": () => ({ ok: true }),
+};
+const failure = (error: unknown) => error instanceof Error ? error.message : String(error);
+const isProtectedError = (error: unknown) => error instanceof GatewayError && error.code === "encrypted_pdf";
+/** 용량 줄이기 (D2): the saved revision shrinks in the gateway into a private result; Workbench's own save picker offers
+ * `{stem} (작게).pdf` beside the source and publishes it there as a new document. The open document is untouched. */
+async function reduceFileSize(value: unknown) {
+  checkPath(value);
+  const snapshot = revision, plan = await prepareOutput(snapshot, "pdf", crypto.randomUUID(), { defaultName: `${init.artifact.name.replace(/\.pdf$/i, "")} (작게).pdf`, longJob: true });
+  if (!plan) return { ok: false, canceled: true };
+  let published = false;
+  try {
+    const result = await gateway.pdf<{ generatedId: string | null; bytesBefore: number; bytesAfter: number; streamsRecompressed: number; imagesDownsampled: number }>(id, snapshot, "reduce", { path });
+    const { generatedId, ...sizes } = result;
+    if (!generatedId) return { ok: true, targetPath: "", ...sizes };
+    const saved = await commitGeneratedOutput(plan.id, generatedId, snapshot); published = true;
+    return { ok: true, targetPath: saved.path, ...sizes };
+  } catch (error) {
+    return { ok: false, reason: isProtectedError(error) ? "암호가 걸린 PDF는 용량을 줄이지 않습니다." : failure(error) };
+  } finally { if (!published) await cancelOutput(plan.id).catch(() => {}); }
+}
 const jobs = pdfJobs(init, gateway, ai, () => revision);
 const note = noteRequests();
 const convertOffice = pdfOfficeConvert(init, gateway, () => revision, async () => init.readOnly || await flush());
@@ -215,11 +254,14 @@ useTransport({
         try { return await convertOffice(args[0]); } catch (error) { report(error); return false; }
       }
       case "pdf:export-images": {
-        const request = args[0] as { images: string[]; pageNumbers: number[]; baseName: string };
-        const plan = await preparePdfImages(revision, request.baseName);
+        // v0.13.0 draws PNG or JPG pages (797a89292); `saveAs` is the Electron shell's Save As › PNG target, which
+        // Workbench does not have: every export goes to a new folder chosen in Workbench's own picker.
+        const request = args[0] as { images: string[]; pageNumbers: number[]; baseName: string; format?: "png" | "jpg" };
+        const format = request.format === "jpg" ? "jpg" : "png";
+        const plan = await preparePdfImages(revision, request.baseName, false, format);
         if (!plan) return { ok: true, canceled: true };
         try {
-          await writePdfImages(plan.id, request.images, request.pageNumbers, request.baseName);
+          await writePdfImages(plan.id, request.images, request.pageNumbers, request.baseName, format);
           const result = await finishPdfImages(plan.id, true);
           if (result.files?.[0]) void revealExport(result.files[0]).catch(() => {});
           return { ok: true, savedDir: result.path, count: result.files?.length ?? 0 };
@@ -229,14 +271,59 @@ useTransport({
         }
       }
       case "pdf:consume-pending": return path;
+      // v0.13.0 opens through 8 MiB slices (73c69181f); whole-file reads remain for its other callers.
+      case "pdf:read-file-chunk": {
+        checkPath(args[0]);
+        const [, start, end] = args as [unknown, number, number];
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start) throw new Error("PDF 읽기 범위가 올바르지 않습니다.");
+        const bytes = await currentBytes();
+        if (!opened) { opened = true; post({ type: "office:opened", revision, recovered: restored }); }
+        return { data: new Uint8Array(bytes.slice(Math.min(start, bytes.byteLength), Math.min(end, bytes.byteLength))), fileSize: bytes.byteLength };
+      }
       case "pdf:read-file": {
         checkPath(args[0]);
-        if (!opened) { opened = true; post({ type: "office:opened", revision, recovered: restored }); }
         return (await currentBytes()).slice(0);
+      }
+      // The session's own decryptor (v0.13.0, 985b73c7a): the gateway checks the password against its own copy of the
+      // revision; the plain bytes never come back. Saves then carry the password and keep the file's protection
+      // (pdf-ops.mjs); only the protection dialog (주석 › 보호 → 문서 보호: 보호 적용 / 보호 제거) changes it on purpose.
+      case "pdf:decrypt": {
+        if (typeof args[1] !== "string") return { ok: false, reason: "PDF 암호 요청이 올바르지 않습니다." };
+        try {
+          const outcome = await gateway.pdf<{ ok: boolean; reason?: string }>(id, revision, "decrypt", { password: args[1] }, workingSource());
+          return outcome.ok ? { ...outcome, bytes: new Uint8Array(0) } : outcome;
+        } catch (error) { return { ok: false, reason: failure(error) }; }
       }
       case "pdf:recovery-state": checkPath(args[0]); return { unsaved: restored };
       case "pdf:recovery-write-copy": return keepRequest(requestOf(args[0]));
-      case "pdf:recovery-unprotectable": return args[0] ? "암호화된 PDF는 복구본을 보관하지 않습니다." : null;
+      case "pdf:recovery-unprotectable": unprotectable = args[0] === true; return unprotectable ? "암호화된 PDF는 복구본을 보관하지 않습니다." : null;
+      // The page clipboard (D1): the gateway holds the copied pages for this window (pdf-clipboard.mjs); a paste
+      // is a new revision of this document, through the same save route as the other page operations.
+      case "pdf:copied-page-count": return gateway.pdf<{ count: number }>(id, revision, "copied-count", {}).then((value) => value.count, () => 0);
+      case "pdf:copy-pages": {
+        const request = args[0] as { source?: PdfRequest; pages?: unknown } | null;
+        if (!request?.source || typeof request.source !== "object") return { ok: false, error: "PDF 요청이 올바르지 않습니다." };
+        checkPath(request.source.path);
+        try {
+          const result = await gateway.pdf<{ count: number }>(id, revision, "copy-pages", { source: request.source, pages: request.pages }, workingSource());
+          return { ok: true, count: result.count };
+        } catch (error) { return isProtectedError(error) ? { ok: false, error: failure(error), protected: true } : { ok: false, error: failure(error) }; }
+      }
+      case "pdf:paste-pages": {
+        if (init.readOnly) return { ok: false, error: "이 판은 읽기 전용입니다." };
+        if (pdfHistory.busy()) return { ok: false, error: "PDF를 불러오는 중입니다." };
+        if (copying()) return { ok: false, error: "사본 저장을 마치거나 취소한 뒤 실행해 주세요." };
+        writing++;
+        try {
+          const result = await gateway.pdf<{ revision: number; insertedCount: number }>(id, revision, "paste-pages", requestOf(args[0]), workingSource());
+          if (result.insertedCount > 0) await persistResult(result.revision);
+          return { ok: true, insertedCount: result.insertedCount };
+        } catch (error) {
+          if (isProtectedError(error)) return { ok: false, error: failure(error), protected: true };
+          report(error); return { ok: false, error: failure(error) };
+        } finally { writing--; }
+      }
+      case "pdf:reduce-file-size": return reduceFileSize(args[0]);
       case "pdf:recovery-resume": return;
       case "pdf:template-bytes": return new Uint8Array(await gateway.pdf<ArrayBuffer>(id, revision, "recover", requestOf(args[0]), workingSource()));
       case "pdf:request-redaction-copy": checkPath(args[0]); return saveCopy(true);
@@ -295,7 +382,7 @@ useTransport({
       case "app:set-ai-panel-prefs": return preferences.setPanel(args[0]);
       // Keep missing services visible through the original preload's structured failure
       // contracts. No generic null/empty-success proxy, and no implicit model invocation.
-      default: return fail(channel);
+      default: return notYet[channel] ? notYet[channel]() : fail(channel);
     }
   }),
   send(channel, args) {

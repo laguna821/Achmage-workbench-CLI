@@ -1,12 +1,13 @@
-// Adapted from IeumOffice packages/ai-provider/src/user-skills/frontmatter.ts @ 30ff4f051f067fcb2baf1ab416c40718c802ca35.
+// Adapted from IeumOffice packages/ai-provider/src/user-skills/frontmatter.ts @ 8602a39410adb86037f3008588b64efc75b08c60.
 // Apache-2.0; see ../LICENSE and ../NOTICE. Changes: explicit Node .ts and local package imports.
 /**
  * SKILL.md front matter, read and written without a YAML library. Only what
  * skills use is understood: top-level `key: value` lines, plain, quoted and
- * block (`|`, `>`) scalars, and one level of `key: value` under a map key such
- * as `metadata`. Anything else is kept as written when the app rewrites a file.
+ * block (`|`, `>`) scalars, one level of `key: value` under a map key such
+ * as `metadata`, and top-level lists of scalars (`- item` lines or `[a, b]`).
+ * Anything else is kept as written when the app rewrites a file.
  */
-import { IEUM_TEMPLATE_KEY, IEUM_TITLE_KEY } from './constants.ts'
+import { IEUM_EDITORS_KEY, IEUM_TEMPLATE_KEY, IEUM_TITLE_KEY } from './constants.ts'
 
 export interface ParsedSkillMd {
   name: string | undefined
@@ -15,6 +16,8 @@ export interface ParsedSkillMd {
   metadata: Record<string, string>
   /** every top-level key with a scalar value */
   fields: Record<string, string>
+  /** every top-level key whose value is a list of scalars, such as `allowed-tools` */
+  lists: Record<string, string[]>
   /** everything after the closing `---` line, as written */
   body: string
 }
@@ -265,6 +268,90 @@ function readScalar(inline: string, children: Line[], parentIndent: number): str
   return foldFlow([head, ...rest]).trim()
 }
 
+/** One item of a list: a plain or quoted scalar; `undefined` for a map, a list or a block */
+function readListItem(raw: string): string | undefined {
+  const text = raw.trim()
+  if (text.startsWith('"')) return readDoubleQuoted(text)
+  if (text.startsWith("'")) return readSingleQuoted(text)
+  if (/^[[{|>]/.test(text) || text === '-' || text.startsWith('- ') || KEY_LINE.test(text)) {
+    return undefined
+  }
+  return stripComment(text).trim()
+}
+
+/** The items of a flow list such as `[a, "b, c", 'd']`; `undefined` when it is not one */
+function readFlowList(text: string): string[] | undefined {
+  const value = text.trim()
+  if (!value.startsWith('[') || !value.endsWith(']')) return undefined
+  const inner = value.slice(1, -1)
+  const parts: string[] = []
+  let current = ''
+  let quote: string | undefined
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i]!
+    if (quote) {
+      current += ch
+      if (ch === '\\' && quote === '"' && i + 1 < inner.length) current += inner[++i]!
+      else if (ch === quote) quote = undefined
+      continue
+    }
+    if (ch === '"' || ch === "'") quote = ch
+    if (ch === ',') {
+      parts.push(current)
+      current = ''
+      continue
+    }
+    current += ch
+  }
+  if (quote) return undefined
+  parts.push(current)
+  const items: string[] = []
+  for (const part of parts) {
+    if (part.trim() === '') continue
+    const item = readListItem(part)
+    if (item === undefined) return undefined
+    items.push(item)
+  }
+  return items
+}
+
+/**
+ * The items of a list value: `- item` lines (at the key's indent or deeper) or
+ * a flow list. `undefined` when the value is not a list of scalars.
+ */
+function readList(inline: string, children: Line[]): string[] | undefined {
+  const value = stripComment(inline.trim())
+  if (value.startsWith('[')) {
+    const rest = children.filter((line) => !line.blank).map((line) => line.text.trim())
+    return readFlowList([value, ...rest].join(' '))
+  }
+  if (value !== '') return undefined
+  const raws: string[] = []
+  let dashIndent = -1
+  for (const line of children) {
+    const text = line.text.trim()
+    if (line.blank || text.startsWith('#')) continue
+    if (text === '-' || text.startsWith('- ')) {
+      if (dashIndent === -1) dashIndent = line.indent
+      if (line.indent === dashIndent) {
+        raws.push(text.slice(1).trim())
+        continue
+      }
+    }
+    // a plain item going on over more lines
+    if (raws.length === 0 || line.indent <= dashIndent) return undefined
+    raws[raws.length - 1] += ` ${text}`
+  }
+  if (raws.length === 0) return undefined
+  const items: string[] = []
+  for (const raw of raws) {
+    const item = readListItem(raw)
+    if (item === undefined) return undefined
+    items.push(item)
+  }
+  return items
+}
+
 interface MapEntry {
   key: string
   inline: string
@@ -307,6 +394,7 @@ export function parseSkillMd(text: string): ParsedSkillMd | undefined {
   const split = splitFrontmatter(text)
   if (!split) return undefined
   const fields: Record<string, string> = {}
+  const lists: Record<string, string[]> = {}
   const metadata: Record<string, string> = {}
   for (const block of blocksOf(split.lines)) {
     if (block.key === undefined) continue
@@ -318,6 +406,12 @@ export function parseSkillMd(text: string): ParsedSkillMd | undefined {
       }
       continue
     }
+    // a list first: lines `- item` at the key's indent read as an empty scalar
+    const list = readList(block.inline, block.children)
+    if (list) {
+      lists[block.key] = list
+      continue
+    }
     const value = readScalar(block.inline, block.children, 0)
     if (value !== undefined) fields[block.key] = value
   }
@@ -326,6 +420,7 @@ export function parseSkillMd(text: string): ParsedSkillMd | undefined {
     description: fields.description,
     metadata,
     fields,
+    lists,
     body: split.body,
   }
 }
@@ -384,6 +479,11 @@ export interface SkillMdInput {
   title?: string | undefined
   /** `metadata.ieum-template`; left out when undefined */
   template?: string | undefined
+  /**
+   * `metadata.ieum-editors`, editor ids separated by spaces; `null` takes it
+   * out, and undefined keeps what the file has
+   */
+  editors?: string | null | undefined
   body: string
   /** other top-level keys to set, such as `disable-model-invocation` */
   fields?: Record<string, string | boolean> | undefined
@@ -392,12 +492,16 @@ export interface SkillMdInput {
 /**
  * Write a SKILL.md in the standard shape: `name`, `description`, and this
  * app's values under `metadata`. With `base` (the file being rewritten), its
- * other keys and other metadata entries stay as they were written, in place.
+ * other keys and other metadata entries stay as they were written, in place,
+ * and so does a key whose value is not changed (its quoting, its comments).
  */
 export function renderSkillMd(input: SkillMdInput, base?: string): string {
   const ieum: Array<[string, string]> = []
   if (input.title !== undefined) ieum.push([IEUM_TITLE_KEY, input.title])
   if (input.template !== undefined) ieum.push([IEUM_TEMPLATE_KEY, input.template])
+  if (typeof input.editors === 'string') ieum.push([IEUM_EDITORS_KEY, input.editors])
+  const managed = new Set([IEUM_TITLE_KEY, IEUM_TEMPLATE_KEY])
+  if (input.editors !== undefined) managed.add(IEUM_EDITORS_KEY)
   const fields = new Map<string, string | boolean>([
     ['name', input.name],
     ['description', input.description],
@@ -415,11 +519,12 @@ export function renderSkillMd(input: SkillMdInput, base?: string): string {
     const lines: string[] = [...(map?.lead ?? [])]
     let kept = 0
     for (const entry of map?.entries ?? []) {
-      if (entry.key === IEUM_TITLE_KEY || entry.key === IEUM_TEMPLATE_KEY) {
+      if (managed.has(entry.key)) {
         const value = pending.get(entry.key)
         pending.delete(entry.key)
         if (value === undefined) continue
-        lines.push(...keyValue(entry.key, value, indent))
+        const same = readScalar(entry.inline, entry.children, indent) === value
+        lines.push(...(same ? entry.raw : keyValue(entry.key, value, indent)))
       } else {
         lines.push(...entry.raw)
       }
@@ -451,7 +556,10 @@ export function renderSkillMd(input: SkillMdInput, base?: string): string {
       out.push(...block.raw)
       continue
     }
-    if (!written.has(block.key)) out.push(...keyValue(block.key, value, 0))
+    if (!written.has(block.key)) {
+      const same = readScalar(block.inline, block.children, 0) === value
+      out.push(...(same ? block.raw : keyValue(block.key, value, 0)))
+    }
     written.add(block.key)
   }
   const missing = [...fields].filter(([key]) => !written.has(key))
@@ -461,4 +569,25 @@ export function renderSkillMd(input: SkillMdInput, base?: string): string {
   if (!metadataWritten) out.push(...metadataLines(undefined))
   for (const [key, value] of tail) out.push(...keyValue(key, value, 0))
   return `---\n${out.join('\n')}\n---\n${input.body}`
+}
+
+/**
+ * A SKILL.md without this app's where-used value, every other byte of the
+ * front matter as written. A file that names none, or cannot be read, comes
+ * back unchanged.
+ */
+export function withoutSkillEditors(text: string): string {
+  const parsed = parseSkillMd(text)
+  if (!parsed?.name || parsed.metadata[IEUM_EDITORS_KEY] === undefined) return text
+  return renderSkillMd(
+    {
+      name: parsed.name,
+      description: parsed.description ?? '',
+      title: parsed.metadata[IEUM_TITLE_KEY],
+      template: parsed.metadata[IEUM_TEMPLATE_KEY],
+      editors: null,
+      body: parsed.body,
+    },
+    text,
+  )
 }
