@@ -259,9 +259,9 @@
   if (get) {
     const ua = navigator.userAgent, plat = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
     const mobile = /Android|iPhone|iPad/.test(ua);
-    const pick = mobile ? null : /Mac/.test(plat + ua) ? ["macOS용 내려받기", "Achmage.Workbench_0.5.5_aarch64.dmg, 181 MB (Apple silicon)"]
-      : /Win/.test(plat + ua) ? ["Windows용 내려받기", "Achmage.Workbench_0.5.5_x64-setup.exe, 135 MB"]
-      : /Linux|X11/.test(plat + ua) ? ["Linux용 내려받기", "Achmage.Workbench_0.5.5_amd64.AppImage, 241 MB (deb, Arch용도 같은 곳에 있습니다)"] : null;
+    const pick = mobile ? null : /Mac/.test(plat + ua) ? ["macOS용 내려받기", "Achmage.Workbench_0.5.6_aarch64.dmg, 181 MB (Apple silicon)"]
+      : /Win/.test(plat + ua) ? ["Windows용 내려받기", "Achmage.Workbench_0.5.6_x64-setup.exe, 135 MB"]
+      : /Linux|X11/.test(plat + ua) ? ["Linux용 내려받기", "Achmage.Workbench_0.5.6_amd64.AppImage, 241 MB (deb, Arch용도 같은 곳에 있습니다)"] : null;
     if (pick) {
       $$(".close-get-label", get).forEach((s) => { s.textContent = pick[0]; });
       const f = $(".close-file"); f.textContent = pick[1]; f.hidden = false;
