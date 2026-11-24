@@ -185,7 +185,12 @@ export async function apiChecks(gateway: Gateway, app: string, expect: ReturnTyp
 
   await step("AI 엔진·필수 문서 도구 상태와 컴파일된 웹 파일이 준비됨", async () => {
     const snapshot = await call<Snapshot>("GET", "/api/snapshot");
-    const missing = [...snapshot.providers.filter((entry) => !entry.installed).map((entry) => entry.provider), ...(["kordoc", "ieumoffice", "hwp", "pdf"] as const).filter((name) => !snapshot.tools[name]?.available)];
+    // Claude Code and Codex come with the app (or the stand-ins here); Gemini is the person's own Antigravity CLI, installed later:
+    // its status must be reported, found or not.
+    const required = new Set(["claude", "codex"]);
+    const missing = [...snapshot.providers.filter((entry) => required.has(entry.provider) && !entry.installed).map((entry) => entry.provider),
+      ...(snapshot.providers.some((entry) => entry.provider === "gemini") ? [] : ["gemini status"]),
+      ...(["kordoc", "ieumoffice", "hwp", "pdf"] as const).filter((name) => !snapshot.tools[name]?.available)];
     const assets = join(appLayout(app).web, "assets");
     const scripts = existsSync(assets) ? readdirSync(assets).filter((name) => name.endsWith(".js")) : [];
     // Optional apps can legitimately have an uninstalled label in the bundle. Check
