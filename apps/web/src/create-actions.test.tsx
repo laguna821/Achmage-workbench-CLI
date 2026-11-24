@@ -56,3 +56,12 @@ it("speaks the owner's words when a person starts something (I5): 대화, 문서
   expect(createActions({ folderId: null }).map(action => action.label)).toContain("새 대화");
   expect(labels.join("\n")).not.toMatch(/세션|작업공간|doory|정리 폴더/);
 });
+
+it("on a phone joined to the PC: no 새 웹 탭 (the PC's browser, not the phone's) — every other way to make something stays", () => {
+  const target = { workId: "project", workspaceId: "main", folderId: null };
+  const pc = createActions(target).map((action) => action.kind);
+  const phone = createActions(target, { remote: true }).map((action) => action.kind);
+  expect(pc).toContain("browser");
+  expect(phone).not.toContain("browser");
+  expect(phone).toEqual(pc.filter((kind) => kind !== "browser"));
+});

@@ -956,7 +956,7 @@ export class Projects {
     const session = request.sessionId ? this.manager.view.sessions.get(request.sessionId) : null;
     const today = new Date();
     const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    const source = session ? ` — ${session.provider === "claude" ? "Claude" : "Codex"} · ${session.purpose || "세션"} ([원문](workbench://session/${session.id}${request.itemId ? `#${request.itemId}` : ""}))` : "";
+    const source = session ? ` — ${PROVIDER_LABEL[session.provider]} · ${session.purpose || "세션"} ([원문](workbench://session/${session.id}${request.itemId ? `#${request.itemId}` : ""}))` : "";
     const line = `${stamp} ${text}${source}`;
     const result = this.write(workId, section === "decision" ? `결정: ${text}` : `열린 질문: ${text}`, (current) => ({ span: entryEdit(current, section, line), scope: { kind: "body", section } }), { access, ...(request.baseRevision !== undefined ? { baseRevision: request.baseRevision } : {}) });
     this.logEntry({ workId, section, text, sessionId: session?.id ?? null, itemId: request.itemId ?? null }, result.token);
@@ -1085,7 +1085,7 @@ export class Projects {
     if (revision.author === "external") return "앱 밖에서";
     if (revision.sessionId === sessionId) return "이 세션이";
     const other = revision.sessionId ? this.manager.view.sessions.get(revision.sessionId) : null;
-    return other ? `다른 세션(${other.provider === "claude" ? "Claude" : "Codex"} · ${firstLine(other.purpose || "세션", 30)})이` : "다른 세션이";
+    return other ? `다른 세션(${PROVIDER_LABEL[other.provider]} · ${firstLine(other.purpose || "세션", 30)})이` : "다른 세션이";
   }
 
   private revisionText(artifactId: string, revision: number) {

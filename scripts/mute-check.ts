@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { chromium } from "playwright-core";
-import type { Provider, Session, Work } from "@workbench/contracts";
+import type { Session, Work } from "@workbench/contracts";
 
 const outDir = process.argv[2] ?? join(tmpdir(), "wb-mute");
 mkdirSync(outDir, { recursive: true });
@@ -45,7 +45,7 @@ const sessionOf = async (id: string) => (await api<{ sessions: Session[] }>("GET
 await api("PUT", "/api/prefs", { prefs: { onboarding: "done", startScreen: "last" } });
 
 const work = await api<Work>("POST", "/api/works", { title: "알림 확인" });
-const made: Record<Provider, Session> = {
+const made: Record<"claude" | "codex", Session> = {
   codex: await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider: "codex", purpose: "Codex 세션" }),
   claude: await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider: "claude", purpose: "Claude 세션" }),
 };

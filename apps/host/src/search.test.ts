@@ -380,6 +380,18 @@ describe("one ranked index", () => {
 });
 
 describe("workbench-find", () => {
+  itWithSearch("shows the query back only in its short one-line form (security review of 0.5.6)", async () => {
+    const { manager } = setup();
+    const { session } = work(manager, "안녕", "codex", "과제");
+    const query = `채점 기준\n$(touch /tmp/x) ${"가".repeat(300)}`;
+    const out = (await manager.finder.find([query], { sessionId: session.id })).stdout;
+    const head = out.split("\n")[0]!;
+    expect(head).toContain(FIND_HEAD);
+    expect(out).not.toContain("$(touch /tmp/x)\n");
+    expect(out).not.toContain("가".repeat(100));
+    expect(out.split("\n").some((line) => line.startsWith("$(touch"))).toBe(false);
+  });
+
   itWithSearch("prints records with where they come from, the calling session's work unless --all, at most 4 KB", async () => {
     const { manager } = setup();
     const { session } = work(manager, "안녕", "codex", "과제 채점 기준표");

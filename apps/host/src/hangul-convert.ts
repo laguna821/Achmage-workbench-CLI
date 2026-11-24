@@ -465,7 +465,19 @@ export type ConvertHost = {
 export const IEUM_CONVERTERS = "IeumOffice 0.13.0";
 const LEGACY_CONVERTER = { doc: "doc2docx", ppt: "ppt2pptx", ods: "xlsx 엔진" } as const;
 /** A Word → Hangul copy waiting for the person's answer to the ledger (never written before it). */
-type HangulTicket = { artifactId: string; revision: number; format: "hwp" | "hwpx"; name?: string; bytes: Uint8Array; fromEditor: boolean; expires: number };
+type HangulTicket = { artifactId: string; revision: number; format: "hwp" | "hwpx"; name?: string; bytes: Uint8Array; fromEditor: boolean; expires: number;
+  /** "device:<id>" when a paired phone asked (the device gateway says so); absent for the PC's own windows. */
+  owner?: string };
+/**
+ * A pending Word → 한글 conversion holds its file for 15 minutes. The PC's windows have 20 at once; each paired phone
+ * has its own 3, never counted against the PC's — a phone cannot lock the PC's own 한글로 내보내기.
+ */
+export function admitHangulTicket(tickets: Iterable<{ owner?: string; expires: number }>, owner: string | undefined, now: number) {
+  let mine = 0;
+  for (const ticket of tickets) if (ticket.expires >= now && ticket.owner === owner) mine += 1;
+  if (owner && mine >= 3) throw new HttpError(429, "export_busy", "이 휴대폰에서 기다리는 한글 내보내기가 많습니다. 하나를 저장하거나 15분 뒤에 다시 해 주세요.");
+  if (!owner && mine >= 20) throw new HttpError(429, "export_busy", "내보내기 요청이 너무 많습니다. 잠시 뒤에 다시 해 주세요.");
+}
 export type WordHangulPlan = { ticket: string; format: "hwp" | "hwpx"; name: string; ledger: LossLedger; losses: number };
 
 /**
@@ -511,7 +523,10 @@ export class HangulConvert {
     return this.entry(workId, root, this.copyIn(root, name, bytes));
   }
   private copyIn(root: string, name: string, bytes: Buffer) {
-    const ext = extname(name), stem = basename(name, ext);
+    const ext = extname(name);
+    let stem = basename(name, ext);
+    // Windows' device names (CON, NUL, COM1 …) are not file names there: the same "_" rule as 새 문서 (createOfficeDocument).
+    if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(stem)) stem = `_${stem}`;
     for (let n = 0; n < 1000; n++) {
       const path = join(root, `${n ? `${stem} (${n})` : stem}${ext}`);
       try { mkdirSync(root, { recursive: true }); writeFileSync(path, bytes, { flag: "wx" }); return path; }
@@ -630,7 +645,7 @@ export class HangulConvert {
    * copy loses — nothing is written yet. `editorBytes`: the open editor's document (with edits not saved
    * yet); absent: the recorded revision. `passwordSet`: the document carries an open password (the copy does not).
    */
-  async prepareWordHangul(artifactId: string, raw: { format?: unknown; name?: unknown; passwordSet?: unknown }, editorBytes?: Uint8Array): Promise<WordHangulPlan> {
+  async prepareWordHangul(artifactId: string, raw: { format?: unknown; name?: unknown; passwordSet?: unknown }, editorBytes?: Uint8Array, owner?: string): Promise<WordHangulPlan> {
     const artifact = this.listed(artifactId);
     if (artifact.format !== "docx") throw new HttpError(415, "export_source", "워드 문서(.docx)만 한글 문서로 내보낼 수 있습니다.");
     const format = raw.format === undefined ? "hwpx" : raw.format;
@@ -643,9 +658,9 @@ export class HangulConvert {
     const made = await wordToHangul(editorBytes ?? readFileSync(this.host.documents.revisionPath(artifact.id, artifact.revision)), format, this.host.convertWorker);
     const now = Date.now();
     for (const [id, ticket] of this.hangulTickets) if (ticket.expires < now) this.hangulTickets.delete(id);
-    if (this.hangulTickets.size >= 20) throw new HttpError(429, "export_busy", "내보내기 요청이 너무 많습니다. 잠시 뒤에 다시 해 주세요.");
+    admitHangulTicket(this.hangulTickets.values(), owner, now);
     const ticket = randomUUID();
-    this.hangulTickets.set(ticket, { artifactId, revision: artifact.revision, format, ...(name ? { name } : {}), bytes: made.bytes, fromEditor: Boolean(editorBytes), expires: now + 15 * 60_000 });
+    this.hangulTickets.set(ticket, { artifactId, revision: artifact.revision, format, ...(name ? { name } : {}), bytes: made.bytes, fromEditor: Boolean(editorBytes), expires: now + 15 * 60_000, ...(owner ? { owner } : {}) });
     return { ticket, format, name: basename(planned), ledger: lossLedger(made.losses, raw.passwordSet === true), losses: made.losses.length };
   }
 

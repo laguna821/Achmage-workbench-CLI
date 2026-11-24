@@ -1,4 +1,5 @@
-import { withParticle } from "@workbench/contracts";
+import { MESSENGER_HOME_TITLE, withParticle } from "@workbench/contracts";
+import { AUTO_NAME_HINT, EditableText } from "../EditableText.tsx";
 import { useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { ItemIcon } from "../ItemIcon.tsx";
 import type { NavSectionId, Work } from "@workbench/contracts";
@@ -120,7 +121,12 @@ export function ProjectLevel({ shared, work, query, setQuery, onBack }: {
         </span>
       </div>
       <div className="nav-project-head" onContextMenu={(event) => { event.preventDefault(); menuAt(event.clientX, event.clientY); }}>
-        <h2 className="nav-project-name" title={work.title}>{work.title}</h2>
+        {/* 이름 바꾸기 asked here (its ⋯, a tab's menu) renames in place: the list stays inside the project. */}
+        {shared.renaming === work.id
+          ? <EditableText className="side-rename nav-project-name-edit" label={`${work.title} 이름 바꾸기`} value={work.title}
+              empty={work.messengerHome ? { hint: MESSENGER_HOME_TITLE[work.messengerHome.kind], restores: MESSENGER_HOME_TITLE[work.messengerHome.kind] } : { hint: AUTO_NAME_HINT }}
+              onSave={(next) => actions.rename({ kind: "work", id: work.id }, next)} onDone={() => shared.setRenaming(null)} />
+          : <h2 className="nav-project-name" title={work.title} onDoubleClick={() => shared.setRenaming(work.id)}>{work.title}</h2>}
         {path ? <div className="nav-path" title={path}>{path}</div> : null}
       </div>
       <div
@@ -157,7 +163,7 @@ export function ProjectLevel({ shared, work, query, setQuery, onBack }: {
         {!sections.chats.length && !sections.docs.length && !(web ? workPages(state, work.id, web).length : sections.web.length) && !text ? <ListEmpty line="이 프로젝트에는 아직 대화도 문서도 없습니다." action="새 대화" onAction={() => actions.newSession({ work })} /> : null}
         {section("chats", "대화", sections.chats, () => actions.newSession({ work }), "이 프로젝트에 새 대화")}
         {section("docs", "문서", sections.docs, creation, "이 프로젝트에 새 문서")}
-        {web ? <WebRows shared={shared} work={work} web={web} text={text} tabId={ctx.tabId} onKey={(event) => onKey(event, null)} /> : section("web", "웹", sections.web, creation, "이 프로젝트에 새 웹 페이지")}
+        {web ? <WebRows shared={shared} work={work} web={web} text={text} tabId={ctx.tabId} onKey={(event) => onKey(event, null)} /> : sections.web.length ? section("web", "웹", sections.web, creation, "이 프로젝트에 새 웹 페이지") : null}
         <LinkLines tree={list} />
       </div>
     </div>

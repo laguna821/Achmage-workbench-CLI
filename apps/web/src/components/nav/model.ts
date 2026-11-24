@@ -567,7 +567,8 @@ export function messengerHomes(projects: ListProject[], query = "", filtered = f
 }
 
 export type LevelOneRow =
-  | { type: "folder"; id: string; folder: Folder; depth: number; open: boolean; count: number; children: boolean }
+  /** `needs`: what needs the person in the projects under it (its folded row says so: the projects are hidden). */
+  | { type: "folder"; id: string; folder: Folder; depth: number; open: boolean; count: number; children: boolean; needs: number }
   | { type: "project"; id: string; project: ListProject; depth: number }
   | { type: "group"; id: string; label: string; count: number };
 
@@ -596,8 +597,6 @@ export type LevelOneOptions = {
   sort: NavSort;
   stages: ProjectStage[];
   now: number;
-  /** Projects a folded folder still shows (the current one, those needing the person). */
-  keep?: string[];
 };
 
 /**
@@ -637,12 +636,14 @@ export function levelOneRows(projects: ListProject[], folders: Record<string, Fo
     byFolder.set(at, [...(byFolder.get(at) ?? []), project]);
   }
   for (const list of byFolder.values()) list.sort(order);
-  // Projects in each folder and below it (what the folder row counts).
+  // Projects in each folder and below it (what the folder row counts), and what needs the person there.
   const below = new Map<string, number>();
+  const needsBelow = new Map<string, number>();
   for (const { folder } of [...tree].reverse()) {
-    const own = byFolder.get(folder.id)?.length ?? 0;
-    const kids = tree.filter((entry) => parentOf(entry.folder.id) === folder.id).reduce((sum, entry) => sum + (below.get(entry.folder.id) ?? 0), 0);
-    below.set(folder.id, own + kids);
+    const own = byFolder.get(folder.id) ?? [];
+    const kids = tree.filter((entry) => parentOf(entry.folder.id) === folder.id);
+    below.set(folder.id, own.length + kids.reduce((sum, entry) => sum + (below.get(entry.folder.id) ?? 0), 0));
+    needsBelow.set(folder.id, own.reduce((sum, project) => sum + project.needs, 0) + kids.reduce((sum, entry) => sum + (needsBelow.get(entry.folder.id) ?? 0), 0));
   }
   const narrowing = Boolean(matcher || filter);
   const closed = new Set(options.closedFolders);
@@ -658,13 +659,12 @@ export function levelOneRows(projects: ListProject[], folders: Record<string, Fo
     }
     const children = tree.some((entry) => parentOf(entry.folder.id) === folder.id) || Boolean(byFolder.get(folder.id)?.length);
     const open = narrowing || !closed.has(folder.id);
-    rows.push({ type: "folder", id: folder.id, folder, depth, open, count, children });
+    rows.push({ type: "folder", id: folder.id, folder, depth, open, count, children, needs: needsBelow.get(folder.id) ?? 0 });
+    // Folded, a folder hides everything under it (0.5.6, the owner: "접어지면서 가려져야"); until then
+    // it kept the project open now and those needing the person, so a fold often hid nothing. The
+    // open project stays reachable from its tab; its row says what needs the person.
     if (!open) {
       hiddenUnder = depth;
-      // A folded folder still shows its current project and those that need the person.
-      const keep = new Set(options.keep ?? []);
-      const within = (at: string | null): boolean => { for (let id = at, guard = 0; id && guard < 32; id = parentOf(id), guard += 1) if (id === folder.id) return true; return false; };
-      for (const project of shown) if (keep.has(project.work.id) && within(folderOf(folders, project.work))) rows.push({ type: "project", id: project.work.id, project, depth: depth + 1 });
       continue;
     }
     for (const project of byFolder.get(folder.id) ?? []) rows.push({ type: "project", id: project.work.id, project, depth: depth + 1 });

@@ -50,3 +50,31 @@ export type EngineLoginState = {
   message: string | null;
   at: number;
 };
+
+/**
+ * Gemini (0.5.6): Workbench's ACP client of the person's installed Antigravity CLI (`agy acp`). Subscription login
+ * only (the owner, 2026-11-21): agy signs itself in with a Google account — personal or company, agy decides — in a
+ * visible terminal (`agy acp --login`). No API key, no Cloud / ADC route; every Gemini sign-in is behind the
+ * explicit opt-in with Google's terms named, and Gemini conversations take only what a person sends.
+ */
+export type GeminiSetup = {
+  /** The person accepted the plain warning (§ G rule 11). */
+  googleOptIn: boolean;
+  /** agy's version is at least `minVersion` (null: not found, or its version unreadable). */
+  versionOk: boolean | null;
+  /** agy's version is also at least the recommended one (1.5.12); null when unknown. */
+  versionRecommended?: boolean | null;
+  minVersion: string;
+  /** Sign-in methods agy offered over ACP (ids and names, as it said them), from the last initialize. */
+  authMethods: { id: string; name: string; terminal: boolean }[];
+  /** agy can reopen a conversation (ACP loadSession / session resume). */
+  canReopen: boolean | null;
+  /** The command 설치 runs in a terminal tab (shown before it runs). */
+  installCommand: string;
+  /** Google's FAQ, terms and install page (opened by the person's click). */
+  links: { faq: string; terms: string; install: string };
+  /** agy said Google blocked this account (a Terms of Service block); `appeal`: Google's own appeal address when agy gave one. */
+  suspended?: { appeal: string | null } | null;
+  /** Environment variables found and NOT passed to agy (API keys, Cloud project, ADC: names only). */
+  strippedVars: string[];
+};

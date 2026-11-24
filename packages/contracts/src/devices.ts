@@ -10,6 +10,8 @@ export type DeviceGrant = {
   permissions: DevicePermission[];
   /** An empty list grants no project access. Wildcards are not supported. */
   workIds: string[];
+  /** List folders the device made itself (목록에 새 폴더 on the phone): it sees and names them; nothing else. */
+  folderIds?: string[];
   createdAt: number;
   approvedAt: number;
   activatedAt: number | null;
@@ -91,7 +93,8 @@ export type PairingCredentialResult =
   | ({ status: "approved" } & DeviceCredential);
 
 export type DeviceRegistryEvent = {
-  type: "requested" | "approved" | "rejected" | "revoked" | "rotated" | "updated" | "expired";
+  /** "extended": the device made a project of its own, which joined its grant (nothing narrowed). */
+  type: "requested" | "approved" | "rejected" | "revoked" | "rotated" | "updated" | "expired" | "extended";
   requestId?: string;
   deviceId?: string;
 };

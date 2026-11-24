@@ -5,6 +5,7 @@ import { type AgentBrowserStatus, type DocumentTools, type Provider, type Provid
 import webPackage from "../../package.json";
 import { BrowserEngine, BrowserInstall, BrowserLogin, type BrowserActions } from "./BrowserPill.tsx";
 import { capital, EngineCard, usageWords, type EngineActions } from "./EngineSetup.tsx";
+import { GeminiCard, type GeminiActions } from "./GeminiSetup.tsx";
 import { PathDetail, SettingsGroup, SettingsRow, SettingsSwitch } from "./SettingsSheet.tsx";
 import { Segmented } from "./ui/Hig.tsx";
 import { MESSENGER_NEEDS } from "./phone-words.ts";
@@ -95,7 +96,7 @@ function BrowserRow({ status, actions }: { status: AgentBrowserStatus; actions: 
 /** "내 MCP 서버와 훅 불러오기" (0.5.3, the owner 2026-11-16): what it does, in one sentence. */
 export const personalToolsHint = (provider: Provider) => `켜면 이 컴퓨터의 ${provider === "codex" ? "Codex" : "Claude"} 설정에 넣어 둔 MCP 서버와 훅을 Workbench 대화에서도 쓰며, 대화마다 그것들을 새로 띄웁니다.`;
 
-export function EnginesSection({ providers, connected, engineActions, onRefresh, browser, browserActions, onIntegrations, voice, onPersonalTools, resources }: {
+export function EnginesSection({ providers, connected, engineActions, onRefresh, browser, browserActions, onIntegrations, voice, onPersonalTools, resources, gemini }: {
   providers: Partial<Record<Provider, ProviderStatus>>;
   connected: boolean;
   engineActions: EngineActions;
@@ -109,6 +110,8 @@ export function EnginesSection({ providers, connected, engineActions, onRefresh,
   onPersonalTools?: (provider: Provider, on: boolean) => void;
   /** 동시에 돌리는 작업 (0.5.3, the resource manager's settings rows). */
   resources?: ReactNode;
+  /** Gemini's card (0.5.6): shown when the gateway has the engine and this window can set it up. */
+  gemini?: GeminiActions;
 }) {
   return <>
     <p className="settings-lead">이 컴퓨터에서 찾은 AI 엔진입니다. 로그인은 각 엔진의 로그인 페이지에서 하며, 암호를 이 앱에 넣지 않습니다.</p>
@@ -117,7 +120,7 @@ export function EnginesSection({ providers, connected, engineActions, onRefresh,
       {(["claude", "codex"] as const).map((provider) => {
         const status = providers[provider];
         return <div key={provider} className="settings-engine">
-          <EngineCard provider={provider} status={status} actions={engineActions}>
+          <EngineCard provider={provider} status={status} actions={engineActions} manage>
             {status?.account ? <p className="settings-note">{status.account}{status.plan ? ` (${capital(status.plan)})` : ""}</p> : null}
             {status?.usage.length ? <ul className="settings-facts">{status.usage.map((window) => <li key={window.label}>{usageWords(window)}</li>)}</ul>
               : status?.loggedIn ? <p className="settings-note">사용량은 첫 요청 뒤에 보입니다.</p> : null}
@@ -126,6 +129,7 @@ export function EnginesSection({ providers, connected, engineActions, onRefresh,
             control={<SettingsSwitch label="내 MCP 서버와 훅 불러오기" checked={status.personalTools} onChange={(next) => onPersonalTools(provider, next)} />} /> : null}
         </div>;
       })}
+      {gemini && providers.gemini ? <div className="settings-engine"><GeminiCard status={providers.gemini} actions={gemini} /></div> : null}
     </SettingsGroup>
     {resources ? <SettingsGroup title="동시 작업">{resources}</SettingsGroup> : null}
     <SettingsGroup title="엔진이 함께 쓰는 것">

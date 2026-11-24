@@ -84,6 +84,7 @@
   --color-brand-navy: oklch(18.06% 0.0661 257.7);   /* #00102e: the wordmark's ink on light */
   --color-brand-teal: oklch(66.06% 0.1137 191);      /* #00a8a3: the Arc and the working line */
   --color-engine-claude: oklch(61.71% 0.1375 39);    /* #c96442: Claude's mark */
+  --color-engine-gemini: oklch(54% 0.19 288);          /* Gemini's mark (0.5.6): a violet, apart from Codex's blue and the teal */
   /* File kinds keep their makers' colours as marks (Word, PowerPoint, Excel). */
   --color-format-docx: oklch(46.1% 0.12 259);
   --color-format-pptx: oklch(55.4% 0.176 35);
@@ -362,6 +363,7 @@
   --on-action: var(--color-accent-ink);
   --field-line: var(--color-edge);
   --engine-claude: var(--color-engine-claude);
+  --engine-gemini: var(--color-engine-gemini);
   /* states and signals */
   --amber: var(--color-attention);
   --amber-text: var(--color-attention-text);

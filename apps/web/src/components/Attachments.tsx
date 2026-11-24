@@ -47,7 +47,8 @@ export function pastedFiles(data: DataTransfer) {
 type PendingGroup = {
   files: PendingFile[];
   uploads: Map<string, Promise<Attachment | null>>;
-  sources: Map<string, File>;
+  /** What each chip came from: a file, or a path on the PC (a file manager's drop), for 재시도. */
+  sources: Map<string, File | string>;
   listeners: Set<() => void>;
 };
 const pendingGroups = new Map<string, PendingGroup>();
@@ -81,16 +82,19 @@ function publishPending(scope: string, group: PendingGroup) {
  * uploads still running and hands over the files that made it (a failed one stays, its chip says so).
  * Each exact input/host owns a list. Only uploaded references survive browser suspension/reload.
  */
-export function usePendingFiles(upload: (file: File) => Promise<Attachment | null>, scope: string) {
+export function usePendingFiles(upload: (file: File) => Promise<Attachment | null>, scope: string, attachPath?: ((path: string) => Promise<Attachment | null>) | null) {
   const storageScope = JSON.stringify([attachmentHostId(), scope]);
   const group = pendingGroup(storageScope);
   const files = useSyncExternalStore(listener => {
     group.listeners.add(listener);
     return () => group.listeners.delete(listener);
   }, () => group.files);
-  const start = (entry: PendingFile, file: File) => {
-    const uploading = upload(file).catch(() => null).then(attachment => {
-      group.files = group.files.map(item => item.key === entry.key ? { ...item, attachment, error: attachment ? null : "올리지 못했습니다. 연결 후 다시 시도해 주세요.", canRetry: !attachment } : item);
+  const start = (entry: PendingFile, file: File | string) => {
+    // A path (a file manager's drop): the gateway reads the file there; its size comes with the answer.
+    let reason: string | null = null;
+    const sent = typeof file === "string" ? (attachPath ? attachPath(file) : Promise.resolve(null)) : upload(file);
+    const uploading = sent.catch((error: unknown) => { reason = typeof file === "string" && error instanceof Error ? error.message : null; return null; }).then(attachment => {
+      group.files = group.files.map(item => item.key === entry.key ? { ...item, attachment, ...(attachment ? { size: attachment.size } : {}), error: attachment ? null : reason ?? "올리지 못했습니다. 연결 후 다시 시도해 주세요.", canRetry: !attachment } : item);
       group.uploads.delete(entry.key);
       if (attachment) group.sources.delete(entry.key);
       publishPending(storageScope, group);
@@ -118,6 +122,16 @@ export function usePendingFiles(upload: (file: File) => Promise<Attachment | nul
       start(entry, file);
     }
   };
+  /** Files dropped by their paths on the PC (no bytes in the page): one chip each, read by the gateway. */
+  const addPaths = (paths: string[]) => {
+    const added = paths.map((path) => ({ path, entry: { key: crypto.randomUUID(), name: path.split(/[\\/]/).filter(Boolean).at(-1) ?? path, size: 0, preview: null, attachment: null, error: null } satisfies PendingFile }));
+    group.files = [...group.files, ...added.map(({ entry }) => entry)];
+    publishPending(storageScope, group);
+    for (const { path, entry } of added) {
+      group.sources.set(entry.key, path);
+      start(entry, path);
+    }
+  };
   const remove = (keys?: string[]) => {
     for (const item of keys ? group.files.filter(entry => keys.includes(entry.key)) : group.files) {
       if (item.preview) URL.revokeObjectURL(item.preview);
@@ -140,7 +154,7 @@ export function usePendingFiles(upload: (file: File) => Promise<Attachment | nul
     const carried = ready.map(item => item.attachment).filter((attachment): attachment is Attachment => Boolean(attachment));
     return { carried, done: () => remove(ready.filter(item => item.attachment).map(item => item.key)) };
   };
-  return { files, add, remove, retry, take, count: files.filter(item => !item.error).length };
+  return { files, add, addPaths, remove, retry, take, count: files.filter(item => !item.error).length };
 }
 
 /** Chips above the input: a thumbnail or the file's name, with a spinner while it uploads. */

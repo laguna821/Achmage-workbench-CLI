@@ -3,7 +3,7 @@ import type { Provider } from "@workbench/contracts";
 import { AppearanceContext, engineMarkStyle } from "../appearance.ts";
 
 // Own simple marks (not the vendors' logos): a filled spark for Claude, an outlined
-// hexagon with a prompt for Codex. Shape alone already tells them apart; `data-provider` gives
+// hexagon with a prompt for Codex, an outlined four-point star with a centre dot for Gemini. Shape alone already tells them apart; `data-provider` gives
 // each its engine color (styles.css "Engine identity"). Skin 2 (S9): this mark is the ONE place an
 // engine's colour is drawn; a colour the person gave the engine in 외형 reaches it as `--engine-own`.
 
@@ -25,6 +25,14 @@ export function EngineMark({ provider, size = 16, className }: { provider: Provi
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" className={`engine-mark ${className ?? ""}`} data-provider={provider} style={style} aria-hidden>
         <path d={SPARK} fill="currentColor" strokeLinejoin="round" stroke="currentColor" strokeWidth={0.8} />
+      </svg>
+    );
+  }
+  if (provider === "gemini") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinejoin="round" className={`engine-mark ${className ?? ""}`} data-provider={provider} style={style} aria-hidden>
+        <path d="M12 2.8l2.3 6.9 6.9 2.3-6.9 2.3-2.3 6.9-2.3-6.9-6.9-2.3 6.9-2.3z" />
+        <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
       </svg>
     );
   }

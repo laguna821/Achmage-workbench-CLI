@@ -1,4 +1,5 @@
 import type { Artifact, Session } from "@workbench/contracts";
+import { readingView } from "../../doc-open.ts";
 
 type Format = Artifact["format"];
 /** Document screens built from IeumOffice, inside the central Workbench tab. */
@@ -146,6 +147,14 @@ export function readView(format: Format | undefined): "preview" | "pages" | "ren
   if (format === "html") return "render";
   if (format === "docx" || format === "pptx" || format === "xlsx") return "pages";
   return isWordEditor(format) ? "preview" : "edit";
+}
+
+/**
+ * The first view beside a conversation: its read view; on a phone joined to the PC the one its 문서 list opens
+ * (doc-open.ts readingView: Hangul, Word and PowerPoint as page pictures, PDF in its viewer), else the read view.
+ */
+export function hostedView(format: Format | undefined, remote: boolean): "preview" | "pages" | "render" | "edit" {
+  return (remote ? readingView(format) : null) ?? readView(format);
 }
 
 /** The app's own view of a format, shown in place of its embedded editor. */

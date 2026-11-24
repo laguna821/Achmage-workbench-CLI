@@ -34,6 +34,10 @@
   color: var(--ok, var(--text));
 }
 
+/* 설정 › AI 엔진, signed in (0.5.6 round 2): 다른 계정으로 다시 로그인 · 로그아웃 on one line; the logout asked first. */
+.setup-account-keys { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+.setup-logout-confirm .button { margin-left: var(--space-2xs); }
+
 .setup-found {
   display: flex;
   flex-direction: column;

@@ -170,6 +170,12 @@ const V2_DEFAULT_APPEARANCE: Appearance = {
     light: look(ACHMAGE_LIGHT, { fontSize: 16, lineHeight: 1.7, bubble: "soft" }),
     dark: look(CODEX_MIDNIGHT, { fontSize: 16, lineHeight: 1.7, bubble: "rail" }),
   },
+  // Gemini came after v2 (0.5.6): no look of it was ever stored under these, so they only fill the shape.
+  gemini: {
+    mode: "follow",
+    light: look(ACHMAGE_LIGHT, { fontSize: 16, lineHeight: 1.7, bubble: "soft" }),
+    dark: look(CODEX_MIDNIGHT, { fontSize: 16, lineHeight: 1.7, bubble: "rail" }),
+  },
   v: 2,
 };
 
@@ -244,6 +250,7 @@ const furrowLook = (palette: Palette): Look => ({ ...higLook(palette), radius: 1
 export const DEFAULT_APPEARANCE: Appearance = {
   claude: { mode: "follow", light: furrowLook(N1_LIGHT), dark: furrowLook(N1_DARK) },
   codex: { mode: "follow", light: furrowLook(N1_LIGHT), dark: furrowLook(N1_DARK) },
+  gemini: { mode: "follow", light: furrowLook(N1_LIGHT), dark: furrowLook(N1_DARK) },
   v: APPEARANCE_VERSION,
 };
 /** The frame's look (menus opened on the frame): the paper (--color-paper) under the sheet. */
@@ -268,6 +275,11 @@ const LEGACY_DEFAULTS: Record<Provider, Record<Theme, { glow: Glow; radius: numb
     // A filled accent bubble per request read as a chat app; a tinted slip reads as a request.
     light: { glow: "soft", radius: 16, bubble: "filled", palette: { text: "#000000" } },
     dark: { glow: "soft", radius: 12, palette: {} },
+  },
+  // No Gemini look predates v2; nothing to recognise.
+  gemini: {
+    light: { glow: "off", radius: -1, palette: {} },
+    dark: { glow: "off", radius: -1, palette: {} },
   },
 };
 
@@ -359,7 +371,7 @@ export function readAppearance(stored: unknown): Appearance {
     const mode = value.mode === "light" || value.mode === "dark" ? value.mode : "follow";
     return { mode, light: mergeLook(provider, "light", value.light), dark: mergeLook(provider, "dark", value.dark) };
   };
-  return { claude: merge("claude"), codex: merge("codex"), v: APPEARANCE_VERSION };
+  return { claude: merge("claude"), codex: merge("codex"), gemini: merge("gemini"), v: APPEARANCE_VERSION };
 }
 
 export const engineTheme = (engine: EngineAppearance, appTheme: Theme): Theme => (engine.mode === "follow" ? appTheme : engine.mode);

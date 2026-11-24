@@ -2,6 +2,7 @@ import { PROVIDER_LABEL, type Provider, type Session, type TranscriptItem, type 
 import { HttpError } from "../errors.ts";
 import type { SessionManager } from "../sessions.ts";
 import { cutAt } from "./shape.ts";
+import { shownArg } from "../spool-folders.ts";
 import type { Binding, ChannelStore } from "./store.ts";
 
 // `workbench-remote` (ux/briefs/phone-remote-brief.md): what the messenger's own conversation — the
@@ -215,6 +216,8 @@ export class RemoteDesk {
     } else {
       const preset = this.core.defaultEngine(binding);
       if (!preset) return fail("engine_needed", "엔진을 정하지 않았습니다. 사용자에게 마지막 줄 [[선택: Claude | Codex]] 로 물으세요.");
+      // Gemini takes no hand-over (study § G rule 6): as if no default were set.
+      if (this.manager.enginePersonOnly(preset)) return fail("engine_needed", "이 메신저의 기본 엔진(Gemini)에는 일을 넘길 수 없습니다. 사용자에게 마지막 줄 [[선택: Claude | Codex]] 로 물으세요.");
       // The default not on this PC: the conversation is made as 메뉴 makes it, and the chat is told.
       provider = this.core.installed(preset) ? preset : undefined;
     }
@@ -254,7 +257,7 @@ function parseFlags(args: string[]): Flags | Fail {
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]!;
     const match = /^--([a-z]+)(?:=(.*))?$/.exec(arg);
-    if (!match || !FLAG_NAMES.has(match[1]!)) return fail("usage", `알 수 없는 인자: ${cutAt(arg, 40)}\n${REMOTE_USAGE}`);
+    if (!match || !FLAG_NAMES.has(match[1]!)) return fail("usage", `알 수 없는 인자: ${shownArg(arg)}\n${REMOTE_USAGE}`);
     const value = match[2] ?? args[++index];
     if (value === undefined) return fail("usage", `--${match[1]} 에 값이 없습니다.`);
     flags[match[1]!] = value;

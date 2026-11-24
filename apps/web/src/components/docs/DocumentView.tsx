@@ -62,7 +62,7 @@ import { COVER_DRAW_WAIT_MS, COVER_HOLD_MS, COVER_PAGE_WAIT_MS, PAGE_DRAWN_KINDS
 import { READING_LINE, firstView, isTyping, readDocOpen, readingView, useDocOpen } from "../../doc-open.ts";
 import { useShownPanel } from "../../completion-notifications.ts";
 import { NoteBanner } from "../../conversation/NoteBanner.tsx";
-import { DOCK_READY_WAIT_MS, DOCK_RETRY_MS, EDITOR_MIN_WIDTH, REVEAL_WAIT_MS, documentAgentParent, documentConversationShown, editorAiIsEntry, editorKeepsAiPanel, isOfficeEditing, isRichTextEditor, isWordEditor, narrowPaneStep, narrowView, otherDocumentAgent, readView, reportsAiSidebar, type AgentReveal } from "./document-modes.ts";
+import { DOCK_READY_WAIT_MS, DOCK_RETRY_MS, EDITOR_MIN_WIDTH, REVEAL_WAIT_MS, documentAgentParent, documentConversationShown, editorAiIsEntry, hostedView, editorKeepsAiPanel, isOfficeEditing, isRichTextEditor, isWordEditor, narrowPaneStep, narrowView, otherDocumentAgent, reportsAiSidebar, type AgentReveal } from "./document-modes.ts";
 import type { OfficePresentation } from "../../../../../packages/contracts/src/office-output.ts";
 
 /** Save operations only; "unsaved" is derived from the text, never stored (no stale overwrite). */
@@ -292,7 +292,7 @@ export default function DocumentView({
   const [mode, setMode] = useState<"edit" | "preview" | "split" | "render" | "source" | "pages" | "rich">(() =>
     // Beside a conversation every format opens in the app's own read view: no embedded editor
     // there (its own AI panel and input would sit next to the conversation's input).
-    hosted ? readView(artifact?.format)
+    hosted ? hostedView(artifact?.format, remoteReader)
       // 쪽 보기로 먼저 열기 (설정 › 문서 도구): a new or woken tab shows its pages; the editor starts on the first wish to edit.
       // A phone joined to the PC opens documents in their page view: the editors run on the PC, not over the device channel.
       : (remoteReader ? readingView(artifact?.format) : firstView(readDocOpen(), artifact, uiState, false)) ?? (hangul && uiState?.mode === "pages" ? "edit" : uiState?.mode && ["edit", "preview", "split", "render", "source", "pages", "rich"].includes(uiState.mode) ? uiState.mode as "edit" | "preview" | "split" | "render" | "source" | "pages" | "rich"
@@ -304,6 +304,15 @@ export default function DocumentView({
    * low memory, over the size bound) the editor opens as before — the person never looks at an empty
    * 쪽 보기 or a wait for pictures (doc-default, point d). Nothing is drawn for the moment of asking.
    */
+  // A phone: a document made a moment ago opens its tab before it reaches the phone's state (the device channel is
+  // slower), so its view was chosen without its kind. Once it arrives, the view is the 문서 list's (Hangul as pages).
+  const kindAtStart = useRef(artifact?.format);
+  useEffect(() => {
+    if (!remoteReader || kindAtStart.current !== undefined || !artifact?.format) return;
+    kindAtStart.current = artifact.format;
+    const view = hosted ? hostedView(artifact.format, true) : readingView(artifact.format);
+    if (view) setMode(view);
+  }, [remoteReader, artifact?.format, hosted]);
   const [pagesAsked, setPagesAsked] = useState(() => !hosted && !remoteReader && mode === "pages" && (artifact?.format === "docx" || artifact?.format === "pptx"));
   useEffect(() => {
     if (!pagesAsked || !artifact) return;
@@ -1116,6 +1125,7 @@ export default function DocumentView({
           artifact={artifact}
           readOnly={!everWriter.current}
           access={lease.access()}
+          relay={remoteReader ? (path: string) => rootApi.bytes(path) : undefined}
           onStatus={setDesignStatus}
           onSelection={(picked) => setSelection(picked ? { from: 0, to: 0, text: picked.text, label: picked.label, pageId: picked.pageId, objectIds: picked.objectIds } : null)}
           onCopied={(created) => {
@@ -1137,7 +1147,7 @@ export default function DocumentView({
           artifactId={artifactId}
           revision={artifact.revision}
           onSelection={setSelection}
-          onEdit={async (edit) => {
+          onEdit={remoteReader ? undefined : async (edit) => {
             try {
               const created = await api.editPdf(artifactId, edit);
               onToast(`PDF 쪽 편집을 새 파일로 저장했습니다: ${created.name}`);
@@ -1255,7 +1265,8 @@ export default function DocumentView({
     ...(officeEditing && hasEditorAi(artifact.format) && editorAiOff ? [{ key: "editor-ai", label: "편집기 안에 문서 AI 다시 켜기", icon: "chat" as const, onSelect: openEditorAi }] : []),
     ...(officeEditing ? [{ key: "commands", label: "편집 명령 찾기", icon: "search" as const, shortcut: "Alt+/", disabled: officeStatus.revision === null || Boolean(compare || viewing), reason: "편집기가 문서를 연 뒤에 쓸 수 있습니다.", onSelect: () => officeRef.current?.showCommands() }] : []),
     ...(markdownDoc && !hosted && (mode === "edit" || mode === "split") && !viewing && !compare && base ? [{ key: "draw", label: drawOpen ? "그림 닫기" : "여기에 그림 그리기", icon: "image" as const, shortcut: "Ctrl+Alt+G", onSelect: () => setDrawOpen(!drawOpen) }] : []),
-    ...(!hosted && (wordEditor || richTextEditor) ? [{ key: "external", label: "앱으로 열기", icon: "external" as const, onSelect: openExternal }] : []),
+    // 앱으로 열기 opens the PC's own app on the PC's screen: not from a phone.
+    ...(!hosted && !remoteReader && (wordEditor || richTextEditor) ? [{ key: "external", label: "앱으로 열기", icon: "external" as const, onSelect: openExternal }] : []),
   ];
   const exportsHere = officeEditing ? [
     ...(["docx", "pptx", "xlsx", "hwpx", "hwp", "markdown", "html"].includes(artifact.format) ? [{ key: "pdf", label: "PDF로 내보내기", onSelect: () => officeRef.current?.exportPdf() }] : []),
@@ -1376,7 +1387,8 @@ export default function DocumentView({
               ))}
             </div>
           ) : null}
-          {hosted ? (
+          {/* A phone joined to the PC reads the document: its AI is not started from here (the notice says to ask in a conversation). */}
+          {remoteReader ? null : hosted ? (
             // Beside a conversation the input is that conversation's: this document's own AI is in the document's tab.
             <button type="button" className="ghost-button doc-agent-toggle" disabled={!session || !hosted.onAgent} aria-label={agentSaid ? `문서 AI, ${agentSaid}` : "문서 AI"} title="이 문서의 AI 대화를 문서의 탭에서 엽니다. 메인 대화와 따로 실행됩니다" onClick={() => session && hosted.onAgent?.(session)}>
               <Icon name="chat" size={16} /><span className="doc-key-label">문서 AI</span>{agentState}

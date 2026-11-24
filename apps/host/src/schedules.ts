@@ -49,6 +49,8 @@ export type ScheduleHost = {
   getMeta: (key: string) => string | null;
   setMeta: (key: string, value: string) => void;
   sessionExists: (sessionId: string) => boolean;
+  /** Why this conversation takes no schedule (Gemini: a person only); null: it may. */
+  refuse?: (sessionId: string) => string | null;
   /** Send the request (queued when the session is working); throws when it cannot go. */
   send: (schedule: Schedule, requestId: string) => Promise<CommandReceipt | void>;
   receipt?: (commandId: string) => CommandReceipt | null;
@@ -89,6 +91,8 @@ export class Schedules {
     const text = String(request.text ?? "").trim();
     if (!text) throw new HttpError(400, "empty_schedule", "보낼 요청을 적어 주세요.");
     if (!this.host.sessionExists(request.sessionId)) throw new HttpError(404, "session_not_found", "세션을 찾지 못했습니다.");
+    const refused = this.host.refuse?.(request.sessionId);
+    if (refused) throw new HttpError(409, "person_only", refused);
     const when = parseWhen(request.when);
     const now = this.now();
     const policy = parsePolicy(request.policy, now);

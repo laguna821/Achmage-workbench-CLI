@@ -338,9 +338,11 @@ export type PropertyProps = {
   onRaw?: () => void;
   /** The note cannot be written now (its front matter does not read): values are shown, changed in the source. */
   readOnly?: boolean;
-  onKind: (key: string, type: PropertyType) => void;
+  /** A property's kind (it changes the kind for every project's note): absent on a phone joined to the PC. */
+  onKind?: (key: string, type: PropertyType) => void;
   /** The stage settings (names and colours). */
-  onStages: () => void;
+  /** 단계 편집 (every project's stages): absent on a phone joined to the PC. */
+  onStages?: () => void;
   /** The vault's tags, asked for the first time tags are edited. */
   onWantTags: () => void;
   openMenu: (request: MenuRequest) => void;
@@ -414,8 +416,8 @@ function StagePicker({ row, anchor, props, onClose }: PickerProps) {
       ))}
       <MenuSeparator />
       <MenuItem value="none" type="radio" checked={!name} onSelect={() => name && write(null)}>값 없음</MenuItem>
-      <MenuSeparator />
-      <MenuItem value="settings" icon="palette" more onSelect={props.onStages}>단계 편집…</MenuItem>
+      {props.onStages ? <><MenuSeparator />
+      <MenuItem value="settings" icon="palette" more onSelect={props.onStages}>단계 편집…</MenuItem></> : null}
     </Menu>
   );
 }
@@ -653,7 +655,7 @@ export function useNoteProperties(props: PropertyProps) {
     const row = rows.find((entry) => entry.key === key);
     if (row) return activate(row);
     // A new name, or a known one given another kind, is recorded with its kind (`.obsidian/types.json`).
-    if (props.knownKeys.find((entry) => entry.key === key)?.type !== type && type !== "stage") props.onKind(key, type);
+    if (props.knownKeys.find((entry) => entry.key === key)?.type !== type && type !== "stage") props.onKind?.(key, type);
     if (type === "checkbox") {
       void props.onWrite({ note, key, values: ["true"], type });
       return;
@@ -674,9 +676,10 @@ export function useNoteProperties(props: PropertyProps) {
   /** A row's kind and removal (its kind icon, or a right click). */
   const menuOf = (row: PropertyRow): MenuEntry[] => {
     if (props.readOnly || row === machine) return [];
-    const kinds: MenuEntry[] = KINDS.map((entry) => ({ kind: "item", label: entry.label, icon: KIND_ICON[entry.type], checked: entry.type === row.type, onSelect: () => props.onKind(row.key, entry.type) }));
+    const onKind = props.onKind;
+    const kinds: MenuEntry[] = onKind ? KINDS.map((entry) => ({ kind: "item", label: entry.label, icon: KIND_ICON[entry.type], checked: entry.type === row.type, onSelect: () => onKind(row.key, entry.type) })) : [];
     return [
-      ...(row.type === "stage" ? [] : [{ kind: "submenu" as const, label: "형식", icon: KIND_ICON[row.type], items: kinds }]),
+      ...(row.type === "stage" || !onKind ? [] : [{ kind: "submenu" as const, label: "형식", icon: KIND_ICON[row.type], items: kinds }]),
       // A key the note does not have (an empty template field, a new one) has nothing to remove.
       ...(row.present ? [{ kind: "separator" as const }, { kind: "item" as const, label: row.fromTemplate ? "값 지우기" : "속성 지우기", icon: "x" as const, danger: !row.fromTemplate, onSelect: () => void props.onWrite({ note, key: row.key, values: null, type: row.type }) }] : []),
     ];

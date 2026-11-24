@@ -13,6 +13,7 @@ import { EventBus } from "./bus.ts";
 import { createHttpServer } from "./http.ts";
 import { ClaudeAdapter } from "./providers/claude.ts";
 import { CodexAdapter } from "./providers/codex.ts";
+import { GeminiAdapter } from "./providers/gemini.ts";
 import { SessionManager } from "./sessions.ts";
 import { attachmentsDir } from "./attachments.ts";
 import { Store } from "./store.ts";
@@ -60,6 +61,7 @@ import { ExtensionService } from "./extensions/service.ts";
 import { EventHub } from "./event-hub.ts";
 import { gatewayChannels } from "./channels/gateway.ts";
 import { RemoteTool } from "./channels/remote-tool.ts";
+import { PeerDesk, PeerTool, peerScrub } from "./peer-read.ts";
 import { OfficeVault, vaultStatus } from "./office-vault.ts";
 import { CredentialService } from "./credentials/service.ts";
 import { CredentialTool } from "./credentials/tool.ts";
@@ -196,7 +198,18 @@ const remoteTool = new RemoteTool({
   run: (sessionId, args, input) => channelCore ? channelCore.remote(sessionId, args, input) : Promise.resolve({ code: 1, stdout: `${JSON.stringify({ ok: false, error: "channel_off", message: "휴대폰 채널이 없습니다." })}\n`, stderr: "workbench-remote: 휴대폰 채널이 없습니다.\n" }),
   hide: (id, name, value) => (value ? credentials.scrubber.set(id, name, [value]) : credentials.scrubber.remove(id)),
 });
-const engineHooks = remoteTool.hooks(credentialTool.hooks(desktopTool.hooks(withFindTool(browse.engineHooks(), find.engineHooks()))));
+// "이 프로젝트의 다른 대화 읽기" (peer-read.ts): workbench-peers, read only, for every conversation, scoped to its own project.
+const peerTool = new PeerTool({
+  dataDir, sessions: () => manager.view.sessions, bus,
+  desk: new PeerDesk({
+    sessions: () => manager.view.sessions, works: () => manager.view.works, items: (id) => manager.items(id).items,
+    document: (id) => manager.documents.find(id) ?? null,
+    workspace: (id) => manager.workspaces.list().find((entry) => entry.id === id) ?? null,
+    // The stored secrets and token shapes; with the messenger channel also its own redactor (its tokens in every form).
+    scrub: peerScrub(credentials.scrubber, () => channelCore),
+  }),
+});
+const engineHooks = peerTool.hooks(remoteTool.hooks(credentialTool.hooks(desktopTool.hooks(withFindTool(browse.engineHooks(), find.engineHooks())))));
 pkm.findInstructions = findToolInstructions;
 
 // "내 MCP 서버와 훅 불러오기" per engine (설정 › AI 엔진): off unless the person switches it on.
@@ -217,6 +230,23 @@ manager.registerAdapter(
     personalTools: () => enginePrefs.personalTools("codex"),
     browser: engineHooks,
     launch: pkm.codexLaunch,
+  }),
+);
+// Gemini (0.5.6): an ACP client of the person's installed Antigravity CLI (providers/gemini.ts). Subscription login
+// only, through agy's own sign-in (the owner, 2026-11-21); the opt-in is in engine-prefs.json.
+manager.registerAdapter(
+  new GeminiAdapter(manager.sink, {
+    settings: () => enginePrefs.gemini(),
+    // Workbench's own tools reach every engine as commands on its PATH (workbench-find, workbench-peers, …);
+    // "이 프로젝트의 다른 대화 읽기" also goes to agy as an MCP server in session/new (list_conversations /
+    // read_conversation, peer-read.ts), named for this conversation.
+    mcpServers: (session) => [peerTool.mcpServer(session)],
+    launch: pkm.codexLaunch,
+    protectedRoots: () => pkm.protectedRoots(),
+    browser: engineHooks,
+    idleMs: env.WORKBENCH_GEMINI_IDLE_MS ? Number(env.WORKBENCH_GEMINI_IDLE_MS) : undefined,
+    offScreenIdleMs,
+    modelCacheFile: join(dataDir, "gemini-models.json"),
   }),
 );
 
@@ -422,6 +452,7 @@ async function stop() {
   desktopTool.close();
   credentialTool.close();
   remoteTool.close();
+  peerTool.close();
   credentials.close();
   desktop.close();
   find.close();

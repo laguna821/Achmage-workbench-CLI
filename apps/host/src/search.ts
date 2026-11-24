@@ -30,6 +30,7 @@ import { SearchProjection } from "./search-projection.ts";
 import type { FastFindHit, FastFindScope } from "./search-service.ts";
 import { fold, parseQuery, snippetOf, type ParsedQuery } from "./search-text.ts";
 import { noteTitle, type NoteEntry, type VaultMirror } from "./vault.ts";
+import { shownArg } from "./spool-folders.ts";
 
 // One persistent Fast Find engine for Ctrl+K, saved views and workbench-find. Host scope is
 // applied before native ranking; source identity, document/reply joins and group paging remain
@@ -554,7 +555,9 @@ export class Finder {
     const options: SearchOptions = { archived, workId: onlyWork, scope, excludedKeys };
     const ranked = (await this.rank(query, options, true)).filter((hit) => scope === "all" || hit.scope === scope);
     const where = onlyWork && work ? `작업 「${work.title}」` : "모든 작업과 볼트";
-    const head = `${FIND_HEAD} · "${query}" · ${where}${scope !== "all" ? ` · ${SCOPE_LABEL[scope]}` : ""}${archived ? " · 보관 포함" : ""} · 총 ${ranked.length}건`;
+    // The query is shown back only in its short one-line form (security review of 0.5.6: an answer echoes no raw argument text).
+    const shownQuery = shownArg(query, 80);
+    const head = `${FIND_HEAD} · "${shownQuery}" · ${where}${scope !== "all" ? ` · ${SCOPE_LABEL[scope]}` : ""}${archived ? " · 보관 포함" : ""} · 총 ${ranked.length}건`;
     const lines = [head];
     if (!ranked.length) {
       lines.push(onlyWork ? "찾은 기록이 없습니다. 다른 작업과 볼트까지 찾으려면 --all을 붙이세요." : "찾은 기록이 없습니다.");
@@ -565,7 +568,7 @@ export class Finder {
     const texts = this.index.texts(slice.flatMap((hit) => [hit.id, ...(hit.answer?.matched ? [hit.answer.matched.id] : [])]));
     const bytes = (text: string) => Buffer.byteLength(text, "utf8");
     const flags = [all ? "--all" : null, archived ? "--archived" : null, scope !== "all" ? `--scope=${scope}` : null].filter(Boolean).join(" ");
-    const more = (from: number) => `… 총 ${ranked.length}건 중 ${offset + 1}–${from}건을 보였습니다. 나머지: workbench-find ${flags ? `${flags} ` : ""}--offset=${from} "${query.replace(/"/g, '\\"')}"`;
+    const more = (from: number) => `… 총 ${ranked.length}건 중 ${offset + 1}–${from}건을 보였습니다. 나머지: workbench-find ${flags ? `${flags} ` : ""}--offset=${from} ${shownQuery === query ? `"${query.replace(/"/g, '\\"')}"` : "(같은 질의)"}`;
     let used = bytes(`${head}\n`);
     let shownCount = 0;
     for (const hit of slice) {

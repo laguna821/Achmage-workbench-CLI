@@ -134,6 +134,28 @@
   pointer-events: none;
 }
 
+/* 첨부's first part (composer-056): the conversation's working folder, by name (its path on hover). */
+.composer-folder { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) 10px var(--space-2); min-width: 0; color: var(--text); font-weight: 600; }
+.composer-folder > svg { flex: none; color: var(--muted); }
+.composer-folder-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Files dragged from the computer over a conversation: the whole pane takes them, and says so. */
+.work-view[data-file-drop] { position: relative; }
+.work-drop {
+  position: absolute;
+  inset: var(--space-2);
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--accent);
+  font-size: var(--fs-lead);
+  font-weight: 600;
+  pointer-events: none;
+}
+
 .composer-file-picker, .attach-file { position: relative; display: inline-flex; min-width: 0; }
 .composer-file-picker > input[hidden] { display: none; }
 .composer-file-problem { color: var(--danger); font-size: var(--fs-meta); overflow-wrap: anywhere; }

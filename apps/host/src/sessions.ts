@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { copyOfficeStyleSelection } from "./office-styles.ts";
 import { blankOfficeBytes } from "./office-new.mjs";
-import { BLANK_OFFICE_DOCUMENTS, type NewOfficeDocument } from "@workbench/contracts";
+import { BLANK_OFFICE_DOCUMENTS, PROVIDER_LABEL, type NewOfficeDocument } from "@workbench/contracts";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync, type Stats } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { Artifact, DocumentRemovalPlan } from "@workbench/contracts";
@@ -75,6 +75,7 @@ import { GitHubActions } from "./github-actions.ts";
 import { WorkspaceLayouts } from "./layouts.ts";
 import type { Kordoc } from "./kordoc.ts";
 import type { AdapterSink, LoginStart, ProviderAdapter } from "./providers/types.ts";
+import { GEMINI_PERSON_ONLY } from "./providers/gemini.ts";
 import type { Store } from "./store.ts";
 import { adaptTitle, titleFor } from "./titles.ts";
 import { blankDesign, copyDesignAssets, designProblem, designStem, type DesignPreset } from "./design.ts";
@@ -93,7 +94,10 @@ import { TaskService } from "./task-service.ts";
 import { OfficeSessions } from "./office-sessions.ts";
 import { copyMcp, copySkill, integrations, withoutEnvValues, type EngineBinaries } from "./integrations.ts";
 import { exportFileName, sessionMarkdown } from "./export-md.ts";
-import { Attachments } from "./attachments.ts";
+import { Attachments, MAX_ATTACHMENT } from "./attachments.ts";
+
+/** What a file dropped by its path is, by its extension (the bytes still decide for pictures and PDFs). */
+const LOCAL_MIME: Record<string, string> = { ".txt": "text/plain", ".md": "text/markdown", ".csv": "text/csv", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".pdf": "application/pdf" };
 import { imagesNamed, keepImage, withImages } from "./tool-images.ts";
 import { captureMessageMedia } from "./media-references.ts";
 import { AgentProfiles } from "./agent-profiles.ts";
@@ -196,6 +200,8 @@ export type SendOptions = {
   notes?: string[];
   /** Sent by a schedule ("예약 작업"): marked on the request. */
   scheduled?: boolean;
+  /** Came from a schedule, the automation API or a hub event (tasks.submit), not a person: kept on the queued entry. */
+  automated?: boolean;
   /** Lines of "지난 요청 뒤 바뀐 것" the user chose not to send (project.ts `changes`). */
   omitChanges?: string[];
   /** The request waits in the session's queue and is sent from there (`sendWaiting` only): it leaves the queue when its user item is written. */
@@ -684,6 +690,7 @@ export class SessionManager {
       getMeta: (key) => store.getMeta(key),
       setMeta: (key, value) => store.setMeta(key, value),
       sessionExists: (id) => this.sessions.has(id),
+      refuse: (id) => this.personOnly(this.sessions.get(id)),
       transaction: run => store.transaction(run),
       receipt: commandId => this.tasks.receipt(commandId),
       send: async (schedule, requestId) => {
@@ -704,7 +711,7 @@ export class SessionManager {
     });
     this.profiles = new AgentProfiles(store);
     this.tasks = new TaskService(store, bus, {
-      submit: (input, source, origin) => this.send(input.sessionId, input.commandId, input.text, [], null, null, input.mode ?? "auto", { profileId: input.profileId, activate: false, scheduled: source === "schedule", ...(origin ? { origin } : {}) }),
+      submit: (input, source, origin) => this.send(input.sessionId, input.commandId, input.text, [], null, null, input.mode ?? "auto", { profileId: input.profileId, activate: false, scheduled: source === "schedule", automated: true, ...(origin ? { origin } : {}) }),
       sessions: () => [...this.sessions.values()], items: id => this.loadItems(id),
       canSteer: session => Boolean(this.adapters.get(session.provider)?.steer),
       nativeTasks: session => this.adapters.get(session.provider)?.nativeTasks?.(session) ?? [],
@@ -720,6 +727,7 @@ export class SessionManager {
         if (!adapter?.nativeTaskHistory) throw new HttpError(409, "native_history_unavailable", "이 공급자는 하위 작업 기록을 지원하지 않습니다.");
         return adapter.nativeTaskHistory(session, this.engineWork(session, this.requireWork(session.workId)), target);
       },
+      refuse: session => this.personOnly(session),
       stop: id => this.interrupt(id), approve: (id, itemId, decision) => this.answerApproval(id, itemId, decision),
       cancelQueue: (id, queuedId) => this.cancelQueued(id, queuedId), sendQueue: (id, queuedId) => this.sendQueued(id, queuedId),
     });
@@ -1039,7 +1047,7 @@ export class SessionManager {
    * leaves it waiting as it was, and after it the request is in the conversation, never in both.
    */
   private sendWaiting(sessionId: string, entry: QueuedMessage): Promise<SendResult> {
-    return this.send(sessionId, entry.id, entry.text, entry.refs, null, entry.create, entry.plan ? "queue" : "steer", { attachments: entry.attachments ?? [], plan: entry.plan === true, notes: entry.notes ?? [], runSettings: entry.runSettings, waiting: true, ...(entry.origin ? { origin: entry.origin } : {}) });
+    return this.send(sessionId, entry.id, entry.text, entry.refs, null, entry.create, entry.plan ? "queue" : "steer", { attachments: entry.attachments ?? [], plan: entry.plan === true, notes: entry.notes ?? [], runSettings: entry.runSettings, waiting: true, ...(entry.origin ? { origin: entry.origin } : {}), ...(entry.automated ? { automated: true } : {}) });
   }
 
   /** The turn ended normally: the oldest request not kept back becomes the next turn. */
@@ -1504,7 +1512,7 @@ export class SessionManager {
     return this.requireWork(work.id);
   }
 
-  /** The messenger's bot was registered or removed: its home is locked (name, place, archive) only while it is registered. */
+  /** The messenger's bot was registered or removed: its home is locked (place, archive, delete; never its name) only while it is registered. */
   setMessengerRegistered(kind: ChannelKind, registered: boolean) {
     for (const work of [...this.works.values()]) {
       if (work.messengerHome?.kind !== kind || work.messengerHome.registered === registered || (registered && this.hidden(work.id))) continue;
@@ -1514,8 +1522,9 @@ export class SessionManager {
 
   updateWork(workId: string, patch: UpdateWorkRequest): Work {
     const work = this.requireWork(workId);
-    if (work.messengerHome?.registered && ((patch.title !== undefined && patch.title.trim() !== work.title) || patch.archived === true || (patch.folderId !== undefined && (patch.folderId ?? null) !== work.folderId))) {
-      throw new HttpError(409, "messenger_home", messengerHomeLocked(work.messengerHome.kind));
+    // A home is renamed as a project is; its place (no folder, not archived) is kept while its messenger is registered.
+    if (work.messengerHome?.registered && (patch.archived === true || (patch.folderId !== undefined && (patch.folderId ?? null) !== work.folderId))) {
+      throw new HttpError(409, "messenger_home", messengerHomeLocked(work.messengerHome.kind, work.title));
     }
     if (patch.activeSessionId && this.sessions.get(patch.activeSessionId)?.workId !== workId) {
       throw new HttpError(400, "invalid_session", "다른 작업의 세션입니다.");
@@ -1534,10 +1543,16 @@ export class SessionManager {
       next.archivedAt = patch.archived ? Date.now() : null;
     }
     if (patch.title !== undefined) {
-      // A name typed by hand stays; clearing it hands the title back to the automatic one.
+      // A name typed by hand stays; clearing it hands the title back to the automatic one (a
+      // messenger's home: back to the name it was made with, "텔레그램 대화" / "Slack 대화").
       const title = patch.title.trim();
-      next.title = title ? title.slice(0, 80) : work.title;
-      next.titleSource = title ? "user" : "auto";
+      if (work.messengerHome) {
+        next.title = title ? title.slice(0, 80) : MESSENGER_HOME_TITLE[work.messengerHome.kind];
+        next.titleSource = "user";
+      } else {
+        next.title = title ? title.slice(0, 80) : work.title;
+        next.titleSource = title ? "user" : "auto";
+      }
     }
     this.saveWork(next);
     if (next.titleSource === "auto" && patch.title !== undefined) this.retitleWork(workId, true);
@@ -1546,7 +1561,7 @@ export class SessionManager {
 
   deleteWork(workId: string) {
     const work = this.requireWork(workId);
-    if (work.messengerHome?.registered) throw new HttpError(409, "messenger_home", messengerHomeLocked(work.messengerHome.kind));
+    if (work.messengerHome?.registered) throw new HttpError(409, "messenger_home", messengerHomeLocked(work.messengerHome.kind, work.title));
     for (const workspace of this.workspaces.list().filter(space => space.workId === workId)) this.assertWorkspaceIdle(workspace);
     const sessions = [...this.sessions.values()].filter(session => session.workId === workId), ids = new Set(sessions.map(session => session.id));
     if (sessions.some(session => this.office.busy(session.id)) || this.links.list().some(link => link.state !== "ended" && link.participants.some(id => ids.has(id)))) throw new HttpError(409, "project_busy", "프로젝트의 AI 작업·세션 연결을 마치거나 멈춘 뒤 삭제해 주세요.");
@@ -1806,7 +1821,7 @@ export class SessionManager {
   createSession(workId: string, request: CreateSessionRequest, activate = true): Session {
     const work = this.requireWork(workId);
     const workspace = this.workspaces.requireActive(request.workspaceId ?? this.workspaces.defaultFor(work).id, workId);
-    if (request.provider !== "claude" && request.provider !== "codex") {
+    if (request.provider !== "claude" && request.provider !== "codex" && request.provider !== "gemini") {
       throw new HttpError(400, "invalid_provider", "지원하지 않는 엔진입니다.");
     }
     const now = Date.now();
@@ -1868,7 +1883,9 @@ export class SessionManager {
     const prior = children.find(entry => entry.id === this.store.getMeta(selectionKey)) ?? children[0];
     if (prior && !fresh && (!provider || prior.provider === provider)) return prior;
     if (children.some(entry => this.office.busy(entry.id) || !["idle", "error"].includes(entry.status) || entry.queued.length)) throw new HttpError(409, "document_agent_busy", "진행 중인 문서 AI와 대기 요청을 마치거나 멈춘 뒤 엔진이나 대화를 바꿔 주세요.");
-    const chosen = provider ?? prior?.provider ?? preferred ?? parent?.provider ?? (this.prefs().engine === "codex" ? "codex" : "claude");
+    // Document AI keeps its engines (Claude, Codex): a Gemini main conversation's documents get the person's default one.
+    const notGemini = (value: Provider | undefined | null) => (value === "gemini" ? undefined : value ?? undefined);
+    const chosen = provider ?? notGemini(prior?.provider) ?? notGemini(preferred) ?? notGemini(parent?.provider) ?? (this.prefs().engine === "codex" ? "codex" : "claude");
     const existing = !fresh ? children.find(entry => entry.provider === chosen) : null;
     if (existing) { this.store.setMeta(selectionKey, existing.id); return existing; }
     const defaults = prior?.provider === chosen ? prior : parent?.provider === chosen ? parent : null;
@@ -1907,7 +1924,7 @@ export class SessionManager {
       if (parent?.pageAgent || parent?.documentAgent || parent?.workspaceId !== page.workspaceId) parent = null;
     }
     if (parent && (parent.workId !== page.workId || parent.workspaceId !== page.workspaceId || this.hidden(parent.workId, parent.id))) throw new HttpError(403, "browser_parent_scope", "같은 작업공간의 메인 대화를 선택해 주세요.");
-    const chosen = provider ?? parent?.provider ?? (this.prefs().engine === "codex" ? "codex" : "claude");
+    const chosen = provider ?? (parent?.provider === "gemini" ? undefined : parent?.provider) ?? (this.prefs().engine === "codex" ? "codex" : "claude");
     const prior = [...this.sessions.values()].reverse().find(entry => entry.pageAgent?.pageId === pageId && entry.provider === chosen && entry.workspaceId === page.workspaceId && !this.hidden(page.workId, entry.id));
     if (prior) { this.sharedBrowser.attach(pageId, prior); return prior; }
     const defaults = parent?.provider === chosen ? parent : null;
@@ -1919,7 +1936,7 @@ export class SessionManager {
   /** "격리 사본에서": a new session working in a git worktree of the work's repository. */
   async createIsolatedSession(workId: string, request: CreateSessionRequest): Promise<Session> {
     const work = this.requireWork(workId);
-    if (request.provider !== "claude" && request.provider !== "codex") throw new HttpError(400, "invalid_provider", "지원하지 않는 엔진입니다.");
+    if (request.provider !== "claude" && request.provider !== "codex" && request.provider !== "gemini") throw new HttpError(400, "invalid_provider", "지원하지 않는 엔진입니다.");
     // The copy first: a session is made only once it exists.
     const source = this.workspaces.requireActive(request.workspaceId ?? this.workspaces.defaultFor(work).id, workId);
     const worktree = await createWorktree(source.cwd, this.options.dataDir ?? dirname(this.options.managedWorksDir), randomUUID());
@@ -1989,6 +2006,42 @@ export class SessionManager {
       this.sink.upsertItem(sessionId, { kind: "notice", id: `worktree-removed:${Date.now()}`, level: "info", text: `격리 사본을 버렸습니다. 연결된 작업공간과 세션은 기록을 보존해 보관함으로 옮겼습니다.${retained}`, at: Date.now() });
       return { ok: true };
     } finally { release(); }
+  }
+
+  /**
+   * 작업 폴더 바꾸기 (composer-056): the folder a conversation's engine runs in. A conversation that has not
+   * started (no request sent, no engine running for it) moves to the folder chosen; one that has stays where
+   * it is and a new conversation of the same engine, model and access starts in the folder chosen (a running
+   * engine is never moved). The folder becomes one of the project's work folders (a workspace), so the
+   * project's own folder, its other conversations and its documents stay as they are.
+   */
+  sessionFolder(sessionId: string, cwd: string): { session: Session; moved: boolean } {
+    const session = this.requireSession(sessionId);
+    const work = this.requireWork(session.workId);
+    if (session.documentAgent || session.pageAgent) throw new HttpError(409, "session_folder_agent", "문서 AI와 웹 AI는 문서·웹 탭의 작업 폴더에서 일합니다.");
+    const workspace = this.workspaces.requireActive(this.workspaces.create(work, { cwd }).id, work.id);
+    if (workspace.id === session.workspaceId) return { session, moved: true };
+    const engineAlive = this.adapters.get(session.provider)?.engineProcesses?.().some((entry) => entry.sessionIds.includes(session.id)) ?? false;
+    const started = Boolean(session.nativeSessionId) || engineAlive || session.status !== "idle" || this.items(session.id).items.some((item) => item.kind === "user");
+    if (!started) {
+      this.saveSession({ ...session, workspaceId: workspace.id, worktree: workspace.worktree ?? null, updatedAt: Date.now() });
+      return { session: this.requireSession(session.id), moved: true };
+    }
+    const created = this.createSession(work.id, { provider: session.provider, workspaceId: workspace.id, model: session.model, effort: session.effort, access: session.access ?? null, ...(session.profileId ? { profileId: session.profileId } : {}) });
+    return { session: created, moved: false };
+  }
+
+  /**
+   * A file dropped from the PC's file manager arrives as its path (a file:// list, no bytes): read here and
+   * kept as any attachment is (a file, not a folder or a device; up to 25MB; a full path).
+   */
+  attachLocal(path: string) {
+    if (typeof path !== "string" || !isAbsolute(path)) throw new HttpError(400, "attachment_path", "파일의 전체 경로가 필요합니다.");
+    let real: string, stats: Stats;
+    try { real = realpathSync(path); stats = statSync(real); } catch { throw new HttpError(404, "attachment_missing", "파일이 없습니다. 옮겨졌거나 지워졌는지 확인해 주세요."); }
+    if (!stats.isFile()) throw new HttpError(400, "attachment_not_file", "파일만 첨부할 수 있습니다. 폴더는 작업 폴더로 고르세요.");
+    if (stats.size > MAX_ATTACHMENT) throw new HttpError(413, "attachment_too_large", `첨부는 ${Math.floor(MAX_ATTACHMENT / 1024 / 1024)}MB까지입니다.`);
+    return this.attachments.save(readFileSync(real), basename(path), LOCAL_MIME[extname(path).toLowerCase()] ?? "application/octet-stream");
   }
 
   /** Where the engine works for a session: its worktree, else the work folder. */
@@ -2224,6 +2277,10 @@ export class SessionManager {
     const attachments = options.attachments ?? [];
     const plan = options.plan === true;
     const relay = options.relay ?? null;
+    // Another conversation handing work over ("세션 잇기") is not a person typing, nor is a request a schedule, the
+    // automation API or a hub event left waiting (checked again here: the sign-in may have changed since it arrived).
+    const personOnly = relay || options.automated ? this.personOnly(session) : null;
+    if (personOnly) throw new HttpError(409, "person_only", personOnly);
     const notes = options.notes ?? [];
     const origin = options.origin ?? null;
     const draft = options.draft === true || Boolean(origin);
@@ -2360,6 +2417,7 @@ export class SessionManager {
           ...(notes.length ? { notes } : {}),
           ...(origin ? { origin } : {}),
           ...(draft ? { draft: true } : {}),
+          ...(options.automated ? { automated: true } : {}),
         };
         this.saveSession({ ...current, queued: [...current.queued, later] });
         return { duplicate: false, delivery: "queued" };
@@ -2390,6 +2448,8 @@ export class SessionManager {
             ...(notes.length ? { notes } : {}),
             ...(origin ? { origin } : {}),
             ...(draft ? { draft: true } : {}),
+            ...(options.automated ? { automated: true } : {}),
+          ...(options.automated ? { automated: true } : {}),
           };
           this.saveSession({ ...now, queued: [...now.queued, later] });
         }
@@ -2429,7 +2489,11 @@ export class SessionManager {
       // sessions' revisions, the note), before the request; relays and drawings carry their own.
       const change = told ? (this.changeHook?.(session, work, options.omitChanges ?? []) ?? null) : null;
       const roleText = settings.instructions ? `이 요청에 선택한 역할: ${settings.profileName}\n${settings.instructions}\n\n` : "";
-      engineText = channelContext + roleText + officeContext.text + browserContext + (change ? `${change}\n\n${baseText}` : baseText);
+      // Gemini gets the person's request and the context it needs (documents, attachments, notes, the chosen role),
+      // not Workbench's status dumps of other conversations or "what changed" (study § H+: agy may notice a foreign
+      // agent's large prompt). The other engines keep theirs.
+      const lean = session.provider === "gemini";
+      engineText = channelContext + roleText + (lean ? "" : officeContext.text + browserContext) + (change && !lean ? `${change}\n\n${baseText}` : baseText);
       mustStillGo();
       if (created) this.creations.update(requestId, { state: "sent" });
       // Known before its user item is written (the phone reads it when that item arrives).
@@ -2961,7 +3025,7 @@ export class SessionManager {
         refs,
         {
           sessionId: source.id,
-          label: `${sourceWork.title} · ${source.purpose} (${source.provider === "claude" ? "Claude" : "Codex"})`,
+          label: `${sourceWork.title} · ${source.purpose} (${PROVIDER_LABEL[source.provider]})`,
         },
         null,
         "auto",
@@ -3013,8 +3077,10 @@ export class SessionManager {
    * goes to "세션 기록/" and becomes a document of the work (opened, attached, searched like others);
    * a later export of the same conversation updates the same file.
    */
-  exportMarkdown(sessionId: string, request: ExportMarkdownRequest): ExportMarkdownResult {
+  /** `scope`: a paired phone's projects — what lies outside them is named only as "다른 프로젝트의 …". */
+  exportMarkdown(sessionId: string, request: ExportMarkdownRequest, scope?: readonly string[]): ExportMarkdownResult {
     const session = this.requireSession(sessionId);
+    const seen = (workId: string | undefined) => !scope || (workId !== undefined && scope.includes(workId));
     const work = this.engineWork(session, this.requireWork(session.workId));
     const items = this.loadItems(sessionId);
     const folders: string[] = [];
@@ -3025,18 +3091,27 @@ export class SessionManager {
       folders: folders.filter(Boolean),
       items,
       tools: Boolean(request.tools),
-      artifactName: (id) => this.documents.list().find((artifact) => artifact.id === id)?.name ?? null,
+      artifactName: (id) => {
+        const artifact = this.documents.list().find((entry) => entry.id === id);
+        return artifact && !seen(artifact.workId) ? "다른 프로젝트의 문서" : artifact?.name ?? null;
+      },
       proposal: (id) => {
         const proposal = this.documents.listProposals().find((entry) => entry.id === id);
         if (!proposal) return null;
-        return { ...proposal, name: this.documents.list().find((artifact) => artifact.id === proposal.artifactId)?.name ?? null };
+        const artifact = this.documents.list().find((entry) => entry.id === proposal.artifactId);
+        return { ...proposal, name: artifact && !seen(artifact.workId) ? "다른 프로젝트의 문서" : artifact?.name ?? null };
       },
-      handoff: (id) => this.handoffs.get(id) ?? null,
+      handoff: (id) => {
+        const handoff = this.handoffs.get(id) ?? null;
+        // Another project's conversation's answer stays out of a phone's copy (its line says only that it answered).
+        return handoff && !seen(this.sessions.get(handoff.targetSessionId)?.workId) ? { ...handoff, reply: null } : handoff;
+      },
       link: (id) => this.links.get(id),
       sessionLabel: (id) => {
         const target = this.sessions.get(id);
+        if (target && !seen(target.workId)) return "다른 프로젝트의 대화";
         const targetWork = target ? this.works.get(target.workId) : undefined;
-        return target ? `${targetWork?.title ?? ""} · ${target.purpose} (${target.provider === "claude" ? "Claude" : "Codex"})` : null;
+        return target ? `${targetWork?.title ?? ""} · ${target.purpose} (${PROVIDER_LABEL[target.provider]})` : null;
       },
     });
     if (request.target === "text") return { markdown, path: null, artifactId: null };
@@ -3123,16 +3198,68 @@ export class SessionManager {
     return this.engineSetup.decorate(adapter.status());
   }
 
+  /**
+   * Gemini runs only what a person sends (study § G rule 6; subscription login only): schedules, the
+   * automation API, webhook events and hand-overs between conversations are refused with this line.
+   */
+  personOnly(session: Pick<Session, "provider"> | undefined): string | null {
+    return session && this.enginePersonOnly(session.provider) ? GEMINI_PERSON_ONLY : null;
+  }
+
+  /** The engine takes only what a person sends (Gemini). */
+  enginePersonOnly(provider: Provider): boolean {
+    if (provider !== "gemini") return false;
+    const adapter = this.adapters.get("gemini") as (ProviderAdapter & { personOnly?: () => boolean }) | undefined;
+    return Boolean(adapter?.personOnly?.());
+  }
+
+  /**
+   * 설정 › AI 엔진 › Gemini: 설치 runs Google's official installer, 로그인 runs agy's own terminal sign-in —
+   * each in a terminal tab the person sees (in the project they are in, else the last one they used).
+   */
+  geminiTerminal(action: "install" | "login", workId?: string | null) {
+    const adapter = this.adapters.get("gemini") as (ProviderAdapter & { terminalLaunch?: (action: "install" | "login") => { shell: string; args: string[]; environment: Record<string, string>; label: string } | null }) | undefined;
+    const launch = adapter?.terminalLaunch?.(action) ?? null;
+    if (!launch) throw new HttpError(409, "gemini_not_found", "먼저 Antigravity CLI를 설치하고 다시 확인을 눌러 주세요.");
+    const usable = (work: Work | undefined) => Boolean(work && !work.archivedAt && !work.messengerHome);
+    const work = (workId ? this.works.get(workId) : undefined) ?? [...this.works.values()].filter(usable).sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    if (!work || !usable(work)) throw new HttpError(409, "no_project", "터미널을 열 프로젝트가 없습니다. 먼저 프로젝트를 하나 만들어 주세요.");
+    const workspaceId = work.defaultWorkspaceId ?? this.workspaces.list().find((entry) => entry.workId === work.id && !entry.archivedAt && !entry.removedAt)?.id;
+    if (!workspaceId) throw new HttpError(409, "no_project", "터미널을 열 작업공간을 찾지 못했습니다.");
+    return this.terminals.create(workspaceId, { requestId: randomUUID(), label: launch.label, shell: launch.shell, args: launch.args }, { environment: launch.environment });
+  }
+
+  /** 설정 › AI 엔진 › Gemini changed: the adapter applies it (idle engines close) and reports the new status. */
+  async geminiSettingsChanged() {
+    const adapter = this.adapters.get("gemini") as (ProviderAdapter & { settingsChanged?: () => Promise<ProviderStatus> }) | undefined;
+    const status = adapter?.settingsChanged ? await adapter.settingsChanged() : adapter?.status();
+    return status ? this.engineSetup.decorate(status) : null;
+  }
+
+  /**
+   * 로그아웃 (설정 › AI 엔진): the engine's own logout. Conversations of that engine already running are
+   * not stopped; the next one needs a login.
+   */
+  async logout(provider: Provider) {
+    const adapter = this.adapter(provider);
+    if (!adapter.logout) throw new HttpError(400, "no_logout", "이 엔진은 앱에서 로그아웃할 수 없습니다.");
+    await adapter.logout().catch((error: unknown) => {
+      throw new HttpError(409, "logout_failed", error instanceof Error ? error.message : String(error));
+    });
+    return this.engineSetup.decorate(adapter.status());
+  }
+
   /** "설치": the latest engine for this user; progress arrives as provider.status events. */
   installEngine(provider: Provider) {
     const adapter = this.adapter(provider);
+    if (provider === "gemini") throw new HttpError(400, "engine_not_installable", "Gemini는 Workbench가 설치하지 않습니다. 설정 › AI 엔진 › Gemini의 설치 단추가 Google 공식 설치 프로그램을 터미널 탭에서 실행합니다.");
     if (!this.engineSetup.canInstall()) throw new HttpError(501, "npm_missing", "이 설치본에는 엔진을 설치할 npm이 없습니다.");
     void this.engineSetup.install(provider);
     return this.engineSetup.decorate(adapter.status());
   }
 
   /** Document settings stay busy until the shared installer actually finishes. */
-  async installEngineAndWait(provider: Provider) {
+  async installEngineAndWait(provider: "claude" | "codex") {
     this.installEngine(provider);
     await this.engineSetup.install(provider);
     const state = this.engineSetup.state(provider);

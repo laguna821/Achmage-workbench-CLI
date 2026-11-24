@@ -36,6 +36,8 @@
 // Vault notes attached to a request are named back ("받은 노트 사본: …").
 //   In a messenger's own conversation (the remote's rules in the request): "<이름> 프로젝트에서 <일>" and the
 //          rest of fake-remote.mjs — workbench-remote through Bash, then one line (or [[선택: …]])
+//   "코덱스에서 한 작업 보고 이어서" (or 클로드 / 다른 대화): fake-peers.mjs — workbench-peers list and read
+//          through Bash, then an answer naming what it read and whether it was told about the tool
 //   "[[crash]]"  the process dies in the middle of the turn: it adds part of an edit to the working
 //          copy the request names, streams a few lines (about 2.5 s), then exits without a result.
 //          "[[crash-once]]", or "충돌:N" in a linked-session goal at hand-over N: the same, once per
@@ -56,13 +58,14 @@
 
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createServer } from "node:http";
 import { createInterface } from "node:readline";
 import { pagePng } from "./png.mjs";
 import { remoteTurn } from "./fake-remote.mjs";
+import { peerTurn } from "./fake-peers.mjs";
 import { SAMPLE_COMMAND, SAMPLE_FILE, SAMPLE_FILE_TEXT, SAMPLE_OUTPUT, SAMPLE_PLAN, SAMPLE_REPLY, SAMPLE_THINKING } from "./sample-reply.mjs";
 
 const args = process.argv.slice(2);
@@ -77,6 +80,12 @@ if (args[0] === "auth" && args[1] === "status") {
     process.exit(1);
   }
   console.log(JSON.stringify({ loggedIn: true, authMethod: "claude.ai", apiProvider: "firstParty", email: process.env.WORKBENCH_FIXTURE_EMAIL || "fake@example.com", subscriptionType: "max" }));
+  process.exit(0);
+}
+// `auth logout` removes <dir>/claude (only the stand-in's, in its temporary folder).
+if (args[0] === "auth" && args[1] === "logout") {
+  if (authFile) rmSync(authFile, { force: true });
+  console.log("Successfully logged out from your Anthropic account.");
   process.exit(0);
 }
 const loginMode = args[0] === "auth" && args[1] === "login";
@@ -487,6 +496,20 @@ async function runTurn(text) {
     send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: result.output, is_error: result.code !== 0 }] }, parent_tool_use_id: null, ...base() });
     return result;
   }, process.env.WORKBENCH_REMOTE_SESSION ?? "claude");
+  // "방금 코덱스에서 한 작업 보고 이어서 해 줘" (fake-peers.mjs): workbench-peers through Bash, then what it read.
+  const peerAnswer = remoteAnswer === null ? await peerTurn(text, async (line) => {
+    const toolId = `toolu_${randomUUID().slice(0, 8)}`;
+    const input = { command: line, description: "같은 프로젝트의 다른 대화 읽기" };
+    send({ type: "assistant", message: { id: `msg_${randomUUID().slice(0, 8)}`, type: "message", role: "assistant", model: MODEL, content: [{ type: "tool_use", id: toolId, name: "Bash", input }], stop_reason: "tool_use", stop_sequence: null, usage: { input_tokens: 10, output_tokens: 20, cache_creation_input_tokens: 0, cache_read_input_tokens: used } }, parent_tool_use_id: null, ...base() });
+    let allowed = permissionMode === "bypassPermissions" || permissionMode === "dontAsk";
+    if (!allowed) {
+      const answerToTool = await ask({ subtype: "can_use_tool", tool_name: "Bash", input, tool_use_id: toolId, decision_reason: "명령 실행은 확인이 필요합니다" });
+      allowed = answerToTool?.behavior === "allow";
+    }
+    const result = allowed ? await runCommand(line) : { code: 1, output: "The user declined this action." };
+    send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: result.output, is_error: result.code !== 0 }] }, parent_tool_use_id: null, ...base() });
+    return result;
+  }, appendSystemPrompt) : null;
   if (!(text.trim() === "/compact")) {
     const steer = text.startsWith("[steer]") ? `이어서 받은 요청을 반영합니다: ${text.slice(7)}\n\n` : "";
     const skill = text.match(/^\/정리(?:\s+(.*))?$/s);
@@ -517,6 +540,8 @@ async function runTurn(text) {
     const linked = linkReply(text, "Claude");
     if (remoteAnswer !== null) {
       chunks.push({ text: remoteAnswer, wait: 30 });
+    } else if (peerAnswer !== null) {
+      chunks.push({ text: peerAnswer, wait: 30 });
     } else if (linked) {
       for (const line of linked) chunks.push({ text: `${line}\n`, wait: 40 });
       // "천천히" / "길게": the same reply, then a tail (about 2 s / 8 s) to have time to act meanwhile.

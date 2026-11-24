@@ -31,7 +31,7 @@ export const PRESSURE_SLEEP_MS = 30_000;
 export const PRESSURE_SOON_MS = 10 * 60_000;
 
 /** The tree determines geometry; editors retain the same parent and React key when moved. */
-export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, recentFrames = 2, warm, maximized = false, onMaximize, onPresent, onResize, onFocus, onClose, onMove, onSplit, onDrop, head, scope, effectOf, render, onNarrow, tabBar, minWidthOf, foot, sleep, sleepNow = 0, onSleeping }: {
+export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, recentFrames = 2, warm, maximized = false, onMaximize, onPresent, onResize, onFocus, onClose, onMove, onSplit, onDrop, head, scope, effectOf, render, onNarrow, tabBar, minWidthOf, sleep, sleepNow = 0, onSleeping }: {
   layout: Layout<V>; enabled: boolean;
   /** The editor pool's recent frames per kind (editor-pool.ts recentFramesFor: 2 with room, fewer when memory is short). */
   recentFrames?: number;
@@ -65,8 +65,6 @@ export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, recentFrames
    * over the work rather than docking into that width.
    */
   minWidthOf?: (pane: Pane<V>) => number;
-  /** A line under the panes (the launch's attribution, LaunchCredit): it sets the room it takes, the panes measure what is left. */
-  foot?: ReactNode;
   maximized?: boolean;
   onMaximize?: (id: PaneId) => void;
   /** Re-place native web views now that zoom or restore has moved the panes. */
@@ -332,7 +330,6 @@ export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, recentFrames
         }} />;
     }) : null}
     {enabled ? <><DropPreview boxes={boxes} effectOf={effectOf} panes={layout.panes} /><DragGhost /></> : null}
-    {foot}
   </div></EditorPoolContext.Provider>;
 }
 

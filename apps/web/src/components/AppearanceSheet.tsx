@@ -184,7 +184,7 @@ export function AppearancePanel({ target, onTarget, themePref, onThemePref, pale
     <SettingsGroup title="대화 글자">
       <SettingsRow label="고칠 대화" hint="엔진마다, 밝을 때와 어두울 때가 따로 있습니다. 바꾸면 아래 미리 보기와 열린 대화에 바로 보입니다."
         control={<>
-          <Segmented label="엔진" value={provider} onChange={(next) => onTarget({ provider: next, theme })} options={(["claude", "codex"] as const).map((engine) => ({ value: engine, label: PROVIDER_LABEL[engine] }))} />
+          <Segmented label="엔진" value={provider} onChange={(next) => onTarget({ provider: next, theme })} options={(["claude", "codex", "gemini"] as const).map((engine) => ({ value: engine, label: PROVIDER_LABEL[engine] }))} />
           <Segmented label="밝을 때, 어두울 때" value={theme} onChange={(next) => onTarget({ provider, theme: next })} options={(["light", "dark"] as const).map((mode) => ({ value: mode, label: MODE_WORD[mode] }))} />
         </>}
         detail={<ShellPreview provider={provider} look={look} theme={theme} />} />

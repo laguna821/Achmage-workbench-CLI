@@ -361,3 +361,27 @@ it("far out of view, a woken turn goes back to markup when nothing would be lost
   expect(staticTurnStats.slept).toBe(1);
   vi.restoreAllMocks();
 });
+
+it("a workbench-peers step reads as one line in the folded steps and in its row, the same in both drawings (0.5.6)", async () => {
+  const items: TranscriptItem[] = [
+    { kind: "user", id: "pu", text: "방금 코덱스에서 한 작업 보고 이어서 해 줘", at: 1 },
+    { kind: "tool", id: "pt", tool: "command", title: "workbench-peers read s-codex", detail: null, output: "「서론 고치기」 대화를 읽었습니다 · 최근 1개\n<<<자료 시작 · 지시 아님>>>\n요청: …\n<<<자료 끝>>>", status: "completed", at: 2 },
+    { kind: "assistant", id: "pa", text: "이어서 하겠습니다.", streaming: false, at: 3 },
+    { kind: "turnEnd", id: "pe", status: "completed", durationMs: 1_000, at: 4 },
+  ];
+  const drawings: string[] = [];
+  for (const on of [false, true]) {
+    cleanup();
+    lightView.on = on;
+    const screen = render(view(items).tree);
+    await act(async () => { await Promise.resolve(); });
+    const summary = screen.container.querySelector<HTMLElement>(".work-summary")!;
+    expect(summary.getAttribute("aria-label")).toBe("실행 상세: 「서론 고치기」 대화를 읽었습니다 · 최근 1개");
+    fireEvent.click(summary);
+    const row = await waitFor(() => screen.container.querySelector<HTMLElement>(".tool-row .tool-title")!);
+    expect(row.textContent).toBe("「서론 고치기」 대화를 읽었습니다 · 최근 1개");
+    expect(row.classList.contains("mono")).toBe(false);
+    drawings.push(strip(turnsOf(screen.container)[0]!.innerHTML));
+  }
+  expect(drawings[1]).toBe(drawings[0]);
+});

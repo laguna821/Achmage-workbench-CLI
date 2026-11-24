@@ -1,12 +1,19 @@
 // The messenger channel: the owner talks to this PC's conversations from a paired chat.
 
+import { withParticle } from "./korean.ts";
+
 export type ChannelKind = "telegram" | "slack";
 
 /** A messenger by its name, and the name of its own place for conversations (`Work.messengerHome`). */
 export const MESSENGER_LABEL: Record<ChannelKind, string> = { telegram: "텔레그램", slack: "Slack" };
 export const MESSENGER_HOME_TITLE: Record<ChannelKind, string> = { telegram: "텔레그램 대화", slack: "Slack 대화" };
-/** Why a home keeps its name and place while its messenger is registered, in one line. */
-export const messengerHomeLocked = (kind: ChannelKind) => `${MESSENGER_LABEL[kind]}을 연결해 둔 동안에는 '${MESSENGER_HOME_TITLE[kind]}'의 이름을 바꾸거나 옮기거나 보관·삭제할 수 없습니다.`;
+/**
+ * `MESSENGER_HOME_TITLE` is the name a home is made with and the one an emptied name brings back; the
+ * person may rename it (0.5.6). Why a home keeps its place while its messenger is registered, in one
+ * line, naming it by its name.
+ */
+export const messengerHomeLocked = (kind: ChannelKind, title: string = MESSENGER_HOME_TITLE[kind]) =>
+  `${MESSENGER_LABEL[kind]}을 연결해 둔 동안에는 ${withParticle(`'${title}'`, "을/를")} 폴더로 옮기거나 보관·삭제할 수 없습니다.`;
 
 /**
  * Who sent a request that was not typed at this PC: a paired messenger chat. Kept on the request,

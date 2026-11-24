@@ -287,6 +287,44 @@ export class DeviceRegistry {
     return structuredClone(stored.grant);
   }
 
+  /**
+   * A project the device made itself (새 프로젝트 on the phone): it joins that device's own grant, nothing
+   * else changes (permissions, expiry, the other projects). Only a device holding "send" may make one.
+   * Emits "extended", which keeps the device's live connection (a narrowing "updated" ends it).
+   */
+  addWork(credential: string, workId: string): DeviceGrant {
+    this.requireOpen();
+    const grant = this.authenticate(credential);
+    if (!grant) fail("invalid_credential", 401, "기기 자격증명이 만료되었거나 철회되었습니다.");
+    if (!grant.permissions.includes("send")) fail("permission_denied", 403, "이 기기에 해당 권한이 없습니다.");
+    const id = text(workId, "프로젝트", 256);
+    if (id.includes("*")) fail("invalid_input", 400, "프로젝트는 개별 ID로 승인해야 합니다.");
+    const next = structuredClone(this.state), stored = this.device(next, grant.deviceId);
+    if (stored.grant.workIds.includes(id)) return structuredClone(stored.grant);
+    if (stored.grant.workIds.length >= 256) fail("registry_limit", 409, "이 기기에 허용한 프로젝트가 너무 많습니다. PC에서 정리해 주세요.");
+    stored.grant.workIds.push(id);
+    this.commit(next);
+    this.emit({ type: "extended", deviceId: grant.deviceId });
+    return structuredClone(stored.grant);
+  }
+
+  /** A list folder the device made itself (목록에 새 폴더 on the phone) joins its grant; as addWork, nothing else changes. */
+  addFolder(credential: string, folderId: string): DeviceGrant {
+    this.requireOpen();
+    const grant = this.authenticate(credential);
+    if (!grant) fail("invalid_credential", 401, "기기 자격증명이 만료되었거나 철회되었습니다.");
+    if (!grant.permissions.includes("send")) fail("permission_denied", 403, "이 기기에 해당 권한이 없습니다.");
+    const id = text(folderId, "폴더", 256);
+    const next = structuredClone(this.state), stored = this.device(next, grant.deviceId);
+    const folders = stored.grant.folderIds ?? [];
+    if (folders.includes(id)) return structuredClone(stored.grant);
+    if (folders.length >= 256) fail("registry_limit", 409, "이 기기에서 만든 폴더가 너무 많습니다. PC에서 정리해 주세요.");
+    stored.grant.folderIds = [...folders, id];
+    this.commit(next);
+    this.emit({ type: "extended", deviceId: grant.deviceId });
+    return structuredClone(stored.grant);
+  }
+
   revoke(deviceId: string): DeviceGrant {
     this.requireOpen();
     const next = structuredClone(this.state), stored = this.device(next, deviceId);
@@ -453,6 +491,7 @@ export class DeviceRegistry {
         || !nullableEpoch(item.expiresAt) || !nullableEpoch(item.revokedAt) || !nullableEpoch(item.lastRotatedAt)
         || typeof item.credentialVersion !== "number" || !Number.isSafeInteger(item.credentialVersion) || item.credentialVersion < 1
         || (item.rememberedAt !== undefined && !nullableEpoch(item.rememberedAt))
+        || (item.folderIds !== undefined && (!Array.isArray(item.folderIds) || !item.folderIds.every((id) => typeof id === "string" && id.length > 0 && id.length <= 256)))
         || (row.credentialHash !== null && (typeof row.credentialHash !== "string" || !HEX_DIGEST.test(row.credentialHash)))) throw Error("Invalid grant");
       const grant: DeviceGrant = {
         deviceId: item.deviceId, hostId: this.hostId, name: item.name, platform: item.platform,
@@ -461,6 +500,7 @@ export class DeviceRegistry {
         credentialVersion: item.credentialVersion, lastRotatedAt: item.lastRotatedAt,
         // Absent in registries written before devices could be remembered.
         rememberedAt: item.rememberedAt ?? null,
+        ...(Array.isArray(item.folderIds) ? { folderIds: item.folderIds as string[] } : {}),
       };
       return { grant, credentialHash: row.credentialHash as string | null };
     });

@@ -41,6 +41,7 @@ import { HttpError } from "./errors.ts";
 import { contentReason, needlesOf, turn, type Needles } from "./channels/file-scan.ts";
 import { LightpandaBrowser, LightpandaInstall, LIGHTPANDA_HELP } from "./browse-lightpanda.ts";
 import { guiEnvironment } from "./gui-env.ts";
+import { readSpoolRequest, writeSpoolAnswer } from "./spool-folders.ts";
 
 const run = promisify(execFile);
 
@@ -521,24 +522,16 @@ export class AgentBrowser {
     const key = `${name}/${file}`;
     if (this.inFlight.has(key)) return;
     const path = join(this.paths.spool, name, file);
-    let request: Request;
-    try {
-      request = JSON.parse(readFileSync(path, "utf8")) as Request;
-      rmSync(path, { force: true });
-    } catch {
-      return;
-    }
+    // A regular file only, at most 256 KB, never blocking (a FIFO, a link to /dev/zero): spool-folders.ts.
+    const request = readSpoolRequest(path, 256_000) as Request | null;
+    if (!request || typeof request !== "object") return;
     this.inFlight.add(key);
     const reply = async (raw: CliResult) => {
       this.inFlight.delete(key);
       const result = await this.hidden(raw, request.cwd, name);
-      const out = join(this.paths.spool, name, `${request.id}.res.json`);
-      try {
-        writeFileSync(`${out}.tmp`, JSON.stringify(result));
-        renameSync(`${out}.tmp`, out);
-      } catch {
-        // The session's browser was switched off meanwhile: its folder is gone.
-      }
+      // Not written when the session's browser was switched off meanwhile (its folder is gone), when the id is
+      // not a plain id, or when the engine planted something at the answer path (spool-folders.ts).
+      writeSpoolAnswer(join(this.paths.spool, name), String(request.id), result);
     };
     // One command at a time per session, in the order they came.
     const previous = this.chains.get(name) ?? Promise.resolve();

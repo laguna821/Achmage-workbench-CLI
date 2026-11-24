@@ -496,7 +496,8 @@ export class ChannelMenu {
     const session = this.pointer(binding);
     const at = session ? this.manager.view.works.get(session.workId) : undefined;
     const here = at && !this.core.hidden(at) ? at : null;
-    const home = MESSENGER_HOME_TITLE[binding.kind], atHome = !here || here.messengerHome?.kind === binding.kind;
+    // The place by the name the person gave it (made with "텔레그램 대화" / "Slack 대화"; not made before its first use).
+    const home = this.manager.messengerHome(binding.kind)?.title ?? MESSENGER_HOME_TITLE[binding.kind], atHome = !here || here.messengerHome?.kind === binding.kind;
     // A messenger's place is not a project to go to (the other messenger's neither).
     const works = [...this.manager.view.works.values()].filter((work) => !this.core.hidden(work) && !work.messengerHome).sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt).slice(0, 6);
     const rows: MenuButton[][] = [
@@ -541,7 +542,8 @@ export class ChannelMenu {
     const preset = this.core.defaultEngine(binding);
     const presetLine = `이 메신저의 기본 엔진: ${preset ? PROVIDER_LABEL[preset] : "정하지 않음"}`;
     const rows: MenuButton[][] = [
-      (["claude", "codex"] as const).map((provider) => ({ label: mark(session?.provider === provider, PROVIDER_LABEL[provider]), act: { a: "provider", provider } })),
+      // Gemini only where it is set up on this PC (설정 › AI 엔진 › Gemini).
+      (["claude", "codex", "gemini"] as const).filter((provider) => provider !== "gemini" || this.manager.snapshot().providers.some((entry) => entry.provider === "gemini" && entry.installed)).map((provider) => ({ label: mark(session?.provider === provider, PROVIDER_LABEL[provider]), act: { a: "provider", provider } })),
       [{ label: mark(!preset, "기본 엔진: 정하지 않음"), act: { a: "engine-default-clear" } }],
     ];
     if (!session) return { text: `${note ? `${note}\n` : ""}아직 대화가 없습니다. 적어 보내면 새 대화가 생깁니다.\n${presetLine}`, buttons: [...rows, [BACK]] };
@@ -573,6 +575,7 @@ export class ChannelMenu {
     if (session.provider === provider) return `이미 ${label} 대화입니다.\n${later}`;
     let next: Session;
     try {
+      if (session.documentAgent && provider === "gemini") return `문서 AI는 이번 판에서 Gemini를 쓰지 않습니다(Claude, Codex만).\n${later}`;
       if (session.documentAgent) {
         next = this.manager.documentSession(session.documentAgent.artifactId, session.documentAgent.parentSessionId, false, provider);
         this.core.setPointer(binding.id, next.id);

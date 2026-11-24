@@ -292,7 +292,7 @@ export function sessionKeys(state: State, engineColor: (provider: Provider) => s
       key: "engine",
       label: "엔진",
       kind: "choice",
-      known: (["claude", "codex"] as const).map((provider) => ({ id: provider, label: PROVIDER_LABEL[provider], color: engineColor(provider) })),
+      known: (["claude", "codex", "gemini"] as const).map((provider) => ({ id: provider, label: PROVIDER_LABEL[provider], color: engineColor(provider) })),
       values: (session) => [session.provider],
       fixed: ENGINE,
     },

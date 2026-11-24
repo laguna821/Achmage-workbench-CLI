@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { designToken } from "./design.ts";
+import { pageFetch } from "./api.ts";
 
 // Page images of Word/PowerPoint/Excel documents, rendered by IeumOffice on the gateway. Images
 // need the token, so they are fetched and shown as blob: URLs; revisions never change, so the
@@ -12,7 +13,7 @@ const images = new Map<string, Promise<string>>();
 const lists = new Map<string, Promise<OfficePageInfo[]>>();
 
 async function get(path: string) {
-  const response = await fetch(path, { headers: { authorization: `Bearer ${designToken()}` } });
+  const response = await pageFetch(path, designToken());
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { message?: string } | null;
     throw new Error(body?.message ?? response.statusText);

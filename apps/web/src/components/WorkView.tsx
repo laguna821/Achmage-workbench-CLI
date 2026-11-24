@@ -16,6 +16,8 @@ import { Icon } from "./Icon.tsx";
 import { MenuItem, Popover } from "./Popover.tsx";
 import { EngineMark } from "./EngineMark.tsx";
 import { EngineTabs } from "./StartView.tsx";
+import { engineChoices } from "../engines.ts";
+import { GEMINI_NO_FULL } from "./GeminiSetup.tsx";
 import { useAppearance } from "../appearance.ts";
 import { ListLayer, MenuItem as ListItem, MenuLabel, useMenuTrigger } from "./ui/Menu.tsx";
 import { needsPerson, rowState } from "../row-state.ts";
@@ -24,6 +26,8 @@ import { workSessions } from "../tree.ts";
 import { Transcript } from "./Transcript.tsx";
 import { AccessPicker, ContextGauge } from "./SessionControls.tsx";
 import { PendingFiles, usePendingFiles } from "./Attachments.tsx";
+import { useFileDrop } from "../file-drop.ts";
+import { workspaceName } from "./WorkspacePicker.tsx";
 import { PlanToggle } from "./PlanFirst.tsx";
 import { ResourcesContext, waitingWords } from "./ResourceManager.tsx";
 import "../styles/worktrees.css";
@@ -77,6 +81,11 @@ export type WorkActions = {
   answer: (session: Session, itemId: string, decision: "accept" | "decline", response?: import("@workbench/contracts").OfficeInteractionResponse) => void;
   newSession: (work: Work, provider: Provider, choice?: ModelChoice, options?: { browser?: boolean; worktree?: boolean; workspaceId?: string }) => Promise<Session | null>;
   createWorkspace: (work: Work, cwd: string) => Promise<Workspace | null>;
+  /**
+   * 작업 폴더 바꾸기 from 첨부 (composer-056): the PC's folder chooser, then the conversation works there (not
+   * started) or a new conversation opens there (started). Absent where no PC folder can be chosen (the phone page).
+   */
+  changeSessionFolder?: (session: Session) => Promise<void>;
   updateWorkspace: (workspace: Workspace, patch: UpdateWorkspaceRequest) => Promise<Workspace | null>;
   openWorkspace: (workspace: Workspace | null) => Promise<boolean>;
   openTerminals: (workspace: Workspace) => void;
@@ -194,6 +203,7 @@ export function QueuedList({ session, busy, actions, readOnly = false }: { sessi
 }
 
 function TargetPicker({
+  engines,
   sessions,
   active,
   hostLabel,
@@ -201,6 +211,7 @@ function TargetPicker({
   onNew,
   onHandoff,
 }: {
+  engines: readonly Provider[];
   sessions: Session[];
   active: Session | null;
   hostLabel: string;
@@ -237,7 +248,7 @@ function TargetPicker({
           </MenuItem>
         ))}
         {sessions.length ? <div className="menu-divider" /> : null}
-        {(["claude", "codex"] as const).map((provider) => (
+        {engines.map((provider) => (
           <MenuItem
             key={provider}
             onSelect={() => {
@@ -435,7 +446,10 @@ export function WorkView({
     if (active) setResolvedRole({ sessionId: active.id, profile });
   }, [active?.id]);
   const profile = active && resolvedRole && resolvedRole.sessionId === active.id && resolvedRole.profile?.id === active.profileId ? resolvedRole.profile : null;
-  const access = accessFor(pickerProvider, active?.access ?? profile?.access, prefs, state.providers[pickerProvider]?.configuredAccess);
+  // Gemini has no 전체 접근 (study § G rule 5; subscription login only): it runs as 자동, said in the picker.
+  const noFull = pickerProvider === "gemini" ? GEMINI_NO_FULL : null;
+  const chosenAccess = accessFor(pickerProvider, active?.access ?? profile?.access, prefs, state.providers[pickerProvider]?.configuredAccess);
+  const access = noFull && chosenAccess === "full" ? "auto" : chosenAccess;
   // "원문": the raw Markdown of this conversation instead of the reading view (per session shown).
   const [rawFor, setRawFor] = useState<string | null>(null);
   // The inline title being renamed (the session it belongs to, so another session never takes the draft).
@@ -463,7 +477,19 @@ export function WorkView({
   const panes = usePaneActions();
   // Capture this composer's owner, including when another pane gains focus during an upload.
   const draftKey = `work:${work.id}:${active?.id ?? "none"}`;
-  const pending = usePendingFiles(file => actions.upload(file, active?.workId ?? work.id), draftKey);
+  // A file manager's drop on the PC may carry only paths (WebKitGTK): the gateway reads those; never from the phone page.
+  const pending = usePendingFiles(file => actions.upload(file, active?.workId ?? work.id), draftKey, api.isRemote ? null : (path) => api.attachLocalFile(path));
+  // The whole conversation takes files dropped from the computer (the transcript too, not only the input).
+  const canAttach = !readOnly && !(workspace?.archivedAt || workspace?.removedAt);
+  const fileDrop = useFileDrop({ onFiles: canAttach ? pending.add : null, onPaths: canAttach && !api.isRemote ? pending.addPaths : null, enabled: canAttach });
+  // 첨부's first part: the folder this conversation's engine works in.
+  const transcriptItems = active ? state.transcripts[active.id]?.items : undefined;
+  const folder = workspace ? {
+    name: workspaceName(workspace, work),
+    path: workspace.cwd,
+    started: Boolean(active && (active.nativeSessionId || active.status !== "idle" || transcriptItems?.some((item) => item.kind === "user"))),
+    change: active && actions.changeSessionFolder && !active.documentAgent && !active.pageAgent ? () => void actions.changeSessionFolder!(active) : undefined,
+  } : undefined;
   // Text typed before the conversation turned read-only is kept under its own key and comes back with the input.
   const keptDraft = Boolean(readOnly && active && readDraft(`work:${work.id}:${active.id}`).trim());
   // "/" in the input: the active session's commands and skills, asked for when first typed.
@@ -584,7 +610,8 @@ export function WorkView({
   );
 
   return (
-    <main className="work-view" onContextMenu={(event) => openMenu(event, active?.provider ?? engine)}>
+    <main className="work-view" data-file-drop={fileDrop.over ? "" : undefined} {...fileDrop.props} onContextMenu={(event) => openMenu(event, active?.provider ?? engine)}>
+      {fileDrop.over ? <div className="work-drop" aria-hidden><span>여기에 놓으면 첨부합니다</span></div> : null}
       {tabs}
       {noteMenu.layers}
       {/* Not read-only: the project (or its folder) is archived, or the record was imported. The same line, above the conversation. */}
@@ -621,8 +648,10 @@ export function WorkView({
             if (decision === "accept" && answered?.kind === "approval" && answered.plan) setPlanFirst(false);
             actions.answer(active, itemId, decision, response);
           }}
-          onTrust={() => actions.setAccess(active, active.provider, "full")}
-          onFork={busy || readOnly ? undefined : (itemId) => actions.fork(active, itemId)}
+          // Not for Gemini: it never runs without asking (study § G rule 5).
+          onTrust={active.provider === "gemini" ? undefined : () => actions.setAccess(active, active.provider, "full")}
+          // agy's ACP has no fork (0.5.6): no "이 요청 전으로" in a Gemini conversation.
+          onFork={busy || readOnly || active.provider === "gemini" ? undefined : (itemId) => actions.fork(active, itemId)}
           readOnly={Boolean(readOnly)}
           focusItem={focusItem ?? null}
           onFocusDone={onFocusDone}
@@ -666,8 +695,8 @@ export function WorkView({
           autoFocus={!modes?.paned}
           left={
             <>
-              <AccessPicker provider={pickerProvider} value={access} onChange={(mode) => actions.setAccess(active, pickerProvider, mode)} />
-              {active ? <ContextGauge context={active.context} canCompact={!busy && Boolean(active.nativeSessionId)} onCompact={() => actions.compact(active)} /> : null}
+              <AccessPicker provider={pickerProvider} value={access} noFull={noFull} onChange={(mode) => actions.setAccess(active, pickerProvider, mode)} />
+              {active ? <ContextGauge context={active.context} canCompact={!busy && Boolean(active.nativeSessionId)} onCompact={active.provider === "gemini" ? undefined : () => actions.compact(active)} /> : null}
             </>
           }
           tools={
@@ -700,6 +729,8 @@ export function WorkView({
             </>
           }
           onFiles={pending.add}
+          dropZone={false}
+          folder={folder}
           onDesktopPicture={actions.clipboardPicture}
           attachments={pending.count}
           slash={handoffTo ? undefined : slash}
@@ -793,6 +824,7 @@ export function WorkView({
           toolsOn={[...(planFirst && !handoffTo ? ["계획 먼저"] : []), ...(access === "full" ? ["전체 접근"] : [])]}
           engine={active ? (
             <TargetPicker
+              engines={engineChoices(state.providers)}
               sessions={sessions}
               active={active}
               hostLabel={state.hostLabel}
@@ -804,6 +836,7 @@ export function WorkView({
             // A new conversation: the engine it starts with is chosen in the row, as on home.
             <EngineTabs
               value={engine}
+              engines={engineChoices(state.providers)}
               onChange={(next) => {
                 setEngine(next);
                 setDraftChoice({ model: null, effort: null });

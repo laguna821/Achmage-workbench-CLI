@@ -1,11 +1,12 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { chmodSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from "node:fs";
+import { chmodSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { join } from "node:path";
 import type { Session, Work } from "@workbench/contracts";
 import type { BrowserEngineHooks } from "../browse.ts";
 import { cmdLauncherSource, launcherSource } from "../browse-wrapper.ts";
 import type { EventBus } from "../bus.ts";
 import { findSessionName } from "../find-tool.ts";
+import { readSpoolRequest, writeSpoolAnswer } from "../spool-folders.ts";
 import { REMOTE_USAGE, type ToolAnswer } from "./remote.ts";
 
 // `workbench-remote`: the transport of the remote's command (what it does: remote.ts). The same as
@@ -231,12 +232,9 @@ export class RemoteTool {
     if (this.busy.has(path)) return;
     this.busy.add(path);
     try {
-      let request: { id: unknown; args: unknown; input: unknown; key: unknown };
-      try {
-        if (statSync(path).size > MAX_REQUEST) { rmSync(path, { force: true }); return; }
-        request = JSON.parse(readFileSync(path, "utf8")) as typeof request;
-        rmSync(path, { force: true });
-      } catch { return; }
+      // A regular file only, never blocking (a FIFO, a link to /dev/zero): spool-folders.ts.
+      const request = readSpoolRequest(path, MAX_REQUEST) as { id: unknown; args: unknown; input: unknown; key: unknown } | null;
+      if (!request || typeof request !== "object") return;
       if (typeof request.id !== "string" || file !== `${request.id}.req.json` || !Array.isArray(request.args) || request.args.length > 20 || request.args.some((arg) => typeof arg !== "string" || arg.length > 400)) return;
       const session = this.options.sessions().get(sessionId);
       let result: ToolAnswer;
@@ -249,11 +247,7 @@ export class RemoteTool {
           result = { code: 1, stdout: `${JSON.stringify({ ok: false, error: "unavailable", message: "처리하지 못했습니다." })}\n`, stderr: "workbench-remote: 처리하지 못했습니다.\n" };
         }
       }
-      try {
-        const out = join(dir, `${request.id}.res.json`);
-        writeFileSync(`${out}.tmp`, JSON.stringify(result), { mode: 0o600 });
-        renameSync(`${out}.tmp`, out);
-      } catch { /* The command was stopped meanwhile. */ }
+      writeSpoolAnswer(dir, request.id, result);
     } finally {
       this.busy.delete(path);
     }

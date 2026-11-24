@@ -32,13 +32,13 @@ it("walks four steps, one idea each: 화면, AI 엔진, 휴대폰 메신저, 즐
   expect(props.onDone).toHaveBeenCalledTimes(1);
 });
 
-it("is one panel: the steps on its left, the step and its keys on its right, the launch's attribution line its last row", async () => {
-  await mount({ foot: <div className="launch-credit">디자인 편집기에 쓴 오픈소스</div> });
+it("is one panel: the steps on its left, the step and its keys on its right, and no attribution line (it stands in the design editor)", async () => {
+  await mount();
   const panel = document.querySelector(".onboarding-first > .onboarding")!;
-  expect([...panel.children].map((child) => child.className)).toEqual(["onboarding-side", "onboarding-pane", "onboarding-foot"]);
+  expect([...panel.children].map((child) => child.className)).toEqual(["onboarding-side", "onboarding-pane"]);
   expect(panel.querySelector(".onboarding-side .onboarding-steps")).toBeTruthy();
   expect(panel.querySelector(".onboarding-pane > .onboarding-actions")).toBeTruthy();
-  expect(panel.querySelector(".onboarding-foot > .launch-credit")).toBeTruthy();
+  expect(document.body.textContent).not.toContain("Creator and maintainer of Doory");
 });
 
 it("speaks a teacher's words on every step: no CLI, OS 등록, 이음 앱, 호스트, orchestration, raw commands or middle dots", async () => {

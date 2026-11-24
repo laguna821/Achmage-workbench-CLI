@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ChannelKind, ChannelsState, DocumentTools, Provider, ProviderStatus } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import type { PaletteChoice, ThemePref } from "../theme.ts";
@@ -62,12 +62,10 @@ export type OnboardingProps = {
   onPalette?(palette: PaletteChoice): void;
   /** Hands over to 설정 › 메신저 for that messenger (its own wizard); the first run comes back when it closes. */
   onOpenMessenger?(kind: ChannelKind): void;
-  /** The launch's attribution line (LaunchCredit) when the app opens on the first run: the panel's last row. */
-  foot?: ReactNode;
 };
 
 /** Original Paseo visit fencing and completion model; Workbench owns the existing settings/actions. */
-export function Onboarding({ foot, providers, engineActions, onRefresh, onDone, api, hostLabel = "현재 PC", suspended = false, themePref = "system", onTheme, palette = DEFAULT_SET, onPalette, onOpenMessenger }: OnboardingProps) {
+export function Onboarding({ providers, engineActions, onRefresh, onDone, api, hostLabel = "현재 PC", suspended = false, themePref = "system", onTheme, palette = DEFAULT_SET, onPalette, onOpenMessenger }: OnboardingProps) {
   const pkm = usePkm();
   const effectiveSuspended = suspended || Boolean(pkm.dialog);
   const done = useRef(onDone); done.current = onDone;
@@ -236,7 +234,6 @@ export function Onboarding({ foot, providers, engineActions, onRefresh, onDone, 
           <button type="button" className={quietNext ? "button" : "button primary"} onClick={next}>{last ? "시작하기" : quietNext ? "AI 없이 계속" : "다음"}</button>
         </div>
       </section>
-      {foot ? <div className="onboarding-foot">{foot}</div> : null}
     </div>
   </div>;
 }

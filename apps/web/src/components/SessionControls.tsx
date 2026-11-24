@@ -9,6 +9,7 @@ const ACCESS_ICON: Record<AccessMode, IconName> = { ask: "shield", auto: "bolt",
 function accessHelp(mode: AccessMode, provider: Provider) {
   if (mode === "ask") return "명령을 실행하거나 파일을 바꾸기 전에 매번 묻습니다.";
   if (mode === "full") return "묻지 않고 진행합니다. 작업 폴더 밖의 파일과 인터넷까지 씁니다.";
+  if (provider === "gemini") return "작업 폴더 안의 파일 수정은 묻지 않고, 명령을 실행할 때는 묻습니다.";
   return provider === "codex"
     ? "작업 폴더 안에서는 묻지 않고, 폴더 밖이나 인터넷을 쓸 때만 묻습니다."
     : "파일 수정은 묻지 않고, 명령을 실행할 때만 묻습니다.";
@@ -19,7 +20,8 @@ function accessHelp(mode: AccessMode, provider: Provider) {
  * A change applies at once (approvals waiting on screen are answered if the new access allows
  * them) and becomes the default for new sessions of the engine.
  */
-export function AccessPicker({ provider, value, onChange }: { provider: Provider; value: AccessMode; onChange: (mode: AccessMode) => void }) {
+/** `noFull`: 전체 접근 is not offered here, for the reason given in one line (Gemini). */
+export function AccessPicker({ provider, value, onChange, noFull }: { provider: Provider; value: AccessMode; onChange: (mode: AccessMode) => void; noFull?: string | null }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   return (
@@ -37,7 +39,7 @@ export function AccessPicker({ provider, value, onChange }: { provider: Provider
       </button>
       <Popover open={open} onClose={close} placement="above" align="left" className="access-menu">
         <div className="menu-label">권한 · 바로 적용, 새 대화에도 이어짐</div>
-        {ACCESS_MODES.map((mode) => (
+        {ACCESS_MODES.filter((mode) => !(noFull && mode === "full")).map((mode) => (
           <button
             key={mode}
             type="button"
@@ -56,6 +58,7 @@ export function AccessPicker({ provider, value, onChange }: { provider: Provider
             </span>
           </button>
         ))}
+        {noFull ? <p className="access-note">{noFull}</p> : null}
       </Popover>
     </div>
   );

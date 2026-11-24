@@ -8,7 +8,8 @@ export function useOfficeControl(api: Api | null, main: boolean, open: (artifact
   const handlers = useRef({ open, onError }); handlers.current = { open, onError };
   const active = useRef(new Set<string>());
   const notify = useCallback(() => {
-    if (!api) return;
+    // A phone joined to the PC has no office editors: the queue is the PC's windows' (it was refused every time).
+    if (!api || api.isRemote) return;
     void api.officeControl(windowId, main).then(({ commands }) => {
       for (const command of commands) {
         if (active.current.has(command.id)) continue;

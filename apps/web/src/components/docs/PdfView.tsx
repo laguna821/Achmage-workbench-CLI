@@ -7,7 +7,7 @@ import type { EditorSelection } from "./MarkdownEditor.tsx";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
-function Page({ pdf, number, width, selected, onToggle }: { pdf: PDFDocumentProxy; number: number; width: number; selected: boolean; onToggle: () => void }) {
+function Page({ pdf, number, width, selected, onToggle }: { pdf: PDFDocumentProxy; number: number; width: number; selected: boolean; onToggle?: () => void }) {
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const textLayer = useRef<HTMLDivElement>(null);
@@ -60,9 +60,9 @@ function Page({ pdf, number, width, selected, onToggle }: { pdf: PDFDocumentProx
     <div className={`pdf-page${selected ? " selected" : ""}`} ref={box} data-page={number} style={size ? { width: size.width, height: size.height } : { width, height: width * 1.41 }}>
       <canvas ref={canvas} role="img" aria-label={`PDF ${number}페이지`} />
       <div className="textLayer" ref={textLayer} />
-      <label className="pdf-page-pick" title="이 페이지 고르기">
+      {onToggle ? <label className="pdf-page-pick" title="이 페이지 고르기">
         <input type="checkbox" checked={selected} onChange={onToggle} /> {number}
-      </label>
+      </label> : null}
     </div>
   );
 }
@@ -79,7 +79,8 @@ export function PdfView({
   artifactId: string;
   revision: number;
   onSelection: (selection: EditorSelection) => void;
-  onEdit: (edit: { rotate?: { pages: number[]; degrees: number }[]; delete?: number[] }) => Promise<void>;
+  /** 쪽 편집 (돌리기, 삭제 → a new file): absent on a phone joined to the PC, where the PDF is read only. */
+  onEdit?: (edit: { rotate?: { pages: number[]; degrees: number }[]; delete?: number[] }) => Promise<void>;
 }) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -133,7 +134,7 @@ export function PdfView({
   const run = async (edit: { rotate?: { pages: number[]; degrees: number }[]; delete?: number[] }) => {
     setBusy(true);
     try {
-      await onEdit(edit);
+      await onEdit?.(edit);
       setPicked(new Set());
     } finally {
       setBusy(false);
@@ -145,14 +146,16 @@ export function PdfView({
       <div className="doc-tools">
         <span className="muted">{pdf ? `${pdf.numPages}쪽, ${revision}판` : "PDF를 여는 중"}</span>
         <span className="doc-tools-sep" />
-        <span className="muted">{pages.length ? `${pages.join(", ")}쪽 고름` : "쪽을 고르면 돌리거나 지울 수 있습니다"}</span>
-        <button type="button" className="button small" disabled={!pages.length || busy} onClick={() => void run({ rotate: [{ pages, degrees: 90 }] })}>
-          오른쪽으로 돌리기
-        </button>
-        <button type="button" className="button small" disabled={!pages.length || busy || (pdf ? pages.length >= pdf.numPages : true)} onClick={() => void run({ delete: pages })}>
-          삭제
-        </button>
-        <span className="muted">결과는 새 파일로 저장</span>
+        {onEdit ? <>
+          <span className="muted">{pages.length ? `${pages.join(", ")}쪽 고름` : "쪽을 고르면 돌리거나 지울 수 있습니다"}</span>
+          <button type="button" className="button small" disabled={!pages.length || busy} onClick={() => void run({ rotate: [{ pages, degrees: 90 }] })}>
+            오른쪽으로 돌리기
+          </button>
+          <button type="button" className="button small" disabled={!pages.length || busy || (pdf ? pages.length >= pdf.numPages : true)} onClick={() => void run({ delete: pages })}>
+            삭제
+          </button>
+          <span className="muted">결과는 새 파일로 저장</span>
+        </> : <span className="muted">쪽 돌리기·지우기는 PC에서 합니다</span>}
       </div>
       <div className="pdf-stage" ref={stage}>
         {error ? <div className="notice notice-error">{error}</div> : null}
@@ -164,13 +167,13 @@ export function PdfView({
                 number={index + 1}
                 width={width}
                 selected={picked.has(index + 1)}
-                onToggle={() =>
+                onToggle={onEdit ? () =>
                   setPicked((current) => {
                     const next = new Set(current);
                     if (next.has(index + 1)) next.delete(index + 1);
                     else next.add(index + 1);
                     return next;
-                  })
+                  }) : undefined
                 }
               />
             ))

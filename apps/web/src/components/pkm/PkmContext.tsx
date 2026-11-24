@@ -110,7 +110,8 @@ export function PkmProvider({
   const fail = useCallback((error: unknown) => toastRef.current(failure(error)), []);
 
   const vaultVersion = state.pkm.vault ?? 0;
-  const live = state.ready && state.connected;
+  // A phone joined to the PC: the vault (볼트, 자료) stays the PC's — nothing of it is asked for (it was refused, every few seconds).
+  const live = state.ready && state.connected && api.isRemote !== true;
   useEffect(() => {
     if (!live) return;
     let cancelled = false;

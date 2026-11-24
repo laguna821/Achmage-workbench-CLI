@@ -21,6 +21,7 @@ export function VaultGuardPill({ provider, access, workId }: { provider: Provide
   // Short on purpose: it shares the bar with access, context, model and engine. Calm, it is only the
   // shield (the tooltip says the rest); under full access the warning is spelled out.
   const label = weak ? (provider === "codex" ? "보호 꺼짐" : "보호 일부") : "";
+  const gemini = provider === "gemini";
   return (
     <div className="anchor pkm-pill-anchor">
       <button
@@ -43,7 +44,9 @@ export function VaultGuardPill({ provider, access, workId }: { provider: Provide
       <Popover open={open} onClose={() => setOpen(false)} placement="above" align="left" className="vault-guard-pop">
         <div className="menu-label">볼트 {status.name} · 사람 원본</div>
         <p className="vault-guard-text">
-          {weak
+          {gemini
+            ? "볼트가 있으면 Gemini의 파일 수정은 자동에서도 Workbench가 먼저 보고, 볼트 안(링크를 따라간 곳 포함)이면 거절합니다. 셸 명령은 일부만 알아봅니다. 읽기는 됩니다."
+            : weak
             ? provider === "codex"
               ? "전체 접근에서는 Codex에 샌드박스가 없어 볼트에 쓸 수 있습니다. 볼트를 지키려면 묻기나 자동으로 바꾸세요."
               : "전체 접근에서도 Claude의 파일 쓰기·고치기는 막지만, 셸 명령은 일부만 알아봅니다. 볼트를 확실히 지키려면 묻기나 자동으로 바꾸세요."

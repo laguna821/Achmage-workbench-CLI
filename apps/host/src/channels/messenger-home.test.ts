@@ -194,7 +194,7 @@ describe("what is already planted stays; the next 새 대화 goes home once", ()
 });
 
 describe("the home at the PC while its messenger is registered", () => {
-  it("cannot be renamed, moved into a folder, archived or deleted, each refused in one plain line; when the messenger is gone it can", async () => {
+  it("cannot be moved into a folder, archived or deleted, each refused in one plain line; when the messenger is gone it can", async () => {
     const kit = await startKit();
     await pair(kit);
     await say(kit, "첫 일");
@@ -204,14 +204,13 @@ describe("the home at the PC while its messenger is registered", () => {
     const folder = kit.manager.createFolder("강의", null);
     const refused = (run: () => unknown) => { try { run(); return null; } catch (error) { return error; } };
     for (const run of [
-      () => kit.manager.updateWork(home.id, { title: "내 대화" }),
       () => kit.manager.updateWork(home.id, { folderId: folder.id }),
       () => kit.manager.updateWork(home.id, { archived: true }),
       () => kit.manager.deleteWork(home.id),
     ]) {
       const error = refused(run);
       expect(error).toBeInstanceOf(HttpError);
-      expect(error).toMatchObject({ status: 409, code: "messenger_home", message: "텔레그램을 연결해 둔 동안에는 '텔레그램 대화'의 이름을 바꾸거나 옮기거나 보관·삭제할 수 없습니다." });
+      expect(error).toMatchObject({ status: 409, code: "messenger_home", message: "텔레그램을 연결해 둔 동안에는 '텔레그램 대화'를 폴더로 옮기거나 보관·삭제할 수 없습니다." });
     }
     // What a project row may always do still works (고정, the conversation shown).
     expect(kit.manager.updateWork(home.id, { pinned: true, title: "텔레그램 대화" }).pinned).toBe(true);
@@ -221,6 +220,55 @@ describe("the home at the PC while its messenger is registered", () => {
     expect(workOf(kit, home.id).messengerHome).toEqual({ kind: "telegram", registered: false });
     expect(sessionOf(kit, first.id).workId).toBe(home.id);
     expect(kit.manager.updateWork(home.id, { archived: true }).archivedAt).not.toBeNull();
+  });
+
+  // 0.5.6, the owner (2026-11-20): "이름이 아예 절대 안바꿔지더라고" — a home is named as a project is.
+  it("is renamed as any project is; it stays the messenger's place, and the bot's menus and lines say the new name", async () => {
+    const kit = await startKit();
+    await pair(kit);
+    await say(kit, "첫 일");
+    const first = pointer(kit);
+    kit.engine.finish(first.id);
+    const home = workOf(kit, first.workId);
+    expect(kit.manager.updateWork(home.id, { title: "  연구실 텔레그램 봇 " })).toMatchObject({ title: "연구실 텔레그램 봇", titleSource: "user", messengerHome: { kind: "telegram", registered: true } });
+    // Still the messenger's place: found as the home, 새 대화 goes there, not a new home.
+    expect(kit.manager.messengerHome("telegram")!.id).toBe(home.id);
+    await say(kit, "새 대화");
+    expect(pointer(kit).workId).toBe(home.id);
+    expect(homes(kit)).toHaveLength(1);
+    expect(made(kit)).toMatch(/^새 대화를 만들었습니다: 「연구실 텔레그램 봇」 › /);
+    // 프로젝트 바꾸기 names the place by its name; pressing it lists its conversations under that name.
+    const id = await menu(kit);
+    await press(kit, "프로젝트 바꾸기");
+    expect(kit.adapter.labelsOf(id)).toContain("✓ 연구실 텔레그램 봇");
+    expect(kit.adapter.labelsOf(id)).not.toContain("✓ 텔레그램 대화");
+    expect(shownText(kit, id)).toContain("지금: 「연구실 텔레그램 봇」");
+    await press(kit, "✓ 연구실 텔레그램 봇");
+    expect(shownText(kit, id)).toBe("「연구실 텔레그램 봇」의 최근 대화");
+    // Refusals name it by its name too.
+    try { kit.manager.updateWork(home.id, { archived: true }); } catch (error) {
+      expect(error).toMatchObject({ code: "messenger_home", message: "텔레그램을 연결해 둔 동안에는 '연구실 텔레그램 봇'을 폴더로 옮기거나 보관·삭제할 수 없습니다." });
+    }
+    // An empty name brings back the default name (not an automatic title).
+    expect(kit.manager.updateWork(home.id, { title: "  " })).toMatchObject({ title: "텔레그램 대화", titleSource: "user" });
+    // The name survives the messenger being removed and registered again.
+    kit.manager.updateWork(home.id, { title: "Achmage 봇 1호기" });
+    kit.manager.setMessengerRegistered("telegram", false);
+    kit.manager.setMessengerRegistered("telegram", true);
+    expect(workOf(kit, home.id)).toMatchObject({ title: "Achmage 봇 1호기", messengerHome: { kind: "telegram", registered: true } });
+  });
+
+  it("a chat in a project, sent home by 새 대화, is told the home's own name", async () => {
+    const kit = await startKit();
+    const mine = project(kit, "샘플 프로젝트");
+    const home = kit.manager.ensureMessengerHome("telegram");
+    kit.manager.updateWork(home.id, { title: "Achmage 봇 1호기" });
+    const binding = await pair(kit);
+    const planted = kit.manager.createSession(mine.work.id, { provider: "claude", purpose: "휴대폰 · 11/15", access: "full" }, false);
+    kit.core.setPointer(binding.id, planted.id);
+    await say(kit, "새 대화");
+    expect(pointer(kit).workId).toBe(home.id);
+    expect(made(kit).split("\n")[1]).toBe("새 대화는 이제 'Achmage 봇 1호기'에 만듭니다. 프로젝트에서 하려면 메뉴의 [프로젝트 바꾸기]에서 고르세요.");
   });
 
   it("a free home put away under an archived folder is left alone too", async () => {

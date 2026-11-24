@@ -28,6 +28,8 @@ export type DocActions = {
   resendHandoff: (handoff: Handoff) => Promise<void>;
   /** 이름 바꾸기 for a document (its head's name and ⋯, the list row's menu): opens the dialog. */
   renameDocument?: (artifactId: string) => void;
+  /** A file link in an answer, on a phone joined to the PC (remote-links.ts): true when it was handled here. */
+  openLink?: (href: string) => boolean;
 };
 
 export const DocContext = createContext<{ state: State; actions: DocActions } | null>(null);

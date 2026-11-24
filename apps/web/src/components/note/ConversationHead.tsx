@@ -5,7 +5,7 @@ import type { Api } from "../../api.ts";
 import type { Notify } from "../../top-notice.ts";
 import { folderPath, type State } from "../../state.ts";
 import { sessionLabel, statusText, statusTone } from "../../format.ts";
-import { EditableText } from "../EditableText.tsx";
+import { AUTO_NAME_HINT, EditableText } from "../EditableText.tsx";
 import { EngineMark } from "../EngineMark.tsx";
 import { Icon } from "../Icon.tsx";
 import { NoteTitle } from "./NoteTitle.tsx";
@@ -237,7 +237,7 @@ export function ConversationHead({ state, work, session, actions, cwd, raw, onRa
         title={title}
         hint={session ? "두 번 눌러 이름 바꾸기" : undefined}
         onDoubleClick={session ? () => onRenaming(true) : undefined}
-        editor={renaming && session ? <EditableText className="note-title-edit" label="대화 이름" value={session.purpose || title} onSave={(purpose) => actions.renameSession(session, purpose)} onDone={() => onRenaming(false)} /> : undefined}
+        editor={renaming && session ? <EditableText className="note-title-edit" label="대화 이름" value={session.purpose || title} empty={{ hint: AUTO_NAME_HINT }} onSave={(purpose) => actions.renameSession(session, purpose)} onDone={() => onRenaming(false)} /> : undefined}
         tools={
           <>
             {session ? (

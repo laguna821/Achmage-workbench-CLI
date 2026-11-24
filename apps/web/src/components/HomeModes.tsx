@@ -336,7 +336,8 @@ function NowMode({ api, state, open, views, onViews }: { api: Api; state: State;
   const { lookOf } = useAppearance();
   const claude = lookOf("claude").palette.accent;
   const codex = lookOf("codex").palette.accent;
-  const engineColor = useCallback((provider: Provider) => (provider === "claude" ? claude : codex), [claude, codex]);
+  const gemini = lookOf("gemini").palette.accent;
+  const engineColor = useCallback((provider: Provider) => (provider === "claude" ? claude : provider === "gemini" ? gemini : codex), [claude, codex, gemini]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const keys = useMemo(() => sessionKeys(state, engineColor), [state.folders, state.works, engineColor]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -764,7 +765,8 @@ function FlowWithViews({ api, state, open, views, onViews }: { api: Api; state: 
   const { lookOf } = useAppearance();
   const claude = lookOf("claude").palette.accent;
   const codex = lookOf("codex").palette.accent;
-  const engineColor = useCallback((provider: Provider) => (provider === "claude" ? claude : codex), [claude, codex]);
+  const gemini = lookOf("gemini").palette.accent;
+  const engineColor = useCallback((provider: Provider) => (provider === "claude" ? claude : provider === "gemini" ? gemini : codex), [claude, codex, gemini]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const keys = useMemo(() => projectKeys({ state, summaries: data.summaries, stages: data.stages, template: data.template, engineColor }), [state.folders, data.summaries, data.stages, data.template, engineColor]);
   // eslint-disable-next-line react-hooks/exhaustive-deps

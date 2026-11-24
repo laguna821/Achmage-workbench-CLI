@@ -13,13 +13,18 @@ export type CreateAction = { id: string; label: string; icon: IconName; target: 
 );
 
 /** One command catalog for the toolbar, project rows, context menu and keyboard. */
-export function createActions(target: CreateContext): CreateAction[] {
+/**
+ * `remote`: a phone joined to the PC — a web page is the PC's browser (its own driver and profile), not offered there.
+ * `engines`: the engines a new conversation may start with (engines.ts; Claude and Codex by default).
+ */
+export function createActions(target: CreateContext, options: { remote?: boolean; engines?: readonly Provider[] } = {}): CreateAction[] {
+  const engines = options.engines ?? ["claude", "codex"];
   return [
     ...NEW_DOCUMENT_TYPES.map(type => ({ id: `create-${type.format}`, kind: "document" as const, format: type.format, label: `새 ${type.label}`, icon: (type.format === "design" ? "palette" : "file") as IconName, target })),
     ...(target.workId
-      ? (["claude", "codex"] as const).map(provider => ({ id: `create-${provider}`, kind: "session" as const, provider, label: `${PROVIDER_LABEL[provider]}와 새 대화`, icon: "chat" as const, target }))
+      ? engines.map(provider => ({ id: `create-${provider}`, kind: "session" as const, provider, label: `${PROVIDER_LABEL[provider]}와 새 대화`, icon: "chat" as const, target }))
       : [{ id: "create-session", kind: "session" as const, label: "새 대화", icon: "chat" as const, target }]),
-    { id: "create-browser", kind: "browser", label: "새 웹 탭", icon: "globe", target },
+    ...(options.remote ? [] : [{ id: "create-browser", kind: "browser" as const, label: "새 웹 탭", icon: "globe" as const, target }]),
     { id: "create-folder", kind: "folder", label: "목록에 새 폴더…", icon: "folder", target },
     ...(target.workId && target.workspaceId ? [{ id: "create-directory", kind: "directory" as const, label: "프로젝트 폴더 안에 새 폴더…", icon: "folder" as const, target }] : []),
     { id: "create-project", kind: "project", label: "새 프로젝트…", icon: "project", target },

@@ -10,6 +10,7 @@ import { HomeModes } from "./HomeModes.tsx";
 import { Icon } from "./Icon.tsx";
 import { MenuItem, Popover } from "./Popover.tsx";
 import { ModelPicker, type ModelChoice } from "./ModelPicker.tsx";
+import { engineChoices } from "../engines.ts";
 import { EngineMark } from "./EngineMark.tsx";
 import { ProjectChoice } from "./ProjectChoice.tsx";
 import { useAppearance } from "../appearance.ts";
@@ -35,8 +36,9 @@ export function useEngineChoice() {
  * conversation's engine control stands, at the right beside send (Hallmark merge: one row language).
  */
 /** `ready`: an engine that is not connected carries no mark, so its key does not look ready (I6). */
-export function EngineTabs({ value, onChange, ready }: { value: Provider; onChange: (provider: Provider) => void; ready?: (provider: Provider) => boolean }) {
-  return <Segmented className="engine-tabs" value={value} onChange={onChange} label="엔진" options={(["claude", "codex"] as const).map(provider => ({ value: provider, label: <>{provider === value && (ready?.(provider) ?? true) ? <EngineMark provider={provider} size={15} /> : null}{PROVIDER_LABEL[provider]}</> }))} />;
+/** `engines`: which keys show (Gemini only once it is found, engines.ts); Claude and Codex by default. */
+export function EngineTabs({ value, onChange, ready, engines = ["claude", "codex"] }: { value: Provider; onChange: (provider: Provider) => void; ready?: (provider: Provider) => boolean; engines?: readonly Provider[] }) {
+  return <Segmented className="engine-tabs" value={value} onChange={onChange} label="엔진" options={engines.map(provider => ({ value: provider, label: <>{provider === value && (ready?.(provider) ?? true) ? <EngineMark provider={provider} size={15} /> : null}{PROVIDER_LABEL[provider]}</> }))} />;
 }
 
 const engineReady = (status: ProviderStatus | undefined) => Boolean(status?.installed && status.loggedIn);
@@ -234,6 +236,7 @@ export function StartView({
         engine={
           <EngineTabs
             value={engine}
+            engines={engineChoices(state.providers)}
             ready={(provider) => engineReady(state.providers[provider])}
             onChange={(next) => {
               setEngine(next);

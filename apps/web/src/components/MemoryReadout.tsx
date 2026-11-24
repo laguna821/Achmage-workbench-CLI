@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { AppMemory } from "@workbench/contracts";
+import { PROVIDER_LABEL, type AppMemory } from "@workbench/contracts";
 
 // 메모리 표시 (0.5.1): what the app uses now, small and muted at the right end of the window's bottom
 // line, as Orca shows it — "메모리 0.5 GB". The gateway sums it (`GET /api/memory`); the window only asks.
@@ -76,7 +76,7 @@ export function useAppMemory(read: (() => Promise<AppMemory>) | null, again = 0)
 
 /** An engine's row: its conversation (Codex's shared app-server: how many), the engine, and whether it rests. */
 function engineLabel(engine: NonNullable<KnownMemory["engines"]>[number]) {
-  const name = engine.provider === "codex" ? "Codex" : "Claude";
+  const name = PROVIDER_LABEL[engine.provider];
   const what = engine.sessions.length === 1 ? engine.sessions[0]!.title : `${name} 대화 ${engine.sessions.length}개`;
   return `${what} · ${name} · ${engine.idle ? "쉬는 중" : "일하는 중"}`;
 }

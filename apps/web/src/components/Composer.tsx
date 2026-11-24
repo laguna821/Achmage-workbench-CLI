@@ -15,8 +15,16 @@ import { pickedFiles } from "../mobile-platform.ts";
 import { MenuItem, Popover } from "./Popover.tsx";
 import { VoiceInput } from "./VoiceInput.tsx";
 import { appendVoiceTranscript, type VoiceScope } from "../voice/capture.ts";
+import { useFileDrop } from "../file-drop.ts";
 
 export { writeDraft } from "../draft.ts";
+
+/**
+ * The conversation's working folder, first in 첨부 (composer-056): the folder its engine runs in, by
+ * name with its path on hover. `change` (the PC's folder chooser) is absent where no PC folder can be
+ * chosen (the phone page); `started`: the conversation has begun, so a change starts a new one there.
+ */
+export type ComposerFolder = { name: string; path: string; started: boolean; change?: () => void };
 
 /** Documents the `@` list offers, and what to do with a picked one (attach it to the request). */
 export type ComposerMentions = { items: MentionItem[]; onPick: (item: MentionItem) => void };
@@ -51,7 +59,16 @@ export function Composer({
   engine,
   toolsOn,
   provider,
+  folder,
+  onPaths,
+  dropZone = true,
 }: {
+  /** The conversation's working folder, first in 첨부. */
+  folder?: ComposerFolder;
+  /** Files dropped by their paths on the PC (a file manager's file:// list with no files in it). */
+  onPaths?: ((paths: string[]) => void) | null;
+  /** false: a drop zone around the input takes the drops (the whole conversation pane, WorkView). */
+  dropZone?: boolean;
   /**
    * The quiet row (Hallmark U5): with an engine control given, the bar shows only 첨부, 도구, the
    * engine and send. Everything else (left, target, voice, tools) lives one disclosure away in 도구,
@@ -117,7 +134,8 @@ export function Composer({
   const [composing, setComposing] = useState(false);
   const [active, setActive] = useState(0);
   const [dismissed, setDismissed] = useState<number | null>(null);
-  const [dropping, setDropping] = useState(false);
+  const drop = useFileDrop({ onFiles: (files) => { onFiles?.(files); ref.current?.focus(); }, onPaths: onPaths ? (paths) => { onPaths(paths); ref.current?.focus(); } : null, enabled: dropZone && Boolean(onFiles) && !disabled });
+  const dropping = drop.over;
   const quiet = Boolean(engine);
   const toolsRef = useRef<HTMLDetailsElement>(null);
   // The quiet row's 도구 closes when the hand goes elsewhere (its menus open inside it).
@@ -304,22 +322,7 @@ export function Composer({
       data-provider={provider}
       data-phase={waiting ? "waiting" : undefined}
       data-drop={dropping ? "" : undefined}
-      onDragOver={(event) => {
-        if (!onFiles || disabled || !event.dataTransfer.types.includes("Files")) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "copy";
-        setDropping(true);
-      }}
-      onDragLeave={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false);
-      }}
-      onDrop={(event) => {
-        setDropping(false);
-        if (!onFiles || disabled || !event.dataTransfer.files.length) return;
-        event.preventDefault();
-        onFiles(Array.from(event.dataTransfer.files));
-        ref.current?.focus();
-      }}
+      {...drop.props}
     >
       {dropping ? <div className="composer-drop">놓으면 요청에 붙입니다</div> : null}
       {header ? <div className="composer-header">{header}</div> : null}
@@ -453,7 +456,7 @@ export function Composer({
       {draftProblem ? <p className="composer-file-problem" role="status">이 브라우저에 초안을 저장하지 못했습니다. 창을 닫기 전에 복사해 주세요.</p> : null}
       <div className="composer-bar">
         <div className="composer-left">
-          {onFiles ? <AttachmentPicker draftKey={draftKey} disabled={disabled || sending} onFiles={onFiles} /> : null}
+          {onFiles ? <AttachmentPicker draftKey={draftKey} disabled={disabled || sending} onFiles={onFiles} folder={folder} /> : null}
           {!quiet && !compactControls ? left : null}
           {quiet ? null : voice}
           {quiet ? quietTools : tools || compactControls && (left || target) ? <details className="composer-tools" onKeyDown={event => {
@@ -505,7 +508,7 @@ export function Composer({
   );
 }
 
-function AttachmentPicker({ draftKey, disabled, onFiles }: { draftKey: string; disabled?: boolean; onFiles(files: File[]): void }) {
+function AttachmentPicker({ draftKey, disabled, onFiles, folder }: { draftKey: string; disabled?: boolean; onFiles(files: File[]): void; folder?: ComposerFolder }) {
   const [open, setOpen] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -536,9 +539,23 @@ function AttachmentPicker({ draftKey, disabled, onFiles }: { draftKey: string; d
       <Icon name="file" size={15} /> 첨부
     </button>
     <Popover open={open} onClose={() => setOpen(false)} placement="above" role="menu" label="사진 또는 파일 첨부">
+      {/* First and plain: the folder this conversation's engine works in (Codex / Claude Code); the files below, apart. */}
+      {folder ? <>
+        <p className="menu-label">작업 폴더</p>
+        <div className="composer-folder" title={folder.path}>
+          <Icon name="folder" size={15} />
+          <span className="composer-folder-name">{folder.name}</span>
+        </div>
+        {folder.change ? <>
+          <MenuItem onSelect={() => { setOpen(false); folder.change!(); }}>작업 폴더 바꾸기…</MenuItem>
+          <p className="menu-label">{folder.started ? "시작한 대화는 그대로 두고, 고른 폴더에서 새 대화를 엽니다." : "이 대화가 고른 폴더에서 시작합니다."}</p>
+        </> : <p className="menu-label">작업 폴더는 PC에서 바꿉니다.</p>}
+        <div className="menu-divider" role="separator" />
+        <p className="menu-label">첨부</p>
+      </> : null}
+      <MenuItem onSelect={() => choose(input.current)}>파일 첨부…</MenuItem>
       <MenuItem onSelect={() => choose(photos.current)}>사진 보관함에서 선택</MenuItem>
       <MenuItem onSelect={() => choose(camera.current)}>사진 촬영</MenuItem>
-      <MenuItem onSelect={() => choose(input.current)}>파일 선택</MenuItem>
       <p className="menu-label">파일마다 최대 25MB, 선택한 대화에만 붙습니다</p>
     </Popover>
     <input ref={input} type="file" multiple hidden tabIndex={-1} onChange={event => selected(event.currentTarget)} />

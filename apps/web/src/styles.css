@@ -1774,6 +1774,11 @@ kbd {
   color: var(--engine-own, var(--color-accent));
 }
 
+/* Gemini's own colour (0.5.6): a violet token of its own. */
+.engine-mark[data-provider="gemini"] {
+  color: var(--engine-own, var(--engine-gemini));
+}
+
 /* The input's top edge is its own edge, whichever engine it sends to (the engine is named by its
    mark beside send). While a turn runs the edge carries the progress pass in the "at work" teal
    (--engine-pass, see "composer-working"): state, never the engine's colour. */
@@ -4629,6 +4634,16 @@ kbd {
 
 .menu-item.active .access-option-help {
   color: var(--active-hint);
+}
+
+/* Why 전체 접근 is not offered here (Gemini): one line under the options. */
+.access-note {
+  margin: var(--space-3xs) 0 0;
+  padding: var(--space-xs) var(--space-sm) var(--space-3xs);
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-micro);
+  line-height: 1.5;
+  color: var(--muted);
 }
 
 .access-option.access-full .access-option-icon {

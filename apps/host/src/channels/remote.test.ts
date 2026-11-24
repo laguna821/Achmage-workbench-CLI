@@ -85,6 +85,10 @@ describe("who may use workbench-remote", () => {
     const { kit, remote } = await remoteTurn();
     expect(json(await run(kit, remote.id, ["tell", "--conversation", remote.id], "나에게"))).toMatchObject({ ok: false, error: "messenger_place" });
     expect(json(await run(kit, remote.id, ["access", "--conversation", remote.id]))).toMatchObject({ ok: false, error: "usage" });
+    // Security review of 0.5.6: an unknown argument is shown back only in a short one-line form.
+    const bad = json(await run(kit, remote.id, ["peek", `--x\n$(touch /tmp/r)${"q".repeat(100)}`]));
+    expect(String(bad.message).split("\n").some((line) => line.startsWith("$(touch"))).toBe(false);
+    expect(String(bad.message)).not.toContain("q".repeat(41));
     const home = kit.manager.snapshot().works.find((work) => work.messengerHome)!;
     expect(json(await run(kit, remote.id, ["start", "--project", home.id, "--engine", "claude"], "x"))).toMatchObject({ ok: false, error: "messenger_place" });
   });

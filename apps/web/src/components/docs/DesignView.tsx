@@ -27,15 +27,21 @@ export const DesignView = forwardRef<
     onCopied(artifactId: string): void;
     onExported(name: string, artifactId: string | null): void;
     onError(message: string): void;
+    /**
+     * A phone joined to the PC: the design page reads its document through this window (its own origin
+     * answers no /api/ there) — only this design's text and pictures; it is read only.
+     */
+    relay?: (path: string) => Promise<{ status: number; contentType: string; body: ArrayBuffer }>;
   }
->(function DesignView({ artifact, revision = null, readOnly: requestedReadOnly = false, access, onStatus, onSelection, onCopied, onExported, onError }, ref) {
+>(function DesignView({ artifact, revision = null, readOnly: requestedReadOnly = false, access, onStatus, onSelection, onCopied, onExported, onError, relay }, ref) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [generation, setGeneration] = useState(0);
   const opened = useRef<number | null>(null);
   const status = useRef<DesignSaveState>("idle");
   const own = useRef(new Set<number>());
   const waiters = useRef(new Map<string, { resolve(value: number | null): void; timer: number }>());
-  const readOnly = requestedReadOnly || revision !== null;
+  const readOnly = requestedReadOnly || revision !== null || Boolean(relay);
+  const relayNow = useRef(relay); relayNow.current = relay;
   const latestAccess = useRef(access); latestAccess.current = access;
   const handlers = useRef({ onStatus, onSelection, onCopied, onExported, onError });
   handlers.current = { onStatus, onSelection, onCopied, onExported, onError };
@@ -62,8 +68,17 @@ export const DesignView = forwardRef<
       const post = (value: unknown) => frame.current?.contentWindow?.postMessage(value, location.origin);
       switch (message.type) {
         case "design:ready":
-          post({ type: "design:init", token: designToken() ?? "", artifactId: artifact.id, revision, readOnly, theme: theme(), access: latestAccess.current });
+          post({ type: "design:init", token: relayNow.current ? "" : designToken() ?? "", artifactId: artifact.id, revision, readOnly, theme: theme(), access: latestAccess.current, ...(relayNow.current ? { relay: true } : {}) });
           break;
+        case "design:fetch": {
+          const ask = relayNow.current, id = message.id;
+          const own = new RegExp(`^/api/artifacts/${artifact.id}/(text|asset)(\\?|$)`);
+          if (!ask || typeof message.path !== "string" || !own.test(message.path)) { post({ type: "design:fetched", id, status: 403, contentType: "", body: null, message: "이 디자인의 내용만 읽을 수 있습니다." }); break; }
+          ask(message.path).then(
+            (answer) => frame.current?.contentWindow?.postMessage({ type: "design:fetched", id, ...answer }, location.origin, [answer.body]),
+            (error: unknown) => post({ type: "design:fetched", id, status: 502, contentType: "", body: null, message: error instanceof Error ? error.message : String(error) }));
+          break;
+        }
         case "design:opened":
           opened.current = message.revision;
           status.current = "saved";

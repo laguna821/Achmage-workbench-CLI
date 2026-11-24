@@ -12,12 +12,13 @@ import { loadFonts } from "./fonts";
 import { Gateway } from "./gateway";
 import { routeDownloads } from "./downloads";
 import { DesignRecovery } from "./recovery";
+import { DooryCredit } from "./credit";
 import type { FontFamily } from "@/types/api";
 import type { EditorEngine } from "@/editor/engine/editor";
 // Panels that need a doory server (template and element catalogues, brand kits) are left out.
 for (const id of ["templates", "elements", "brand"]) panels.unregister(id);
 
-export type DesignInit = { token: string; artifactId: string; revision: number | null; readOnly: boolean; access?: DocumentAccess };
+export type DesignInit = { token: string; artifactId: string; revision: number | null; readOnly: boolean; access?: DocumentAccess; relay?: boolean };
 
 type Prepared = { document: DoryDocument; artifact: Artifact; revision: number; gateway: Gateway; fonts: FontFamily[] };
 type Load =
@@ -25,9 +26,6 @@ type Load =
   | { kind: "error"; message: string }
   | { kind: "recovery"; prepared: Prepared; drafts: DesignDraft[] }
   | { kind: "ready"; document: DoryDocument; name: string; revision: number; gateway: Gateway; adapter: ReturnType<typeof createWorkbenchAdapter>; state: DesignDocumentState; recovery: DesignRecovery };
-
-// vendor/doory/LICENSE clause 2: name, professional identification and URL, verbatim (as LaunchCredit in the app).
-const CREDIT = "Siam, Creator and maintainer of Doory, https://github.com/shaongitbd/doory";
 
 const stateOf = (state: SaveState): DesignSaveState => (state.status === "local" ? "saved" : state.status);
 
@@ -110,7 +108,7 @@ export function EditorHost({ init }: { init: DesignInit }) {
 
   useEffect(() => {
     let active = true;
-    const gateway = new Gateway(init.token, init.access);
+    const gateway = new Gateway(init.token, init.access, init.relay === true);
     const stopAccess = listen((message) => { if (message.type === "design:access") gateway.setAccess(message.access); });
     (async () => {
       const [opened, fonts] = await Promise.all([gateway.text(init.artifactId, init.revision), loadFonts(gateway)]);
@@ -199,6 +197,7 @@ export function EditorHost({ init }: { init: DesignInit }) {
 
   return (
     <div className="wb-design">
+      <DooryCredit />
       {recoveryError && <div className="wb-design-recovery-error" role="alert">{recoveryError}</div>}
       <div className="wb-design-editor">
         <EditorApp
@@ -223,9 +222,6 @@ export function EditorHost({ init }: { init: DesignInit }) {
           topBarEnd={<><SelectionReporter />{!init.readOnly && <RecoveryReporter recovery={load.recovery} state={load.state} attach={(value) => { engine.current = value; }} />}</>}
         />
       </div>
-      <a className="wb-design-credit" href="https://github.com/shaongitbd/doory" target="_blank" rel="noreferrer" title="Attribution Assurance License">
-        디자인 편집기: {CREDIT}
-      </a>
     </div>
   );
 }

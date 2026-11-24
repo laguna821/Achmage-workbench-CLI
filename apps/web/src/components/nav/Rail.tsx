@@ -34,6 +34,7 @@ export function Rail({
   settings,
   greet = false,
   onGreeted,
+  omit,
 }: {
   /** The place lit (one at most). */
   lit: RailPlace | null;
@@ -53,6 +54,8 @@ export function Rail({
   /** The focused view has work modes (Alt+1–5 are theirs, K1): the rail leaves those keys and its tooltips do not offer them. */
   modeKeys?: boolean;
   onGreeted?: (event: { animationName: string }) => void;
+  /** Places not offered here (a phone joined to the PC: 볼트). */
+  omit?: readonly RailPlace[];
 }) {
   const ref = useRef<HTMLElement>(null);
   const place = useRef(onPlace);
@@ -89,6 +92,7 @@ export function Rail({
       </button>
       <ul className="rail-places">
         {RAIL_ITEMS.map((item, index) => {
+          if (omit?.includes(item.id)) return null;
           const current = lit === item.id;
           const count = item.id === "now" && attention ? attention : 0;
           return (

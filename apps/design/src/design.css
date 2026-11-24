@@ -56,23 +56,25 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Required attribution (Attribution Assurance License): always visible while the editor runs. */
+/* Required attribution (Attribution Assurance License clause 2; credit.tsx): the editor page's top line, above
+   its menus, every time it opens. Prominent: the editor's own ink at 12px on the bar's surface; it wraps on a
+   narrow screen rather than being cut. */
 .wb-design-credit {
   flex: none;
-  padding: 3px 12px;
-  font-size: 11px;
+  margin: 0;
+  padding: 4px 14px;
+  font-size: 12px;
   line-height: 16px;
-  color: var(--color-text-muted);
-  background: var(--color-bg);
-  border-top: 1px solid var(--color-border, rgba(127, 127, 127, 0.2));
-  text-decoration: none;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  overflow-wrap: anywhere;
 }
 
-.wb-design-credit:hover {
-  color: var(--color-text);
+.wb-design-credit a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .wb-design-status {

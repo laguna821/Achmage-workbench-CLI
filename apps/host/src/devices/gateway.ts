@@ -6,7 +6,7 @@ import type { DeviceRegistry } from "../devices.ts";
 import type { SessionManager } from "../sessions.ts";
 import type { EventBus } from "../bus.ts";
 import { HttpError } from "../errors.ts";
-import { checkReferences, scopedEvent, scopedRoute, scopedSnapshot } from "./scope.ts";
+import { checkReferences, newWorkRequest, scopedEvent, scopedRoute, scopedSnapshot } from "./scope.ts";
 import type { ProtectedSocket as PaseoProtectedSocket } from "./transport.ts";
 import { sendProtectedServerInfo } from "./transport.ts";
 import { RemoteMediaAccess } from "./media.ts";
@@ -19,6 +19,12 @@ export interface ProtectedSocket {
 type Upload = { request: RemoteRequest; chunks: Buffer[]; size: number };
 /** All device connections at once, and of those how many may not have signed in or paired yet (L3). */
 export const DEVICE_SOCKET_LIMIT = 32, ANONYMOUS_SOCKET_LIMIT = 8;
+/** 새 프로젝트 from one device, per minute. */
+export const PROJECTS_PER_MINUTE = 5;
+/** Heavy work on the PC from one device (uploads, conversions, exports, folders made in a project), per minute. */
+export const HEAVY_PER_MINUTE = 10;
+/** 불러오기 from a phone: one file at most this size (the device channel carries 32 MB a request). */
+export const REMOTE_UPLOAD_LIMIT = 25 * 1024 * 1024;
 export class DeviceGateway {
   private readonly sockets = new Set<ProtectedSocket>();
   /**
@@ -28,6 +34,8 @@ export class DeviceGateway {
    */
   private readonly anonymous = new Set<ProtectedSocket>();
   private readonly media: RemoteMediaAccess;
+  /** 새 프로젝트 from each device in the last minute (at most PROJECTS_PER_MINUTE): a looping phone cannot fill the PC with folders. */
+  private readonly projectsMade = new Map<string, number[]>();
   private readonly options: {
     registry: DeviceRegistry; manager: SessionManager; bus: EventBus;
     localOrigin: () => string | null; localToken: string; dataDir: string; voice?: import("../voice.ts").VoiceService;
@@ -101,15 +109,40 @@ export class DeviceGateway {
         const requestCompatibility = handshakeFromHeader(request.headers[PROTOCOL_HEADER] ?? protocolHeader(compatibility.client));
         if (request.method !== "GET") { requireProtocolWrite(compatibility); requireProtocolWrite(requestCompatibility); }
         const serviceProxy = /^\/api\/services\/([^/]+)\/proxy$/.exec(pathname);
-        const attachmentUpload = pathname === "/api/attachments" && request.method === "POST";
+        const attachmentUpload = (pathname === "/api/attachments" || /^\/api\/works\/[^/]+\/import-upload$/.test(pathname)) && request.method === "POST";
+        if (attachmentUpload && pathname !== "/api/attachments" && bytes.length > REMOTE_UPLOAD_LIMIT) throw new HttpError(413, "remote_upload_size", "25MB가 넘는 파일은 휴대폰에서 불러오지 않습니다. PC에서 불러오세요.");
         let body: Record<string, unknown> = {};
-        if (!attachmentUpload && !serviceProxy && bytes.length && (request.headers["content-type"] ?? "").includes("application/json")) {
+        // Every other body is JSON: one that says otherwise would reach the gateway's routes unread by the
+        // checks below (references, the new project's folder), and those routes read it as JSON anyway.
+        if (!attachmentUpload && !serviceProxy && bytes.length && !(request.headers["content-type"] ?? "").includes("application/json")) throw new HttpError(415, "remote_body_type", "JSON 요청만 받습니다.");
+        if (!attachmentUpload && !serviceProxy && bytes.length) {
           const parsed = JSON.parse(bytes.toString("utf8"));
           if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new HttpError(400, "invalid_json", "JSON 요청을 확인해 주세요.");
           body = parsed;
         }
         const route = scopedRoute(manager, request.method, request.path, body, { grant, headers: request.headers, media: this.media, voice: this.options.voice });
-        registry.authorize(credential, route.permission, route.workId);
+        if (route.newWork) {
+          newWorkRequest(manager, grant, body);
+          const now = Date.now(), recent = (this.projectsMade.get(grant.deviceId) ?? []).filter(at => now - at < 60_000);
+          if (recent.length >= PROJECTS_PER_MINUTE) throw new HttpError(429, "remote_rate", "새 프로젝트를 너무 자주 만들었습니다. 1분 뒤에 다시 해 주세요.");
+          this.projectsMade.set(grant.deviceId, [...recent, now]);
+        }
+        else if (route.grantCheck && route.workId === undefined) {
+          if (!grant.permissions.includes(route.permission)) throw new HttpError(403, "permission_denied", "이 기기에 해당 권한이 없습니다.");
+          route.grantCheck(grant);
+          if (route.made === "folder") {
+            if ((grant.folderIds ?? []).length >= 256) throw new HttpError(409, "registry_limit", "이 기기에서 만든 폴더가 너무 많습니다. PC에서 정리해 주세요.");
+            const now = Date.now(), recent = (this.projectsMade.get("folder:" + grant.deviceId) ?? []).filter(at => now - at < 60_000);
+            if (recent.length >= PROJECTS_PER_MINUTE) throw new HttpError(429, "remote_rate", "새 폴더를 너무 자주 만들었습니다. 1분 뒤에 다시 해 주세요.");
+            this.projectsMade.set("folder:" + grant.deviceId, [...recent, now]);
+          }
+        }
+        else { registry.authorize(credential, route.permission, route.workId); route.grantCheck?.(grant); }
+        if (route.heavy) {
+          const now = Date.now(), recent = (this.projectsMade.get("heavy:" + grant.deviceId) ?? []).filter(at => now - at < 60_000);
+          if (recent.length >= HEAVY_PER_MINUTE) throw new HttpError(429, "remote_rate", "휴대폰에서 1분에 너무 많이 요청했습니다. 1분 뒤에 다시 해 주세요.");
+          this.projectsMade.set("heavy:" + grant.deviceId, [...recent, now]);
+        }
         checkReferences(manager, grant, body);
         this.media.requireReferences(grant, body);
         const json = (value: unknown) => Response.json(value);
@@ -160,8 +193,38 @@ export class DeviceGateway {
           }
           if (!headers.has(PROTOCOL_HEADER)) headers.set(PROTOCOL_HEADER, protocolHeader(compatibility.client));
           headers.set("authorization", "Bearer " + this.options.localToken);
-          result = await fetch(origin + request.path, { method: request.method, headers, body: bytes.length ? bytes : undefined, signal: abort.signal, redirect: "error" });
-          if (attachmentUpload && result.ok) {
+          // Which paired device asks (the PC gives each its own share of what is held for it, e.g. pending Word → 한글).
+          headers.set("x-workbench-device", grant.deviceId);
+          // 새 프로젝트: only the checked fields go on (a name and a list folder; the folder on disk is the PC's default).
+          const sent = route.newWork ? Buffer.from(JSON.stringify({ title: typeof body.title === "string" ? Array.from(body.title).slice(0, 80).join("") : "", folderId: body.folderId ?? null, cwd: null }))
+            : route.body ? Buffer.from(JSON.stringify(route.body)) : bytes;
+          // What the gateway read as JSON (every body but an upload's or a service proxy's) goes on as JSON, whatever type
+          // the device named (a type like "application/octet-stream;x=application/json" passed the check).
+          if (route.newWork || route.body || (!attachmentUpload && !serviceProxy && bytes.length)) headers.set("content-type", "application/json");
+          result = await fetch(origin + request.path, { method: request.method, headers, body: sent.length ? sent : undefined, signal: abort.signal, redirect: "error" });
+          if (request.method === "GET" && /^\/api\/projects\/[^/]+$/.test(pathname) && result.ok) {
+            // A project's page: its property-name suggestions (knownKeys) come from every project's note — not the device's to see.
+            const page = await result.json() as Record<string, unknown>;
+            delete page.knownKeys;
+            result = Response.json(page);
+          }
+          if (route.newWork && result.ok) {
+            // The project the device just made joins its own grant. Its first events went by while it was
+            // not yet the device's, so the device reloads its view (resync) before it hears the answer.
+            const work = await result.json() as import("@workbench/contracts").Work;
+            registry.addWork(credential, work.id);
+            await send({ op: "resync" });
+            result = Response.json(work, { status: 201 });
+          }
+          if (route.filter && result.ok) result = Response.json(route.filter(await result.json(), grant));
+          if (route.made === "folder" && result.ok) {
+            // As 새 프로젝트: the folder joins the device's grant, and the device reloads its view to see it.
+            const folder = await result.json() as import("@workbench/contracts").Folder;
+            registry.addFolder(credential, folder.id);
+            await send({ op: "resync" });
+            result = Response.json(folder, { status: 201 });
+          }
+          if (pathname === "/api/attachments" && attachmentUpload && result.ok) {
             // The existing attachment store keeps bytes; this sidecar binds the
             // upload to the approving device/project until it enters a transcript.
             const attachment = await result.json() as import("@workbench/contracts").Attachment;
@@ -261,6 +324,6 @@ export class DeviceGateway {
       }).catch(() => { socket.close(1011, "connection failure"); stop(); });
     });
     socket.on("close", stop); socket.on("error", stop);
-    await sendProtectedServerInfo(socket as PaseoProtectedSocket, { serverId: manager.snapshot().hostId, hostname: manager.snapshot().hostLabel, version: "0.5.5" });
+    await sendProtectedServerInfo(socket as PaseoProtectedSocket, { serverId: manager.snapshot().hostId, hostname: manager.snapshot().hostLabel, version: "0.5.6" });
   };
 }

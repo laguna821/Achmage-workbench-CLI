@@ -81,6 +81,11 @@ export interface ProviderAdapter {
   loginCode?(code: string): Promise<void>;
   /** Stop a login that is waiting for the browser. */
   cancelLogin?(): Promise<void>;
+  /**
+   * Sign the engine out through its own logout (Claude Code: `claude auth logout`; Codex: the
+   * app-server's `account/logout`). Conversations already running are not stopped.
+   */
+  logout?(): Promise<void>;
   /** Look for the engine again (after an install, or a "다시 확인" after the user installed it). */
   locate?(): Promise<void>;
   /** The engine's command line as found (null when none). */

@@ -11,7 +11,7 @@ import type { AppMemory, EngineMemory } from "@workbench/contracts";
 // engines (0.5.3 B1) are named by their conversations' titles, which the window shows anyway.
 
 /** An engine as its adapter knows it: its conversations (with titles), its process id or the WORKBENCH_SESSION it was started with. */
-export type EngineSource = { provider: "claude" | "codex"; sessions: { id: string; title: string }[]; pid: number | null; marker: string | null; idle: boolean };
+export type EngineSource = { provider: import("@workbench/contracts").Provider; sessions: { id: string; title: string }[]; pid: number | null; marker: string | null; idle: boolean };
 
 /**
  * Each engine's memory: its process with everything under it (MCP servers, hooks). A Claude Code process

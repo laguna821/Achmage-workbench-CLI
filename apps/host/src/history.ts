@@ -1,4 +1,4 @@
-import type { HistoryEvent, HistoryFilter, HistoryPage, TranscriptItem } from "@workbench/contracts";
+import type { HistoryEvent, HistoryFilter, HistoryPage, Provider, TranscriptItem } from "@workbench/contracts";
 import { firstLine } from "./timeline.ts";
 
 // 활동 › 기록: what happened, newest first, a page at a time, read from what the gateway already stores.
@@ -45,7 +45,7 @@ export function mergeHistory(sources: HistorySource[], limit: number, drop: (eve
 /** A transcript item as a line, or null when it is not one a person reads in the history. */
 export function itemEvent(row: { sessionId: string; workId: string; provider: string | null; status: string | null; item: TranscriptItem }): HistoryEvent | null {
   const { item, sessionId, workId } = row;
-  const base = { id: `item:${sessionId}:${item.id}`, at: item.at, workId, sessionId, artifactId: item.office?.artifactId ?? null, itemId: item.id, provider: row.provider === "claude" || row.provider === "codex" ? row.provider as "claude" | "codex" : null };
+  const base = { id: `item:${sessionId}:${item.id}`, at: item.at, workId, sessionId, artifactId: item.office?.artifactId ?? null, itemId: item.id, provider: row.provider === "claude" || row.provider === "codex" || row.provider === "gemini" ? row.provider as Provider : null };
   if (item.kind === "user") {
     const via = item.origin ? "phone" : item.scheduled ? "schedule" : item.link ? "link" : item.from || item.peer ? "handover" : item.steered ? "steer" : "pc";
     const text = firstLine(item.text, 60);

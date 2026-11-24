@@ -1771,6 +1771,13 @@ const N1_SCREENS: Screen[] = navMode && papers && paperDocs.length && paperMain 
   { name: "nav-n1-keys", viewport: WIDE, steps: [sidebarOpen, railTo("projects"), toLevelOne,
     { js: `document.querySelector('.sidebar [data-row-id="${papers.id}"]').focus()` }, { press: "Enter", wait: levelIs("project") },
     { press: "ArrowDown" }, { js: "document.querySelector('.sidebar [data-list-row]')?.focus()" }, { press: "Alt+ArrowLeft", wait: levelIs("projects") }], settle: 300 },
+  // 0.5.6 (nav-qol-056): a folded folder hides every project under it; its row says what needs the person.
+  { name: "nav-n1-folder-folded", viewport: WIDE, steps: [...gridSteps(1), closeStaleTabs, sidebarOpen, railTo("projects"), toLevelOne,
+    { js: "__wb.click('.sidebar .nav-folder[aria-expanded=true]', '강의')", wait: `!__wb.has('.sidebar [data-row-id="${lecture.id}"]')` },
+    // At rest (not hovered or focused) the row's one trailing fact shows: the pill.
+    { js: "__wb.blur()", wait: "__wb.has('.sidebar .nav-folder[aria-expanded=false] .nav-pill')", pause: 300 },
+    { probe: "({ folded: [...document.querySelectorAll('.sidebar .nav-folder[aria-expanded=false]')].map((e) => e.getAttribute('aria-label')) })" }], settle: 400,
+    cleanup: [{ js: "__wb.click('.sidebar .nav-folder[aria-expanded=false]', '강의')", wait: `__wb.has('.sidebar [data-row-id="${lecture.id}"]')` }] },
   // The column laid over the work under 960px; the rail stays (icon-only under 800px).
   { name: "nav-n1-over", viewport: NARROW, steps: [sidebarOpen, railTo("projects"), toLevelOne, { js: "__wb.blur()", pause: 300 }, { assert: "칸은 최소 너비를 지킴" }], settle: 500 },
   { name: "nav-n1-toggle", viewport: WIDE, steps: [...gridSteps(1), sidebarOpen,

@@ -13,10 +13,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { chromium } from "playwright-core";
-import type { Provider, Session, TranscriptItem, Work } from "@workbench/contracts";
+import type { Session, TranscriptItem, Work } from "@workbench/contracts";
 
 const outDir = process.argv[2] ?? join(tmpdir(), "wb-import");
-const providers: Provider[] = process.argv[3] === "codex" || process.argv[3] === "claude" ? [process.argv[3]] : ["codex", "claude"];
+const providers: ("claude" | "codex")[] = process.argv[3] === "codex" || process.argv[3] === "claude" ? [process.argv[3]] : ["codex", "claude"];
 mkdirSync(outDir, { recursive: true });
 const dataDir = mkdtempSync(join(tmpdir(), "workbench-import-"));
 const worksDir = mkdtempSync(join(tmpdir(), "workbench-import-works-"));
@@ -28,7 +28,7 @@ const check = (step: string, ok: boolean, detail = "") => {
 };
 
 // The folders the terminal conversations ran in, and a Claude Code record made up for the check.
-const folders: Record<Provider, string> = { claude: join(worksDir, "claude-terminal"), codex: join(worksDir, "codex-terminal") };
+const folders: Record<"claude" | "codex", string> = { claude: join(worksDir, "claude-terminal"), codex: join(worksDir, "codex-terminal") };
 for (const folder of Object.values(folders)) mkdirSync(folder, { recursive: true });
 const claudeSession = randomUUID();
 {
@@ -54,7 +54,7 @@ const claudeSession = randomUUID();
   // Claude Code's list dates a conversation by its file's last change: two hours ago, like the record.
   utimesSync(join(dir, `${claudeSession}.jsonl`), at, new Date(at.getTime() + 5000));
 }
-const nativeId: Record<Provider, string> = { claude: claudeSession, codex: "thr_cli_1" };
+const nativeId: Record<"claude" | "codex", string> = { claude: claudeSession, codex: "thr_cli_1" };
 
 const child = spawn(process.execPath, ["apps/host/src/main.ts"], {
   env: {
@@ -94,7 +94,7 @@ await api("PUT", "/api/prefs", { prefs: { onboarding: "done", startScreen: "last
 const browser = await chromium.launch();
 const logs: string[] = [];
 
-async function flow(provider: Provider) {
+async function flow(provider: "claude" | "codex") {
   const label = provider === "codex" ? "Codex" : "Claude";
   const engineName = provider === "codex" ? "Codex" : "Claude Code";
   const page = await browser.newPage({ viewport: { width: 1280, height: 860 } });

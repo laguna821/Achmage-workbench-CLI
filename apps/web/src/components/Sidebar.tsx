@@ -105,6 +105,8 @@ function DragGhost({ store }: { store: GhostStore }) {
   );
 }
 
+export type SidebarPending = { rename?: string; createIn?: string | null; reveal?: string; unfold?: string | null };
+
 export type PrefsPatch = UiPrefs | ((current: UiPrefs) => UiPrefs);
 
 export function Sidebar({
@@ -137,7 +139,8 @@ export function Sidebar({
   visibleSessionId: string | null;
   currentDocId: string | null;
   open: TreeOpenState;
-  onOpenChange: (next: TreeOpenState) => void;
+  /** A new open state, or a change of the latest one. */
+  onOpenChange: (next: TreeOpenState | ((current: TreeOpenState) => TreeOpenState)) => void;
   sortMode: SortMode;
   onSortMode: (mode: SortMode) => void;
   width: number;
@@ -145,8 +148,12 @@ export function Sidebar({
   /** The least width the work panes need side by side (panes.ts `minimumSize`): the column never takes it. */
   paneMinimum?: number;
   actions: SidebarActions;
-  /** A rename or a new folder asked from a menu. */
-  pending: { rename?: string; createIn?: string | null } | null;
+  /**
+   * A rename or a new folder asked from a menu; `reveal`: a project that came into a folder from this window
+   * (made or moved there) — the folders above it unfold and its row is shown (with `rename`, at level 1);
+   * `unfold`: the folder it went to, when the list may not know it yet.
+   */
+  pending: SidebarPending | null;
   onPendingDone: () => void;
   /** Home is on screen. */
   homeActive?: boolean;
@@ -223,6 +230,8 @@ export function Sidebar({
   /** A document row's menu (the shared Menu): at the pointer, or under its ⋯. */
   const [rowMenu, setRowMenu] = useState<{ rowId: string; request: MenuRequest; anchor: LayerAnchor } | null>(null);
   const [live, setLive] = useState<number | null>(null);
+  /** A project to show once its row is drawn (`pending.reveal`, a move into a folder). */
+  const [revealing, setRevealing] = useState<string | null>(null);
 
   // The list follows what is opened (nav/place.ts `followOpen`, driven by the app for every way of
   // opening); here only the inside search is left behind when the project changes.
@@ -269,7 +278,8 @@ export function Sidebar({
   const unfoldTo = useCallback((folderId: string, itself = true) => {
     const above = new Set<string>();
     for (let at: string | null = itself ? folderId : (state.folders[folderId]?.parentId ?? null); at && !above.has(at); at = state.folders[at]?.parentId ?? null) above.add(at);
-    if (open.closedFolders.some((id) => above.has(id))) onOpenChange({ ...open, closedFolders: open.closedFolders.filter((id) => !above.has(id)) });
+    // A change of the latest open state: an unfold never undoes a fold made in the same moment.
+    if (open.closedFolders.some((id) => above.has(id))) onOpenChange((current) => ({ ...current, closedFolders: current.closedFolders.filter((id) => !above.has(id)) }));
   }, [state.folders, open, onOpenChange]);
 
   /** Back to every project: the list only (nothing in the centre moves). */
@@ -316,7 +326,15 @@ export function Sidebar({
       const work = state.works[id];
       if (session) saveNav({ rail: "projects", level: "project", project: session.workId });
       else if (folder) { saveNav({ rail: "projects", level: "projects" }); unfoldTo(id, false); }
-      else if (work) { saveNav({ rail: "projects", level: "projects" }); if (work.folderId) unfoldTo(work.folderId); }
+      // The project open at level 2 is renamed in its head there (0.5.6 round 2); any other at level 1.
+      // A project just made (`reveal`) is named in its row at level 1, its folders unfolded (the owner,
+      // 2026-11-15 and composer-056: a new project in a folded folder was never seen).
+      else if (work && (pending.reveal === id || !(level === "project" && insideWork?.id === work.id))) { saveNav({ rail: "projects", level: "projects" }); if (work.folderId) unfoldTo(work.folderId); }
+    }
+    if (pending.reveal !== undefined) {
+      const folderId = pending.unfold !== undefined ? pending.unfold : (state.works[pending.reveal]?.folderId ?? null);
+      if (folderId) unfoldTo(folderId);
+      setRevealing(pending.reveal);
     }
     if (pending.createIn !== undefined) {
       setCreatingIn(pending.createIn);
@@ -327,19 +345,41 @@ export function Sidebar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pending]);
 
+  // A project that came into a folder from this window: once its row is drawn (the gateway's answer may
+  // come a moment later) it is the list's keyboard row, scrolled into view, and focused if the keyboard
+  // was in the list (never taken from the input the person types in). Given up after a few seconds.
+  useEffect(() => {
+    if (!revealing) return;
+    const give = window.setTimeout(() => setRevealing(null), 5_000);
+    return () => window.clearTimeout(give);
+  }, [revealing]);
+  useEffect(() => {
+    if (!revealing || level !== "projects") return;
+    const element = asideRef.current?.querySelector<HTMLElement>(`[data-list-row][data-row-id="${CSS.escape(revealing)}"]`);
+    if (!element) return;
+    setRevealing(null);
+    setListFocus(revealing);
+    element.scrollIntoView({ block: "nearest" });
+    const active = document.activeElement;
+    if (!active || active === document.body || (asideRef.current?.contains(active) && !active.closest("input, textarea"))) element.focus({ preventScroll: true });
+  });
+
   // ── moves ───────────────────────────────────────────────────────────────────────────────
   /** Projects into a folder (or out of folders): first in it, as a drop into a folder always put them. */
   const moveProjects = useCallback(
     (works: Work[], folderId: string | null) => {
       const moving = works.filter((work) => (work.folderId ?? null) !== folderId);
       if (!moving.length) return;
+      // Moved into a folded folder, they would vanish: the folder unfolds and the first one is shown.
+      if (folderId) unfoldTo(folderId);
+      setRevealing(moving[0]!.id);
       let first = Math.min(0, ...Object.values(state.works).filter((work) => !work.archivedAt && (work.folderId ?? null) === folderId).map((work) => work.sort));
       const name = folderId ? (state.folders[folderId]?.name ?? "폴더") : "프로젝트";
       void Promise.all(moving.map((work) => api.updateWork(work.id, { folderId, sort: (first -= 1) })))
         .then(() => moving.length > 1 && onToast(`프로젝트 ${moving.length}개를 ${withParticle(`「${name}」`, "으로/로")} 옮겼습니다.`))
         .catch(fail);
     },
-    [api, state.works, state.folders, onToast, fail],
+    [api, state.works, state.folders, onToast, fail, unfoldTo],
   );
 
   /** Where a drag would land now, and what dropping there does. */
@@ -437,10 +477,12 @@ export function Sidebar({
   // ── rows as the tree shows them (inside a project) ──────────────────────────────────────
   const toggleRow = (row: Row) => {
     if (row.type === "folder") {
-      const closed = new Set(open.closedFolders);
-      if (row.open) closed.add(row.id);
-      else closed.delete(row.id);
-      onOpenChange({ ...open, closedFolders: [...closed] });
+      onOpenChange((current) => {
+        const closed = new Set(current.closedFolders);
+        if (row.open) closed.add(row.id);
+        else closed.delete(row.id);
+        return { ...current, closedFolders: [...closed] };
+      });
     } else if (row.type === "work" && row.expandable) onOpenChange(toggleWork(open, row.id, row.open));
   };
   const activate = (row: Row) => {

@@ -155,6 +155,13 @@ let activeMediaConnection: RemoteApiConnection | null = null;
 let localMediaHostId: string | null = null;
 const mediaConnections = new Map<string, RemotePeer>();
 export const attachmentHostId = () => activeMediaConnection?.hostId ?? "local";
+/**
+ * A GET for modules that fetch by path outside an Api (office page pictures): over the device channel
+ * when this page is a phone joined to a PC (its own origin answers no /api/ there), else with the token.
+ */
+export function pageFetch(path: string, token: string | null): Promise<Response> {
+  return activeMediaConnection ? activeMediaConnection.peer.fetch(path) : fetch(path, { headers: { authorization: `Bearer ${token ?? ""}` } });
+}
 export function setMediaConnection(connection: RemoteApiConnection | null) {
   activeMediaConnection = connection;
   if (connection) mediaConnections.set(connection.hostId, connection.peer);
@@ -472,6 +479,10 @@ export class Api {
   /** "알릴 변경": what the next request of a session will be told changed since its last one. */
   changes = (sessionId: string) => this.request<ChangeLine[]>("GET", `/api/projects/changes?${new URLSearchParams({ sessionId })}`);
   /** A pasted or dropped file, kept by the gateway until a request names it. */
+  /** 작업 폴더 바꾸기: `moved` — this conversation now works there; otherwise `session` is a new conversation there (the PC only). */
+  sessionFolder = (sessionId: string, cwd: string) => this.request<{ session: Session; moved: boolean }>("POST", `/api/sessions/${sessionId}/folder`, { cwd });
+  /** A file dropped from the PC's file manager by its path (a file:// list without the file's bytes). */
+  attachLocalFile = (path: string) => this.request<Attachment>("POST", "/api/attachments/local", { path });
   async uploadAttachment(file: File, workId?: string): Promise<Attachment> {
     if (this.remote && !workId) throw new Error("파일을 첨부할 프로젝트를 확인할 수 없습니다.");
     const response = await this.transport("/api/attachments", {
@@ -699,6 +710,11 @@ export class Api {
     if (!response.ok) throw new ApiRequestError(response.status, { code: "image_failed", message: response.statusText });
     return response.blob();
   }
+  /** A GET answered as bytes (the design page on a phone reads its document through the window: DesignView). */
+  async bytes(path: string): Promise<{ status: number; contentType: string; body: ArrayBuffer }> {
+    const response = await this.transport(path, { headers: { authorization: `Bearer ${this.token}` } });
+    return { status: response.status, contentType: response.headers.get("content-type") ?? "", body: await response.arrayBuffer() };
+  }
   /** Raw bytes of a revision (PDF viewer). */
   async raw(artifactId: string, revision?: number): Promise<ArrayBuffer> {
     const response = await this.transport(`/api/artifacts/${artifactId}/raw${revision ? `?revision=${revision}` : ""}`, {
@@ -714,12 +730,17 @@ export class Api {
   /** The code the engine's login page showed (Claude Code), handed to its waiting login. */
   loginCode = (provider: Provider, code: string) => this.request<ProviderStatus>("POST", `/api/providers/${provider}/login/code`, { code });
   cancelLogin = (provider: Provider) => this.request<ProviderStatus>("POST", `/api/providers/${provider}/login/cancel`);
+  /** 로그아웃 through the engine's own logout (running conversations are not stopped). */
+  logout = (provider: Provider) => this.request<ProviderStatus>("POST", `/api/providers/${provider}/logout`);
   /** "설치": the engine for this user; progress arrives as provider.status events. */
   installEngine = (provider: Provider) => this.request<ProviderStatus>("POST", `/api/providers/${provider}/install`);
   refreshProviders = (provider?: Provider) => this.request("POST", `/api/providers/refresh${provider ? `?provider=${provider}` : ""}`);
   /** What the app uses now (the readout in the window's bottom line); the gateway reads at most once in 30 s. */
   memory = () => this.request<import("@workbench/contracts").AppMemory>("GET", "/api/memory");
   /** "내 MCP 서버와 훅 불러오기" for an engine (설정 › AI 엔진); the engine's status follows by event. */
+  /** 설정 › AI 엔진 › Gemini (0.5.6). */
+  setGemini = (patch: { googleOptIn?: boolean }) => this.request<ProviderStatus | null>("POST", "/api/providers/gemini/settings", patch);
+  geminiTerminal = (action: "install" | "login", workId: string | null) => this.request<TerminalSession>("POST", "/api/providers/gemini/terminal", { action, workId });
   setPersonalTools = (provider: Provider, on: boolean) => this.request<ProviderStatus | null>("POST", "/api/providers/personal-tools", { provider, on });
   /** "쉬는 엔진 지금 끄기" (B1): every idle engine closes now; how many. */
   closeIdleEngines = () => this.request<{ closed: number }>("POST", "/api/engines/close-idle");

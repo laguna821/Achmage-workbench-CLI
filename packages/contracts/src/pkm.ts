@@ -126,7 +126,7 @@ export type ViewTerm = { not: boolean } & (
   /** value null: the key has a value; "": it has none ("값 없음"). */
   | { kind: "prop"; key: string; value: string | null }
   | { kind: "date"; spec: "today" | "yesterday" | "thisweek" | "thismonth" | `last${number}d` }
-  | { kind: "engine"; engine: "claude" | "codex" }
+  | { kind: "engine"; engine: import("./index.ts").Provider }
   | { kind: "status"; status: "running" | "idle" | "error" | "approval" | "unseen" }
   | { kind: "type"; type: PkmCard["kind"] }
   | { kind: "text"; text: string }
@@ -179,7 +179,7 @@ export function parseViewQuery(query: string): { terms: ViewTerm[]; problems: st
       else problems.push(word);
     } else if (/^engine:/i.test(word)) {
       const engine = word.slice(7).toLowerCase();
-      if (engine === "claude" || engine === "codex") terms.push({ not, kind: "engine", engine });
+      if (engine === "claude" || engine === "codex" || engine === "gemini") terms.push({ not, kind: "engine", engine });
       else problems.push(word);
     } else if (/^status:/i.test(word)) {
       const status = STATUS_WORDS[word.slice(7).toLowerCase()];

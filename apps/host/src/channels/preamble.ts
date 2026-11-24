@@ -75,3 +75,9 @@ export function phonePreamble(version: number = PREAMBLE_VERSION, engine: string
   // `place.remote`: the request runs in a messenger's own place (the remote), from version 5 on.
   return version >= 5 && place.remote ? `${said}\n\n${REMOTE}` : said;
 }
+
+/**
+ * What a Gemini conversation is told of a request from the messenger: two plain lines, not the other engines' phone
+ * preamble (its tool manuals and rules; study § H+: a foreign agent's large system prompt through ACP may be noticed).
+ */
+export const GEMINI_PHONE = "[휴대폰 메신저에서 온 요청] 사용자는 지금 PC 앞에 없습니다.\n결과는 휴대폰에서 읽기 좋게 짧게 정리해 주세요.";

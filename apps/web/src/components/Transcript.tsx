@@ -1,4 +1,4 @@
-import { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import type { State } from "../state.ts";
@@ -28,6 +28,7 @@ import { approvalKeyApplies } from "../conversation/approval-keys.ts";
 import { useStreamingText } from "../streaming-text.ts";
 import { TURN_STEP, drawFrom, earlierFrom, reachFrom, slideFrom } from "../conversation/turn-window.ts";
 import { WAKE_EVENTS, inUse, lightView, looksAsMarkup, registerWake, staticMarkup, staticTurnStats, turnKey, wakeTarget } from "../conversation/static-turns.ts";
+import { peerLine } from "../conversation/peer-line.ts";
 
 const DRAWN = diagramComponents();
 const STREAMING = diagramComponents(true);
@@ -142,11 +143,21 @@ const AssistantText = memo(function AssistantText({ text: whole, streaming, medi
   return useMemo(() => <AssistantMarkdown text={text} streaming={streaming} media={media} />, [text, streaming, media]);
 });
 
+/** A link in an answer: on a phone joined to the PC a file link opens its document here (DocActions.openLink); any other link as before. */
+export function AnswerLink({ node, ...props }: ComponentProps<"a"> & { node?: unknown }) {
+  void node;
+  const docs = useContext(DocContext);
+  const openLink = docs?.actions.openLink;
+  // The PC keeps its links exactly as before (the app's own link handling); only the phone's page takes file links here.
+  if (!openLink) return <a {...props} />;
+  return <a {...props} target="_blank" rel="noreferrer" onClick={(event) => { if (openLink(props.href ?? "")) event.preventDefault(); }} />;
+}
+
 function AssistantMarkdown({ text, streaming, media }: { text: string; streaming: boolean; media: MessageMedia[] }) {
   const gallery = media.map(entry => entry.attachment);
   return (
     <div className={`markdown${streaming ? " streaming" : ""}`}>
-      <Markdown remarkPlugins={REMARK_BASE} urlTransform={(url, key) => key === "src" ? url : defaultUrlTransform(url)} components={{ ...(streaming ? STREAMING : DRAWN), img: ({ src, alt }) => {
+      <Markdown remarkPlugins={REMARK_BASE} urlTransform={(url, key) => key === "src" ? url : defaultUrlTransform(url)} components={{ ...(streaming ? STREAMING : DRAWN), a: AnswerLink, img: ({ src, alt }) => {
         const saved = media.find(entry => entry.source === src);
         return saved ? <MessageImage attachment={saved.attachment} gallery={gallery} />
           : <span className="muted">{alt || "그림"}{typeof src === "string" && /^https?:\/\//i.test(src) ? <> <a href={src} target="_blank" rel="noreferrer">원본 링크</a></> : streaming ? " (응답 후 미리보기)" : " (미리보기 없음)"}</span>;
@@ -164,11 +175,14 @@ function workSummary(items: Step[]) {
   const counts = new Map<string, number>();
   for (const tool of tools) if (tool !== running) counts.set(tool.tool, (counts.get(tool.tool) ?? 0) + 1);
   const cells: string[] = [];
-  if (running) cells.push(running.title);
+  if (running) cells.push(peerLine(running) ?? running.title);
   for (const plan of items) if (plan.kind === "plan") cells.push(`계획 ${plan.steps.length}/${plan.steps.length}`);
+  // 0.5.6: another conversation read is said in words, not counted among the commands.
+  const peers = tools.filter((tool) => tool !== running && peerLine(tool) !== null);
+  for (const tool of peers) { cells.push(peerLine(tool)!); counts.set(tool.tool, (counts.get(tool.tool) ?? 1) - 1); }
   if (counts.get("command")) cells.push(`명령 ${counts.get("command")}개`);
   if (counts.get("fileChange")) cells.push(`파일 변경 ${counts.get("fileChange")}건`);
-  const other = tools.length - (running ? 1 : 0) - (counts.get("command") ?? 0) - (counts.get("fileChange") ?? 0);
+  const other = tools.length - (running ? 1 : 0) - peers.length - (counts.get("command") ?? 0) - (counts.get("fileChange") ?? 0);
   if (other) cells.push(`도구 ${other}개`);
   if (!cells.length) cells.push("생각 정리");
   return { cells, running: Boolean(running), label: `실행 상세: ${cells.join(", ")}` };
@@ -178,17 +192,20 @@ function ToolRow({ item, focused }: { item: Item<"tool">; focused: boolean }) {
   const [open, setOpen] = useState(focused);
   useLayoutEffect(() => { if (focused) setOpen(true); }, [focused]);
   const hasBody = Boolean(item.output || (item.detail && item.tool !== "command"));
+  // 0.5.6: a workbench-peers step is one readable line ("「…」 대화를 읽었습니다 · 최근 N개"); its command and answer stay in the body.
+  const peer = peerLine(item);
+  const title = peer ?? item.title;
   return (
     <li className={`tool-row status-${item.status}`} data-item-id={item.id}>
-      <button type="button" className="tool-row-head" onClick={() => hasBody && setOpen(!open)} aria-expanded={hasBody ? open : undefined} aria-label={`${item.title} · ${item.status === "running" ? "실행 중" : item.status === "completed" ? "완료" : item.status === "declined" ? "거절됨" : item.status === "unknown" ? "기록에 결과 없음" : "실패"}`}>
+      <button type="button" className="tool-row-head" onClick={() => hasBody && setOpen(!open)} aria-expanded={hasBody ? open : undefined} aria-label={`${title} · ${item.status === "running" ? "실행 중" : item.status === "completed" ? "완료" : item.status === "declined" ? "거절됨" : item.status === "unknown" ? "기록에 결과 없음" : "실패"}`}>
         <Icon name={TOOL_ICON[item.tool] ?? "tool"} size={14} className="tool-icon" />
-        <span className={item.tool === "command" ? "tool-title mono" : "tool-title"}>{item.title}</span>
+        <span className={item.tool === "command" && !peer ? "tool-title mono" : "tool-title"}>{title}</span>
         <span className="tool-status">
           {item.status === "running" ? <span className="spinner" aria-label="실행 중" /> : item.status === "completed" ? <Icon name="check" size={14} /> : item.status === "declined" ? "거절됨" : item.status === "unknown" ? "기록에 결과 없음" : "실패"}
         </span>
       </button>
       {open && hasBody ? (
-        <pre className="tool-output">{[item.tool !== "command" ? item.detail : null, item.output].filter(Boolean).join("\n\n")}</pre>
+        <pre className="tool-output">{[peer ? item.title : item.tool !== "command" ? item.detail : null, item.output].filter(Boolean).join("\n\n")}</pre>
       ) : null}
     </li>
   );

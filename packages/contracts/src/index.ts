@@ -20,6 +20,7 @@ export * from "./source-control.ts";
 export * from "./scm-review.ts";
 export * from "./document-registry.ts";
 export * from "./office-new.ts";
+export * from "./doory-credit.ts";
 export * from "./tasks.ts";
 export * from "./host-session.ts";
 export * from "./korean.ts";
@@ -30,11 +31,12 @@ export * from "./credentials.ts";
 
 export const PROTOCOL_VERSION = 1;
 
-export type Provider = "claude" | "codex";
+export type Provider = "claude" | "codex" | "gemini";
 
 export const PROVIDER_LABEL: Record<Provider, string> = {
   claude: "Claude",
   codex: "Codex",
+  gemini: "Gemini",
 };
 
 export type Folder = {
@@ -192,6 +194,8 @@ export type ContextUsage = { used: number; window: number | null; compactAt: num
  * `held`: kept after a stop, a failure, a restart or a steer the stop dropped — sent only by hand.
  */
 export type QueuedMessage = { id: string; text: string; refs: DocRef[]; create: CreateTarget | null; at: number; held?: boolean; attachments?: Attachment[]; plan?: boolean; notes?: string[]; runSettings?: import("./agent-profiles.ts").RunSettings; /** Sent from a paired messenger chat: kept while it waits (see `RequestOrigin`). */ origin?: import("./channels.ts").RequestOrigin;
+  /** Accepted from a schedule, the automation API or a hub event (not a person): checked again before it is sent (0.5.6). */
+  automated?: boolean;
   /**
    * Waits for a free slot of the resource manager (0.5.3), not for this conversation's own turn: starts by
    * itself when its turn in the line comes, also after a restart (not held like the others).
@@ -607,6 +611,8 @@ export type ProviderStatus = {
    * servers and hooks of this engine. Off by default (0.5.3). Absent from older gateways (they loaded them).
    */
   personalTools?: boolean;
+  /** Gemini only (0.5.6): sign-in kind, opt-in, version gate and what agy offered over ACP. */
+  gemini?: import("./setup.ts").GeminiSetup | null;
   error: string | null;
 };
 
@@ -893,7 +899,10 @@ export type DesignDraft = { artifactId: string; viewId: string; baseRevision: nu
 
 /** Workbench window → design page (iframe at /design/). */
 export type DesignHostMessage =
-  | { type: "design:init"; token: string; artifactId: string; revision: number | null; readOnly: boolean; theme: "light" | "dark"; access?: import("./document-registry.ts").DocumentAccess }
+  | { type: "design:init"; token: string; artifactId: string; revision: number | null; readOnly: boolean; theme: "light" | "dark"; access?: import("./document-registry.ts").DocumentAccess;
+      /** A phone joined to the PC: the page has no /api/ of its own; it reads through the window (design:fetch), read only. */
+      relay?: boolean }
+  | { type: "design:fetched"; id: string; status: number; contentType: string; body: ArrayBuffer | null; message?: string }
   | { type: "design:access"; access: import("./document-registry.ts").DocumentAccess }
   | { type: "design:theme"; theme: "light" | "dark" }
   | { type: "design:flush"; requestId: string }
@@ -913,6 +922,8 @@ export type DesignPageMessage =
   | { type: "design:copied"; artifactId: string }
   | { type: "design:exported"; name: string; path: string; artifactId: string | null }
   | { type: "design:error"; message: string }
+  /** A read of the design page's own document (text, its pictures) asked of the window, when init said `relay`. */
+  | { type: "design:fetch"; id: string; path: string }
   | { type: "render:ready" }
   | { type: "render:result"; id: string; dataUrl: string | null; pages: number; error?: string };
 

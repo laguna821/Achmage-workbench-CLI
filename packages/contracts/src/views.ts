@@ -48,7 +48,7 @@ export type HistoryEvent = {
   /** The transcript item it is (opens the conversation there). */
   itemId: string | null;
   /** The engine of its conversation. */
-  provider?: "claude" | "codex" | null;
+  provider?: import("./index.ts").Provider | null;
   /** request: who sent it, its first line, how long it waited for a free slot (ms; only when it did). */
   via?: HistoryVia;
   text?: string;

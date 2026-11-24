@@ -168,3 +168,16 @@ describe("one 문서 AI per document (one-doc-ai)", () => {
     }
   });
 });
+
+// 0.5.6 (the owner, 2026-11-20): a document opened from a conversation on the phone shows in the same read view as
+// from the 문서 list — a Hangul document as its page pictures, not its text.
+it("beside a conversation on a phone: the 문서 list's read view (Hangul as pages); on the PC as before", async () => {
+  const { hostedView } = await import("./document-modes.ts");
+  expect(hostedView("hwpx", true)).toBe("pages");
+  expect(hostedView("hwp", true)).toBe("pages");
+  expect(hostedView("docx", true)).toBe("pages");
+  expect(hostedView("pdf", true)).toBe("preview");
+  expect(hostedView("markdown", true)).toBe("preview");
+  expect(hostedView("html", true)).toBe("render");
+  for (const format of ["hwpx", "docx", "markdown", "html", "pdf"] as const) expect(hostedView(format, false)).toBe(readView(format));
+});

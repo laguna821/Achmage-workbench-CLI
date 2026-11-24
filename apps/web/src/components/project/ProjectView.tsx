@@ -1,7 +1,7 @@
 import { withParticle } from "@workbench/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { ItemIcon } from "../ItemIcon.tsx";
-import { PROVIDER_LABEL, type ProjectEvent, type ProjectPage, type ProjectSummary, type ProjectWrite, type Session, type StoppedPlace, type Work } from "@workbench/contracts";
+import { PROVIDER_LABEL, type ProjectEvent, type ProjectPage, type ProjectSummary, type ProjectWrite, type PropertyType, type Session, type StoppedPlace, type Work } from "@workbench/contracts";
 import type { Components } from "react-markdown";
 import { ApiRequestError, type Api } from "../../api.ts";
 import { ago } from "../../format.ts";
@@ -12,7 +12,7 @@ import type { State } from "../../state.ts";
 import type { MenuEntry, MenuRequest } from "../ContextMenu.tsx";
 import { diagramComponents } from "../Diagram.tsx";
 import { EngineMark } from "../EngineMark.tsx";
-import { EditableText } from "../EditableText.tsx";
+import { AUTO_NAME_HINT, EditableText } from "../EditableText.tsx";
 import { LoadingView } from "../Skeleton.tsx";
 import { Icon, type IconName } from "../Icon.tsx";
 import { docPictureComponents } from "../ImageGen.tsx";
@@ -42,7 +42,7 @@ type Toast = { text: string; kind?: "info" | "error"; action?: { label: string; 
 const DRAWN = diagramComponents();
 /** Source links of decisions (`workbench://session/…`) stay links here. */
 const keepSources = (url: string) => (url.startsWith("workbench://") ? url : obsidianUrlTransform(url));
-const BY_LABEL: Record<string, string> = { user: "나", claude: "Claude", codex: "Codex", external: "앱 밖" };
+const BY_LABEL: Record<string, string> = { user: "나", claude: "Claude", codex: "Codex", gemini: "Gemini", external: "앱 밖" };
 /** A record row's time: today the hour, earlier the date (the day heads are gone; the time says it). */
 function eventWhen(at: number, now = Date.now()) {
   const date = new Date(at);
@@ -392,9 +392,10 @@ function ProjectNotePage({
     tagChoices,
     projectNames: Object.values(state.works).filter((entry) => entry.id !== workId && !entry.archivedAt).map((entry) => entry.title),
     onWrite: writeProperty,
-    onKind: (key, type) => void api.setPropertyType(key, type).then(() => load(), onError),
-    onStages: () => setStagesOpen(true),
+    // A phone joined to the PC writes this project's note only: what changes every project (a kind, 단계 편집) and the vault's tags stay on the PC.
+    ...(api.isRemote ? {} : { onKind: (key: string, type: PropertyType) => void api.setPropertyType(key, type).then(() => load(), onError), onStages: () => setStagesOpen(true) }),
     onWantTags: () => {
+      if (vaultTags === null && api.isRemote) { setVaultTags([]); return; }
       if (vaultTags === null) api.vaultTags().then((list) => setVaultTags(list.map((entry) => entry.tag)), () => setVaultTags([]));
     },
     openMenu,
@@ -501,9 +502,11 @@ function ProjectNotePage({
       ]),
       ...(note.artifactId ? [{ kind: "item" as const, label: "노트를 문서로 열기 (판과 비교)", icon: "page" as const, onSelect: () => onOpenDocument(note.artifactId!, null) }] : []),
       ...(!note.exists && page.noteTemplate ? [{ kind: "item" as const, label: `「${page.noteTemplate.folderName}」 템플릿으로 노트 만들기`, icon: "file" as const, onSelect: () => void api.initializeProjectNote(workId).then((write) => wrote(write)).catch(onError) }] : []),
-      { kind: "separator" },
-      { kind: "item", label: "속성 템플릿…", icon: "list", onSelect: () => setTemplateOpen(true) },
-      { kind: "item", label: "단계 편집…", icon: "palette", onSelect: () => setStagesOpen(true) },
+      ...(api.isRemote ? [] : [
+        { kind: "separator" as const },
+        { kind: "item" as const, label: "속성 템플릿…", icon: "list" as const, onSelect: () => setTemplateOpen(true) },
+        { kind: "item" as const, label: "단계 편집…", icon: "palette" as const, onSelect: () => setStagesOpen(true) },
+      ]),
       { kind: "separator" },
       { kind: "item", label: "노트 경로 복사", icon: "copy", onSelect: () => void navigator.clipboard?.writeText(note.path) },
       { kind: "item", label: "폴더 경로 복사", icon: "copy", onSelect: () => void navigator.clipboard?.writeText(work.cwd) },
@@ -583,7 +586,7 @@ function ProjectNotePage({
               hook="project-title"
               hint="두 번 눌러 이름 바꾸기"
               onDoubleClick={() => setRenaming(true)}
-              editor={renaming ? <EditableText className="note-title-edit" label="프로젝트 이름" value={work.title} onSave={(title) => void api.updateWork(workId, { title }).catch(onError)} onDone={() => setRenaming(false)} /> : undefined}
+              editor={renaming ? <EditableText className="note-title-edit" label="프로젝트 이름" value={work.title} empty={{ hint: AUTO_NAME_HINT }} onSave={(title) => void api.updateWork(workId, { title }).catch(onError)} onDone={() => setRenaming(false)} /> : undefined}
               tools={
                 <>
                   {next ? (
@@ -722,7 +725,7 @@ function ProjectNotePage({
                     <li key={event.id} className={`pn-event kind-${event.kind}${seenBefore && event.at > seenBefore ? " fresh" : ""}`}>
                       <button type="button" className="pn-event-main" onClick={() => openEvent(event)}>
                         <time className="pn-event-time" dateTime={new Date(event.at).toISOString()} title={new Date(event.at).toLocaleString("ko-KR")}>{eventWhen(event.at)}</time>
-                        <span className={`pn-event-by by-${event.by ?? "none"}`}>{event.by === "claude" || event.by === "codex" ? <EngineMark provider={event.by} size={14} /> : null}{BY_LABEL[event.by ?? ""] ?? ""}</span>
+                        <span className={`pn-event-by by-${event.by ?? "none"}`}>{event.by === "claude" || event.by === "codex" || event.by === "gemini" ? <EngineMark provider={event.by} size={14} /> : null}{BY_LABEL[event.by ?? ""] ?? ""}</span>
                         <span className="pn-event-text">{event.text}</span>
                       </button>
                       {!note.problem && event.kind !== "decision" && event.kind !== "question" && event.kind !== "stage" && event.kind !== "worktree" ? (

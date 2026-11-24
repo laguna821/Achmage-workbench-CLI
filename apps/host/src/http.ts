@@ -620,7 +620,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
             mode: url.searchParams.get("mode") === "filesOnly" ? "filesOnly" : "all",
             properties: rawProperties, workId: url.searchParams.get("workId"),
             archived: url.searchParams.get("archived") === "1",
-            provider: provider === "claude" || provider === "codex" ? provider : null,
+            provider: provider === "claude" || provider === "codex" || provider === "gemini" ? provider : null,
             folderId: url.searchParams.get("folderId"), scope: parseSearchScope(url.searchParams.get("scope")),
             offset: number("offset"), limit: number("limit"), per: number("per"),
             group: url.searchParams.get("group"), legacy: url.searchParams.get("legacy") !== "0",
@@ -878,6 +878,11 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         }
         if (method === "POST" && parts[2] === "compact") return sendJson(res, 202, await manager.compact(sessionId));
         if (method === "GET" && parts[2] === "commands") return sendJson(res, 200, { commands: await manager.commands(sessionId) });
+        // 작업 폴더 바꾸기 (the PC's folder chooser; never a paired phone's route): moved, or a new conversation there.
+        if (method === "POST" && parts[2] === "folder" && parts.length === 3) {
+          const result = manager.sessionFolder(sessionId, String((await readJson(req)).cwd ?? ""));
+          return sendJson(res, 200, { session: manager.shown(result.session), moved: result.moved });
+        }
         if (method === "POST" && parts[2] === "fork") return sendJson(res, 201, manager.shown(await manager.forkBefore(sessionId, String((await readJson(req)).itemId ?? ""))));
         if (method === "GET" && parts[2] === "worktree" && parts.length === 3) return sendJson(res, 200, await manager.worktreeChanges(sessionId));
         if (method === "POST" && parts[2] === "worktree" && parts[3] === "apply") return sendJson(res, 200, await manager.applyWorktree(sessionId));
@@ -885,7 +890,10 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         if (method === "POST" && parts[2] === "export") {
           const body = await readJson(req);
           const target = body.target === "path" ? "path" : body.target === "text" ? "text" : "work";
-          return sendJson(res, 200, manager.exportMarkdown(sessionId, { target, path: typeof body.path === "string" ? body.path : undefined, tools: body.tools === true }));
+          // From a paired phone (the device gateway names it): what lies outside its projects is not named.
+          const device = typeof req.headers["x-workbench-device"] === "string" ? options.devices?.registry.get(req.headers["x-workbench-device"]) : undefined;
+          const scope = typeof req.headers["x-workbench-device"] === "string" ? device?.workIds ?? [] : undefined;
+          return sendJson(res, 200, manager.exportMarkdown(sessionId, { target, path: typeof body.path === "string" ? body.path : undefined, tools: body.tools === true }, scope));
         }
         if (method === "POST" && parts[2] === "messages") {
           const body = await readJson(req);
@@ -980,6 +988,8 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         if (body.provider !== "claude" && body.provider !== "codex") throw new HttpError(400, "invalid_provider", "엔진을 골라 주세요.");
         return sendJson(res, 201, manager.shown(await manager.importSession({ provider: body.provider, nativeSessionId: String(body.nativeSessionId ?? "") })));
       }
+      // A file dropped from the PC's file manager as its path (file:// list): the PC's own window only.
+      if (method === "POST" && path === "/api/attachments/local") return sendJson(res, 201, manager.attachLocal(String((await readJson(req)).path ?? "")));
       if (method === "POST" && path === "/api/attachments") {
         const data = await readBody(req, 26 * 1024 * 1024);
         const name = decodeURIComponent(String(req.headers["x-file-name"] ?? "첨부"));
@@ -1133,7 +1143,9 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
             const options = { format: query.get("format") ?? undefined, name: query.get("name") ?? undefined, passwordSet: query.get("passwordSet") === "1" };
             return sendJson(res, 200, await manager.hangulConvert.prepareWordHangul(artifactId, options, await readBody(req, 200 * 1024 * 1024)));
           }
-          return sendJson(res, 200, await manager.hangulConvert.prepareWordHangul(artifactId, await readJson(req, 16_000)));
+          // A paired phone (the device gateway names it; no device can set this header itself) has its own share of pending conversions.
+          const device = typeof req.headers["x-workbench-device"] === "string" ? `device:${req.headers["x-workbench-device"]}` : undefined;
+          return sendJson(res, 200, await manager.hangulConvert.prepareWordHangul(artifactId, await readJson(req, 16_000), undefined, device));
         }
         if (method === "POST" && parts[2] === "word-to-hangul" && parts[3] === "commit" && parts.length === 4) return sendJson(res, 200, await manager.hangulConvert.commitWordHangul(artifactId, (await readJson(req, 16_000)).ticket));
         if (method === "POST" && parts[2] === "save-copy" && parts.length === 3) {
@@ -1388,7 +1400,22 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           return sendJson(res, 200, links.exportMarkdown(linkId, { target, path: typeof body.path === "string" ? body.path : undefined }));
         }
       }
-      if (method === "POST" && parts[0] === "providers" && (parts[1] === "claude" || parts[1] === "codex")) {
+      // 설정 › AI 엔진 › Gemini: the sign-in kind, the opt-in and the API key entry; 설치 / 로그인 in a terminal tab.
+      if (method === "POST" && path === "/api/providers/gemini/settings") {
+        if (!options.enginePrefs) throw new HttpError(404, "not_found", "이 게이트웨이에서는 바꿀 수 없습니다.");
+        const body = await readJson(req);
+        const patch: Record<string, unknown> = {};
+        // Subscription login only (the owner, 2026-11-21): the opt-in is the one setting; anything else is ignored.
+        if ("googleOptIn" in body) patch.googleOptIn = body.googleOptIn === true;
+        options.enginePrefs.setGemini(patch);
+        return sendJson(res, 200, await manager.geminiSettingsChanged());
+      }
+      if (method === "POST" && path === "/api/providers/gemini/terminal") {
+        const body = await readJson(req);
+        if (body.action !== "install" && body.action !== "login") throw new HttpError(400, "invalid_action", "설치 또는 로그인만 열 수 있습니다.");
+        return sendJson(res, 201, manager.geminiTerminal(body.action, typeof body.workId === "string" ? body.workId : null));
+      }
+      if (method === "POST" && parts[0] === "providers" && (parts[1] === "claude" || parts[1] === "codex" || parts[1] === "gemini")) {
         const provider = parts[1] as Provider;
         const action = parts.slice(2).join("/");
         if (action === "login") return sendJson(res, 200, await manager.login(provider));
@@ -1397,6 +1424,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           return sendJson(res, 200, await manager.loginCode(provider, String(body.code ?? "")));
         }
         if (action === "login/cancel") return sendJson(res, 200, await manager.cancelLogin(provider));
+        if (action === "logout") return sendJson(res, 200, await manager.logout(provider));
         if (action === "install") return sendJson(res, 202, manager.installEngine(provider));
       }
       if (method === "PUT" && path === "/api/prefs") {
@@ -1436,8 +1464,8 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       }
       if (method === "POST" && path === "/api/providers/refresh") {
         const provider = url.searchParams.get("provider");
-        if (provider && provider !== "claude" && provider !== "codex") throw new HttpError(400, "invalid_provider", "지원하지 않는 엔진입니다.");
-        return sendJson(res, 200, await manager.refreshProviders(provider === "codex" || provider === "claude" ? provider : undefined));
+        if (provider && provider !== "claude" && provider !== "codex" && provider !== "gemini") throw new HttpError(400, "invalid_provider", "지원하지 않는 엔진입니다.");
+        return sendJson(res, 200, await manager.refreshProviders(provider === "codex" || provider === "claude" || provider === "gemini" ? provider : undefined));
       }
       throw new HttpError(404, "not_found", `${method} ${path}`);
     } catch (error) {

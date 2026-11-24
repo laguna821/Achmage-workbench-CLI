@@ -531,6 +531,15 @@ export class CodexAdapter implements ProviderAdapter {
     this.scheduleIdleStop(60_000);
   }
 
+  /** 로그아웃: the app-server's own account logout; the status then says signed out. */
+  async logout() {
+    await this.cancelLogin().catch(() => undefined);
+    await this.ensureRunning();
+    await this.rpc!.request("account/logout", undefined);
+    this.publish({ loggedIn: false, loginMethod: null, account: null, plan: null, models: [], usage: [], login: null });
+    this.scheduleIdleStop(60_000);
+  }
+
   /** The browser came back: logged in (the status then names the account) or not. */
   private loginCompleted(params: AccountLoginCompletedNotification) {
     const pending = this.pendingLogin;

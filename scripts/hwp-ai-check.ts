@@ -165,8 +165,10 @@ const outerHandle = await page.waitForSelector("iframe.office-frame", { timeout:
 let outer = (await outerHandle.contentFrame())!;
 /** The editor's frame now: an executor turn's end reloads the view (office:execution-refresh). */
 const ofr = async (): Promise<Frame> => {
-  if (!outer.isDetached()) return outer;
-  // The editor on screen (another tab's editor may stay mounted, hidden).
+  // The editor on screen (another tab's editor may stay mounted, hidden). A frame taken while another tab was shown
+  // (the Hangul page reopens after a turn, and the made document's tab may already be in front then) is left when its
+  // tab is no longer the one on screen.
+  if (!outer.isDetached() && await outer.frameElement().then((element) => element.isVisible()).catch(() => false)) return outer;
   const handle = await page.waitForSelector(".document-view iframe.office-frame:visible", { timeout: 30_000 });
   outer = (await handle.contentFrame())!;
   await outer.waitForSelector('.hwp-app[data-phase="ready"]', { timeout: 90_000 }).catch(() => {});

@@ -471,7 +471,7 @@ export class Store {
     ).all(at, id, work, limit);
     sources.push(source(sessions, (row) => ({ at: Number(row.at), id: String(row.key) }), (row) => ({
       id: String(row.key), kind: row.what === "archived" ? "session-archived" : "session-created", at: Number(row.at), workId: String(row.work_id),
-      sessionId: String(row.session_id), artifactId: null, itemId: null, provider: row.provider === "claude" || row.provider === "codex" ? row.provider : null,
+      sessionId: String(row.session_id), artifactId: null, itemId: null, provider: row.provider === "claude" || row.provider === "codex" || row.provider === "gemini" ? row.provider : null,
     })));
     // Documents taken out of their project, and the last rename of each (the record keeps only the last).
     const documents = this.db.prepare(

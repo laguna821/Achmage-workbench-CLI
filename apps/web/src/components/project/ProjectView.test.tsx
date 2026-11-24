@@ -57,7 +57,7 @@ const pageOf = (patch: Partial<ProjectPage["note"]> = {}, rows = ROWS): ProjectP
 
 const session = (id: string, patch: Partial<Session>): Session => ({ id, workId: "w", provider: "codex", purpose: id, status: "idle", updatedAt: 1, archivedAt: null, lastError: null, unread: false, preview: null, previewAt: null, seenAt: null, activity: null, queued: [], ...patch }) as unknown as Session;
 
-function setup(page = pageOf(), onLeaveGuard?: (guard: (() => Promise<void>) | null) => void, options: { empty?: boolean } = {}) {
+function setup(page = pageOf(), onLeaveGuard?: (guard: (() => Promise<void>) | null) => void, options: { empty?: boolean; remote?: boolean } = {}) {
   let current = page;
   const write = (summary: string): ProjectWrite => ({ token: "tok", created: false, summary, page: current });
   // Another project the same place can go on to show.
@@ -90,6 +90,8 @@ function setup(page = pageOf(), onLeaveGuard?: (guard: (() => Promise<void>) | n
     updateWork: vi.fn(async () => ({})),
   } as Record<string, ReturnType<typeof vi.fn>> & { forDocument?: unknown };
   api.forDocument = () => api;
+  // A phone joined to the PC (0.5.6 round 2).
+  if (options.remote) (api as Record<string, unknown>).isRemote = true;
   const works: Record<string, Work> = {
     w: { id: "w", title: "3주차 강의 슬라이드", folderId: null, cwd: "/tmp/lecture", activeSessionId: null, archivedAt: null, tags: [] } as unknown as Work,
     x: { id: "x", title: "다른 프로젝트", folderId: null, cwd: "/tmp/other", activeSessionId: null, archivedAt: null, tags: [] } as unknown as Work,
@@ -242,6 +244,21 @@ describe("reading the project note", () => {
     const items = openMenu.mock.calls.at(-1)![0].items as { label?: string; onSelect?: () => void }[];
     act(() => items.find((item) => item.label === "이름 바꾸기")!.onSelect!());
     expect(screen.getByRole("textbox", { name: "프로젝트 이름" })).toBeTruthy();
+  });
+
+  it("on a phone joined to the PC: the project's own note is written, what changes every project (속성 템플릿, 단계 편집) is not offered", async () => {
+    const labels = async (remote: boolean) => {
+      cleanup();
+      const { openMenu } = setup(pageOf(), undefined, { remote });
+      await screen.findByRole("heading", { level: 1, name: "3주차 강의 슬라이드" });
+      fireEvent.click(screen.getByRole("button", { name: "프로젝트 메뉴" }));
+      return (openMenu.mock.calls.at(-1)![0].items as { label?: string }[]).map((item) => item.label);
+    };
+    expect(await labels(false)).toEqual(expect.arrayContaining(["속성 템플릿…", "단계 편집…", "이름 바꾸기"]));
+    const phone = await labels(true);
+    expect(phone).toContain("이름 바꾸기");
+    expect(phone).not.toContain("속성 템플릿…");
+    expect(phone).not.toContain("단계 편집…");
   });
 
   it("opens the note's raw text from the block's head (원문), the whole file as it is", async () => {

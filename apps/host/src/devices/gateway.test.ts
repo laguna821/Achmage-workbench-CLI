@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { defaultWebSocketFactory } from "@getpaseo/client/internal/daemon-client-websocket-transport";
 import type {
   DeviceApproval, DeviceGrant, EventCursor, PairingCredentialResult, PairingRequestTicket,
@@ -15,6 +15,7 @@ import { EventBus } from "../bus.ts";
 import { SessionManager } from "../sessions.ts";
 import { createHttpServer } from "../http.ts";
 import { DeviceService } from "./service.ts";
+import { newWorkRequest } from "./scope.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -42,7 +43,7 @@ async function bounded<T>(promise: Promise<T>, message: string, timeout = 5000):
 /** Uses the real SessionManager + SQLite fixture from automation-api.test.ts.
  * Only loopback ports are opened. There is no provider or external service call.
  */
-async function fixture() {
+async function fixture(serverOptions: Partial<Parameters<typeof createHttpServer>[2]> = {}) {
   const directory = mkdtempSync(join(tmpdir(), "workbench-device-gateway-"));
   const store = new Store(join(directory, "state.sqlite"));
   const bus = new EventBus(8);
@@ -53,7 +54,7 @@ async function fixture() {
   const ownerToken = "test-local-owner-" + randomUUID();
   let origin: string | null = null;
   const devices = new DeviceService({ dataDir: directory, manager, bus, localToken: ownerToken, localOrigin: () => origin, webDir: null });
-  const server = createHttpServer(manager, bus, { token: ownerToken, webDir: null, devices });
+  const server = createHttpServer(manager, bus, { token: ownerToken, webDir: null, devices, ...serverOptions });
   const clients: ReturnType<typeof openPeer>[] = [];
 
   cleanup.push(async () => {
@@ -125,7 +126,7 @@ async function fixture() {
     const authentication = await client.peer.connect(claim.credential);
     return { ...client, claim, authentication };
   }
-  return { manager, bus, devices, local, origin, ownerToken, ownWork, foreignWork, ownSession, foreignSession, offer, peer, approve, enroll };
+  return { worksDir: join(directory, "works"), manager, bus, devices, local, origin, ownerToken, ownWork, foreignWork, ownSession, foreignSession, offer, peer, approve, enroll };
 }
 
 function openPeer(offer: RemoteOffer) {
@@ -482,3 +483,434 @@ test("L3: connections that have not signed in are capped; a tailnet peer filling
   for (const socket of Array.from({ length: DEVICE_SOCKET_LIMIT }, fake)) await gateway.attach(socket);
   expect(phone.closed).toBeNull();
 });
+
+// 0.5.6 (phone over Tailscale): 새 프로젝트 and 새 문서 from the phone.
+const post = (peer: RemotePeer, path: string, body: unknown, type = "application/json") =>
+  peer.fetch(path, { method: "POST", headers: { "content-type": type }, body: JSON.stringify(body) });
+
+test("새 프로젝트 from a paired phone: a name, made in the PC's projects folder, joins that phone's projects only; a PC folder, a hidden list folder, a read-only phone and an unpaired client are refused", async () => {
+  const f = await fixture();
+  // Unpaired: a connection holding no credential asks to make a project.
+  const stranger = f.peer(await f.offer());
+  await stranger.peer.connect();
+  const before = f.manager.snapshot().works.length;
+  await expect(stranger.peer.rpc("request", { request: { method: "POST", path: "/api/works", headers: { "content-type": "application/json" }, bytes: 0 } })).rejects.toMatchObject({ status: 401 });
+  await expect(stranger.peer.fetch("/api/works", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).rejects.toMatchObject({ status: 401 });
+
+  const reader = await f.enroll(f.ownWork.id, ["read"]);
+  const readOnly = await post(reader.peer, "/api/works", { title: "읽기 기기", folderId: null, cwd: null });
+  expect(readOnly.status).toBe(403); await readOnly.arrayBuffer();
+
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  const watch = observe(phone.peer, phone.authentication.cursor);
+  await until(() => watch.statuses.includes(true), "the phone did not subscribe");
+  const elsewhere = await post(phone.peer, "/api/works", { title: "PC 폴더", folderId: null, cwd: "/etc" });
+  expect(elsewhere.status).toBe(403); expect((await elsewhere.json() as { code: string }).code).toBe("remote_project_folder");
+  const hiddenFolder = f.manager.createFolder("다른 분류", null);
+  const hidden = await post(phone.peer, "/api/works", { title: "숨은 분류", folderId: hiddenFolder.id, cwd: null });
+  expect(hidden.status).toBe(403); await hidden.arrayBuffer();
+  // A body that does not say it is JSON is refused before any route reads it.
+  const smuggled = await post(phone.peer, "/api/works", { title: "몰래", folderId: null, cwd: "/etc" }, "text/plain");
+  expect(smuggled.status).toBe(415); await smuggled.arrayBuffer();
+  expect(f.manager.snapshot().works.length).toBe(before);
+
+  const made = await post(phone.peer, "/api/works", { title: "휴대폰 프로젝트", folderId: null, cwd: null });
+  expect(made.status).toBe(201);
+  const work = await made.json() as import("@workbench/contracts").Work;
+  expect(work.title).toBe("휴대폰 프로젝트");
+  expect(work.cwd.startsWith(f.worksDir + "/")).toBe(true);
+  // It joined this phone's grant (and nobody else's); the phone reloads its view and sees it at once.
+  const devices = f.devices.registry.list();
+  expect(devices.find(entry => entry.deviceId === phone.claim.grant.deviceId)?.workIds).toEqual([f.ownWork.id, work.id]);
+  expect(devices.find(entry => entry.deviceId === reader.claim.grant.deviceId)?.workIds).toEqual([f.ownWork.id]);
+  await until(() => watch.resyncs() > 0, "the phone was not told to reload its view");
+  const snapshot = await json<Snapshot>(phone.peer, "/api/snapshot");
+  expect(snapshot.works.map(entry => entry.id).sort()).toEqual([f.ownWork.id, work.id].sort());
+  // Its row waits for its name (as on the PC): the title is the phone's to change.
+  const named = await phone.peer.fetch(`/api/works/${work.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: "휴대폰에서 지은 이름" }) });
+  expect(named.status).toBe(200); await named.arrayBuffer();
+  expect(f.manager.snapshot().works.find(entry => entry.id === work.id)?.title).toBe("휴대폰에서 지은 이름");
+  // Round 2: 보관/고정/태그/옮기기 are the phone's too (see "round 2 · a project's …"); other fields and wrong shapes are not.
+  for (const patch of [{ activeSessionId: null }, { title: 5 }, { pinned: "yes" }]) {
+    const other = await phone.peer.fetch(`/api/works/${work.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) });
+    expect(other.status).toBe(403); await other.arrayBuffer();
+  }
+  const foreignName = await phone.peer.fetch(`/api/works/${f.foreignWork.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: "남의 프로젝트" }) });
+  expect(foreignName.status).toBe(403); await foreignName.arrayBuffer();
+  // The live connection stays (a project added is not a narrowed grant) and a conversation can start there.
+  const session = await post(phone.peer, `/api/works/${work.id}/sessions`, { provider: "codex" });
+  expect(session.status).toBe(201); await session.arrayBuffer();
+  expect(phone.statuses.at(-1)).toMatchObject({ status: "connected", authenticated: true });
+  watch.release();
+}, 30_000);
+
+test("새 문서 from a paired phone: the PC's kinds made in its own project; another project, another project's workspace, a path outside the project and an unpaired client are refused", async () => {
+  const f = await fixture();
+  const stranger = f.peer(await f.offer());
+  await stranger.peer.connect();
+  await expect(stranger.peer.rpc("request", { request: { method: "POST", path: `/api/works/${f.ownWork.id}/office-documents`, headers: { "content-type": "application/json" }, bytes: 0 } })).rejects.toMatchObject({ status: 401 });
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  for (const format of ["markdown", "html"] as const) {
+    const made = await post(phone.peer, `/api/works/${f.ownWork.id}/office-documents`, { format, name: "휴대폰 메모" });
+    expect(made.status).toBe(201);
+    const artifact = await made.json() as import("@workbench/contracts").Artifact;
+    expect(artifact.workId).toBe(f.ownWork.id);
+  }
+  const design = await post(phone.peer, `/api/works/${f.ownWork.id}/designs`, { name: "휴대폰 카드", preset: "square" });
+  expect(design.status).toBe(201); await design.arrayBuffer();
+  const foreign = await post(phone.peer, `/api/works/${f.foreignWork.id}/office-documents`, { format: "markdown" });
+  expect(foreign.status).toBe(403); await foreign.arrayBuffer();
+  const foreignSpace = await post(phone.peer, `/api/works/${f.ownWork.id}/office-documents`, { format: "markdown", workspaceId: f.foreignWork.defaultWorkspaceId });
+  expect(foreignSpace.status).toBeGreaterThanOrEqual(400); await foreignSpace.arrayBuffer();
+  for (const path of ["/etc/hostname", "../다른 프로젝트/비밀.md", "C:\\Users\\비밀.md"]) {
+    const outside = await post(phone.peer, `/api/works/${f.ownWork.id}/artifacts`, { path });
+    expect(outside.status).toBe(403); await outside.arrayBuffer();
+  }
+  expect(f.manager.snapshot().artifacts.filter(entry => entry.workId === f.foreignWork.id)).toEqual([]);
+}, 30_000);
+
+test("a phone reads its own project's page and its documents' page pictures; another project's and an unpaired client are refused", async () => {
+  const f = await fixture();
+  const stranger = f.peer(await f.offer());
+  await stranger.peer.connect();
+  await expect(stranger.peer.rpc("request", { request: { method: "GET", path: `/api/projects/${f.ownWork.id}`, headers: {}, bytes: 0 } })).rejects.toMatchObject({ status: 401 });
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  // Admitted (this fixture's gateway has no project notes service: what it answers is not a refusal).
+  const own = await phone.peer.fetch(`/api/projects/${f.ownWork.id}`);
+  expect([401, 403]).not.toContain(own.status); await own.arrayBuffer();
+  const events = await phone.peer.fetch(`/api/projects/${f.ownWork.id}/events`);
+  expect([401, 403]).not.toContain(events.status); await events.arrayBuffer();
+  const foreign = await phone.peer.fetch(`/api/projects/${f.foreignWork.id}`);
+  expect(foreign.status).toBe(403); await foreign.arrayBuffer();
+  // Round 2: the own project's note writes are admitted (see "round 2 · project page"); another project's are not.
+  const write = await phone.peer.fetch(`/api/projects/${f.foreignWork.id}/property`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: "단계", values: ["진행"] }) });
+  expect(write.status).toBe(403); await write.arrayBuffer();
+  // Word page pictures: the route is the device's to ask (drawing them is the PC's business: any answer but a refusal).
+  const made = await post(phone.peer, `/api/works/${f.ownWork.id}/office-documents`, { format: "docx", name: "휴대폰 워드" });
+  const docx = await made.json() as import("@workbench/contracts").Artifact;
+  const pictures = await phone.peer.fetch(`/api/artifacts/${docx.id}/office-pages?revision=${docx.revision}`);
+  expect([401, 403]).not.toContain(pictures.status); await pictures.arrayBuffer();
+  const foreignDoc = f.manager.documents.track(f.foreignWork.id, f.foreignWork.cwd, join(f.foreignWork.cwd, "비공개.md"), "user", null, "검사");
+  if (foreignDoc) {
+    const hidden = await phone.peer.fetch(`/api/artifacts/${foreignDoc.artifact.id}/office-pages?revision=1`);
+    expect(hidden.status).toBe(403); await hidden.arrayBuffer();
+  }
+}, 30_000);
+
+// Security review of 0.5.6 (4dda47f9..0d4624d9): each finding with its refusal.
+test("review 1+4: 작업 폴더에서 열기 from a phone takes only a path string inside the project — an array, an outside path and a link leading out are refused", async () => {
+  const f = await fixture();
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  const outside = join(f.foreignWork.cwd, "비공개.md");
+  mkdirSync(f.foreignWork.cwd, { recursive: true }); mkdirSync(f.ownWork.cwd, { recursive: true });
+  writeFileSync(outside, "# 다른 프로젝트의 글\n");
+  for (const path of [[outside], ["../" + f.foreignWork.cwd.split("/").pop() + "/비공개.md"], { toString: outside }, 7]) {
+    const refused = await post(phone.peer, `/api/works/${f.ownWork.id}/artifacts`, { path });
+    expect(refused.status).toBe(403); await refused.arrayBuffer();
+  }
+  symlinkSync(outside, join(f.ownWork.cwd, "바로가기.md"));
+  const viaLink = await post(phone.peer, `/api/works/${f.ownWork.id}/artifacts`, { path: "바로가기.md" });
+  expect(viaLink.status).toBe(403); await viaLink.arrayBuffer();
+  expect(f.manager.snapshot().artifacts.some(entry => entry.path === outside || entry.name === "바로가기.md")).toBe(false);
+  writeFileSync(join(f.ownWork.cwd, "안의 글.md"), "# 안\n");
+  const inside = await post(phone.peer, `/api/works/${f.ownWork.id}/artifacts`, { path: "안의 글.md" });
+  expect(inside.status).toBe(200); await inside.arrayBuffer();
+}, 30_000);
+
+test("review 2: a phone at its 256 projects is refused before anything is made; and at most 5 new projects a minute", async () => {
+  const f = await fixture();
+  const full = { ...f.devices.registry.list()[0], permissions: ["read", "send"], workIds: Array.from({ length: 256 }, (_, index) => "w" + index) } as unknown as import("@workbench/contracts").DeviceGrant;
+  expect(() => newWorkRequest(f.manager, full, { title: "넘침" })).toThrow(expect.objectContaining({ status: 409 }));
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  const before = f.manager.snapshot().works.length;
+  const statuses: number[] = [];
+  for (let at = 0; at < 7; at++) { const made = await post(phone.peer, "/api/works", { title: "연속 " + at }); statuses.push(made.status); await made.arrayBuffer(); }
+  expect(statuses).toEqual([201, 201, 201, 201, 201, 429, 429]);
+  expect(f.manager.snapshot().works.length).toBe(before + 5);
+}, 30_000);
+
+test("review 3: a new project's name from a phone is cut at 80 characters", async () => {
+  const f = await fixture();
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  const made = await post(phone.peer, "/api/works", { title: "가".repeat(5000) });
+  expect(made.status).toBe(201);
+  const work = await made.json() as import("@workbench/contracts").Work;
+  expect(Array.from(f.manager.snapshot().works.find(entry => entry.id === work.id)!.title).length).toBeLessThanOrEqual(80);
+}, 30_000);
+
+test("review 5: a project's page read from a phone carries no property names of other projects (knownKeys); the PC's still does", async () => {
+  const page = (workId: string) => ({ workId, knownKeys: [{ key: "다른 프로젝트의 비밀 속성", type: "text" }] });
+  const f = await fixture({ projects: async (_req, res, url) => {
+    const id = url.pathname.split("/")[3]!;
+    res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(page(id))); return true;
+  } });
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  const seen = await json<Record<string, unknown>>(phone.peer, `/api/projects/${f.ownWork.id}`);
+  expect(seen.workId).toBe(f.ownWork.id);
+  expect(JSON.stringify(seen)).not.toContain("다른 프로젝트의 비밀 속성");
+  expect((await f.local<Record<string, unknown>>(`/api/projects/${f.ownWork.id}`)).knownKeys).toEqual(page(f.ownWork.id).knownKeys);
+}, 30_000);
+
+test("review 6: a phone does not write a document's text (the phone reads documents only)", async () => {
+  const f = await fixture();
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  const made = await post(phone.peer, `/api/works/${f.ownWork.id}/office-documents`, { format: "markdown", name: "읽기만" });
+  const doc = await made.json() as import("@workbench/contracts").Artifact;
+  const write = await phone.peer.fetch(`/api/artifacts/${doc.id}/text`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ expectedRevision: doc.revision, text: "휴대폰에서 고친 글" }) });
+  expect(write.status).toBe(403); await write.arrayBuffer();
+  expect(f.manager.documents.get(doc.id)!.revision).toBe(doc.revision);
+}, 30_000);
+
+// ── Round 2 (owner, 2026-11-20): every phone action works inside its approved projects, or is not offered. ──
+async function strangerRefused(f: Awaited<ReturnType<typeof fixture>>, method: string, path: string) {
+  const stranger = f.peer(await f.offer());
+  await stranger.peer.connect();
+  await expect(stranger.peer.rpc("request", { request: { method, path, headers: { "content-type": "application/json" }, bytes: 0 } })).rejects.toMatchObject({ status: 401 });
+}
+const patch = (peer: RemotePeer, path: string, body: unknown) => peer.fetch(path, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+const status = async (response: Response) => { const value = response.status; await response.arrayBuffer(); return value; };
+
+test("round 2 · list folders: a phone makes one (no parent or one it sees), names its own; another's folder, a hidden parent, other fields and an unpaired client are refused", async () => {
+  const f = await fixture();
+  await strangerRefused(f, "POST", "/api/folders");
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  const hidden = f.manager.createFolder("PC의 분류", null);
+  expect(await status(await post(phone.peer, "/api/folders", { name: "숨은 곳 아래", parentId: hidden.id }))).toBe(403);
+  expect(await status(await post(phone.peer, "/api/folders", { name: "색", parentId: null, color: "red" }))).toBe(403);
+  const made = await post(phone.peer, "/api/folders", { name: "휴대폰 분류", parentId: null });
+  expect(made.status).toBe(201);
+  const folder = await made.json() as import("@workbench/contracts").Folder;
+  expect(f.devices.registry.list().find(entry => entry.deviceId === phone.claim.grant.deviceId)?.folderIds).toEqual([folder.id]);
+  expect((await json<Snapshot>(phone.peer, "/api/snapshot")).folders.map(entry => entry.id)).toContain(folder.id);
+  expect(await status(await post(phone.peer, "/api/folders", { name: "안쪽", parentId: folder.id }))).toBe(201);
+  expect(await status(await patch(phone.peer, `/api/folders/${folder.id}`, { name: "휴대폰에서 지은 분류" }))).toBe(200);
+  expect(f.manager.snapshot().folders.find(entry => entry.id === folder.id)?.name).toBe("휴대폰에서 지은 분류");
+  expect(await status(await patch(phone.peer, `/api/folders/${folder.id}`, { name: "x", archived: true }))).toBe(403);
+  expect(await status(await patch(phone.peer, `/api/folders/${hidden.id}`, { name: "남의 분류" }))).toBe(403);
+  expect(f.manager.snapshot().folders.find(entry => entry.id === hidden.id)?.name).toBe("PC의 분류");
+}, 30_000);
+
+test("round 2 · 프로젝트 폴더 안에 새 폴더: inside the phone's project only; another project, .., a link leading out and an unpaired client are refused", async () => {
+  const f = await fixture();
+  const own = f.ownWork.defaultWorkspaceId!, foreign = f.foreignWork.defaultWorkspaceId!;
+  await strangerRefused(f, "POST", `/api/workspaces/${own}/directories`);
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  const root = f.manager.workspaces.get(own).cwd;
+  mkdirSync(root, { recursive: true }); mkdirSync(f.manager.workspaces.get(foreign).cwd, { recursive: true });
+  expect(await status(await post(phone.peer, `/api/workspaces/${own}/directories`, { path: "휴대폰 자료" }))).toBe(201);
+  expect(await status(await post(phone.peer, `/api/workspaces/${foreign}/directories`, { path: "남의 자료" }))).toBe(403);
+  expect(await status(await post(phone.peer, `/api/workspaces/${own}/directories`, { path: "../밖" }))).toBe(400);
+  symlinkSync(f.manager.workspaces.get(foreign).cwd, join(root, "바깥 연결"));
+  expect(await status(await post(phone.peer, `/api/workspaces/${own}/directories`, { path: "바깥 연결/새 폴더" }))).toBe(403);
+  expect(await status(await post(phone.peer, `/api/workspaces/${own}/directories`, { path: ["x"] }))).toBe(403);
+}, 30_000);
+
+test("round 2 · project page: a phone writes its own project's note and reads the shared choices; the summaries are its own; another project's note, what changes every project and an unpaired client are refused", async () => {
+  const calls: string[] = [], listed: { workId: string }[] = [];
+  const f = await fixture({ projects: async (req, res, url) => {
+    calls.push(`${req.method} ${url.pathname}`);
+    const answer = url.pathname === "/api/projects/" ? listed : { ok: true };
+    res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(answer)); return true;
+  } });
+  listed.push({ workId: f.ownWork.id }, { workId: f.foreignWork.id });
+  await strangerRefused(f, "PUT", `/api/projects/${f.ownWork.id}/property`);
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  const put = (path: string, body: unknown) => phone.peer.fetch(path, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const own = `/api/projects/${f.ownWork.id}`;
+  expect(await status(await put(`${own}/property`, { key: "과목", values: ["질적 연구"] }))).toBe(200);
+  expect(await status(await put(`${own}/stage`, { stage: "진행" }))).toBe(200);
+  expect(await status(await post(phone.peer, `${own}/entries`, { section: "decision", text: "과제 마감은 그대로" }))).toBe(200);
+  expect(await status(await put(`${own}/entries/3`, { done: true }))).toBe(200);
+  expect(await status(await post(phone.peer, `${own}/revert`, {}))).toBe(200);
+  expect(await status(await phone.peer.fetch("/api/projects/stages"))).toBe(200);
+  expect(await status(await phone.peer.fetch(`/api/projects/changes?sessionId=${f.ownSession.id}`))).toBe(200);
+  expect(await status(await phone.peer.fetch(`/api/projects/changes?sessionId=${f.foreignSession.id}`))).toBe(403);
+  const summaries = await json<unknown[]>(phone.peer, "/api/projects/");
+  expect(summaries).toEqual([{ workId: f.ownWork.id }]);
+  expect(await status(await put(`/api/projects/${f.foreignWork.id}/property`, { key: "과목", values: ["남의"] }))).toBe(403);
+  for (const [method, path] of [["PUT", "/api/projects/stages"], ["PUT", "/api/projects/template"], ["PUT", "/api/projects/types"], ["POST", "/api/projects/bases/export"], ["PUT", "/api/projects/folder-templates/x"]] as const) {
+    expect(await status(await phone.peer.fetch(path, { method, headers: { "content-type": "application/json" }, body: "{}" }))).toBe(403);
+  }
+  expect(calls.some(call => call.includes(f.foreignWork.id) || call.endsWith("/stages") && call.startsWith("PUT"))).toBe(false);
+}, 30_000);
+
+test("round 2 · a project's 이름 / 보관 / 고정 / 태그 / 폴더로 옮기기 from a phone; a folder it does not see, other fields, another project and an unpaired client are refused", async () => {
+  const f = await fixture();
+  await strangerRefused(f, "PATCH", `/api/works/${f.ownWork.id}`);
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  const path = `/api/works/${f.ownWork.id}`;
+  const work = () => f.manager.snapshot().works.find(entry => entry.id === f.ownWork.id)!;
+  expect(await status(await patch(phone.peer, path, { pinned: true }))).toBe(200);
+  expect(await status(await patch(phone.peer, path, { tags: ["강의", "3주차"] }))).toBe(200);
+  const mine = await (await post(phone.peer, "/api/folders", { name: "휴대폰 분류", parentId: null })).json() as import("@workbench/contracts").Folder;
+  expect(await status(await patch(phone.peer, path, { folderId: mine.id }))).toBe(200);
+  expect(work()).toMatchObject({ pinned: true, tags: ["강의", "3주차"], folderId: mine.id });
+  const hidden = f.manager.createFolder("PC만 보는 분류", null);
+  expect(await status(await patch(phone.peer, path, { folderId: hidden.id }))).toBe(403);
+  expect(await status(await patch(phone.peer, path, { activeSessionId: null }))).toBe(403);
+  expect(await status(await patch(phone.peer, path, { tags: "강의" }))).toBe(403);
+  expect(await status(await patch(phone.peer, `/api/works/${f.foreignWork.id}`, { pinned: true }))).toBe(403);
+  expect(await status(await patch(phone.peer, path, { archived: true }))).toBe(200);
+  expect(work().archivedAt).not.toBeNull();
+  expect(await status(await patch(phone.peer, path, { archived: false }))).toBe(200);
+  expect(await status(await phone.peer.fetch(path, { method: "DELETE" }))).toBe(403);
+  expect(work().folderId).toBe(mine.id);
+}, 30_000);
+
+test("round 2 · a document's 이름 바꾸기 and 목록에서 빼기 from a phone (the file stays); 휴지통, another project's document and an unpaired client are refused", async () => {
+  const f = await fixture();
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  const made = await (await post(phone.peer, `/api/works/${f.ownWork.id}/office-documents`, { format: "markdown", name: "휴대폰 메모" })).json() as import("@workbench/contracts").Artifact;
+  await strangerRefused(f, "POST", `/api/artifacts/${made.id}/rename`);
+  const plan = await json<{ actions: string[] }>(phone.peer, `/api/artifacts/${made.id}/removal`);
+  expect(plan.actions).not.toContain("trash");
+  expect(await status(await post(phone.peer, `/api/artifacts/${made.id}/rename`, { name: "고친 메모" }))).toBe(200);
+  expect(f.manager.documents.get(made.id)!.name).toBe("고친 메모.md");
+  expect(await status(await post(phone.peer, `/api/artifacts/${made.id}/remove`, { action: "trash" }))).toBe(403);
+  const foreign = f.manager.documents.track(f.foreignWork.id, f.foreignWork.cwd, join(f.foreignWork.cwd, "남의.md"), "user", null, "검사");
+  if (foreign) expect(await status(await post(phone.peer, `/api/artifacts/${foreign.artifact.id}/rename`, { name: "x" }))).toBe(403);
+  const path = f.manager.documents.get(made.id)!.path;
+  expect(await status(await post(phone.peer, `/api/artifacts/${made.id}/remove`, { action: "unlisted" }))).toBe(200);
+  expect(f.manager.snapshot().artifacts.some(entry => entry.id === made.id)).toBe(false);
+  expect(existsSync(path)).toBe(true);
+}, 30_000);
+
+test("round 2 · 불러오기 from a phone: a file into its own project (at most 25 MB), then Markdown 변환 beside it; another project, another project's folder, a file outside and an unpaired client are refused", async () => {
+  const f = await fixture();
+  await strangerRefused(f, "POST", `/api/works/${f.ownWork.id}/import-upload`);
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  mkdirSync(f.manager.workspaces.get(f.ownWork.defaultWorkspaceId!).cwd, { recursive: true });
+  const upload = (workId: string, bytes: Uint8Array, headers: Record<string, string> = {}) => phone.peer.fetch(`/api/works/${workId}/import-upload`, { method: "POST", headers: { "content-type": "application/octet-stream", "x-file-name": encodeURIComponent("휴대폰 자료.pdf"), ...headers }, body: new Blob([bytes as Uint8Array<ArrayBuffer>]) });
+  const pdf = new TextEncoder().encode("%PDF-1.4\n%%EOF\n");
+  const done = await upload(f.ownWork.id, pdf);
+  expect(done.status).toBe(200);
+  const files = (await done.json() as { files: { path: string }[] }).files;
+  expect(files[0]!.path.startsWith(f.manager.workspaces.get(f.ownWork.defaultWorkspaceId!).cwd)).toBe(true);
+  expect(await status(await upload(f.foreignWork.id, pdf))).toBe(403);
+  // A folder named by the device is not passed on: the file lands in the project's own folder, whatever was asked.
+  const asked = await upload(f.ownWork.id, pdf, { "x-workspace-id": f.foreignWork.defaultWorkspaceId! });
+  expect(((await asked.json()) as { files: { path: string }[] }).files[0]!.path.startsWith(f.manager.workspaces.get(f.ownWork.defaultWorkspaceId!).cwd)).toBe(true);
+  expect(await status(await upload(f.ownWork.id, new Uint8Array(25 * 1024 * 1024 + 1)))).toBe(413);
+  // 변환 of a file outside the project (an absolute path elsewhere) is refused before the host reads it.
+  mkdirSync(f.foreignWork.cwd, { recursive: true }); writeFileSync(join(f.foreignWork.cwd, "남의.pdf"), pdf);
+  expect(await status(await post(phone.peer, `/api/works/${f.ownWork.id}/convert-to-markdown`, { path: join(f.foreignWork.cwd, "남의.pdf"), preset: "default", pages: "", images: false }))).toBe(403);
+  expect([401, 403]).not.toContain(await status(await post(phone.peer, `/api/works/${f.ownWork.id}/convert-to-markdown`, { path: files[0]!.path, preset: "default", pages: "", images: false })));
+}, 60_000);
+
+test("round 2 · 한글로 내보내기 / Markdown 변환 / 변환해서 열기 from a phone (new files in its project); another project's document, the editor's raw bytes and an unpaired client are refused", async () => {
+  const f = await fixture();
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  const made = await (await post(phone.peer, `/api/works/${f.ownWork.id}/office-documents`, { format: "markdown", name: "내보낼 글" })).json() as import("@workbench/contracts").Artifact;
+  await strangerRefused(f, "POST", `/api/artifacts/${made.id}/export-hangul`);
+  expect([401, 403]).not.toContain(await status(await phone.peer.fetch("/api/hangul-convert/choices")));
+  for (const action of ["export-hangul", "convert-to-markdown", "open-converted", "word-to-hangul"]) {
+    expect([401, 403]).not.toContain(await status(await post(phone.peer, `/api/artifacts/${made.id}/${action}`, { format: "hwpx", template: "기본", preset: "default", pages: "", images: false })));
+  }
+  expect([401, 403]).not.toContain(await status(await post(phone.peer, `/api/artifacts/${made.id}/word-to-hangul/commit`, { ticket: "없는 표" })));
+  const foreign = f.manager.documents.track(f.foreignWork.id, f.foreignWork.cwd, join(f.foreignWork.cwd, "남의 글.md"), "user", null, "검사");
+  if (foreign) expect(await status(await post(phone.peer, `/api/artifacts/${foreign.artifact.id}/export-hangul`, { format: "hwpx", template: "기본" }))).toBe(403);
+  const raw = await phone.peer.fetch(`/api/artifacts/${made.id}/word-to-hangul?format=hwpx`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: new Blob([new Uint8Array([1, 2, 3])]) });
+  expect(await status(raw)).toBe(415);
+}, 60_000);
+
+test("round 2 · 대화 ⋯ 마크다운으로 내보내기 → 작업 폴더에 저장 (and the text) from a phone; a path of the PC, another project's conversation and an unpaired client are refused", async () => {
+  const f = await fixture();
+  await strangerRefused(f, "POST", `/api/sessions/${f.ownSession.id}/export`);
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  mkdirSync(f.manager.workspaces.get(f.ownWork.defaultWorkspaceId!).cwd, { recursive: true });
+  const saved = await post(phone.peer, `/api/sessions/${f.ownSession.id}/export`, { target: "work" });
+  expect(saved.status).toBe(200);
+  const result = await saved.json() as import("@workbench/contracts").ExportMarkdownResult;
+  expect(result.path && existsSync(result.path)).toBeTruthy();
+  expect(await status(await post(phone.peer, `/api/sessions/${f.ownSession.id}/export`, { target: "text" }))).toBe(200);
+  expect(await status(await post(phone.peer, `/api/sessions/${f.ownSession.id}/export`, { target: "path", path: "/tmp/밖.md" }))).toBe(403);
+  expect(await status(await post(phone.peer, `/api/sessions/${f.foreignSession.id}/export`, { target: "work" }))).toBe(403);
+}, 30_000);
+
+test("round 2 · on-screen from a phone: told as the phone's own client, its own conversations only; an unpaired client is refused", async () => {
+  const f = await fixture();
+  await strangerRefused(f, "POST", "/api/sessions/on-screen");
+  const phone = await f.enroll(f.ownWork.id, ["read"]);
+  const told = vi.spyOn(f.manager, "setShown");
+  expect(await status(await post(phone.peer, "/api/sessions/on-screen", { client: "window-of-the-pc", ids: [f.ownSession.id, f.foreignSession.id] }))).toBe(200);
+  expect(told).toHaveBeenCalledWith(`device:${phone.claim.grant.deviceId}`, [f.ownSession.id]);
+}, 30_000);
+
+// ── Security review of 2416cede..b93223c9: each with its refusal (failing on the code before the fix) ──
+test("review2 1: a phone does not rename a listed file that lives outside the project's folders (목록에서 빼기 leaves it as it is)", async () => {
+  const f = await fixture();
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  const desk = mkdtempSync(join(tmpdir(), "workbench-desktop-"));
+  const outside = join(desk, "바탕화면 메모.md");
+  writeFileSync(outside, "# 바탕화면\n");
+  const listed = f.manager.openFile(f.ownWork.id, outside)!;
+  expect(await status(await post(phone.peer, `/api/artifacts/${listed.id}/rename`, { name: "휴대폰이 바꾼 이름" }))).toBe(403);
+  expect(existsSync(outside)).toBe(true);
+  expect(await status(await post(phone.peer, `/api/artifacts/${listed.id}/remove`, { action: "unlisted" }))).toBe(200);
+  expect(existsSync(outside)).toBe(true);
+  rmSync(desk, { recursive: true, force: true });
+}, 30_000);
+
+test("review2 2: one per-device limit (10 a minute) on heavy work: uploads, conversions, exports and new folders inside the project", async () => {
+  const f = await fixture();
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  const own = f.ownWork.defaultWorkspaceId!;
+  mkdirSync(f.manager.workspaces.get(own).cwd, { recursive: true });
+  const statuses: number[] = [];
+  for (let at = 0; at < 11; at++) statuses.push(await status(await post(phone.peer, `/api/workspaces/${own}/directories`, { path: `폴더 ${at}` })));
+  expect(statuses.slice(0, 10).every(value => value === 201)).toBe(true);
+  expect(statuses[10]).toBe(429);
+  expect(await status(await post(phone.peer, `/api/sessions/${f.ownSession.id}/export`, { target: "text" }))).toBe(429);
+}, 60_000);
+
+test("review2 3: a decision or question from a phone names only a conversation of its own projects", async () => {
+  const f = await fixture({ projects: async (_req, res) => { res.writeHead(200, { "content-type": "application/json" }); res.end("{}"); return true; } });
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  const entries = `/api/projects/${f.ownWork.id}/entries`;
+  expect(await status(await post(phone.peer, entries, { section: "decision", text: "남의 대화로", sessionId: f.foreignSession.id }))).toBe(403);
+  expect(await status(await post(phone.peer, entries, { section: "decision", text: "내 대화로", sessionId: f.ownSession.id }))).toBe(200);
+  expect(await status(await post(phone.peer, entries, { section: "decision", text: "대화 없이" }))).toBe(200);
+}, 30_000);
+
+test("review2 4: a conversation exported from a phone names nothing of another project (\"다른 프로젝트의 …\"); the PC's export is unchanged", async () => {
+  const f = await fixture();
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  mkdirSync(f.foreignWork.cwd, { recursive: true });
+  writeFileSync(join(f.foreignWork.cwd, "비밀 계획.md"), "# 비밀\n");
+  const secret = f.manager.openFile(f.foreignWork.id, join(f.foreignWork.cwd, "비밀 계획.md"))!;
+  // The phone's own conversation names a document of another project and a conversation of another project.
+  f.manager.sink.upsertItem(f.ownSession.id, { kind: "artifact", id: "artifact:secret", artifactId: secret.id, change: "modified", revision: 1, at: Date.now() } as never);
+  f.manager.sink.upsertItem(f.ownSession.id, { kind: "user", id: "user:linked", text: "이어서", at: Date.now(), link: { hop: 1, of: 2, fromSessionId: f.foreignSession.id } } as never);
+  const exported = await post(phone.peer, `/api/sessions/${f.ownSession.id}/export`, { target: "text" });
+  expect(exported.status).toBe(200);
+  const { markdown } = await exported.json() as { markdown: string };
+  expect(markdown).not.toContain("비밀 계획");
+  expect(markdown).not.toContain(f.foreignWork.title);
+  expect(markdown).toContain("다른 프로젝트의 문서");
+  expect(markdown).toContain("다른 프로젝트의 대화");
+  // The PC's own export still names them.
+  const pc = f.manager.exportMarkdown(f.ownSession.id, { target: "text" }).markdown;
+  expect(pc).toContain("비밀 계획");
+}, 30_000);
+
+test("review2 5: a body the gateway read as JSON goes on to the PC as application/json, whatever type the device named", async () => {
+  const types: string[] = [];
+  const f = await fixture({ projects: async (req, res) => { types.push(String(req.headers["content-type"])); res.writeHead(200, { "content-type": "application/json" }); res.end("{}"); return true; } });
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  const sent = await phone.peer.fetch(`/api/projects/${f.ownWork.id}/stage`, { method: "PUT", headers: { "content-type": "application/octet-stream;x=application/json" }, body: JSON.stringify({ stage: "진행" }) });
+  expect(await status(sent)).toBe(200);
+  expect(types.at(-1)).toBe("application/json");
+}, 30_000);
+
+test("review2 6: a file uploaded from a phone under a Windows device name (CON, NUL, COM1, LPT1 …) is written as _CON …", async () => {
+  const f = await fixture();
+  const phone = await f.enroll(f.ownWork.id, ["read", "send"]);
+  mkdirSync(f.manager.workspaces.get(f.ownWork.defaultWorkspaceId!).cwd, { recursive: true });
+  const pdf = new TextEncoder().encode("%PDF-1.4\n%%EOF\n");
+  for (const name of ["CON.pdf", "nul.hwpx", "COM1.docx"]) {
+    const done = await phone.peer.fetch(`/api/works/${f.ownWork.id}/import-upload`, { method: "POST", headers: { "content-type": "application/octet-stream", "x-file-name": encodeURIComponent(name) }, body: new Blob([pdf]) });
+    expect(done.status).toBe(200);
+    const path = ((await done.json()) as { files: { path: string }[] }).files[0]!.path;
+    expect(path.split("/").pop()).toBe(`_${name}`);
+  }
+}, 30_000);

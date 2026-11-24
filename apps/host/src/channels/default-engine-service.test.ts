@@ -196,11 +196,13 @@ describe("the PC's control and the chat's engine screen show what the other set"
     await until(() => engineOf(r, "telegram") === null);
   });
 
-  it("the PC's route takes Claude, Codex or null only, and not an engine this PC does not have", async () => {
+  it("the PC's route takes Claude, Codex, Gemini or null only, and not an engine this PC does not have", async () => {
     const r = await open({ codex: false });
     await r.channels.registerTelegram(FAKE_TOKEN);
-    const bad = await r.api("PATCH", path(r, "telegram"), { defaultEngine: "gemini" });
+    const bad = await r.api("PATCH", path(r, "telegram"), { defaultEngine: "openai" });
     expect(bad).toMatchObject({ status: 400, json: { code: "channel_input" } });
+    // 0.5.6: Gemini is an engine; this PC has none, so it is not taken.
+    expect(await r.api("PATCH", path(r, "telegram"), { defaultEngine: "gemini" })).toMatchObject({ status: 409, json: { code: "channel_engine_missing" } });
     expect((await r.api("PATCH", path(r, "telegram"), {})).status).toBe(400);
     const missing = await r.api("PATCH", path(r, "telegram"), { defaultEngine: "codex" });
     expect(missing).toMatchObject({ status: 409, json: { code: "channel_engine_missing", message: "Codex가 이 PC에 설치되어 있지 않습니다." } });

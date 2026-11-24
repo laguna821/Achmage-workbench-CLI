@@ -6,7 +6,7 @@ import { docAgentLabel, purposeText, type Row } from "../../tree.ts";
 import { statusText } from "../../format.ts";
 import { ROW_STATES, groupState, leadState, rowState, type RowStateInfo } from "../../row-state.ts";
 import type { Look } from "../../appearance.ts";
-import { EditableText } from "../EditableText.tsx";
+import { AUTO_NAME_HINT, EditableText } from "../EditableText.tsx";
 import { EngineMark } from "../EngineMark.tsx";
 import { StateMark } from "../StateMark.tsx";
 import { Icon, iconName, type IconName } from "../Icon.tsx";
@@ -178,7 +178,10 @@ export function TreeRow({ row, ctx }: { row: Row; ctx: RowContext }) {
       <div className="side-row renaming" style={indent} data-row-id={row.id} {...listAttr}>
         {chevron}
         <ItemIcon kind={row.type === "folder" ? "folder" : row.type === "work" ? "project" : "chat"} size={15} />
-        <EditableText className="side-rename" label={`${value} 이름 바꾸기`} value={value} onSave={(next) => ctx.onRename(row, next)} onDone={() => ctx.onRenameDone(row)} />
+        <EditableText className="side-rename" label={`${value} 이름 바꾸기`} value={value}
+          // A conversation or project emptied asks for its automatic name; a folder has none to fall back on.
+          {...(row.type === "folder" ? { emptyRefused: "폴더 이름을 적어 주세요. 이름 없는 폴더는 없습니다." } : { empty: { hint: AUTO_NAME_HINT } })}
+          onSave={(next) => ctx.onRename(row, next)} onDone={() => ctx.onRenameDone(row)} />
       </div>
     );
   }

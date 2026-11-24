@@ -28,7 +28,7 @@ function codexSessions(state: State, workId: string) {
 function drawerLabel(state: State, provider: Provider, via: string | null) {
   if (via === "new") return "새 Codex 대화";
   if (via) return `「${state.sessions[via]?.purpose ?? "?"}」 Codex 대화`;
-  return provider === "claude" ? "이 작업의 Codex 그림 대화" : "이 Codex 대화";
+  return provider !== "codex" ? "이 작업의 Codex 그림 대화" : "이 Codex 대화";
 }
 
 export type DrawState = { on: boolean; choice: DrawChoice; via: string | null };
@@ -126,7 +126,7 @@ export function DrawPill({
               <input type="checkbox" checked={value.choice.transparent} onChange={(event) => choose({ transparent: event.target.checked })} /> 투명 배경
             </label>
             <div className="menu-divider" />
-            {provider === "claude" ? (
+            {provider !== "codex" ? (
               <div className="draw-note">
                 <EngineMark provider="codex" size={13} /> Claude는 그림을 그리지 못해 <strong>이 작업의 Codex 대화</strong>가 그립니다. 그림은 이 대화에 보입니다. Codex는 이 대화 내용을 모르니 그릴 것을 구체적으로 적어 주세요.
               </div>
@@ -134,8 +134,8 @@ export function DrawPill({
             <div className="menu-label">그릴 대화</div>
             <div className="draw-sessions" role="radiogroup" aria-label="그릴 대화">
               <button type="button" role="radio" aria-checked={!value.via} className={`menu-item${!value.via ? " active" : ""}`} onClick={() => set({ via: null })}>
-                <span className="menu-item-label">{provider === "claude" ? "자동 · 그림 대화" : "이 대화"}</span>
-                <span className="menu-item-hint">{provider === "claude" ? "없으면 만듦" : session ? statusText(session) : "새 대화"}</span>
+                <span className="menu-item-label">{provider !== "codex" ? "자동 · 그림 대화" : "이 대화"}</span>
+                <span className="menu-item-hint">{provider !== "codex" ? "없으면 만듦" : session ? statusText(session) : "새 대화"}</span>
               </button>
               {others.map((entry) => (
                 <button key={entry.id} type="button" role="radio" aria-checked={value.via === entry.id} className={`menu-item${value.via === entry.id ? " active" : ""}`} onClick={() => set({ via: entry.id })}>
@@ -238,7 +238,7 @@ export function DrawChip({ state, provider, value, onClear }: { state: State; pr
   return (
     <span className="draw-chip">
       <Icon name="image" size={12} /> 그림{detail ? ` · ${detail}` : ""}
-      {provider === "claude" || value.via ? (
+      {provider !== "codex" || value.via ? (
         <span className="draw-chip-via">
           <EngineMark provider="codex" size={12} /> {withParticle(drawerLabel(state, provider, value.via), "이/가")} 그리고, 그림은 이 대화에 보입니다
         </span>

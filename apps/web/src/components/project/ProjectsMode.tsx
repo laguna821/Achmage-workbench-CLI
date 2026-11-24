@@ -62,7 +62,8 @@ export function ProjectsMode({
 
   const claude = lookOf("claude").palette.accent;
   const codex = lookOf("codex").palette.accent;
-  const engineColor = useCallback((provider: Provider) => (provider === "claude" ? claude : codex), [claude, codex]);
+  const gemini = lookOf("gemini").palette.accent;
+  const engineColor = useCallback((provider: Provider) => (provider === "claude" ? claude : provider === "gemini" ? gemini : codex), [claude, codex, gemini]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const keys = useMemo(() => projectKeys({ state, summaries, stages, template, engineColor }), [state.folders, summaries, stages, template, engineColor]);
   const sorts = useMemo(() => projectSorts({ stages, summaries, template }), [stages, summaries, template]);
@@ -186,8 +187,8 @@ export function ProjectsMode({
         ...stages.map((stage) => ({ kind: "item" as const, label: stage.name, checked: stage.name === current, onSelect: () => void moveStage(work, stage.name).catch((error: Error) => pkm?.onToast(failure(error))) })),
         { kind: "separator" as const },
         { kind: "item" as const, label: "값 없음", checked: !current, onSelect: () => void moveStage(work, null).catch((error: Error) => pkm?.onToast(failure(error))) },
-        { kind: "separator" as const },
-        { kind: "item" as const, label: "단계 편집…", icon: "palette" as const, onSelect: () => setStagesOpen(true) },
+        // 단계 편집 changes every project's stages: on the PC only.
+        ...(api.isRemote ? [] : [{ kind: "separator" as const }, { kind: "item" as const, label: "단계 편집…", icon: "palette" as const, onSelect: () => setStagesOpen(true) }]),
       ],
     });
   };
@@ -255,7 +256,7 @@ export function ProjectsMode({
         {groupDef.key === "stage" || subDef?.key === "stage" ? (
           <div className="mode-head stage-edit-head">
             <span className="muted">단계 {stages.length}개</span>
-            <button type="button" className="ghost-button small" title="단계의 이름, 개수, 순서, 색을 바꿉니다" onClick={() => setStagesOpen(true)}><Icon name="palette" size={14} />단계 편집</button>
+            {api.isRemote ? null : <button type="button" className="ghost-button small" title="단계의 이름, 개수, 순서, 색을 바꿉니다" onClick={() => setStagesOpen(true)}><Icon name="palette" size={14} />단계 편집</button>}
           </div>
         ) : null}
         <GroupBoard

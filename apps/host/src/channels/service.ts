@@ -134,7 +134,7 @@ export class ChannelService {
 
   private engineOf(kind: ChannelKind, botId: string): Provider | null {
     const engine = this.bots().find((bot) => bot.kind === kind && bot.id === botId)?.defaultEngine;
-    return engine === "claude" || engine === "codex" ? engine : null;
+    return engine === "claude" || engine === "codex" || engine === "gemini" ? engine : null;
   }
 
   /** Written into the bot's record (nothing is written for a bot that is not registered, or when it is that already). */
@@ -153,7 +153,7 @@ export class ChannelService {
    */
   setDefaultEngine(kind: string, botId: string, provider: unknown): ChannelsState {
     const bot = this.requireBot(kind, botId);
-    if (provider !== null && provider !== "claude" && provider !== "codex") throw new HttpError(400, "channel_input", "기본 엔진은 Claude, Codex 또는 정하지 않음 가운데 하나여야 합니다.");
+    if (provider !== null && provider !== "claude" && provider !== "codex" && provider !== "gemini") throw new HttpError(400, "channel_input", "기본 엔진은 Claude, Codex, Gemini 또는 정하지 않음 가운데 하나여야 합니다.");
     if (provider && !this.options.manager.snapshot().providers.find((status) => status.provider === provider)?.installed) throw new HttpError(409, "channel_engine_missing", `${PROVIDER_LABEL[provider]}가 이 PC에 설치되어 있지 않습니다.`);
     this.keepEngine(bot.kind, bot.id, provider);
     return this.state();

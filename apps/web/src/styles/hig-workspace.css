@@ -34,6 +34,8 @@
 .topbar-title > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topbar-title .shell-location-kind { flex: none; color: var(--chrome-muted); font: 400 var(--text-sm)/24px var(--font-ui); }
 .topbar-title-edit { justify-self: start; text-align: left; font: 600 var(--text-md)/24px var(--font-ui); }
+/* 0.5.6 round 2: where the name renames nothing it is a plain name — no hover fill, no pointer. */
+.topbar-title.static, .topbar-title.static:hover { background: transparent; color: var(--chrome-text); cursor: default; }
 .topbar > .top-notice { justify-self: start; margin-inline: 0; }
 .topbar-right { grid-column: -2 / -1; flex-wrap: nowrap; justify-content: flex-end; gap: var(--space-2xs); padding-bottom: 0; }
 .topbar-right > button, .topbar-left > button { min-width: 32px; }
@@ -150,4 +152,22 @@
 @media (pointer: coarse) {
   .topbar :is(.topbar-left, .topbar-right) :is(.ghost-button, .icon-button) { height: 44px; min-height: 44px; min-width: 44px; }
   .topbar { height: auto; min-height: 52px; }
+}
+/* A phone's width (0.5.6 round 2): the bar's notice cannot share its first row with the keys — it ran past the
+   screen's edge and under 연결 / ⋯. It takes its own row under the bar, across the width, and wraps (never cut);
+   the place's name stays where it is above it. */
+@media (width < 40rem) {
+  .topbar.has-notice { grid-template-rows: auto auto; height: auto; }
+  .topbar.has-notice > .topbar-title { opacity: 1; }
+  .topbar > .top-notice:not(.layout-problem) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: stretch;
+    max-width: none;
+    height: auto;
+    min-height: 32px;
+    margin: 0 0 var(--space-2xs);
+    padding-block: var(--space-3xs);
+  }
+  .topbar > .top-notice .top-notice-text { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
 }

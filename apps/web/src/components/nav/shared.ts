@@ -93,7 +93,8 @@ export type NavShared = {
   counts: { folders: Map<string, { own: number; below: number }>; root: { own: number; below: number } };
   /** The tree's open state (folded folders, unfolded works and documents), shared with the list. */
   open: TreeOpenState;
-  onOpenChange: (next: TreeOpenState) => void;
+  /** A new open state, or a change of the latest one (a fold that waits for the double-click window builds on every fold since). */
+  onOpenChange: (next: TreeOpenState | ((current: TreeOpenState) => TreeOpenState)) => void;
   sortMode: SortMode;
   currentWorkId: string | null;
   visibleSessionId: string | null;

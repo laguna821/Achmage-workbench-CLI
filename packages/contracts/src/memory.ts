@@ -38,7 +38,7 @@ export type AppMemory =
     };
 
 export type EngineMemory = {
-  provider: "claude" | "codex";
+  provider: import("./index.ts").Provider;
   /** The conversations it serves (one for Claude; those loaded in the shared app-server for Codex), with their titles. */
   sessions: { id: string; title: string }[];
   bytes: number | null;

@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { DesktopAction, Session } from "@workbench/contracts";
 import type { BrowserEngineHooks } from "./browse.ts";
@@ -6,7 +6,7 @@ import { launcherSource, cmdLauncherSource } from "./browse-wrapper.ts";
 import { findSessionName, findWrapperSource, isPlainFindCommand } from "./find-tool.ts";
 import type { DesktopService } from "./desktop-adapter.ts";
 import type { EventBus } from "./bus.ts";
-import { SpoolFolders } from "./spool-folders.ts";
+import { readSpoolRequest, SpoolFolders, writeSpoolAnswer } from "./spool-folders.ts";
 
 const USAGE = `workbench-desktop snapshot
 workbench-desktop screenshot
@@ -49,9 +49,9 @@ export class DesktopTool {
   /** For tests: as if the watchers had missed their events. */
   dropWatchersForTest() { this.folders.dropWatchers(); }
   private async take(sessionId: string, dir: string, file: string) {
-    const path = join(dir, file); let request: { id: string; args: string[] };
-    try { if (statSync(path).size > 100_000) { rmSync(path); return; } request = JSON.parse(readFileSync(path, "utf8")); rmSync(path); } catch { return; }
-    if (file !== `${request.id}.req.json` || !Array.isArray(request.args) || request.args.some(arg => typeof arg !== "string")) return;
+    // A regular file only, never blocking (a FIFO, a link to /dev/zero): spool-folders.ts.
+    const request = readSpoolRequest(join(dir, file), 100_000) as { id: string; args: string[] } | null;
+    if (!request || typeof request !== "object" || file !== `${request.id}.req.json` || !Array.isArray(request.args) || request.args.some(arg => typeof arg !== "string")) return;
     let result: { code: number; stdout: string; stderr: string };
     try {
       const [command, payload] = request.args; let response: unknown;
@@ -62,7 +62,7 @@ export class DesktopTool {
       else throw new Error(USAGE);
       result = { code: 0, stdout: JSON.stringify(response) + "\n", stderr: "" };
     } catch (error) { result = { code: 1, stdout: "", stderr: `${error instanceof Error ? error.message : String(error)}\n` }; }
-    try { const out = join(dir, `${request.id}.res.json`); writeFileSync(`${out}.tmp`, JSON.stringify(result), { mode: 0o600 }); renameSync(`${out}.tmp`, out); } catch { /* cancelled caller */ }
+    writeSpoolAnswer(dir, request.id, result);
   }
   hooks(base: BrowserEngineHooks): BrowserEngineHooks {
     return { ...base, pathDirs: () => [...base.pathDirs(), this.bin],

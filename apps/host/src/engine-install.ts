@@ -126,6 +126,8 @@ export class EngineInstaller {
 
   /** What the status of an engine says about installing it. */
   decorate(status: ProviderStatus): ProviderStatus {
+    // Gemini (Google's Antigravity CLI) is never installed by Workbench: its card runs Google's own installer in a terminal tab.
+    if (status.provider === "gemini") return { ...status, canInstall: false, install: null };
     const engine = status.provider as EngineName;
     return { ...status, canInstall: this.canInstall(), install: this.state(engine) };
   }

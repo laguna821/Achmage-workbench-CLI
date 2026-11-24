@@ -1,11 +1,11 @@
-import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { Session } from "@workbench/contracts";
 import type { BrowserEngineHooks } from "./browse.ts";
 import { launcherSource } from "./browse-wrapper.ts";
 import type { EventBus } from "./bus.ts";
 import { findUsage, type Finder } from "./search.ts";
-import { SpoolFolders } from "./spool-folders.ts";
+import { readSpoolRequest, SpoolFolders, writeSpoolAnswer } from "./spool-folders.ts";
 
 // `workbench-find`: the engines' way to Workbench's records — the same index and syntax as
 // Ctrl+K (search.ts), read only, no model. It works like the agent browser's playwright-cli
@@ -192,8 +192,9 @@ export class FindTool {
     const path = join(this.spool, name, file);
     let request: FindRequest;
     try {
-      const raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-      rmSync(path, { force: true });
+      // A regular file only, at most 64 KB, never blocking (a FIFO, a link to /dev/zero): spool-folders.ts.
+      const raw = readSpoolRequest(path, 64_000) as Record<string, unknown> | null;
+      if (!raw || typeof raw !== "object") return;
       request = {
         id: String(raw.id ?? ""),
         args: Array.isArray(raw.args) ? raw.args.filter((arg): arg is string => typeof arg === "string").slice(0, 40) : [],
@@ -212,13 +213,8 @@ export class FindTool {
     } catch (error) {
       result = { code: 1, stdout: "", stderr: `workbench-find: 찾지 못했습니다: ${error instanceof Error ? error.message : String(error)}\n` };
     }
-    const out = join(this.spool, name, `${request.id}.res.json`);
-    try {
-      writeFileSync(`${out}.tmp`, JSON.stringify(result));
-      renameSync(`${out}.tmp`, out);
-    } catch {
-      // The folder went away meanwhile.
-    }
+    // Not written when the folder went away meanwhile, or the engine planted something at the answer path.
+    writeSpoolAnswer(join(this.spool, name), request.id, result);
   }
 
   /** What the engine adapters need: the command on PATH, the session's name, its writable spool, no card. */

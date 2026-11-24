@@ -3,7 +3,7 @@ import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
-import { ACCESS_LABEL, MESSENGER_HOME_TITLE, PROVIDER_LABEL, isOfficeFormat, type Artifact, type Schedule, type Attachment, type AttentionEvent, type ChannelAuditRow, type ChannelKind, type ChannelPairing, type Provider, type RequestOrigin, type SearchPage, type Session, type TranscriptItem, type Work } from "@workbench/contracts";
+import { ACCESS_LABEL, PROVIDER_LABEL, isOfficeFormat, type Artifact, type Schedule, type Attachment, type AttentionEvent, type ChannelAuditRow, type ChannelKind, type ChannelPairing, type Provider, type RequestOrigin, type SearchPage, type Session, type TranscriptItem, type Work } from "@workbench/contracts";
 import type { EventBus } from "../bus.ts";
 import { HttpError } from "../errors.ts";
 import { MAX_ATTACHMENT, attachmentsDir } from "../attachments.ts";
@@ -17,7 +17,7 @@ import { answerFile, closeFence, formatted, hasWideTable } from "./format.ts";
 import { hangulPicture, pictureCode, pictureSvg, type PictureResult } from "./hangul-picture-run.ts";
 import type { ChannelLog } from "./log.ts";
 import { ChannelMenu, MODE_LABEL, noteSentence, planSentence, type MenuAct, type MenuButton, type Screen } from "./menu.ts";
-import { PREAMBLE_VERSION, phonePreamble } from "./preamble.ts";
+import { GEMINI_PHONE, PREAMBLE_VERSION, phonePreamble } from "./preamble.ts";
 import { RemoteDesk, type ToolAnswer } from "./remote.ts";
 import { choiceLabel, clock, cutAt, parseCommand, shapeAnswer, takeChoices } from "./shape.ts";
 import type { Binding, ButtonRow, ChannelStore, OutboxRow } from "./store.ts";
@@ -208,6 +208,9 @@ const REMOTE_REQUEST = ":rm:";
 const ENTER_LABEL = "이 대화로 들어가기";
 const BACK_LABEL = "리모콘으로 돌아가기";
 
+
+/** The remote may not hand work to a Gemini conversation (study § G rule 6); the person may enter it. */
+export const GEMINI_REMOTE_REFUSED = "Gemini 대화에는 다른 AI가 일을 넘길 수 없습니다. 메뉴 › 대화 바꾸기로 그 대화에 직접 들어가 보내 주세요.";
 export class ChannelCore {
   private readonly store: Store;
   private readonly channels: ChannelStore;
@@ -376,6 +379,11 @@ export class ChannelCore {
     });
   }
 
+  /** Text as it may leave the gateway: the channel's redactor (its tokens in every form, the stored secrets, the shapes). */
+  scrub(text: string): string {
+    return this.log.scrub(text);
+  }
+
   /**
    * `workbench-remote` of a conversation (its key already checked by remote-tool.ts): answered only
    * for a running turn of a messenger place's conversation that a paired chat of it asked for.
@@ -408,7 +416,7 @@ export class ChannelCore {
   async start() {
     if (!this.closed) return;
     this.closed = false;
-    this.manager.channelHook = (origin: RequestOrigin, run) => phonePreamble(origin.context ?? PREAMBLE_VERSION, run ? engineSentence(engineFacts(this.manager, run.settings, run.session.engineModel)) : null, { remote: Boolean(run && this.manager.view.works.get(run.session.workId)?.messengerHome) });
+    this.manager.channelHook = (origin: RequestOrigin, run) => run?.session.provider === "gemini" ? GEMINI_PHONE : phonePreamble(origin.context ?? PREAMBLE_VERSION, run ? engineSentence(engineFacts(this.manager, run.settings, run.session.engineModel)) : null, { remote: Boolean(run && this.manager.view.works.get(run.session.workId)?.messengerHome) });
     // What the desktop's own work says when it ends, for the projects a chat asked to hear about.
     this.releaseDelivery = this.manager.notifications.subscribeDelivery((row) => {
       if (!this.closed) queueMicrotask(() => { if (!this.closed) this.track(this.onAttention(row)); });
@@ -1352,7 +1360,7 @@ export class ChannelCore {
     const stays = here && (here.messengerHome?.kind === binding.kind || Boolean(fresh.prefs.placed));
     const work = stays ? here : this.manager.ensureMessengerHome(binding.kind);
     const session = this.createConversation(binding, work, old && !old.documentAgent && !old.pageAgent ? old : null);
-    if (here && !stays) this.homeNotes.set(binding.id, `새 대화는 이제 '${MESSENGER_HOME_TITLE[binding.kind]}'에 만듭니다. 프로젝트에서 하려면 메뉴의 [프로젝트 바꾸기]에서 고르세요.`);
+    if (here && !stays) this.homeNotes.set(binding.id, `새 대화는 이제 '${work.title}'에 만듭니다. 프로젝트에서 하려면 메뉴의 [프로젝트 바꾸기]에서 고르세요.`);
     else this.homeNotes.delete(binding.id);
     this.channels.updateBinding(binding.id, { pointerWorkId: work.id, pointerSessionId: session.id, prefs: { ...fresh.prefs, placed: 1 } });
     this.changed();
@@ -1378,6 +1386,8 @@ export class ChannelCore {
     const fresh = this.channels.binding(binding.id);
     if (!fresh || fresh.revokedAt || fresh.lockedAt || fresh.pausedAt) return { refused: "closed", message: "휴대폰 채널이 멈춰 있거나 잠겨 있습니다." };
     if (!this.admitted()) return { refused: "updating", message: "PC가 업데이트를 준비하고 있어 지금은 새 일을 시작하지 않습니다." };
+    // Another AI handing work over, not the person typing: a Gemini conversation takes none (0.5.6).
+    if (this.manager.personOnly(session)) return { refused: "person_only", message: GEMINI_REMOTE_REFUSED };
     const origin: RequestOrigin = { channel: fresh.kind, bindingId: fresh.id, context: PREAMBLE_VERSION };
     try {
       const result = await this.manager.send(session.id, requestId, text, [], null, null, "queue", { origin, activate: false });

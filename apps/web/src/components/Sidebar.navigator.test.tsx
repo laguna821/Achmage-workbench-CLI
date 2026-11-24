@@ -7,7 +7,7 @@ import type { Api } from "../api.ts";
 import { AppearanceContext, NEUTRAL_LOOK, type AppearanceApi } from "../appearance.ts";
 import { LinkContext, type LinkApi } from "../links.ts";
 import { initialState, type State } from "../state.ts";
-import type { TreeOpenState } from "../tree.ts";
+import { readOpenState, type TreeOpenState } from "../tree.ts";
 import type { MenuRequest } from "./ContextMenu.tsx";
 import { Sidebar, type SidebarActions } from "./Sidebar.tsx";
 import { forgetPlaces, placeStore } from "./nav/place.ts";
@@ -45,9 +45,9 @@ const summaries: ProjectSummary[] = [
 ];
 const OPEN: TreeOpenState = { closedFolders: [], openWorks: ["강의 준비"], closedWorks: [], openDocs: ["강의 준비"] };
 
-type Props = { prefs?: UiPrefs; now?: State; shown?: { work?: string; session?: string; doc?: string }; paneMinimum?: number; onPrefs?: (patch: UiPrefs) => void; actions?: Partial<SidebarActions>; open?: TreeOpenState; onOpen?: (next: TreeOpenState) => void ; atNow?: boolean; onLeaveNow?: () => void };
+type Props = { toast?: (message: unknown) => void; pending?: { rename?: string; createIn?: string | null; reveal?: string; unfold?: string | null } | null; prefs?: UiPrefs; now?: State; shown?: { work?: string; session?: string; doc?: string }; paneMinimum?: number; onPrefs?: (patch: UiPrefs) => void; actions?: Partial<SidebarActions>; open?: TreeOpenState; onOpen?: (next: TreeOpenState) => void ; atNow?: boolean; onLeaveNow?: () => void };
 
-function Frame({ prefs: initial = { navShortcuts: [] }, now = state, shown = {}, paneMinimum, onPrefs, actions = {}, open: initialOpen = OPEN, onOpen, atNow, onLeaveNow }: Props) {
+function Frame({ toast, pending = null, prefs: initial = { navShortcuts: [] }, now = state, shown = {}, paneMinimum, onPrefs, actions = {}, open: initialOpen = OPEN, onOpen, atNow, onLeaveNow }: Props) {
   const [prefs, setPrefs] = useState<UiPrefs>(initial);
   const [open, setOpen] = useState(initialOpen);
   const [api] = useState(() => new Proxy({}, { get: (_, key) => (key === "projects" ? async () => summaries : key === "history" ? async () => ({ events: [], next: null }) : async () => []) }) as unknown as Api);
@@ -57,11 +57,11 @@ function Frame({ prefs: initial = { navShortcuts: [] }, now = state, shown = {},
       <LinkContext.Provider value={{ state: now } as unknown as LinkApi}>
         <Sidebar
           state={now} currentWorkId={shown.work ?? null} visibleSessionId={shown.session ?? null} currentDocId={shown.doc ?? null}
-          open={open} onOpenChange={(next) => { setOpen(next); onOpen?.(next); }} sortMode="manual" onSortMode={() => {}}
+          open={open} onOpenChange={(next) => setOpen((current) => { const value = typeof next === "function" ? next(current) : next; onOpen?.(value); return value; })} sortMode="manual" onSortMode={() => {}}
           width={typeof prefs.sidebarWidth === "number" ? prefs.sidebarWidth : 288} onWidth={(width) => { setPrefs((current) => ({ ...current, sidebarWidth: width })); onPrefs?.({ sidebarWidth: width }); }}
-          paneMinimum={paneMinimum} actions={all} pending={null} onPendingDone={() => {}}
+          paneMinimum={paneMinimum} actions={all} pending={pending} onPendingDone={() => {}}
           prefs={prefs} onPrefs={(patch) => setPrefs((current) => { const change = typeof patch === "function" ? patch(current) : patch; onPrefs?.(change); return { ...current, ...change }; })}
-          api={api} onToast={() => {}} atNow={atNow} onLeaveNow={onLeaveNow}
+          api={api} onToast={(message) => toast?.(message)} atNow={atNow} onLeaveNow={onLeaveNow}
         />
       </LinkContext.Provider>
     </AppearanceContext.Provider>
@@ -105,15 +105,44 @@ describe("level 1: every project in its folders", () => {
     expect(row("도입부 다듬기")).toBeNull();
   });
 
-  it("folds a folder and keeps it folded (the tree's open state), from the pointer and the keyboard", () => {
+  // 0.5.6, the owner: "앞에 > 표시를 누르면 폴더 아래에 프로젝트가 접어지면서 가려져야 하는데 안 가려져서".
+  // Folded, a folder hides every project under it: the one that needs the person (its folder row says
+  // how many need the person instead) and the one open now (its tab keeps it reachable) too.
+  it("folds a folder and keeps it folded (the tree's open state), from the pointer and the keyboard; folded, it hides all its projects", () => {
     const onOpen = vi.fn();
-    render(<Frame onOpen={onOpen} />);
+    render(<Frame onOpen={onOpen} shown={{ work: "과제 채점" }} />);
+    expect(row("수업")!.getAttribute("aria-expanded")).toBe("true");
     fireEvent.click(row("수업")!);
     expect(onOpen.mock.calls.at(-1)![0].closedFolders).toEqual(["수업"]);
-    // Folded, a folder still shows the project that needs the person (rule 5).
-    expect(ids()).toEqual(["빈 폴더", "수업", "강의 준비", "논문 메모"]);
+    expect(ids()).toEqual(["빈 폴더", "수업", "논문 메모"]);
+    expect(row("수업")!.getAttribute("aria-expanded")).toBe("false");
+    // What needs the person under it shows on the folded folder's row (one pill), not as a row.
+    expect(row("수업")!.querySelector(".nav-pill")!.textContent).toBe("1");
+    expect(row("수업")!.getAttribute("aria-label")).toBe("폴더 수업, 프로젝트 2개, 확인 필요 1개");
     fireEvent.keyDown(row("수업")!, { key: "ArrowRight" });
+    expect(ids()).toEqual(["빈 폴더", "수업", "강의 준비", "2026-2", "과제 채점", "논문 메모"]);
+    expect(row("수업")!.querySelector(".nav-pill")).toBeNull();
+    fireEvent.keyDown(row("수업")!, { key: "ArrowLeft" });
+    expect(ids()).toEqual(["빈 폴더", "수업", "논문 메모"]);
+    fireEvent.keyDown(row("수업")!, { key: "Enter" });
     expect(ids()).toContain("강의 준비");
+    fireEvent.keyDown(row("수업")!, { key: " " });
+    expect(ids()).not.toContain("강의 준비");
+    // A subfolder folds on its own.
+    fireEvent.keyDown(row("수업")!, { key: "Enter" });
+    fireEvent.click(row("2026-2")!);
+    expect(ids()).toEqual(["빈 폴더", "수업", "강의 준비", "2026-2", "논문 메모"]);
+  });
+
+  it("a folded folder stays folded after a reload (the open state is read back)", () => {
+    const onOpen = vi.fn();
+    const first = render(<Frame onOpen={onOpen} />);
+    fireEvent.click(row("수업")!);
+    const kept = onOpen.mock.calls.at(-1)![0] as TreeOpenState;
+    first.unmount();
+    // What the app saves in the screen preferences comes back through readOpenState.
+    render(<Frame open={readOpenState(JSON.parse(JSON.stringify(kept)))} shown={{ work: "강의 준비" }} />);
+    expect(ids()).toEqual(["빈 폴더", "수업", "논문 메모"]);
   });
 
   it("finds by project or folder name: a folder's name keeps its projects; nothing found says how to clear", () => {
@@ -674,34 +703,62 @@ describe("level 1: 메신저, each messenger's own place", () => {
     expect(level()).toBe("project");
   });
 
-  it("while its messenger is registered the row's menu keeps the name, the place, 보관 and 삭제 off and says why; the rest works", () => {
+  it("while its messenger is registered the row's menu keeps the place, 보관 and 삭제 off and says why; 이름 바꾸기 and the rest work", () => {
     const why = "텔레그램을 연결해 둔 동안에는 할 수 없습니다.";
     const items = menuOf("텔레그램 대화");
     expect(items.filter((entry) => entry.disabled)).toEqual([
-      { label: "이름 바꾸기", disabled: true, why },
       { label: "폴더로 옮기기", disabled: true, why },
       { label: "보관", disabled: true, why },
       { label: "프로젝트 삭제…", disabled: true, why },
     ]);
-    expect(items.filter((entry) => !entry.disabled).map((entry) => entry.label)).toEqual(expect.arrayContaining(["열기", "고정"]));
+    expect(items.filter((entry) => !entry.disabled).map((entry) => entry.label)).toEqual(expect.arrayContaining(["열기", "이름 바꾸기", "고정"]));
   });
 
   it("its messenger removed: the row stays under 메신저 and its menu allows all of it", () => {
     expect(menuOf("Slack 대화").filter((entry) => entry.disabled)).toEqual([]);
   });
 
-  it("a registered home is not renamed by F2 or a double click, nor archived by Delete; a free one is", () => {
+  // 0.5.6, the owner: "이름이 아예 절대 안바꿔지더라고". A home is renamed as any project is; Delete still does not archive it.
+  it("a registered home is renamed by F2 or a double click (not archived by Delete); a free one is archived by Delete", () => {
     const archive = vi.fn();
-    render(<Frame now={withHomes} actions={{ archive }} />);
-    fireEvent.keyDown(row("텔레그램 대화")!, { key: "F2" });
-    fireEvent.doubleClick(row("텔레그램 대화")!);
+    const rename = vi.fn();
+    render(<Frame now={withHomes} actions={{ archive, rename }} />);
     fireEvent.keyDown(row("텔레그램 대화")!, { key: "Delete" });
-    expect(sidebar().querySelector("input.side-rename")).toBeNull();
     expect(archive).not.toHaveBeenCalled();
+    fireEvent.keyDown(row("텔레그램 대화")!, { key: "F2" });
+    const field = sidebar().querySelector<HTMLInputElement>("input.side-rename")!;
+    expect(field).toBeTruthy();
+    // The field sits in the 메신저 section, on the home's row.
+    expect(section()!.contains(field)).toBe(true);
+    fireEvent.change(field, { target: { value: "연구실 텔레그램 봇" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(rename).toHaveBeenCalledWith({ kind: "work", id: "텔레그램 대화" }, "연구실 텔레그램 봇");
+    fireEvent.doubleClick(row("텔레그램 대화")!);
+    expect(sidebar().querySelector("input.side-rename")).toBeTruthy();
+    fireEvent.keyDown(sidebar().querySelector("input.side-rename")!, { key: "Escape" });
     fireEvent.keyDown(row("Slack 대화")!, { key: "Delete" });
     expect(archive).toHaveBeenCalledWith({ kind: "work", id: "Slack 대화" });
-    fireEvent.keyDown(row("Slack 대화")!, { key: "F2" });
-    expect(sidebar().querySelector("input.side-rename")).toBeTruthy();
+  });
+
+  it("a home's name emptied in its field goes back to the name it was made with (the field shows which)", () => {
+    const rename = vi.fn();
+    const named = { ...withHomes, works: { ...withHomes.works, [telegram.id]: { ...telegram, title: "Achmage 봇 1호기" } } };
+    render(<Frame now={named} actions={{ rename }} />);
+    fireEvent.keyDown(row("텔레그램 대화")!, { key: "F2" });
+    const field = sidebar().querySelector<HTMLInputElement>("input.side-rename")!;
+    expect(field.placeholder).toBe("텔레그램 대화");
+    fireEvent.change(field, { target: { value: "  " } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(rename).toHaveBeenCalledWith({ kind: "work", id: "텔레그램 대화" }, "");
+  });
+
+  it("the row shows the name the person gave the home, and 찾기 finds it by that name", () => {
+    const named = { ...withHomes, works: { ...withHomes.works, [telegram.id]: { ...telegram, title: "Achmage 봇 1호기" } } };
+    render(<Frame now={named} />);
+    expect(row("텔레그램 대화")!.querySelector(".side-row-label")!.textContent).toBe("Achmage 봇 1호기");
+    fireEvent.click(within(sidebar()).getByRole("button", { name: "찾기" }));
+    fireEvent.change(within(sidebar()).getByRole("textbox", { name: "프로젝트·폴더 찾기" }), { target: { value: "1호기" } });
+    expect(ids()).toEqual(["텔레그램 대화"]);
   });
 
   it("a home is never part of a pick of projects (Ctrl, Shift, Ctrl+A)", () => {
@@ -727,5 +784,202 @@ describe("level 1: 메신저, each messenger's own place", () => {
     fireEvent.click(within(within(sidebar()).getByRole("region", { name: "태그" })).getByText("강의"));
     await waitFor(() => expect(ids()).toEqual(["수업", "강의 준비"]));
     expect(section()).toBeNull();
+  });
+});
+
+// 0.5.6 round 2 (the owner: "사용성 불편한 거나 버그 등등 다시 다 확인해봐"): the small blocks met in the list.
+describe("round 2: renaming and moving in the list without surprises", () => {
+  afterEach(() => { vi.useRealTimers(); });
+  const field = () => sidebar().querySelector<HTMLInputElement>("input.side-rename");
+
+  it("a double click on a project row renames it; the first click does not open the project first", () => {
+    vi.useFakeTimers();
+    const chooseProject = vi.fn();
+    render(<Frame actions={{ chooseProject }} />);
+    fireEvent.click(row("논문 메모")!, { detail: 1 });
+    fireEvent.click(row("논문 메모")!, { detail: 2 });
+    fireEvent.doubleClick(row("논문 메모")!);
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(chooseProject).not.toHaveBeenCalled();
+    expect(level()).toBe("projects");
+    expect(field()).toBeTruthy();
+  });
+
+  it("a single click still opens the project (after the double-click window), a keyboard or script click at once", () => {
+    vi.useFakeTimers();
+    const chooseProject = vi.fn();
+    render(<Frame actions={{ chooseProject }} />);
+    fireEvent.click(row("논문 메모")!, { detail: 1 });
+    expect(level()).toBe("projects");
+    act(() => { vi.advanceTimersByTime(600); });
+    expect(chooseProject).toHaveBeenCalledTimes(1);
+    expect(level()).toBe("project");
+  });
+
+  it("a double click on a folder row renames it without folding and unfolding it first; its > folds at once", () => {
+    vi.useFakeTimers();
+    const onOpen = vi.fn();
+    render(<Frame onOpen={onOpen} />);
+    fireEvent.click(row("수업")!, { detail: 1 });
+    fireEvent.click(row("수업")!, { detail: 2 });
+    fireEvent.doubleClick(row("수업")!);
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(field()).toBeTruthy();
+    fireEvent.keyDown(field()!, { key: "Escape" });
+    fireEvent.click(row("수업")!.querySelector(".row-chevron")!, { detail: 1 });
+    expect(onOpen.mock.calls.at(-1)![0].closedFolders).toEqual(["수업"]);
+    // A plain click on the row folds after the window.
+    fireEvent.click(row("빈 폴더")!, { detail: 1 });
+    act(() => { vi.advanceTimersByTime(600); });
+    expect(onOpen.mock.calls.at(-1)![0].closedFolders).toEqual(expect.arrayContaining(["수업", "빈 폴더"]));
+  });
+
+  it("an emptied project or conversation name asks for the automatic name (the field says so); a folder's is kept and said", () => {
+    const rename = vi.fn();
+    render(<Frame actions={{ rename }} />);
+    fireEvent.keyDown(row("논문 메모")!, { key: "F2" });
+    expect(field()!.placeholder).toBe("비우면 자동 이름");
+    fireEvent.change(field()!, { target: { value: " " } });
+    fireEvent.keyDown(field()!, { key: "Enter" });
+    expect(rename).toHaveBeenCalledWith({ kind: "work", id: "논문 메모" }, "");
+    // A folder has no automatic name: Enter on an empty field keeps the field open and says why.
+    fireEvent.keyDown(row("수업")!, { key: "F2" });
+    fireEvent.change(field()!, { target: { value: "" } });
+    fireEvent.keyDown(field()!, { key: "Enter" });
+    expect(field()).toBeTruthy();
+    expect(field()!.getAttribute("aria-invalid")).toBe("true");
+    expect(field()!.placeholder).toBe("폴더 이름을 적어 주세요. 이름 없는 폴더는 없습니다.");
+    expect(rename).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(field()!, { key: "Escape" });
+    // A conversation inside a project.
+    fireEvent.keyDown(row("강의 준비")!, { key: "Enter" });
+    fireEvent.keyDown(row("도입부 다듬기")!, { key: "F2" });
+    expect(field()!.placeholder).toBe("비우면 자동 이름");
+    fireEvent.change(field()!, { target: { value: "" } });
+    fireEvent.keyDown(field()!, { key: "Enter" });
+    expect(rename).toHaveBeenLastCalledWith({ kind: "session", id: "도입부 다듬기" }, "");
+  });
+
+  it("이름 바꾸기 asked inside a project keeps level 2: the field is the head's name", () => {
+    render(<Frame pending={{ rename: "강의 준비" }} prefs={{ navShortcuts: [], navigator: { rail: "projects", level: "project", project: "강의 준비" } } as UiPrefs} />);
+    expect(level()).toBe("project");
+    const input = field()!;
+    expect(input).toBeTruthy();
+    expect(input.closest(".nav-project-head")).toBeTruthy();
+    expect(input.value).toBe("강의 준비");
+  });
+
+  it("모든 폴더 접기 folds the folders in the list, not the archived ones", () => {
+    const onOpen = vi.fn();
+    const openMenu = vi.fn();
+    const withArchived: State = { ...state, folders: { ...state.folders, 지난: { ...folder("지난"), archivedAt: 5 } } };
+    render(<Frame now={withArchived} onOpen={onOpen} actions={{ openMenu }} />);
+    fireEvent.click(within(sidebar()).getByRole("button", { name: "보기" }));
+    const items = (openMenu.mock.calls.at(-1)?.[0] as MenuRequest | undefined)?.items;
+    const all = items?.find((entry) => entry.kind === "item" && entry.label === "모든 폴더 접기");
+    if (all && all.kind === "item") all.onSelect();
+    else fireEvent.click(screen.getByRole("menuitem", { name: /모든 폴더 접기/ }));
+    expect([...onOpen.mock.calls.at(-1)![0].closedFolders].sort()).toEqual(["2026-2", "빈 폴더", "수업"].sort());
+  });
+});
+
+describe("round 2: a messenger place says why it does not move", () => {
+  const telegram = work("텔레그램 대화", null, NOW - 500, { messengerHome: { kind: "telegram", registered: true } });
+  const withHome: State = { ...state, works: { ...state.works, [telegram.id]: telegram } };
+  const LINE = "메신저의 자리는 옮길 수 없습니다. 늘 '메신저' 칸에 있습니다.";
+
+  it("Alt+↑/↓ on it says so in one line", () => {
+    const toasts: unknown[] = [];
+    render(<Frame now={withHome} toast={(entry) => toasts.push(entry)} />);
+    fireEvent.keyDown(row("텔레그램 대화")!, { key: "ArrowDown", altKey: true });
+    expect(toasts).toEqual([LINE]);
+  });
+
+  it("dragging it says so once, and the drag's release does not open it", () => {
+    const toasts: unknown[] = [];
+    const chooseProject = vi.fn();
+    render(<Frame now={withHome} toast={(entry) => toasts.push(entry)} actions={{ chooseProject }} />);
+    const home = row("텔레그램 대화")!;
+    fireEvent.pointerDown(home, { button: 0, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(window, { clientX: 10, clientY: 40 });
+    fireEvent.pointerMove(window, { clientX: 10, clientY: 80 });
+    fireEvent.pointerUp(window, { clientX: 10, clientY: 80 });
+    fireEvent.click(home);
+    expect(toasts).toEqual([LINE]);
+    expect(chooseProject).not.toHaveBeenCalled();
+  });
+});
+
+// composer-056 (the owner, 2026-11-23): "폴더안에 새 프로젝트를 만들면 안보임 … 프로젝트 목록에서 들어가는게 잘 안되".
+describe("composer-056: a project that comes into a folder shows; folds act every time", () => {
+  afterEach(() => { vi.useRealTimers(); });
+  const field = () => sidebar().querySelector<HTMLInputElement>("input.side-rename");
+  const FOLDED: TreeOpenState = { ...OPEN, closedFolders: ["수업", "2026-2"] };
+
+  it("a new project in a folded (nested) folder: the folders above it unfold, the list is level 1 and its row waits for its name there", () => {
+    const onOpen = vi.fn();
+    // As the app has it right after 새 프로젝트…: the project opened, the list followed it to level 2.
+    render(<Frame open={FOLDED} onOpen={onOpen} shown={{ work: "과제 채점" }} pending={{ rename: "과제 채점", reveal: "과제 채점" }}
+      prefs={{ navShortcuts: [], navigator: { rail: "projects", level: "project", project: "과제 채점" } } as UiPrefs} />);
+    expect(level()).toBe("projects");
+    expect(onOpen.mock.calls.at(-1)![0].closedFolders).toEqual([]);
+    expect(field()).toBeTruthy();
+    expect(field()!.closest('[data-row-id="과제 채점"]')).toBeTruthy();
+    expect(field()!.closest(".nav-project-head")).toBeNull();
+  });
+
+  it("after the name, the row is listed, current and the keyboard's; a click on it goes inside (level 2)", () => {
+    vi.useFakeTimers();
+    const chooseProject = vi.fn();
+    render(<Frame open={FOLDED} shown={{ work: "과제 채점" }} actions={{ chooseProject }} pending={{ rename: "과제 채점", reveal: "과제 채점" }} />);
+    fireEvent.keyDown(field()!, { key: "Enter" });
+    const made = row("과제 채점")!;
+    expect(made.getAttribute("aria-selected")).toBe("true");
+    expect(made.tabIndex).toBe(0);
+    fireEvent.click(made, { detail: 1 });
+    act(() => { vi.advanceTimersByTime(600); });
+    expect(chooseProject).toHaveBeenCalledTimes(1);
+    expect(level()).toBe("project");
+  });
+
+  it("a project moved into a folded folder (or made there from 이 폴더에 새 작업): its folder unfolds and its row is listed", () => {
+    const onOpen = vi.fn();
+    render(<Frame open={FOLDED} onOpen={onOpen} pending={{ reveal: "과제 채점", unfold: "2026-2" }} />);
+    expect(onOpen.mock.calls.at(-1)![0].closedFolders).toEqual([]);
+    expect(ids()).toContain("과제 채점");
+    expect(row("과제 채점")!.tabIndex).toBe(0);
+  });
+
+  it("two folders clicked one after the other inside the double-click window both fold (the second click does not cancel the first)", () => {
+    vi.useFakeTimers();
+    const onOpen = vi.fn();
+    render(<Frame onOpen={onOpen} />);
+    fireEvent.click(row("수업")!, { detail: 1 });
+    fireEvent.click(row("빈 폴더")!, { detail: 1 });
+    act(() => { vi.advanceTimersByTime(600); });
+    expect([...onOpen.mock.calls.at(-1)![0].closedFolders].sort()).toEqual(["빈 폴더", "수업"].sort());
+  });
+
+  it("a folder clicked and then a project clicked at once: the folder still folds", () => {
+    vi.useFakeTimers();
+    const onOpen = vi.fn();
+    const chooseProject = vi.fn();
+    render(<Frame onOpen={onOpen} actions={{ chooseProject }} />);
+    fireEvent.click(row("빈 폴더")!, { detail: 1 });
+    fireEvent.click(row("논문 메모")!, { detail: 1 });
+    act(() => { vi.advanceTimersByTime(600); });
+    expect(onOpen.mock.calls.at(-1)![0].closedFolders).toEqual(["빈 폴더"]);
+    expect(chooseProject).toHaveBeenCalledTimes(1);
+  });
+
+  it("a fold waiting for the double-click window does not undo a fold made meanwhile by the keyboard", () => {
+    vi.useFakeTimers();
+    const onOpen = vi.fn();
+    render(<Frame onOpen={onOpen} />);
+    fireEvent.click(row("빈 폴더")!, { detail: 1 });
+    fireEvent.keyDown(row("수업")!, { key: "ArrowLeft" });
+    act(() => { vi.advanceTimersByTime(600); });
+    expect([...onOpen.mock.calls.at(-1)![0].closedFolders].sort()).toEqual(["빈 폴더", "수업"].sort());
   });
 });

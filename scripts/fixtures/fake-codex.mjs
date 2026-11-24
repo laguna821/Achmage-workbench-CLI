@@ -41,7 +41,8 @@
 //          gives it no network (emulated with bubblewrap when it is installed); then answers with the output
 // Login (setup checks): with FAKE_ENGINE_AUTH_DIR set, Codex is logged in only once <dir>/codex
 // exists. `account/login/start` serves a callback on this computer like Codex does; opening its
-// address (a browser, or the stand-in opener) logs in and sends `account/login/completed`.
+// address (a browser, or the stand-in opener) logs in and sends `account/login/completed`;
+// `account/logout` removes <dir>/codex.
 // FAKE_CODEX_VERSION changes what `--version` says.
 //   "맥락"  answers with the developer instructions the thread started with and its sandbox
 //   "볼트에 써: <path>"  writes only where the sandbox would let Codex (work folder, temporary
@@ -50,7 +51,7 @@
 //          file, then an answer with a heading, a list, a table, code and a quote (sample-reply.mjs)
 
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -510,6 +511,15 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
     full += said;
     notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: said });
   }
+  // "파일 링크": an answer naming files as Codex does, by absolute path (0.5.6 phone rig): one tracked, one in the
+  // work folder not yet listed, one outside every project.
+  if (text.includes("파일 링크")) {
+    const made = join(thread.cwd, "링크 메모.md");
+    writeFileSync(made, "# 링크로 연 메모\n");
+    const said = `파일: [슬라이드 구성](${encodeURI(join(thread.cwd, SAMPLE_FILE))}) · [링크 메모](${encodeURI(made)}) · [호스트 이름](/etc/hostname)\n\n`;
+    full += said;
+    notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: said });
+  }
   if (text.includes("작업 폴더")) {
     const said = `작업 폴더: ${thread.cwd}\n\n`;
     full += said;
@@ -632,6 +642,12 @@ async function handle(message) {
       loginServer.listen(0, "127.0.0.1", () => reply({ type: "chatgpt", loginId, authUrl: `http://127.0.0.1:${loginServer.address().port}/auth/callback?state=${loginId}` }));
       return;
     }
+    // Signed out: the login file goes (only the stand-in's, in its temporary folder).
+    case "account/logout":
+      if (authFile) rmSync(authFile, { force: true });
+      reply({});
+      notify("account/updated", { authMode: null });
+      return;
     case "account/login/cancel":
       loginServer?.close();
       loginServer = null;

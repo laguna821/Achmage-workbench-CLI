@@ -18,11 +18,11 @@
 /* The rail is seen, not used, while the first run is up. */
 .app:has(.onboarding-first) .nav-rail { pointer-events: none; }
 
-/* The panel: the step list beside the step, the launch's attribution line (LaunchCredit) as its last row. */
+/* The panel: the step list beside the step. */
 .onboarding-first .onboarding {
   display: grid;
   grid-template-columns: 200px minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   width: min(760px, 100%);
   height: min(520px, 100%);
   max-height: none;
@@ -88,7 +88,6 @@
 
 .onboarding-first .onboarding-actions { display: flex; align-items: center; gap: var(--space-xs); margin: 0; padding: var(--space-sm) var(--space-lg); border-top: 1px solid var(--line); }
 .onboarding-first .onboarding-actions .spacer { flex: 1; }
-.onboarding-foot { grid-column: 1 / -1; min-width: 0; }
 
 /* 화면: 밝기 and 색 조합 as tiles, the live picture beside them. */
 .onboarding-look { display: grid; grid-template-columns: minmax(0, 1fr) 152px; gap: var(--space-lg); align-items: start; }

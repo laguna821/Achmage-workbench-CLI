@@ -27,6 +27,8 @@ type Hooks = {
   sessions(): Session[]; items(sessionId: string): TranscriptItem[]; canSteer(session: Session): boolean;
   stop(sessionId: string): Promise<void>; approve(sessionId: string, itemId: string, decision: "accept" | "decline"): Promise<void>;
   cancelQueue(sessionId: string, queuedId: string): unknown; sendQueue(sessionId: string, queuedId: string): Promise<unknown>;
+  /** Why a conversation takes no request from automation (Gemini: a person only); null: it may. */
+  refuse?(session: Session): string | null;
 };
 
 /** A projection of the existing sessions/transcripts. Only command receipts and parent bindings
@@ -201,6 +203,8 @@ export class TaskService {
     }
     const session = this.hooks.sessions().find(entry => entry.id === input.sessionId && !entry.archivedAt);
     if (!session || session.hostId !== input.hostId || session.workspaceId !== input.workspaceId) throw new HttpError(409, "task_target_mismatch", "다른 호스트 또는 작업공간의 세션입니다.");
+    const refused = this.hooks.refuse?.(session);
+    if (refused) throw new HttpError(409, "person_only", refused);
     this.admitNewWork?.();
     if (!this.hooks.submit) throw new HttpError(409, "task_submit_unavailable", "이 호스트는 공통 입력을 지원하지 않습니다.");
     const now = Date.now();

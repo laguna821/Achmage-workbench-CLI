@@ -561,6 +561,23 @@ export class ClaudeAdapter implements ProviderAdapter {
     if (this.current.login?.state === "waiting") this.publish({ login: null });
   }
 
+  /** 로그아웃: Claude Code's own `claude auth logout`; the status is read again afterwards. */
+  async logout() {
+    if (!this.binary) await this.resolve();
+    const binary = this.binary;
+    if (!binary) throw new Error("claude를 찾지 못했습니다.");
+    await this.cancelLogin();
+    const child = spawn(binary.command, [...binary.args, "auth", "logout"], { stdio: ["ignore", "pipe", "pipe"], env: launchEnv(binary), windowsHide: true });
+    let output = "";
+    const collect = (chunk: Buffer) => { output = (output + chunk.toString("utf8")).slice(-4000); };
+    child.stdout.on("data", collect);
+    child.stderr.on("data", collect);
+    const code = await new Promise<number | null>((resolve) => { child.on("error", () => resolve(-1)); child.on("exit", resolve); });
+    if (code !== 0) throw new Error(`로그아웃하지 못했습니다${output.trim() ? `: ${output.trim().split("\n").at(-1)}` : "."}`);
+    this.publish({ loggedIn: false, loginMethod: null, account: null, plan: null, usage: [], login: null });
+    await this.refreshStatus().catch(() => undefined);
+  }
+
   private startRuntime(session: Session & { access: AccessMode; plan?: boolean }, work: Work): Runtime {
     if (!this.binary) {
       throw new Error("claude를 찾지 못했습니다.");

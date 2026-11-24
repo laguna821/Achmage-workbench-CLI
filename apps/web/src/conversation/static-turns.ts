@@ -13,8 +13,8 @@
  */
 import type { TranscriptItem } from "@workbench/contracts";
 
-/** Part of every key: raised whenever the turn renderer draws the same items differently (components, Markdown rules, classes). */
-export const TURN_RENDERER_VERSION = 1;
+/** Part of every key: raised whenever the turn renderer draws the same items differently (components, Markdown rules, classes). 2: a workbench-peers step reads as one line (0.5.6). */
+export const TURN_RENDERER_VERSION = 2;
 
 /** Off: every turn is drawn as components, as in 0.5.3 (the tests compare the two drawings with it). */
 export const lightView = { on: true };
